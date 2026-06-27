@@ -118,9 +118,11 @@ export class SseTransport implements ITransport {
       this.unsubscribe = undefined
     }
     this.heartbeat.stopAll()
+    // Await each teardown so onDisconnect hooks complete within the shutdown window
+    // (RxJS finalize cannot await an async callback). disconnectLocal removes the
+    // record first, so the stream's own finalize cleanup is then a harmless no-op.
     for (const conn of this.connections.allByTransport('sse')) {
-      conn.close$?.next()
-      conn.close$?.complete()
+      await this.disconnectLocal(conn.connectionId)
     }
   }
 
