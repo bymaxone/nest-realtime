@@ -30,6 +30,7 @@ const config: Config = {
   clearMocks: true,
   restoreMocks: true,
   collectCoverage: true,
+  coverageProvider: 'v8',
   collectCoverageFrom: [
     'server/**/*.ts',
     'shared/**/*.ts',

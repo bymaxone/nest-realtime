@@ -110,4 +110,12 @@ describe('ConnectionRegistry', () => {
     expect(registry.byUser('nope')).toEqual([])
     expect(registry.byTenant('nope')).toEqual([])
   })
+
+  // Unregister is a safe no-op against an index entry that was already pruned.
+  it('tolerates a missing user index on unregister', () => {
+    registry.register(mkRecord({ connectionId: 'c1', userId: 'u1' }))
+    ;(registry as unknown as { byUserId: Map<string, Set<string>> }).byUserId.delete('u1')
+    expect(() => registry.unregister('c1')).not.toThrow()
+    expect(registry.get('c1')).toBeUndefined()
+  })
 })

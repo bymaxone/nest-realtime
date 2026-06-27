@@ -446,4 +446,36 @@ describe('SseTransport', () => {
     await expect(transport.authenticate(ctx)).resolves.toBe(result)
     expect(authenticate).toHaveBeenCalledWith(ctx)
   })
+
+  // FIFO eviction picks the genuine oldest even when insertion order differs from age.
+  it('evicts the genuine oldest regardless of insertion order', async () => {
+    const { transport, connections } = build({ sse: { maxConnectionsPerUser: 2 } })
+    const registerAged = (connectionId: string, ageMs: number): void => {
+      connections.register({
+        connectionId,
+        userId: 'u1',
+        tenantId: undefined,
+        transport: 'sse',
+        ip: 'x',
+        userAgent: undefined,
+        connectedAt: new Date(Date.now() - ageMs),
+        subject: new Subject<MessageEvent>(),
+        close$: new Subject<void>(),
+        originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+      })
+    }
+    registerAged('younger', 0)
+    registerAged('oldest', 10_000)
+    await transport.registerConnection({
+      connectionId: 'newest',
+      auth: { userId: 'u1' },
+      subject: new Subject<MessageEvent>(),
+      close$: new Subject<void>(),
+      ip: 'x',
+      userAgent: undefined,
+    })
+    expect(connections.get('oldest')).toBeUndefined()
+    expect(connections.get('younger')).toBeDefined()
+    expect(connections.get('newest')).toBeDefined()
+  })
 })

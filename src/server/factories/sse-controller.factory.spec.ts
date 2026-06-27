@@ -176,4 +176,36 @@ describe('createSseController', () => {
     expect(context.headers['x-multi']).toBe('a,b')
     expect(context.userAgent).toBe('jest')
   })
+
+  // An endpoint without a leading slash is used verbatim (no leading-slash strip).
+  it('accepts an endpoint without a leading slash', async () => {
+    const ControllerClass = createSseController('realtime/sse')
+    const instance = new ControllerClass(
+      mkTransport(),
+      mkHeartbeat(),
+    ) as unknown as SseControllerInstance
+    await expect(instance.subscribe(mkReq(), mkRes())).resolves.toBeDefined()
+  })
+
+  // Multi-valued cookie/last-event-id/user-agent headers collapse to undefined.
+  it('ignores array-valued single headers', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const getReplayEvents = jest.fn().mockReturnValue([])
+    const transport = mkTransport({ authenticate, getReplayEvents, emitConnectionEvent: false })
+    const req = mkReq({
+      headers: {
+        cookie: ['a=1', 'b=2'],
+        'last-event-id': ['e1', 'e2'],
+        'user-agent': ['ua1', 'ua2'],
+      },
+    })
+    await build(transport, mkHeartbeat()).subscribe(req, mkRes())
+    const context = authenticate.mock.calls[0]?.[0] as {
+      cookies: Record<string, string>
+      userAgent: string | undefined
+    }
+    expect(context.cookies).toEqual({})
+    expect(context.userAgent).toBeUndefined()
+    expect(getReplayEvents).not.toHaveBeenCalled()
+  })
 })
