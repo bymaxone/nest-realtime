@@ -106,8 +106,8 @@ function buildMeta(record: ConnectionRecord) {
 }
 
 /**
- * Owns the complete SSE subscribe flow: auth context → authenticate → eviction →
- * register → onConnect → heartbeat → replay → merged stream with teardown.
+ * Owns the complete SSE subscribe flow: auth context → authenticate →
+ * register (transport handles FIFO eviction) → onConnect → heartbeat → replay → merged stream with teardown.
  *
  * The factory produces a thin `@Controller` shell that delegates every request here,
  * keeping the controller itself free of business logic and independently testable.
@@ -127,10 +127,9 @@ export class SseSubscriptionHandler {
   /**
    * Handle an incoming SSE connection request end-to-end.
    *
-   * Sets anti-buffering headers, authenticates the request, enforces the per-user
-   * connection limit (FIFO eviction), registers the connection, fires `onConnect`,
-   * starts the heartbeat, and returns a merged stream of `connection:established`
-   * + replay + live events.
+   * Sets anti-buffering headers, authenticates the request, registers the connection
+   * (the transport enforces the per-user FIFO cap), fires `onConnect`, starts the
+   * heartbeat, and returns a merged stream of `connection:established` + replay + live events.
    *
    * @param req - The Express request (SSE GET).
    * @param res - The Express response (passthrough for header mutations and heartbeat writes).
@@ -152,12 +151,6 @@ export class SseSubscriptionHandler {
     const resolvedTenantId = this.options.tenantResolver?.(auth) ?? auth.tenantId
     const resolvedAuth: AuthenticationResult =
       resolvedTenantId !== undefined ? { ...auth, tenantId: resolvedTenantId } : auth
-
-    // Enforce the per-user connection cap (FIFO eviction) before registering.
-    const max = this.options.sse?.maxConnectionsPerUser ?? 0
-    if (max > 0) {
-      await this.enforceConnectionLimit(resolvedAuth.userId, max)
-    }
 
     const connectionId = randomUUID()
     const subject = new Subject<MessageEvent>()
@@ -209,31 +202,6 @@ export class SseSubscriptionHandler {
         void this.transport.unregisterConnection(connectionId)
       }),
     )
-  }
-
-  /**
-   * Evict the user's oldest SSE connections (FIFO) until the count is below `max`.
-   *
-   * The new connection is admitted afterward — callers must invoke this BEFORE
-   * registering the new connection. Uses `transport.connectionsForUser` so no
-   * private field of the transport is accessed from outside.
-   *
-   * @param userId - The user whose connections are being checked.
-   * @param max - The maximum number of concurrent connections allowed.
-   */
-  private async enforceConnectionLimit(userId: string, max: number): Promise<void> {
-    const existing = this.transport.connectionsForUser(userId)
-    // shift() on a non-empty array (guarded by length >= max) always returns a value.
-    while (existing.length >= max) {
-      const oldest = existing.shift()!
-      this.logger.warn(
-        `Evicting oldest SSE connection ${oldest.connectionId} for user ${userId} (maxConnectionsPerUser=${max})`,
-      )
-      await this.transport.disconnect(
-        oldest.connectionId,
-        REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS,
-      )
-    }
   }
 
   /**

@@ -348,64 +348,19 @@ describe('SseSubscriptionHandler', () => {
     expect(transport.unregisterConnection).toHaveBeenCalledTimes(1)
   })
 
-  // FIFO eviction removes exactly one connection when the cap is at its limit (max=2, 2 exist).
-  it('evicts the oldest connection when maxConnectionsPerUser is reached', async () => {
-    const old1 = mkRecord('c1', 'u1', new Date(1_000))
-    const old2 = mkRecord('c2', 'u1', new Date(2_000))
-    const transport = mkTransport({
-      connectionsForUser: jest.fn().mockReturnValue([old1, old2]),
-    })
-    const handler = build(
-      transport,
-      mkHeartbeat(),
-      mkOptions({ sse: { maxConnectionsPerUser: 2 } }),
-    )
-    await handler.handle(mkReq(), mkRes())
-    // max=2, existing=[c1, c2] → length(2) >= max(2) → evict c1 → length(1) < max(2) → stop
-    expect(transport.disconnect).toHaveBeenCalledTimes(1)
-    expect(transport.disconnect).toHaveBeenCalledWith('c1', 'REALTIME_TOO_MANY_CONNECTIONS')
-  })
-
-  // FIFO eviction removes two connections when the cap is exceeded by two (max=1, 2 exist).
-  it('evicts multiple connections until the count is below the cap', async () => {
-    const old1 = mkRecord('c1', 'u1', new Date(1_000))
-    const old2 = mkRecord('c2', 'u1', new Date(2_000))
-    const transport = mkTransport({
-      connectionsForUser: jest.fn().mockReturnValue([old1, old2]),
-    })
+  // FIFO eviction is delegated to SseTransport.registerConnection — the handler itself
+  // never calls transport.disconnect for eviction.
+  it('delegates FIFO eviction to the transport via registerConnection (never calls disconnect directly)', async () => {
+    const transport = mkTransport()
     const handler = build(
       transport,
       mkHeartbeat(),
       mkOptions({ sse: { maxConnectionsPerUser: 1 } }),
     )
     await handler.handle(mkReq(), mkRes())
-    // max=1, existing=[c1, c2] → length(2) >= 1 → evict c1 → length(1) >= 1 → evict c2 → done
-    expect(transport.disconnect).toHaveBeenCalledTimes(2)
-    expect(transport.disconnect).toHaveBeenNthCalledWith(1, 'c1', 'REALTIME_TOO_MANY_CONNECTIONS')
-    expect(transport.disconnect).toHaveBeenNthCalledWith(2, 'c2', 'REALTIME_TOO_MANY_CONNECTIONS')
-  })
-
-  // No eviction when maxConnectionsPerUser is 0 (disabled).
-  it('skips eviction when maxConnectionsPerUser is 0', async () => {
-    const transport = mkTransport({
-      connectionsForUser: jest.fn().mockReturnValue([mkRecord('c1', 'u1')]),
-    })
-    const handler = build(
-      transport,
-      mkHeartbeat(),
-      mkOptions({ sse: { maxConnectionsPerUser: 0 } }),
-    )
-    await handler.handle(mkReq(), mkRes())
-    expect(transport.disconnect).not.toHaveBeenCalled()
-  })
-
-  // No eviction when maxConnectionsPerUser is unset.
-  it('skips eviction when maxConnectionsPerUser is unset', async () => {
-    const transport = mkTransport({
-      connectionsForUser: jest.fn().mockReturnValue([mkRecord('c1', 'u1')]),
-    })
-    const handler = build(transport, mkHeartbeat(), mkOptions())
-    await handler.handle(mkReq(), mkRes())
+    // The handler must call registerConnection so the transport can enforce the cap.
+    expect(transport.registerConnection).toHaveBeenCalledTimes(1)
+    // The handler must NOT call disconnect — eviction is entirely the transport's responsibility.
     expect(transport.disconnect).not.toHaveBeenCalled()
   })
 
