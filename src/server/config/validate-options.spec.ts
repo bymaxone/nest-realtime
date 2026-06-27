@@ -68,10 +68,18 @@ describe('validateOptions', () => {
     ).toThrow(/replayBufferSize/)
   })
 
-  // A non-positive per-user connection cap is rejected.
-  it('throws when sse.maxConnectionsPerUser <= 0', () => {
+  // A negative per-user connection cap is rejected.
+  it('throws when sse.maxConnectionsPerUser < 0', () => {
+    expect(() =>
+      validateOptions({ transport: 'sse', authenticator, sse: { maxConnectionsPerUser: -1 } }),
+    ).toThrow(/maxConnectionsPerUser/)
+  })
+
+  // maxConnectionsPerUser = 0 is valid and disables the per-user cap (matches the
+  // transport, which treats <= 0 as "no eviction").
+  it('accepts sse.maxConnectionsPerUser = 0 (cap disabled)', () => {
     expect(() =>
       validateOptions({ transport: 'sse', authenticator, sse: { maxConnectionsPerUser: 0 } }),
-    ).toThrow(/maxConnectionsPerUser/)
+    ).not.toThrow()
   })
 })

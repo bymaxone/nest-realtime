@@ -58,4 +58,17 @@ describe('HeartbeatService', () => {
     jest.advanceTimersByTime(5_000)
     expect(write).not.toHaveBeenCalled()
   })
+
+  // A throwing write (client gone / stream closed) stops the timer, never crashes.
+  it('stops the timer when a write throws', () => {
+    write.mockImplementation(() => {
+      throw new Error('stream closed')
+    })
+    heartbeat.start('c1', res, 1_000)
+    expect(() => jest.advanceTimersByTime(1_000)).not.toThrow()
+    expect(write).toHaveBeenCalledTimes(1)
+    // The timer was cleared on failure, so no further keepalives are attempted.
+    jest.advanceTimersByTime(5_000)
+    expect(write).toHaveBeenCalledTimes(1)
+  })
 })

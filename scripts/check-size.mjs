@@ -56,11 +56,19 @@ for (const budget of BUDGETS) {
   if (!within) failed = true
 }
 
+// Match a STATIC import/require of the token — `import "x"`, `... from "x"`,
+// `require("x")` — but NOT the allowed dynamic `import("x")` (it has a parenthesis,
+// not a quote, after `import`). Otherwise the gate would false-flag the dynamic form.
+function staticImportRegex(token) {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:\\bfrom\\s*|\\brequire\\s*\\(\\s*|\\bimport\\s*)['"]${escaped}['"]`)
+}
+
 for (const rule of FORBIDDEN_STATIC) {
   const absolute = join(rootDir, rule.path)
   if (!existsSync(absolute)) continue
   const contents = readFileSync(absolute, 'utf8')
-  if (contents.includes(rule.token)) {
+  if (staticImportRegex(rule.token).test(contents)) {
     console.error(
       `✗ STATIC IMPORT  ${rule.path} statically references "${rule.token}" — it must be a dynamic import only`,
     )

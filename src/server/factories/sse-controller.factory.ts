@@ -140,6 +140,9 @@ export function createSseController(endpoint: string): Type<unknown> {
       return merge(established$, replay$, subject.asObservable()).pipe(
         takeUntil(close$),
         finalize(() => {
+          // Stop the keepalive synchronously to avoid a write-after-close race while
+          // the async cleanup unregisters the connection (and runs onDisconnect).
+          this.heartbeat.stop(connectionId)
           void this.transport.unregisterConnection(connectionId)
         }),
       )

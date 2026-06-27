@@ -3,10 +3,12 @@ import type { Config } from 'jest'
 /**
  * Fast development test runner.
  *
- * Transforms TypeScript through ts-jest (CommonJS output) so NestJS decorator
- * metadata is emitted for dependency injection. `reflect-metadata` is loaded
- * before each suite. Worker pool is capped for memory safety when many
- * long-lived realtime primitives are exercised in parallel.
+ * Transforms TypeScript through ts-jest (CommonJS output) so NestJS decorators
+ * evaluate. Dependency injection uses explicit `@Inject(token)` everywhere, so
+ * `emitDecoratorMetadata` is intentionally off in `tsconfig.jest.json` — leaving it
+ * on would add unreachable `design:paramtypes` branches that make 100% branch
+ * coverage impossible. `reflect-metadata` is loaded before each suite. Worker pool
+ * is capped for memory safety when many long-lived realtime primitives run.
  */
 const config: Config = {
   rootDir: 'src',

@@ -29,7 +29,13 @@ export class HeartbeatService {
   start(connectionId: string, res: HeartbeatWritable, intervalMs: number): void {
     this.stop(connectionId)
     const timer = setInterval(() => {
-      res.write(KEEPALIVE_COMMENT)
+      try {
+        res.write(KEEPALIVE_COMMENT)
+      } catch {
+        // The response stream is already closed (client gone) — stop pinging it so
+        // a write-after-close error in the timer never crashes the process.
+        this.stop(connectionId)
+      }
     }, intervalMs)
     // Do not let a keepalive timer keep the process alive on its own.
     timer.unref()

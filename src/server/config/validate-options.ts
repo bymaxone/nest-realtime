@@ -47,9 +47,9 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
       `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options.sse.replayBufferSize must be >= 0`,
     )
   }
-  if (sse?.maxConnectionsPerUser !== undefined && sse.maxConnectionsPerUser <= 0) {
+  if (sse?.maxConnectionsPerUser !== undefined && sse.maxConnectionsPerUser < 0) {
     throw new Error(
-      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options.sse.maxConnectionsPerUser must be > 0`,
+      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options.sse.maxConnectionsPerUser must be >= 0 (0 disables the per-user connection cap)`,
     )
   }
 }
