@@ -1,5 +1,5 @@
 /**
- * @fileoverview Dependency-injection tokens (unique Symbols).
+ * @fileoverview Dependency-injection tokens (unique Symbols) and shared module-level constants.
  * @layer composition
  */
 
@@ -17,3 +17,11 @@ export const REALTIME_OFFLINE_QUEUE_TOKEN = Symbol('BYMAX_REALTIME_OFFLINE_QUEUE
 export const REALTIME_PRESENCE_TOKEN = Symbol('BYMAX_REALTIME_PRESENCE')
 export const REALTIME_HOOKS_TOKEN = Symbol('BYMAX_REALTIME_HOOKS')
 export const REALTIME_INSTANCE_ID_TOKEN = Symbol('BYMAX_REALTIME_INSTANCE_ID')
+
+/**
+ * Default heartbeat interval in milliseconds.
+ *
+ * Shared between `SseTransport` (heartbeat service wiring) and
+ * `SseSubscriptionHandler` (fallback when `sse.heartbeatMs` is unset).
+ */
+export const DEFAULT_HEARTBEAT_MS = 30_000

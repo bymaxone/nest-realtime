@@ -7,6 +7,7 @@ import type { MessageEvent } from '@nestjs/common'
 import type { Subject } from 'rxjs'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 import {
+  DEFAULT_HEARTBEAT_MS,
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
   REALTIME_INSTANCE_ID_TOKEN,
@@ -32,9 +33,6 @@ import { RoomRegistry } from '../../services/room-registry.service'
 import { composeRoomId } from '../../utils/compose-room-id'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
-
-/** Default heartbeat interval when `sse.heartbeatMs` is unset. */
-const DEFAULT_HEARTBEAT_MS = 30_000
 
 interface EmitUserArgs {
   userId: string
@@ -141,7 +139,13 @@ export class SseTransport implements ITransport {
     return this.auth.authenticate(context)
   }
 
-  /** Register an authenticated SSE connection and auto-join its user/tenant rooms. */
+  /**
+   * Register an authenticated SSE connection and auto-join its user/tenant rooms.
+   *
+   * Fires FIFO eviction if the user exceeds `maxConnectionsPerUser`. The `onConnect`
+   * lifecycle hook is fired by the subscription handler after this returns, so that the
+   * handler can carry a consistent connection record reference.
+   */
   async registerConnection(params: RegisterSseConnectionParams): Promise<void> {
     const record: ConnectionRecord = {
       connectionId: params.connectionId,
@@ -165,19 +169,6 @@ export class SseTransport implements ITransport {
       this.rooms.join(params.connectionId, composeRoomId('TENANT', params.auth.tenantId))
     }
     await this.evictBeyondLimit(params.auth.userId)
-    try {
-      await this.hooks.onConnect?.({
-        connectionId: record.connectionId,
-        userId: record.userId,
-        tenantId: record.tenantId,
-        transport: 'sse',
-        ip: record.ip,
-        userAgent: record.userAgent,
-        connectedAt: record.connectedAt,
-      })
-    } catch (error) {
-      this.logger.error(`onConnect hook failed: ${(error as Error).message}`)
-    }
   }
 
   /** Idempotent cleanup for a connection — runs the disconnect hook exactly once. */
@@ -206,6 +197,27 @@ export class SseTransport implements ITransport {
   /** Replay the events a user missed after `lastEventId`. */
   getReplayEvents(userId: string, lastEventId: string): MessageEvent[] {
     return this.replayBuffer.since(userId, lastEventId)
+  }
+
+  /**
+   * All SSE connections for a user — public accessor so external callers can
+   * inspect or iterate without reaching into a private registry field.
+   *
+   * @param userId - The user whose active connections are returned.
+   * @returns A snapshot of the user's current SSE `ConnectionRecord` list.
+   */
+  connectionsForUser(userId: string): ConnectionRecord[] {
+    return this.connections.byUser(userId, 'sse')
+  }
+
+  /**
+   * Look up a single connection by id.
+   *
+   * @param connectionId - The unique connection identifier.
+   * @returns The `ConnectionRecord`, or `undefined` when not found.
+   */
+  getConnection(connectionId: string): ConnectionRecord | undefined {
+    return this.connections.get(connectionId)
   }
 
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {

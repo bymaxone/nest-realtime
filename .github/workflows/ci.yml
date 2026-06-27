@@ -33,7 +33,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test:cov
-      - run: pnpm test:e2e -- --testPathIgnorePatterns=cross-instance
+      - run: pnpm test:e2e
       - run: pnpm build
       - run: pnpm size
 

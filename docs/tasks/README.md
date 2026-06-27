@@ -14,12 +14,12 @@ Tasks live **one file per phase** in this folder (`phase-NN-<slug>.md`), followi
 | Phase | File | Tasks | Status |
 |---|---|---|---|
 | 1 | [`phase-01-foundation-sse.md`](./phase-01-foundation-sse.md) | 16 / 16 | ✅ Done |
-| 2 | [`phase-02-auth-last-event-id.md`](./phase-02-auth-last-event-id.md) | 0 / 12 | 🔄 In Progress |
+| 2 | [`phase-02-auth-last-event-id.md`](./phase-02-auth-last-event-id.md) | 12 / 12 | ✅ Done |
 | 3 | [`phase-03-horizontal-scaling-sse.md`](./phase-03-horizontal-scaling-sse.md) | 0 / 11 | 📋 ToDo |
 | 4 | [`phase-04-websocket-transport.md`](./phase-04-websocket-transport.md) | 0 / 12 | 📋 ToDo |
 | 5 | [`phase-05-frontend-react.md`](./phase-05-frontend-react.md) | 0 / 12 | 📋 ToDo |
 | 6 | [`phase-06-release.md`](./phase-06-release.md) | 0 / 10 | 📋 ToDo |
-| | **Total** | **16 / 73** | 🔄 22% |
+| | **Total** | **28 / 73** | 🔄 38% |
 
 ---
 

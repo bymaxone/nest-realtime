@@ -1,6 +1,6 @@
 # Phase 2 — Auth + Last-Event-ID + Reauthentication
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 12 tasks · **Last updated**: 2026-06-27
+> **Status**: ✅ Done · **Progress**: 12 / 12 tasks · **Last updated**: 2026-06-27
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -46,18 +46,18 @@ When this phase is done, a consumer can authenticate via cookie or ticket, recon
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 2.1 | Refactor — extract `SseSubscriptionHandler` | 📋 ToDo | P0 | M | 1.13 |
-| 2.2 | `IConnectionAuthenticator` — three patterns (docs + fixtures) | 📋 ToDo | P1 | M | 1.9 |
-| 2.3 | `@bymax-one/nest-auth` bridge — reference example (docs only) | 📋 ToDo | P2 | S | 2.2 |
-| 2.4 | `ReauthenticationService` — periodic re-check + positive cache | 📋 ToDo | P1 | M | 2.1 |
-| 2.5 | `encodeSseEvent` utility (correct wire format) | 📋 ToDo | P1 | S | 1.8 |
-| 2.6 | `Last-Event-ID` replay wiring + lifecycle hooks | 📋 ToDo | P1 | M | 1.12, 2.1 |
-| 2.7 | Effective heartbeat against real proxies | 📋 ToDo | P2 | S | 1.12 |
-| 2.8 | `forRootAsync` support | 📋 ToDo | P1 | M | 1.13 |
-| 2.9 | Tests — three auth patterns | 📋 ToDo | P1 | M | 2.2 |
-| 2.10 | Tests — `ReauthenticationService` + lifecycle hooks | 📋 ToDo | P1 | M | 2.4, 2.6 |
-| 2.11 | Tests — `encodeSseEvent` + `Last-Event-ID` replay | 📋 ToDo | P1 | M | 2.5, 2.6 |
-| 2.12 | Phase 2 consolidated validation | 📋 ToDo | P1 | S | 2.1…2.11 |
+| 2.1 | Refactor — extract `SseSubscriptionHandler` | ✅ Done | P0 | M | 1.13 |
+| 2.2 | `IConnectionAuthenticator` — three patterns (docs + fixtures) | ✅ Done | P1 | M | 1.9 |
+| 2.3 | `@bymax-one/nest-auth` bridge — reference example (docs only) | ✅ Done | P2 | S | 2.2 |
+| 2.4 | `ReauthenticationService` — periodic re-check + positive cache | ✅ Done | P1 | M | 2.1 |
+| 2.5 | `encodeSseEvent` utility (correct wire format) | ✅ Done | P1 | S | 1.8 |
+| 2.6 | `Last-Event-ID` replay wiring + lifecycle hooks | ✅ Done | P1 | M | 1.12, 2.1 |
+| 2.7 | Effective heartbeat against real proxies | ✅ Done | P2 | S | 1.12 |
+| 2.8 | `forRootAsync` support | ✅ Done | P1 | M | 1.13 |
+| 2.9 | Tests — three auth patterns | ✅ Done | P1 | M | 2.2 |
+| 2.10 | Tests — `ReauthenticationService` + lifecycle hooks | ✅ Done | P1 | M | 2.4, 2.6 |
+| 2.11 | Tests — `encodeSseEvent` + `Last-Event-ID` replay | ✅ Done | P1 | M | 2.5, 2.6 |
+| 2.12 | Phase 2 consolidated validation | ✅ Done | P1 | S | 2.1…2.11 |
 
 ---
 
@@ -65,7 +65,7 @@ When this phase is done, a consumer can authenticate via cookie or ticket, recon
 
 ### Task 2.1 — Refactor: extract `SseSubscriptionHandler`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.13
@@ -234,7 +234,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.2 — `IConnectionAuthenticator`: three patterns (docs + fixtures)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 1.9
@@ -337,7 +337,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.3 — `@bymax-one/nest-auth` bridge: reference example (docs only)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: S
 - **Depends on**: 2.2
@@ -462,7 +462,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.4 — `ReauthenticationService`: periodic re-check + positive cache
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.1
@@ -615,7 +615,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.5 — `encodeSseEvent` utility (correct wire format)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 1.8
@@ -725,7 +725,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.6 — `Last-Event-ID` replay wiring + lifecycle hooks
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 1.12, 2.1
@@ -846,7 +846,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.7 — Effective heartbeat against real proxies
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: S
 - **Depends on**: 1.12
@@ -939,7 +939,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.8 — `forRootAsync` support
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 1.13
@@ -1077,7 +1077,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.9 — Tests: three auth patterns
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.2
@@ -1157,7 +1157,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.10 — Tests: `ReauthenticationService` + lifecycle hooks
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.4, 2.6
@@ -1233,7 +1233,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.11 — Tests: `encodeSseEvent` + `Last-Event-ID` replay
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.5, 2.6
@@ -1307,7 +1307,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.12 — Phase 2 consolidated validation
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 2.1…2.11
@@ -1388,4 +1388,13 @@ Completion Protocol (after you finish):
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
-<!-- No entries yet — Phase 2 is ToDo. Entries are appended on task completion. -->
+- 2.1 ✅ 2026-06-27 — Extracted SseSubscriptionHandler from factory; factory is now a thin shell; FIFO eviction, onConnect hook, anti-buffering headers, and replay all moved to handler.
+- 2.2 ✅ 2026-06-27 — Authored three auth-pattern docs (cookie, ticket, bearer) and three standalone test fixtures implementing IConnectionAuthenticator.
+- 2.3 ✅ 2026-06-27 — Authored nest-auth-bridge reference doc and cross-linked it from cookie-httponly.md.
+- 2.4 ✅ 2026-06-27 — Implemented ReauthenticationService with FIFO-per-user positive cache, both onFailure modes, best-effort hooks, and graceful shutdown.
+- 2.5 ✅ 2026-06-27 — Implemented pure encodeSseEvent utility with multi-line data, heartbeat comment, and W3C SSE wire format.
+- 2.6 ✅ 2026-06-27 — Confirmed Last-Event-ID replay in handler; added catchError to wire onError lifecycle hook; per-user EventReplayBuffer with parenthesized cap confirmed.
+- 2.7 ✅ 2026-06-27 — Added range validation [5000,90000]ms to HeartbeatService; anti-buffering headers moved to factory; proxy cheat sheet authored.
+- 2.8 ✅ 2026-06-27 — Added forRootAsync to BymaxRealtimeModule; validates+defaults inside factory; all Phase 2 providers registered; fixed endpoint /events with JSDoc trade-off note.
+- 2.9 ✅ 2026-06-27 — Authored specs for cookie-jwt, ticket, bearer fixtures and handler integration spec; jest configs extended to cover test/ directory.
+- review-fixes ✅ 2026-06-27 — Applied all code-review findings: S5 added jsonwebtoken devDep; S1 fail-closed on revalidate throw; S2 strict === true result; S3+C1 SSE injection prevention + retry field; S4 HS256 algorithm restriction; S6 cacheTtlMs > intervalSeconds*1000 warning; C2 forRootAsync useClass/useExisting; C3 exact established-event shape assertion; C4 removed duplicate headers; C5 removed duplicate FIFO eviction; C6 consolidated DEFAULT_HEARTBEAT_MS; T1 moved integration specs to test/e2e/ as *.e2e-spec.ts. All final gates pass (100% coverage, typecheck, lint, build, size, e2e suite runs 3 suites/20 tests).

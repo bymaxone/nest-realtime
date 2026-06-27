@@ -5,11 +5,21 @@
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
   "homepage": "https://github.com/bymaxone/nest-realtime#readme",
-  "repository": { "type": "git", "url": "https://github.com/bymaxone/nest-realtime.git" },
-  "bugs": { "url": "https://github.com/bymaxone/nest-realtime/issues" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bymaxone/nest-realtime.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bymaxone/nest-realtime/issues"
+  },
   "type": "module",
   "sideEffects": false,
-  "files": ["dist", "LICENSE", "README.md", "CHANGELOG.md"],
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "exports": {
     ".": {
       "types": "./dist/server/index.d.ts",
@@ -46,30 +56,45 @@
     "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build",
     "release": "pnpm publish --provenance"
   },
-  "dependencies": {},
   "peerDependencies": {
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
-    "rxjs": "^7.8.0",
-    "reflect-metadata": "^0.2.0",
-    "@nestjs/websockets": "^11.0.0",
     "@nestjs/platform-socket.io": "^11.0.0",
-    "socket.io": "^4.0.0",
+    "@nestjs/websockets": "^11.0.0",
     "@socket.io/redis-adapter": "^8.0.0",
     "ioredis": "^5.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.8.0",
+    "socket.io": "^4.0.0",
     "socket.io-client": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "@nestjs/websockets": { "optional": true },
-    "@nestjs/platform-socket.io": { "optional": true },
-    "socket.io": { "optional": true },
-    "@socket.io/redis-adapter": { "optional": true },
-    "ioredis": { "optional": true },
-    "react": { "optional": true },
-    "react-dom": { "optional": true },
-    "socket.io-client": { "optional": true }
+    "@nestjs/websockets": {
+      "optional": true
+    },
+    "@nestjs/platform-socket.io": {
+      "optional": true
+    },
+    "socket.io": {
+      "optional": true
+    },
+    "@socket.io/redis-adapter": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "socket.io-client": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@nestjs/common": "^11.0.0",
@@ -85,6 +110,7 @@
     "@testing-library/react": "^16.0.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -103,6 +129,7 @@
     "ioredis-mock": "^8.0.0",
     "jest": "^30.0.0",
     "jest-environment-jsdom": "^30.0.0",
+    "jsonwebtoken": "^9.0.3",
     "prettier": "^3.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -118,6 +145,11 @@
     "typescript": "^5.6.0"
   },
   "packageManager": "pnpm@11.0.0",
-  "engines": { "node": ">=24.0.0" },
-  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" }
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
 }

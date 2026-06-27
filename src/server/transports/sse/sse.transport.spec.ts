@@ -296,10 +296,9 @@ describe('SseTransport', () => {
     expect(publish).not.toHaveBeenCalled()
   })
 
-  // registerConnection auto-joins the user and tenant rooms and runs onConnect.
-  it('registers a connection, auto-joins rooms, and runs onConnect', async () => {
-    const onConnect = jest.fn()
-    const { transport, rooms } = build({ hooks: { onConnect } })
+  // registerConnection auto-joins the user and tenant rooms (onConnect is fired by the handler).
+  it('registers a connection and auto-joins user and tenant rooms', async () => {
+    const { transport, rooms } = build()
     await transport.registerConnection({
       connectionId: 'c1',
       auth: { userId: 'u1', tenantId: 't1' },
@@ -309,9 +308,6 @@ describe('SseTransport', () => {
       userAgent: 'jest',
     })
     expect(rooms.roomsOf('c1')).toEqual(expect.arrayContaining(['user:u1', 'tenant:t1']))
-    expect(onConnect).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'u1', tenantId: 't1' }),
-    )
   })
 
   // A tenant-less registration auto-joins only the user room.
@@ -479,20 +475,23 @@ describe('SseTransport', () => {
     expect(connections.get('newest')).toBeDefined()
   })
 
-  // A rejecting onConnect hook is isolated (logged, never propagated to the caller).
-  it('isolates a throwing onConnect hook', async () => {
-    const onConnect = jest.fn().mockRejectedValue(new Error('boom'))
-    const { transport } = build({ hooks: { onConnect } })
-    await expect(
-      transport.registerConnection({
-        connectionId: 'c1',
-        auth: { userId: 'u1' },
-        subject: new Subject<MessageEvent>(),
-        close$: new Subject<void>(),
-        ip: 'x',
-        userAgent: undefined,
-      }),
-    ).resolves.toBeUndefined()
+  // connectionsForUser exposes a user's SSE connections without accessing private fields.
+  it('connectionsForUser returns the SSE connections for a user', () => {
+    const { transport, connections } = build()
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    addConn(connections, { connectionId: 'c2', userId: 'u1' })
+    addConn(connections, { connectionId: 'c3', userId: 'u2' })
+    const result = transport.connectionsForUser('u1')
+    expect(result).toHaveLength(2)
+    expect(result.map((r) => r.connectionId)).toEqual(expect.arrayContaining(['c1', 'c2']))
+  })
+
+  // getConnection exposes a single connection record by id.
+  it('getConnection returns the record when present, undefined when absent', () => {
+    const { transport, connections } = build()
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    expect(transport.getConnection('c1')).toBeDefined()
+    expect(transport.getConnection('missing')).toBeUndefined()
   })
 
   // A rejecting onDisconnect hook is isolated (logged, never an unhandled rejection).

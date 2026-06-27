@@ -2,6 +2,7 @@
  * @fileoverview Unit tests for bootstrap option validation.
  * @layer composition
  */
+import { Logger } from '@nestjs/common'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { validateOptions } from './validate-options'
 
@@ -81,5 +82,44 @@ describe('validateOptions', () => {
     expect(() =>
       validateOptions({ transport: 'sse', authenticator, sse: { maxConnectionsPerUser: 0 } }),
     ).not.toThrow()
+  })
+
+  // cacheTtlMs > intervalSeconds*1000 → Logger.warn (every cycle is a cache miss).
+  it('warns when cacheTtlMs exceeds intervalSeconds*1000', () => {
+    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
+    validateOptions({
+      transport: 'sse',
+      authenticator,
+      reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 120_000 },
+    })
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('cacheTtlMs'),
+      'BymaxRealtimeModule',
+    )
+    warnSpy.mockRestore()
+  })
+
+  // cacheTtlMs === intervalSeconds*1000 → no warning (equal is not greater-than).
+  it('does not warn when cacheTtlMs equals intervalSeconds*1000', () => {
+    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
+    validateOptions({
+      transport: 'sse',
+      authenticator,
+      reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 60_000 },
+    })
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  // Only one of cacheTtlMs / intervalSeconds set → no warning (both are required to compare).
+  it('does not warn when only cacheTtlMs is set (intervalSeconds absent)', () => {
+    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
+    validateOptions({
+      transport: 'sse',
+      authenticator,
+      reauthenticationPolicy: { cacheTtlMs: 120_000 },
+    })
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
   })
 })

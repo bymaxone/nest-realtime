@@ -12,6 +12,11 @@ const config: Config = {
   testEnvironment: 'node',
   moduleFileExtensions: ['ts', 'js', 'json'],
   testMatch: ['<rootDir>/test/e2e/**/*.e2e-spec.ts'],
+  // The Redis-dependent cross-instance suite is excluded from the per-PR run and
+  // exercised by the scheduled workflow. Excluding it via config (not a CLI flag)
+  // avoids a fragile override: pnpm forwards `--` to jest, which then treats the
+  // flag as a positional path filter and silently matches no tests.
+  testPathIgnorePatterns: ['/node_modules/', '/cross-instance/'],
   setupFiles: ['reflect-metadata'],
   transform: {
     '^.+\\.ts$': [

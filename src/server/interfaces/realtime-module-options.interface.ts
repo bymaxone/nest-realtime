@@ -2,7 +2,7 @@
  * @fileoverview Module configuration contracts (sync + async dynamic module).
  * @layer contracts
  */
-import type { ModuleMetadata, Type } from '@nestjs/common'
+import type { ModuleMetadata, Provider, Type } from '@nestjs/common'
 import type { TransportMode } from '../../shared/types/transport-mode.type'
 import type {
   IConnectionAuthenticator,
@@ -88,4 +88,9 @@ export interface BymaxRealtimeModuleAsyncOptions extends Pick<ModuleMetadata, 'i
   inject?: readonly (string | symbol | Type<unknown>)[]
   useExisting?: Type<BymaxRealtimeModuleOptionsFactory>
   useClass?: Type<BymaxRealtimeModuleOptionsFactory>
+  /**
+   * Additional providers to register alongside the module (e.g. the authenticator
+   * class when it is a NestJS-managed injectable).
+   */
+  extraProviders?: Provider[]
 }
