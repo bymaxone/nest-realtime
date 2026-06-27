@@ -138,6 +138,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         this.logger.warn(
           `Reauthentication errored for ${conn.connectionId}: ${(err as Error).message}`,
         )
+        await this.handleFailure(conn)
       }
     }
   }

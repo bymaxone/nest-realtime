@@ -195,7 +195,7 @@ describe('ReauthenticationService', () => {
     )
   })
 
-  // A throwing revalidate is non-fatal — the cycle continues for other connections.
+  // A throwing revalidate disconnects the connection (fail-closed) and the cycle continues for others.
   it('continues processing other connections when one revalidate throws', async () => {
     const revalidate = jest
       .fn()
@@ -207,6 +207,31 @@ describe('ReauthenticationService', () => {
     const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
     await expect(svc.runCycle()).resolves.toBeUndefined()
     expect(revalidate).toHaveBeenCalledTimes(2)
+    // c1 threw → fail-closed: c1 is disconnected.
+    expect(realtime.disconnect).toHaveBeenCalledWith(
+      'c1',
+      REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
+    )
+    // c2 succeeded → not disconnected.
+    expect(realtime.disconnect).not.toHaveBeenCalledWith(
+      'c2',
+      REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
+    )
+  })
+
+  // A throwing revalidate disconnects the affected connection immediately (fail-closed).
+  it('disconnects the connection when revalidate throws (fail-closed)', async () => {
+    const revalidate = jest.fn().mockRejectedValue(new Error('auth backend down'))
+    const connections = mkConnections([mkRecord()])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
+    await svc.runCycle()
+    await flush()
+    expect(realtime.disconnect).toHaveBeenCalledWith(
+      'c1',
+      REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
+    )
   })
 
   // onApplicationShutdown clears the timer — no cycles fire after shutdown.
