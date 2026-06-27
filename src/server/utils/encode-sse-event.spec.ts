@@ -95,4 +95,32 @@ describe('encodeSseEvent', () => {
     const result = encodeSseEvent({ type: 'connection:established', data: { connectionId: 'abc' } })
     expect(result.endsWith('\n\n')).toBe(true)
   })
+
+  // SSE injection prevention: LF in event.type is stripped — no standalone injected field in output.
+  it('strips LF from event.type to prevent SSE injection', () => {
+    const result = encodeSseEvent({ type: 'legit\ninjected: x', data: 'safe' } as never)
+    // A preserved \n would start a new SSE field line; verify it is absent.
+    expect(result).not.toContain('\ninjected:')
+    expect(result).toContain('event: legitinjected: x')
+  })
+
+  // SSE injection prevention: CR in event.id is stripped before interpolation.
+  it('strips CR from event.id to prevent SSE injection', () => {
+    const result = encodeSseEvent({ id: '1\rinjected: x', type: 'test', data: 'd' } as never)
+    expect(result).not.toContain('\r')
+    expect(result).toContain('id: 1injected: x')
+  })
+
+  // retry field is emitted as "retry: <ms>" after the id line and before the event line.
+  it('emits a retry: line when event.retry is defined', () => {
+    const result = encodeSseEvent({ id: '5', type: 'chat', data: 'hi', retry: 3000 })
+    expect(result).toBe('id: 5\nretry: 3000\nevent: chat\ndata: hi\n\n')
+  })
+
+  // retry field is omitted when not set.
+  it('omits the retry: line when event.retry is undefined', () => {
+    const result = encodeSseEvent({ id: '6', type: 'chat', data: 'hi' })
+    expect(result).not.toContain('retry:')
+    expect(result).toBe('id: 6\nevent: chat\ndata: hi\n\n')
+  })
 })

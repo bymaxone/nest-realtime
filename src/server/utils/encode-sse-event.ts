@@ -14,10 +14,14 @@ import type { MessageEvent } from '@nestjs/common'
  * never a named event.
  *
  * Regular events follow the W3C SSE layout:
- * - `id:` line — omitted when `event.id` is falsy.
+ * - `id:` line — omitted when `event.id` is falsy after CR/LF stripping.
+ * - `retry:` line — emitted (in ms) when `event.retry` is defined, placed after `id:`.
  * - `event:` line — omitted when `event.type` is `'message'` (the W3C default) or absent.
  * - `data:` line(s) — multi-line data is split into one `data:` line per `\n`.
  * - Blank line terminator (`\n\n`).
+ *
+ * CR (`\r`) and LF (`\n`) characters are stripped from `event.id` and `event.type` before
+ * interpolation to prevent SSE event-injection attacks.
  *
  * NestJS `@Sse()` handles live streams natively; this helper serves the direct-emission
  * path (e.g. the cross-instance pub/sub subscriber) and unit tests.
@@ -53,9 +57,14 @@ export function encodeSseEvent(event: MessageEvent): string {
   // The heartbeat is an SSE comment, not a named event (spec §13).
   if (event.type === 'heartbeat') return ': keepalive\n\n'
 
+  // Strip CR/LF to prevent SSE event injection via crafted id or type values.
+  const safeId = (event.id ?? '').replace(/[\r\n]/g, '')
+  const safeType = (event.type ?? '').replace(/[\r\n]/g, '')
+
   const lines: string[] = []
-  if (event.id) lines.push(`id: ${event.id}`)
-  if (event.type && event.type !== 'message') lines.push(`event: ${event.type}`)
+  if (safeId) lines.push(`id: ${safeId}`)
+  if (event.retry !== undefined) lines.push(`retry: ${event.retry}`)
+  if (safeType && safeType !== 'message') lines.push(`event: ${safeType}`)
 
   const serialized = serializeData(event.data)
   for (const line of serialized.split('\n')) {
