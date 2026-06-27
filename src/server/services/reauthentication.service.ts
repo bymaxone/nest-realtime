@@ -19,7 +19,10 @@ import {
 } from '../constants/injection-tokens.constants'
 import type { IConnectionAuthenticator } from '../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../interfaces/connection-lifecycle-hooks.interface'
-import type { BymaxRealtimeModuleOptions, ReauthenticationPolicy } from '../interfaces/realtime-module-options.interface'
+import type {
+  BymaxRealtimeModuleOptions,
+  ReauthenticationPolicy,
+} from '../interfaces/realtime-module-options.interface'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
 import { RealtimeService } from './realtime.service'
@@ -82,11 +85,8 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       this.logger.log('Authenticator does not implement revalidate() — reauthentication disabled')
       return
     }
-    this.timer = setInterval(
-      () => void this.runCycle(),
-      this.policy.intervalSeconds * 1000,
-    )
-    this.timer.unref?.()
+    this.timer = setInterval(() => void this.runCycle(), this.policy.intervalSeconds * 1000)
+    this.timer.unref()
     this.logger.log(`Reauthentication scheduled every ${this.policy.intervalSeconds}s`)
   }
 
@@ -123,10 +123,12 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         // must be absent, not undefined, under exactOptionalPropertyTypes).
         const originalAuth = {
           userId: conn.originalAuth.userId,
-          ...(conn.originalAuth.tenantId !== undefined ? { tenantId: conn.originalAuth.tenantId } : {}),
+          ...(conn.originalAuth.tenantId !== undefined
+            ? { tenantId: conn.originalAuth.tenantId }
+            : {}),
           ...(conn.originalAuth.roles !== undefined ? { roles: conn.originalAuth.roles } : {}),
         }
-        const ok = await this.auth.revalidate?.(conn.connectionId, originalAuth) ?? true
+        const ok = (await this.auth.revalidate?.(conn.connectionId, originalAuth)) ?? true
         if (ok) {
           this.positiveCache.set(conn.connectionId, now)
           continue
@@ -162,9 +164,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         connectedAt: conn.connectedAt,
       }),
     ).catch((err: unknown) => {
-      this.logger.warn(
-        `onReauthenticationFailed hook failed: ${(err as Error).message}`,
-      )
+      this.logger.warn(`onReauthenticationFailed hook failed: ${(err as Error).message}`)
     })
 
     await this.realtime.disconnect(conn.connectionId, REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED)

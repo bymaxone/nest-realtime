@@ -139,7 +139,8 @@ export class BymaxRealtimeModule {
       provide: REALTIME_OPTIONS_TOKEN,
       useFactory: async (...args: unknown[]) => {
         const raw = await asyncOptions.useFactory?.(...args)
-        if (!raw) throw new Error(`${REALTIME_ERROR_CODES.INVALID_OPTIONS}: useFactory returned nothing`)
+        if (!raw)
+          throw new Error(`${REALTIME_ERROR_CODES.INVALID_OPTIONS}: useFactory returned nothing`)
         validateOptions(raw)
         return applyDefaults(raw)
       },
@@ -185,7 +186,7 @@ export class BymaxRealtimeModule {
       ConnectionRegistry,
       RoomRegistry,
       EventIdGenerator,
-      EventReplayBuffer,       // plain class — injects REALTIME_OPTIONS_TOKEN itself
+      EventReplayBuffer, // plain class — injects REALTIME_OPTIONS_TOKEN itself
       HeartbeatService,
       SseTransport,
       { provide: REALTIME_TRANSPORT_TOKEN, useExisting: SseTransport },
