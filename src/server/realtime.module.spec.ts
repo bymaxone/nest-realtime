@@ -252,4 +252,26 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     })
     await expect(testModule.compile()).rejects.toThrow(/REALTIME_INVALID_OPTIONS/)
   })
+
+  // No async-options pattern is an actionable INVALID_OPTIONS error (not a DI failure).
+  it('throws when no async-options pattern is provided', () => {
+    expect(() => BymaxRealtimeModule.forRootAsync({})).toThrow(
+      /forRootAsync requires exactly one of useFactory, useClass, or useExisting/,
+    )
+  })
+
+  // Providing more than one pattern is rejected up front.
+  it('throws when multiple async-options patterns are provided', () => {
+    class DummyFactory implements BymaxRealtimeModuleOptionsFactory {
+      createRealtimeOptions(): BymaxRealtimeModuleOptions {
+        return { transport: 'sse', authenticator }
+      }
+    }
+    expect(() =>
+      BymaxRealtimeModule.forRootAsync({
+        useFactory: () => ({ transport: 'sse', authenticator }),
+        useClass: DummyFactory,
+      }),
+    ).toThrow(/forRootAsync requires exactly one/)
+  })
 })

@@ -16,7 +16,7 @@ function mkCtx(authorization?: string): ConnectionAuthContext {
     query: {},
     ip: '127.0.0.1',
     userAgent: 'jest',
-    transport: 'sse',
+    transport: 'websocket',
   }
 }
 
