@@ -22,6 +22,7 @@ import { createSseController } from './factories/sse-controller.factory'
 import type {
   BymaxRealtimeModuleAsyncOptions,
   BymaxRealtimeModuleOptions,
+  BymaxRealtimeModuleOptionsFactory,
 } from './interfaces/realtime-module-options.interface'
 import { InMemoryPubSub } from './pubsub/in-memory-pubsub'
 import { ConnectionRegistry } from './services/connection-registry.service'
@@ -135,17 +136,45 @@ export class BymaxRealtimeModule {
    * ```
    */
   static forRootAsync(asyncOptions: BymaxRealtimeModuleAsyncOptions): DynamicModule {
-    const resolvedOptionsProvider: Provider = {
-      provide: REALTIME_OPTIONS_TOKEN,
-      useFactory: async (...args: unknown[]) => {
-        const raw = await asyncOptions.useFactory?.(...args)
-        if (!raw)
-          throw new Error(`${REALTIME_ERROR_CODES.INVALID_OPTIONS}: useFactory returned nothing`)
-        validateOptions(raw)
-        return applyDefaults(raw)
-      },
-      inject: [...(asyncOptions.inject ?? [])],
-    }
+    // Internal token scoped to this call — avoids collisions between multiple forRootAsync calls.
+    const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
+
+    // The resolved-options provider normalises all three async patterns into a single
+    // REALTIME_OPTIONS_TOKEN provider that validates + applies defaults.
+    const resolvedOptionsProvider: Provider = asyncOptions.useFactory
+      ? {
+          provide: REALTIME_OPTIONS_TOKEN,
+          useFactory: async (...args: unknown[]) => {
+            const raw = await asyncOptions.useFactory!(...args)
+            if (!raw)
+              throw new Error(
+                `${REALTIME_ERROR_CODES.INVALID_OPTIONS}: useFactory returned nothing`,
+              )
+            validateOptions(raw)
+            return applyDefaults(raw)
+          },
+          inject: [...(asyncOptions.inject ?? [])],
+        }
+      : {
+          // useClass / useExisting: inject the factory service and call createRealtimeOptions().
+          provide: REALTIME_OPTIONS_TOKEN,
+          useFactory: async (factory: BymaxRealtimeModuleOptionsFactory) => {
+            const raw = await factory.createRealtimeOptions()
+            if (!raw)
+              throw new Error(
+                `${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options factory returned nothing`,
+              )
+            validateOptions(raw)
+            return applyDefaults(raw)
+          },
+          inject: [asyncOptions.useClass ? FACTORY_TOKEN : asyncOptions.useExisting!],
+        }
+
+    // For useClass, register the factory class under the internal token so DI can
+    // instantiate it (it may itself have injectable dependencies).
+    const factoryClassProvider: Provider[] = asyncOptions.useClass
+      ? [{ provide: FACTORY_TOKEN, useClass: asyncOptions.useClass }]
+      : []
 
     const authenticatorProvider: Provider = {
       provide: REALTIME_AUTHENTICATOR_TOKEN,
@@ -168,6 +197,7 @@ export class BymaxRealtimeModule {
     const instanceId = randomUUID()
 
     const providers: Provider[] = [
+      ...factoryClassProvider,
       resolvedOptionsProvider,
       authenticatorProvider,
       pubsubProvider,

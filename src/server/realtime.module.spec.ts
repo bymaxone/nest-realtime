@@ -2,6 +2,7 @@
  * @fileoverview Integration tests for the dynamic module wiring.
  * @layer composition
  */
+import { Injectable } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { BymaxRealtimeModule } from './realtime.module'
 import { RealtimeService } from './services/realtime.service'
@@ -11,6 +12,7 @@ import { REALTIME_HOOKS_TOKEN, REALTIME_PUBSUB_TOKEN } from './constants/injecti
 import type {
   BymaxRealtimeModuleOptions,
   BymaxRealtimeModuleAsyncOptions,
+  BymaxRealtimeModuleOptionsFactory,
   IConnectionLifecycleHooks,
   IRealtimePubSub,
 } from './interfaces'
@@ -202,5 +204,52 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
       useFactory: async () => ({ transport: 'sse', authenticator }),
     })
     expect(dynamic.imports).toEqual([])
+  })
+
+  // useClass: a class implementing BymaxRealtimeModuleOptionsFactory is instantiated by DI.
+  it('wires RealtimeService when useClass is provided', async () => {
+    @Injectable()
+    class TestOptionsFactory implements BymaxRealtimeModuleOptionsFactory {
+      createRealtimeOptions(): BymaxRealtimeModuleOptions {
+        return { transport: 'sse', authenticator }
+      }
+    }
+    const mod = await Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRootAsync({ useClass: TestOptionsFactory })],
+    }).compile()
+    expect(mod.get(RealtimeService)).toBeInstanceOf(RealtimeService)
+  })
+
+  // useExisting: an already-registered factory service is reused.
+  it('wires RealtimeService when useExisting is provided', async () => {
+    @Injectable()
+    class ExistingFactory implements BymaxRealtimeModuleOptionsFactory {
+      createRealtimeOptions(): BymaxRealtimeModuleOptions {
+        return { transport: 'sse', authenticator }
+      }
+    }
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useExisting: ExistingFactory,
+          extraProviders: [ExistingFactory],
+        }),
+      ],
+    }).compile()
+    expect(mod.get(RealtimeService)).toBeInstanceOf(RealtimeService)
+  })
+
+  // useClass returning null rejects with INVALID_OPTIONS during compilation.
+  it('throws during module compilation when useClass factory returns null', async () => {
+    @Injectable()
+    class NullFactory implements BymaxRealtimeModuleOptionsFactory {
+      createRealtimeOptions(): BymaxRealtimeModuleOptions {
+        return null as unknown as BymaxRealtimeModuleOptions
+      }
+    }
+    const testModule = Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRootAsync({ useClass: NullFactory })],
+    })
+    await expect(testModule.compile()).rejects.toThrow(/REALTIME_INVALID_OPTIONS/)
   })
 })
