@@ -1,6 +1,6 @@
 # Phase 2 — Auth + Last-Event-ID + Reauthentication
 
-> **Status**: 🔄 In Progress · **Progress**: 3 / 12 tasks · **Last updated**: 2026-06-27
+> **Status**: 🔄 In Progress · **Progress**: 4 / 12 tasks · **Last updated**: 2026-06-27
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -49,7 +49,7 @@ When this phase is done, a consumer can authenticate via cookie or ticket, recon
 | 2.1 | Refactor — extract `SseSubscriptionHandler` | ✅ Done | P0 | M | 1.13 |
 | 2.2 | `IConnectionAuthenticator` — three patterns (docs + fixtures) | ✅ Done | P1 | M | 1.9 |
 | 2.3 | `@bymax-one/nest-auth` bridge — reference example (docs only) | ✅ Done | P2 | S | 2.2 |
-| 2.4 | `ReauthenticationService` — periodic re-check + positive cache | 📋 ToDo | P1 | M | 2.1 |
+| 2.4 | `ReauthenticationService` — periodic re-check + positive cache | ✅ Done | P1 | M | 2.1 |
 | 2.5 | `encodeSseEvent` utility (correct wire format) | 📋 ToDo | P1 | S | 1.8 |
 | 2.6 | `Last-Event-ID` replay wiring + lifecycle hooks | 📋 ToDo | P1 | M | 1.12, 2.1 |
 | 2.7 | Effective heartbeat against real proxies | 📋 ToDo | P2 | S | 1.12 |
@@ -462,7 +462,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.4 — `ReauthenticationService`: periodic re-check + positive cache
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.1
@@ -1391,3 +1391,4 @@ Completion Protocol (after you finish):
 - 2.1 ✅ 2026-06-27 — Extracted SseSubscriptionHandler from factory; factory is now a thin shell; FIFO eviction, onConnect hook, anti-buffering headers, and replay all moved to handler.
 - 2.2 ✅ 2026-06-27 — Authored three auth-pattern docs (cookie, ticket, bearer) and three standalone test fixtures implementing IConnectionAuthenticator.
 - 2.3 ✅ 2026-06-27 — Authored nest-auth-bridge reference doc and cross-linked it from cookie-httponly.md.
+- 2.4 ✅ 2026-06-27 — Implemented ReauthenticationService with FIFO-per-user positive cache, both onFailure modes, best-effort hooks, and graceful shutdown.

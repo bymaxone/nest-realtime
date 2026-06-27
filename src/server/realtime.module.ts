@@ -24,6 +24,7 @@ import { InMemoryPubSub } from './pubsub/in-memory-pubsub'
 import { ConnectionRegistry } from './services/connection-registry.service'
 import { EventIdGenerator } from './services/event-id-generator.service'
 import { RealtimeService } from './services/realtime.service'
+import { ReauthenticationService } from './services/reauthentication.service'
 import { RoomRegistry } from './services/room-registry.service'
 import { EventReplayBuffer } from './transports/sse/event-replay-buffer'
 import { HeartbeatService } from './transports/sse/heartbeat.service'
@@ -78,6 +79,7 @@ export class BymaxRealtimeModule {
       { provide: REALTIME_TRANSPORT_TOKEN, useExisting: SseTransport },
       SseSubscriptionHandler,
       RealtimeService,
+      ReauthenticationService,
     ]
 
     BymaxRealtimeModule.logger.log(
