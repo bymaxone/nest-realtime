@@ -332,7 +332,7 @@ describe('ReauthenticationService', () => {
     expect(() => svc.onApplicationShutdown()).not.toThrow()
   })
 
-  // runCycle when auth has no revalidate — revalidate?.() returns undefined → ?? true caches.
+  // runCycle when auth has no revalidate — revalidate?.() returns undefined → ?? true → === true → caches.
   it('caches connection as valid when auth has no revalidate (runCycle called directly)', async () => {
     const connections = mkConnections([mkRecord()])
     const realtime = mkRealtime()
@@ -340,8 +340,24 @@ describe('ReauthenticationService', () => {
     const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
     // Calling runCycle directly bypasses the onModuleInit guard.
     await svc.runCycle()
-    // No disconnect or event should be emitted — ?? true treats missing revalidate as success.
+    // undefined ?? true === true → treated as success (absent revalidate is not a failure).
     expect(realtime.disconnect).not.toHaveBeenCalled()
     expect(realtime.emitToUser).not.toHaveBeenCalled()
+  })
+
+  // A truthy non-boolean return from revalidate must not pass (strict === true required).
+  it('calls handleFailure when revalidate returns a truthy non-boolean value', async () => {
+    // Returning a user-like object is a common mistake — should be treated as failure.
+    const revalidate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const connections = mkConnections([mkRecord()])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
+    await svc.runCycle()
+    await flush()
+    expect(realtime.disconnect).toHaveBeenCalledWith(
+      'c1',
+      REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
+    )
   })
 })

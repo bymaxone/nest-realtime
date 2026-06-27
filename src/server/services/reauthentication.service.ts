@@ -128,8 +128,10 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
             : {}),
           ...(conn.originalAuth.roles !== undefined ? { roles: conn.originalAuth.roles } : {}),
         }
-        const ok = (await this.auth.revalidate?.(conn.connectionId, originalAuth)) ?? true
-        if (ok) {
+        // Require strict true — a truthy non-boolean result (e.g. a user object) is not success.
+        // When revalidate is absent, optional-chaining returns undefined; ?? true normalises it.
+        const rawResult = (await this.auth.revalidate?.(conn.connectionId, originalAuth)) ?? true
+        if (rawResult === true) {
           this.positiveCache.set(conn.connectionId, now)
           continue
         }
