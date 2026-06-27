@@ -8,7 +8,7 @@ import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import { EMPTY, merge, of, Subject } from 'rxjs'
 import type { Observable } from 'rxjs'
-import { finalize, takeUntil } from 'rxjs/operators'
+import { catchError, finalize, takeUntil } from 'rxjs/operators'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
 import {
@@ -196,6 +196,13 @@ export class SseSubscriptionHandler {
 
     return merge(established$, replay$, subject.asObservable()).pipe(
       takeUntil(close$),
+      catchError((error: unknown) => {
+        // Fire onError best-effort before letting finalize clean up.
+        this.fireHook(() =>
+          this.hooks?.onError?.({ connectionId, error: error as Error, transport: 'sse' }),
+        )
+        return EMPTY
+      }),
       finalize(() => {
         // Stop keepalive synchronously to avoid a write-after-close race.
         this.heartbeat.stop(connectionId)
