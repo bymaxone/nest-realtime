@@ -88,4 +88,9 @@ export interface BymaxRealtimeModuleAsyncOptions extends Pick<ModuleMetadata, 'i
   inject?: readonly (string | symbol | Type<unknown>)[]
   useExisting?: Type<BymaxRealtimeModuleOptionsFactory>
   useClass?: Type<BymaxRealtimeModuleOptionsFactory>
+  /**
+   * Additional providers to register alongside the module (e.g. the authenticator
+   * class when it is a NestJS-managed injectable).
+   */
+  extraProviders?: import('@nestjs/common').Provider[]
 }
