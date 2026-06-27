@@ -1,0 +1,35 @@
+# OpenSSF Scorecard supply-chain health checks; results published to the
+# code-scanning dashboard. Runs weekly and whenever branch protection changes.
+name: Scorecard
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  branch_protection_rule:
+
+permissions:
+  contents: read
+
+jobs:
+  # OpenSSF Scorecard publishes SARIF to code scanning (GitHub Advanced Security),
+  # free only on public repositories — gate on public visibility.
+  analysis:
+    name: analysis
+    if: ${{ github.event.repository.visibility == 'public' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif

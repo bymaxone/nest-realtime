@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + SSE Transport
 
-> **Status**: 📋 ToDo · **Progress**: 0 / 16 tasks · **Last updated**: 2026-06-23
+> **Status**: ✅ Done · **Progress**: 16 / 16 tasks · **Last updated**: 2026-06-27
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -51,22 +51,22 @@ Files that bear the highest mutation focus at the pre-release gate are `connecti
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 1.1 | Project scaffold — `package.json` + pnpm init | 📋 ToDo | P0 | S | — |
-| 1.2 | `tsconfig` variants + `tsup` config (3 entries) | 📋 ToDo | P0 | M | 1.1 |
-| 1.3 | ESLint + Prettier + `.gitignore` + `.npmignore` | 📋 ToDo | P1 | S | 1.1 |
-| 1.4 | Jest configs (4 variants) + Stryker config | 📋 ToDo | P0 | M | 1.2 |
-| 1.5 | `scripts/check-size.mjs` bundle-size gate | 📋 ToDo | P1 | S | 1.2 |
-| 1.6 | Source layout barrels + build-output integrity | 📋 ToDo | P1 | S | 1.2 |
-| 1.7 | Shared types (`TransportMode`, `RealtimeEvent`, `PublicConnectionMeta`) | 📋 ToDo | P0 | S | 1.6 |
-| 1.8 | Shared constants (`ROOM_PREFIXES`, `RESERVED_EVENT_NAMES`, `REALTIME_ERROR_CODES`) + barrel | 📋 ToDo | P0 | S | 1.6 |
-| 1.9 | Server interfaces (7 contracts) + barrel | 📋 ToDo | P0 | L | 1.7, 1.8 |
-| 1.10 | DI tokens (Symbol) + `composeRoomId` utility | 📋 ToDo | P0 | S | 1.6, 1.8 |
-| 1.11 | Internal services — `EventIdGenerator` + `ConnectionRegistry` + `RoomRegistry` | 📋 ToDo | P0 | L | 1.9, 1.10 |
-| 1.12 | SSE core — `EventReplayBuffer` + `HeartbeatService` + `SseTransport` | 📋 ToDo | P0 | L | 1.11 |
-| 1.13 | `SseController` + factory + `RealtimeService` + `InMemoryPubSub` + `forRoot` | 📋 ToDo | P0 | L | 1.9, 1.10, 1.11, 1.12 |
-| 1.14 | Unit specs — registries, id-gen, replay, transport, service, pubsub | 📋 ToDo | P0 | L | 1.11, 1.12, 1.13 |
-| 1.15 | Phase validation + barrel + integration smoke | 📋 ToDo | P0 | M | 1.1…1.14 |
-| 1.16 | CI skeleton — `ci.yml` + `codeql.yml` + `scorecard.yml` + `.github/dependabot.yml` (green on the scaffold) | 📋 ToDo | P0 | M | 1.3, 1.4, 1.5, 1.6 |
+| 1.1 | Project scaffold — `package.json` + pnpm init | ✅ Done | P0 | S | — |
+| 1.2 | `tsconfig` variants + `tsup` config (3 entries) | ✅ Done | P0 | M | 1.1 |
+| 1.3 | ESLint + Prettier + `.gitignore` + `.npmignore` | ✅ Done | P1 | S | 1.1 |
+| 1.4 | Jest configs (4 variants) + Stryker config | ✅ Done | P0 | M | 1.2 |
+| 1.5 | `scripts/check-size.mjs` bundle-size gate | ✅ Done | P1 | S | 1.2 |
+| 1.6 | Source layout barrels + build-output integrity | ✅ Done | P1 | S | 1.2 |
+| 1.7 | Shared types (`TransportMode`, `RealtimeEvent`, `PublicConnectionMeta`) | ✅ Done | P0 | S | 1.6 |
+| 1.8 | Shared constants (`ROOM_PREFIXES`, `RESERVED_EVENT_NAMES`, `REALTIME_ERROR_CODES`) + barrel | ✅ Done | P0 | S | 1.6 |
+| 1.9 | Server interfaces (7 contracts) + barrel | ✅ Done | P0 | L | 1.7, 1.8 |
+| 1.10 | DI tokens (Symbol) + `composeRoomId` utility | ✅ Done | P0 | S | 1.6, 1.8 |
+| 1.11 | Internal services — `EventIdGenerator` + `ConnectionRegistry` + `RoomRegistry` | ✅ Done | P0 | L | 1.9, 1.10 |
+| 1.12 | SSE core — `EventReplayBuffer` + `HeartbeatService` + `SseTransport` | ✅ Done | P0 | L | 1.11 |
+| 1.13 | `SseController` + factory + `RealtimeService` + `InMemoryPubSub` + `forRoot` | ✅ Done | P0 | L | 1.9, 1.10, 1.11, 1.12 |
+| 1.14 | Unit specs — registries, id-gen, replay, transport, service, pubsub | ✅ Done | P0 | L | 1.11, 1.12, 1.13 |
+| 1.15 | Phase validation + barrel + integration smoke | ✅ Done | P0 | M | 1.1…1.14 |
+| 1.16 | CI skeleton — `ci.yml` + `codeql.yml` + `scorecard.yml` + `.github/dependabot.yml` (green on the scaffold) | ✅ Done | P0 | M | 1.3, 1.4, 1.5, 1.6 |
 
 ---
 
@@ -74,7 +74,7 @@ Files that bear the highest mutation focus at the pre-release gate are `connecti
 
 ### Task 1.1 — Project scaffold: `package.json` + pnpm init
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: —
@@ -164,7 +164,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.2 — `tsconfig` variants + `tsup` config (3 entries)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.1
@@ -255,7 +255,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.3 — ESLint + Prettier + `.gitignore` + `.npmignore`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 1.1
@@ -333,7 +333,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.4 — Jest configs (4 variants) + Stryker config
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.2
@@ -423,7 +423,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.5 — `scripts/check-size.mjs` bundle-size gate
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 1.2
@@ -503,7 +503,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.6 — Source layout barrels + build-output integrity
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 1.2
@@ -575,7 +575,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.7 — Shared types (`TransportMode`, `RealtimeEvent`, `PublicConnectionMeta`)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.6
@@ -661,7 +661,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.8 — Shared constants (`ROOM_PREFIXES`, `RESERVED_EVENT_NAMES`, `REALTIME_ERROR_CODES`) + barrel
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.6
@@ -759,7 +759,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.9 — Server interfaces (7 contracts) + barrel
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 1.7, 1.8
@@ -873,7 +873,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.10 — DI tokens (Symbol) + `composeRoomId` utility
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.6, 1.8
@@ -971,7 +971,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.11 — Internal services: `EventIdGenerator` + `ConnectionRegistry` + `RoomRegistry`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 1.9, 1.10
@@ -1055,7 +1055,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.12 — SSE core: `EventReplayBuffer` + `HeartbeatService` + `SseTransport`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 1.11
@@ -1170,7 +1170,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.13 — `SseController` + factory + `RealtimeService` + `InMemoryPubSub` + `forRoot`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 1.9, 1.10, 1.11, 1.12
@@ -1283,7 +1283,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.14 — Unit specs: registries, id-gen, replay, transport, service, pubsub
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 1.11, 1.12, 1.13
@@ -1401,7 +1401,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.15 — Phase validation + barrel + integration smoke
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.1…1.14
@@ -1500,7 +1500,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.16 — CI skeleton (`ci.yml` + `codeql.yml` + `scorecard.yml` + `dependabot.yml`)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.3, 1.4, 1.5, 1.6
@@ -1611,4 +1611,19 @@ Completion Protocol (after you finish):
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
-<!-- No entries yet — entries are appended here as each task is completed. -->
+- 1.1 ✅ 2026-06-27 — project scaffold + package.json + pnpm workspace
+- 1.2 ✅ 2026-06-27 — tsconfig variants + tsup config (3 subpath entries)
+- 1.3 ✅ 2026-06-27 — ESLint + Prettier + .gitignore + .npmignore
+- 1.4 ✅ 2026-06-27 — Jest configs (unit/coverage/e2e/stryker); v8 coverage + test source maps
+- 1.5 ✅ 2026-06-27 — scripts/check-size.mjs brotli bundle-size gate
+- 1.6 ✅ 2026-06-27 — source-layout barrels + build-output integrity (3 subpaths)
+- 1.7 ✅ 2026-06-27 — shared types (TransportMode, RealtimeEvent, PublicConnectionMeta)
+- 1.8 ✅ 2026-06-27 — shared constants (ROOM_PREFIXES, RESERVED_EVENT_NAMES, REALTIME_ERROR_CODES)
+- 1.9 ✅ 2026-06-27 — seven server interfaces + barrel (auth inversion lands in code)
+- 1.10 ✅ 2026-06-27 — DI tokens (Symbol) + composeRoomId utility
+- 1.11 ✅ 2026-06-27 — EventIdGenerator + ConnectionRegistry + RoomRegistry
+- 1.12 ✅ 2026-06-27 — EventReplayBuffer + HeartbeatService + SseTransport
+- 1.13 ✅ 2026-06-27 — SseController factory + RealtimeService + InMemoryPubSub + forRoot
+- 1.14 ✅ 2026-06-27 — unit specs at 100% line+branch coverage
+- 1.15 ✅ 2026-06-27 — phase validation, barrel integrity, review fixes
+- 1.16 ✅ 2026-06-27 — CI skeleton (ci/codeql/scorecard/dependabot)
