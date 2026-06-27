@@ -69,7 +69,7 @@ The phase order respects the dependency graph (Appendix A): contracts before tra
 ### 1.4 Progress
 
 - **Overall progress:** 📋 0 / 6 phases done (0%) — 0 / 73 tasks (0%)
-- **Active phase:** **Phase 1** (Foundation + SSE Transport) — not started
+- **Active phase:** **Phase 1** (Foundation + SSE Transport) — in progress
 - **Blocked:** none
 
 ### 1.5 Phase dashboard
@@ -78,7 +78,7 @@ Canonical phase status. Each row links to that phase's task file in [`docs/tasks
 
 | ID | Phase | Status | Progress | Complexity | Last updated |
 | --- | --- | --- | --- | --- | --- |
-| 1 | [Foundation + SSE Transport](./tasks/phase-01-foundation-sse.md) | 📋 ToDo | 0/16 | MEDIUM | 2026-06-23 |
+| 1 | [Foundation + SSE Transport](./tasks/phase-01-foundation-sse.md) | 🔄 In Progress | 0/16 | MEDIUM | 2026-06-26 |
 | 2 | [Auth + Last-Event-ID + Reauthentication](./tasks/phase-02-auth-last-event-id.md) | 📋 ToDo | 0/12 | MEDIUM | 2026-06-23 |
 | 3 | [Horizontal Scaling (SSE)](./tasks/phase-03-horizontal-scaling-sse.md) | 📋 ToDo | 0/11 | HIGH | 2026-06-23 |
 | 4 | [WebSocket Transport](./tasks/phase-04-websocket-transport.md) | 📋 ToDo | 0/12 | HIGH | 2026-06-23 |

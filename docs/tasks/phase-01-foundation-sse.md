@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + SSE Transport
 
-> **Status**: 📋 ToDo · **Progress**: 0 / 16 tasks · **Last updated**: 2026-06-23
+> **Status**: 🔄 In Progress · **Progress**: 0 / 16 tasks · **Last updated**: 2026-06-26
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
