@@ -1,6 +1,6 @@
 # Phase 2 — Auth + Last-Event-ID + Reauthentication
 
-> **Status**: 🔄 In Progress · **Progress**: 11 / 12 tasks · **Last updated**: 2026-06-27
+> **Status**: ✅ Done · **Progress**: 12 / 12 tasks · **Last updated**: 2026-06-27
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -57,7 +57,7 @@ When this phase is done, a consumer can authenticate via cookie or ticket, recon
 | 2.9 | Tests — three auth patterns | ✅ Done | P1 | M | 2.2 |
 | 2.10 | Tests — `ReauthenticationService` + lifecycle hooks | ✅ Done | P1 | M | 2.4, 2.6 |
 | 2.11 | Tests — `encodeSseEvent` + `Last-Event-ID` replay | ✅ Done | P1 | M | 2.5, 2.6 |
-| 2.12 | Phase 2 consolidated validation | 📋 ToDo | P1 | S | 2.1…2.11 |
+| 2.12 | Phase 2 consolidated validation | ✅ Done | P1 | S | 2.1…2.11 |
 
 ---
 
