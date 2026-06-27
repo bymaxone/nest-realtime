@@ -1,7 +1,7 @@
 # Development Plan — @bymax-one/nest-realtime
 
 > **Version:** 2.0.0
-> **Last updated:** 2026-05-27
+> **Last updated:** 2026-06-27
 > **Status:** Draft for execution
 > **Reference spec:** [`docs/technical_specification.md`](./technical_specification.md)
 > **Target engine:** NestJS `@Sse()` + RxJS 7.x (default) + Socket.IO 4.x (opt-in)
