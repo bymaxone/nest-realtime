@@ -11,8 +11,11 @@ permissions:
   contents: read
 
 jobs:
+  # OpenSSF Scorecard publishes SARIF to code scanning (GitHub Advanced Security),
+  # free only on public repositories — gate on public visibility.
   analysis:
     name: analysis
+    if: ${{ github.event.repository.visibility == 'public' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write

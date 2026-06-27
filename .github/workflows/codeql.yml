@@ -10,8 +10,12 @@ permissions:
   contents: read
 
 jobs:
+  # CodeQL code scanning needs GitHub Advanced Security, free only on public
+  # repositories — gate on public visibility so it is skipped (CI green) while the
+  # repository is private and runs automatically once it is public.
   analyze:
     name: analyze
+    if: ${{ github.event.repository.visibility == 'public' }}
     runs-on: ubuntu-latest
     permissions:
       security-events: write

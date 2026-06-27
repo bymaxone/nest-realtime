@@ -37,9 +37,12 @@ jobs:
       - run: pnpm build
       - run: pnpm size
 
+  # Dependency review needs GitHub Advanced Security, which is free only on public
+  # repositories — gate on public visibility so CI stays green while the repository
+  # is private; the job activates automatically once the repository is public.
   dependency-review:
     name: dependency-review
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event_name == 'pull_request' && github.event.repository.visibility == 'public' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
