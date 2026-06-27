@@ -92,7 +92,10 @@ describe('validateOptions', () => {
       authenticator,
       reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 120_000 },
     })
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cacheTtlMs'), 'BymaxRealtimeModule')
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('cacheTtlMs'),
+      'BymaxRealtimeModule',
+    )
     warnSpy.mockRestore()
   })
 

@@ -364,6 +364,27 @@ describe('SseSubscriptionHandler', () => {
     expect(transport.disconnect).not.toHaveBeenCalled()
   })
 
+  // An error on the live subject is caught, the stream completes, and onError fires best-effort.
+  it('swallows stream errors and fires onError hook best-effort (catchError coverage)', async () => {
+    let capturedSubject: Subject<MessageEvent> | undefined
+    const transport = mkTransport({
+      registerConnection: jest.fn().mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+        capturedSubject = params.subject
+      }),
+      emitConnectionEvent: false,
+    })
+    const onError = jest.fn()
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onError })
+    const stream$ = await handler.handle(mkReq(), mkRes())
+    let completed = false
+    stream$.subscribe({ complete: () => { completed = true } })
+    capturedSubject!.error(new Error('stream-error'))
+    // catchError converts the error to EMPTY, completing the stream synchronously.
+    expect(completed).toBe(true)
+    await Promise.resolve()
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(Error) }))
+  })
+
   // Multi-valued headers are collapsed (array values yield undefined for single-value fields).
   it('ignores array-valued single headers (cookie, user-agent)', async () => {
     const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
