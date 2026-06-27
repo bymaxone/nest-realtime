@@ -1,6 +1,6 @@
 /**
- * @fileoverview Integration tests: SseSubscriptionHandler with the three auth fixtures.
- * @layer integration
+ * @fileoverview End-to-end tests: SseSubscriptionHandler with the three auth fixtures.
+ * @layer e2e
  */
 import { UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'

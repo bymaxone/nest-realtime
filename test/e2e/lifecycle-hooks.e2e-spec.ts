@@ -1,6 +1,6 @@
 /**
- * @fileoverview Integration tests for connection lifecycle hooks via SseSubscriptionHandler.
- * @layer integration
+ * @fileoverview End-to-end tests for connection lifecycle hooks via SseSubscriptionHandler.
+ * @layer e2e
  */
 import { UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'

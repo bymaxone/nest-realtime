@@ -1,6 +1,6 @@
 /**
- * @fileoverview Integration tests for Last-Event-ID reconnection replay.
- * @layer integration
+ * @fileoverview End-to-end tests for Last-Event-ID reconnection replay.
+ * @layer e2e
  */
 import type { MessageEvent } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
