@@ -2,8 +2,8 @@
  * @fileoverview Unit tests for bootstrap option validation.
  * @layer composition
  */
-import { validateOptions } from './validate-options'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { validateOptions } from './validate-options'
 
 const authenticator = { authenticate: async () => null }
 
@@ -35,14 +35,16 @@ describe('validateOptions', () => {
 
   // An invalid transport value is rejected.
   it('throws when transport is invalid', () => {
-    expect(() => validateOptions(asOptions({ transport: 'carrier-pigeon', authenticator }))).toThrow(
-      /transport/i,
-    )
+    expect(() =>
+      validateOptions(asOptions({ transport: 'carrier-pigeon', authenticator })),
+    ).toThrow(/transport/i)
   })
 
   // A missing authenticator is rejected (auth inversion makes it mandatory).
   it('throws when authenticator is missing', () => {
-    expect(() => validateOptions(asOptions({ transport: 'sse' }))).toThrow(/authenticator is required/)
+    expect(() => validateOptions(asOptions({ transport: 'sse' }))).toThrow(
+      /authenticator is required/,
+    )
   })
 
   // An authenticator without an authenticate() method is rejected.

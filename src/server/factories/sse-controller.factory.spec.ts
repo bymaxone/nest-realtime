@@ -6,10 +6,10 @@ import { UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import type { Observable } from 'rxjs'
-import { createSseController } from './sse-controller.factory'
 import { RESERVED_EVENT_NAMES } from '../constants/reserved-events.constants'
 import type { SseTransport } from '../transports/sse/sse.transport'
 import type { HeartbeatService } from '../transports/sse/heartbeat.service'
+import { createSseController } from './sse-controller.factory'
 
 interface SseControllerInstance {
   subscribe(req: Request, res: Response): Promise<Observable<MessageEvent>>
@@ -69,9 +69,9 @@ describe('createSseController', () => {
   // A failed authentication throws 401 (UnauthorizedException).
   it('throws Unauthorized when authentication fails', async () => {
     const transport = mkTransport({ authenticate: jest.fn().mockResolvedValue(null) })
-    await expect(build(transport, mkHeartbeat()).subscribe(mkReq(), mkRes())).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    )
+    await expect(
+      build(transport, mkHeartbeat()).subscribe(mkReq(), mkRes()),
+    ).rejects.toBeInstanceOf(UnauthorizedException)
   })
 
   // On success the stream starts with the client-safe connection:established event.

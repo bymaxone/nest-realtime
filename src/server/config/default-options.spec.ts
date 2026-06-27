@@ -2,8 +2,8 @@
  * @fileoverview Unit tests for option defaulting.
  * @layer composition
  */
-import { applyDefaults, DEFAULT_SSE } from './default-options'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { applyDefaults, DEFAULT_SSE } from './default-options'
 
 const authenticator = { authenticate: async () => null }
 

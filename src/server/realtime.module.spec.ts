@@ -11,8 +11,8 @@ import { REALTIME_HOOKS_TOKEN, REALTIME_PUBSUB_TOKEN } from './constants/injecti
 import type {
   BymaxRealtimeModuleOptions,
   IConnectionLifecycleHooks,
+  IRealtimePubSub,
 } from './interfaces'
-import type { IRealtimePubSub } from './interfaces'
 
 const authenticator = { authenticate: async () => null }
 
@@ -46,9 +46,9 @@ describe('BymaxRealtimeModule.forRoot', () => {
 
   // The websocket transport is not available in this release.
   it('throws for the websocket transport', () => {
-    expect(() =>
-      BymaxRealtimeModule.forRoot({ transport: 'websocket', authenticator }),
-    ).toThrow(/not available/)
+    expect(() => BymaxRealtimeModule.forRoot({ transport: 'websocket', authenticator })).toThrow(
+      /not available/,
+    )
   })
 
   // The composite transport is not available in this release.

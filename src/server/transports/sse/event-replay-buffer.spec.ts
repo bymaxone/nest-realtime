@@ -3,8 +3,8 @@
  * @layer transport
  */
 import type { MessageEvent } from '@nestjs/common'
-import { EventReplayBuffer } from './event-replay-buffer'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+import { EventReplayBuffer } from './event-replay-buffer'
 
 const authenticator = { authenticate: async () => null }
 

@@ -2,10 +2,7 @@
  * @fileoverview Unit tests for the indexed connection registry.
  * @layer infrastructure
  */
-import {
-  ConnectionRegistry,
-  type ConnectionRecord,
-} from './connection-registry.service'
+import { ConnectionRegistry, type ConnectionRecord } from './connection-registry.service'
 
 function mkRecord(
   over: Partial<ConnectionRecord> & { connectionId: string; userId: string },
@@ -63,7 +60,9 @@ describe('ConnectionRegistry', () => {
 
   // byTenant filters by transport when a transport is supplied.
   it('filters byTenant by transport', () => {
-    registry.register(mkRecord({ connectionId: 'c1', userId: 'u1', tenantId: 't1', transport: 'sse' }))
+    registry.register(
+      mkRecord({ connectionId: 'c1', userId: 'u1', tenantId: 't1', transport: 'sse' }),
+    )
     registry.register(
       mkRecord({ connectionId: 'c2', userId: 'u2', tenantId: 't1', transport: 'websocket' }),
     )

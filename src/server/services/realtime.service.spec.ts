@@ -2,8 +2,8 @@
  * @fileoverview Unit tests asserting RealtimeService delegates to the transport.
  * @layer application
  */
-import { RealtimeService } from './realtime.service'
 import type { ITransport } from '../interfaces/transport.interface'
+import { RealtimeService } from './realtime.service'
 
 function mockTransport(): jest.Mocked<ITransport> {
   return {

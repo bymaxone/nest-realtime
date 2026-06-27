@@ -4,9 +4,6 @@
  */
 import type { MessageEvent } from '@nestjs/common'
 import { Subject } from 'rxjs'
-import { SseTransport } from './sse.transport'
-import { EventReplayBuffer } from './event-replay-buffer'
-import { HeartbeatService } from './heartbeat.service'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { EventIdGenerator } from '../../services/event-id-generator.service'
@@ -17,7 +14,13 @@ import type {
   IRealtimePubSub,
   RealtimePubSubMessage,
 } from '../../interfaces/realtime-pubsub.interface'
-import type { BymaxRealtimeModuleOptions, SseOptions } from '../../interfaces/realtime-module-options.interface'
+import type {
+  BymaxRealtimeModuleOptions,
+  SseOptions,
+} from '../../interfaces/realtime-module-options.interface'
+import { HeartbeatService } from './heartbeat.service'
+import { EventReplayBuffer } from './event-replay-buffer'
+import { SseTransport } from './sse.transport'
 
 type RemoteHandler = (message: RealtimePubSubMessage) => void
 
@@ -29,7 +32,11 @@ function makeOptions(sse?: SseOptions): BymaxRealtimeModuleOptions {
   }
 }
 
-function build(opts?: { sse?: SseOptions; hooks?: IConnectionLifecycleHooks; instanceId?: string }) {
+function build(opts?: {
+  sse?: SseOptions
+  hooks?: IConnectionLifecycleHooks
+  instanceId?: string
+}) {
   const connections = new ConnectionRegistry()
   const rooms = new RoomRegistry()
   const options = makeOptions(opts?.sse)
@@ -60,7 +67,12 @@ function build(opts?: { sse?: SseOptions; hooks?: IConnectionLifecycleHooks; ins
 
 function addConn(
   connections: ConnectionRegistry,
-  params: { connectionId: string; userId: string; tenantId?: string; transport?: 'sse' | 'websocket' },
+  params: {
+    connectionId: string
+    userId: string
+    tenantId?: string
+    transport?: 'sse' | 'websocket'
+  },
 ): { received: MessageEvent[]; close$: Subject<void> } {
   const received: MessageEvent[] = []
   const transport = params.transport ?? 'sse'
@@ -189,7 +201,11 @@ describe('SseTransport', () => {
     const { received } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
     await transport.onModuleInit()
     const handler = subscribe.mock.calls[0]?.[0] as RemoteHandler
-    handler({ op: 'emitToUser', args: { userId: 'u1', event: 'foo', data: {}, id: 'x-1' }, origin: 'other' })
+    handler({
+      op: 'emitToUser',
+      args: { userId: 'u1', event: 'foo', data: {}, id: 'x-1' },
+      origin: 'other',
+    })
     expect(received).toHaveLength(1)
     expect(publish).not.toHaveBeenCalled()
   })
@@ -200,7 +216,11 @@ describe('SseTransport', () => {
     const { received } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
     await transport.onModuleInit()
     const handler = subscribe.mock.calls[0]?.[0] as RemoteHandler
-    handler({ op: 'emitToUser', args: { userId: 'u1', event: 'foo', data: {}, id: 'x' }, origin: 'inst-1' })
+    handler({
+      op: 'emitToUser',
+      args: { userId: 'u1', event: 'foo', data: {}, id: 'x' },
+      origin: 'inst-1',
+    })
     expect(received).toHaveLength(0)
   })
 
@@ -211,8 +231,16 @@ describe('SseTransport', () => {
     rooms.join('cu', 'room:a')
     await transport.onModuleInit()
     const handler = subscribe.mock.calls[0]?.[0] as RemoteHandler
-    handler({ op: 'emitToTenant', args: { tenantId: 't1', event: 'e', data: {}, id: '1' }, origin: 'o' })
-    handler({ op: 'emitToRoom', args: { roomId: 'room:a', event: 'e', data: {}, id: '2' }, origin: 'o' })
+    handler({
+      op: 'emitToTenant',
+      args: { tenantId: 't1', event: 'e', data: {}, id: '1' },
+      origin: 'o',
+    })
+    handler({
+      op: 'emitToRoom',
+      args: { roomId: 'room:a', event: 'e', data: {}, id: '2' },
+      origin: 'o',
+    })
     handler({ op: 'broadcast', args: { event: 'e', data: {}, id: '3' }, origin: 'o' })
     expect(user.received).toHaveLength(3)
     handler({ op: 'disconnect', args: { connectionId: 'cu', reason: 'x' }, origin: 'o' })
@@ -281,7 +309,9 @@ describe('SseTransport', () => {
       userAgent: 'jest',
     })
     expect(rooms.roomsOf('c1')).toEqual(expect.arrayContaining(['user:u1', 'tenant:t1']))
-    expect(onConnect).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1', tenantId: 't1' }))
+    expect(onConnect).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u1', tenantId: 't1' }),
+    )
   })
 
   // A tenant-less registration auto-joins only the user room.
@@ -306,7 +336,9 @@ describe('SseTransport', () => {
     await transport.unregisterConnection('c1')
     await transport.unregisterConnection('c1')
     expect(onDisconnect).toHaveBeenCalledTimes(1)
-    expect(onDisconnect).toHaveBeenCalledWith(expect.not.objectContaining({ reason: expect.anything() }))
+    expect(onDisconnect).toHaveBeenCalledWith(
+      expect.not.objectContaining({ reason: expect.anything() }),
+    )
   })
 
   // FIFO eviction removes the oldest connection beyond the per-user cap.

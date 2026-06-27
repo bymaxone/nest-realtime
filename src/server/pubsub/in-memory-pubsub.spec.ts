@@ -2,8 +2,8 @@
  * @fileoverview Unit tests for the default in-process pub/sub.
  * @layer infrastructure
  */
-import { InMemoryPubSub } from './in-memory-pubsub'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
+import { InMemoryPubSub } from './in-memory-pubsub'
 
 const message: RealtimePubSubMessage = { op: 'broadcast', args: { event: 'x' }, origin: 'inst-1' }
 
