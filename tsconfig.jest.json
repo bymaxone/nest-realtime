@@ -6,6 +6,7 @@
     "noEmit": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
+    "importHelpers": true,
     "types": ["node", "jest"]
   },
   "include": ["src/**/*.ts"],
