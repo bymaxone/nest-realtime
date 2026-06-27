@@ -112,8 +112,12 @@ describe('SseSubscriptionHandler', () => {
     const stream = await handler.handle(mkReq(), mkRes())
     const events = collect(stream)
     expect(events[0]?.type).toBe(RESERVED_EVENT_NAMES.CONNECTION_ESTABLISHED)
-    const data = events[0]?.data as { traits: { userId: string; tenantId?: string } }
-    expect(data.traits).toEqual({ userId: 'u1', tenantId: 't1', roles: undefined })
+    // Assert the EXACT data shape — connectionId + traits only; metadata must NOT be present.
+    // If a future change leaks ip, userAgent, connectedAt, or other internal fields, this fails.
+    expect(events[0]?.data).toEqual({
+      connectionId: expect.any(String),
+      traits: { userId: 'u1', tenantId: 't1', roles: undefined },
+    })
   })
 
   // When the connection event is disabled, no established event is emitted.
