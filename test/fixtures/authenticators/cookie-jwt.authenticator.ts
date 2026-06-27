@@ -57,7 +57,7 @@ export class CookieJwtAuthenticator implements IConnectionAuthenticator {
     const token = ctx.cookies[this.cookieName]
     if (!token) return null
     try {
-      const payload = verify(token, this.secret) as JwtPayload
+      const payload = verify(token, this.secret, { algorithms: ['HS256'] }) as JwtPayload
       return {
         userId: payload.sub,
         tenantId: payload.tid,

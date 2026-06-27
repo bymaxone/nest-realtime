@@ -31,7 +31,7 @@ export class CookieJwtAuthenticator implements IConnectionAuthenticator {
     const token = ctx.cookies[this.cookieName]
     if (!token) return null
     try {
-      const payload = verify(token, this.secret) as {
+      const payload = verify(token, this.secret, { algorithms: ['HS256'] }) as {
         sub: string
         tid?: string
         roles?: string[]
@@ -71,3 +71,9 @@ browsers and leaks the token over plain HTTP.
 
 **Refresh tokens** should live in a separate `HttpOnly` cookie on the token-refresh
 endpoint only, not on the SSE path.  The realtime library never touches refresh tokens.
+
+**Always restrict the allowed algorithms** when calling `verify`. Passing `{ algorithms: ['HS256'] }`
+(or whichever single algorithm your tokens use) prevents algorithm-confusion attacks where an
+attacker swaps the `alg` header to `none` or to an asymmetric algorithm for which the HMAC
+secret happens to be a valid public key.  Never call `verify` without an explicit `algorithms`
+allowlist in production code.

@@ -85,4 +85,11 @@ describe('CookieJwtAuthenticator', () => {
     expect(result?.tenantId).toBeUndefined()
     expect(result?.roles).toBeUndefined()
   })
+
+  // A JWT signed with a non-HS256 algorithm is rejected even with the correct secret.
+  it('rejects a JWT signed with a non-HS256 algorithm', async () => {
+    const token = sign({ sub: 'u5' }, SECRET, { algorithm: 'HS512' })
+    const result = await auth.authenticate(mkCtx({ cookies: { access_token: token } }))
+    expect(result).toBeNull()
+  })
 })
