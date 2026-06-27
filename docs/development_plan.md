@@ -1,7 +1,7 @@
 # Development Plan — @bymax-one/nest-realtime
 
 > **Version:** 2.0.0
-> **Last updated:** 2026-05-27
+> **Last updated:** 2026-06-27
 > **Status:** Draft for execution
 > **Reference spec:** [`docs/technical_specification.md`](./technical_specification.md)
 > **Target engine:** NestJS `@Sse()` + RxJS 7.x (default) + Socket.IO 4.x (opt-in)
@@ -69,7 +69,7 @@ The phase order respects the dependency graph (Appendix A): contracts before tra
 ### 1.4 Progress
 
 - **Overall progress:** 🔄 1 / 6 phases done (17%) — 16 / 73 tasks (22%)
-- **Active phase:** **Phase 2** (Auth + Last-Event-ID + Reauthentication) — not started
+- **Active phase:** **Phase 2** (Auth + Last-Event-ID + Reauthentication) — in progress
 - **Blocked:** none
 
 ### 1.5 Phase dashboard
@@ -79,7 +79,7 @@ Canonical phase status. Each row links to that phase's task file in [`docs/tasks
 | ID | Phase | Status | Progress | Complexity | Last updated |
 | --- | --- | --- | --- | --- | --- |
 | 1 | [Foundation + SSE Transport](./tasks/phase-01-foundation-sse.md) | ✅ Done | 16/16 | MEDIUM | 2026-06-27 |
-| 2 | [Auth + Last-Event-ID + Reauthentication](./tasks/phase-02-auth-last-event-id.md) | 📋 ToDo | 0/12 | MEDIUM | 2026-06-23 |
+| 2 | [Auth + Last-Event-ID + Reauthentication](./tasks/phase-02-auth-last-event-id.md) | 🔄 In Progress | 0/12 | MEDIUM | 2026-06-27 |
 | 3 | [Horizontal Scaling (SSE)](./tasks/phase-03-horizontal-scaling-sse.md) | 📋 ToDo | 0/11 | HIGH | 2026-06-23 |
 | 4 | [WebSocket Transport](./tasks/phase-04-websocket-transport.md) | 📋 ToDo | 0/12 | HIGH | 2026-06-23 |
 | 5 | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md) | 📋 ToDo | 0/12 | MEDIUM | 2026-06-23 |
