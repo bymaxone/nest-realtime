@@ -10,6 +10,7 @@ import { InMemoryPubSub } from './pubsub/in-memory-pubsub'
 import { REALTIME_HOOKS_TOKEN, REALTIME_PUBSUB_TOKEN } from './constants/injection-tokens.constants'
 import type {
   BymaxRealtimeModuleOptions,
+  BymaxRealtimeModuleAsyncOptions,
   IConnectionLifecycleHooks,
   IRealtimePubSub,
 } from './interfaces'
@@ -93,5 +94,113 @@ describe('BymaxRealtimeModule.forRoot', () => {
       imports: [BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator, hooks })],
     }).compile()
     expect(mod.get(REALTIME_HOOKS_TOKEN)).toBe(hooks)
+  })
+})
+
+describe('BymaxRealtimeModule.forRootAsync', () => {
+  // Basic wiring: useFactory returning valid options wires all services.
+  it('wires RealtimeService when useFactory returns valid options', async () => {
+    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+    }
+    const mod = await Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRootAsync(asyncOptions)],
+    }).compile()
+    expect(mod.get(RealtimeService)).toBeInstanceOf(RealtimeService)
+    expect(mod.get(ConnectionRegistry)).toBeInstanceOf(ConnectionRegistry)
+  })
+
+  // A DynamicModule with exactly one SSE controller is produced.
+  it('produces a dynamic module with one controller', () => {
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+    })
+    expect(dynamic.module).toBe(BymaxRealtimeModule)
+    expect(dynamic.controllers).toHaveLength(1)
+  })
+
+  // When useFactory is absent or returns nothing, compilation throws.
+  it('throws during module compilation when useFactory returns null', async () => {
+    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+      useFactory: async () => null as unknown as BymaxRealtimeModuleOptions,
+    }
+    const testModule = Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRootAsync(asyncOptions)],
+    })
+    await expect(testModule.compile()).rejects.toThrow(/REALTIME_INVALID_OPTIONS/)
+  })
+
+  // Without a pubsub the default in-memory implementation is provided.
+  it('defaults to InMemoryPubSub when pubsub is not in the factory result', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useFactory: async () => ({ transport: 'sse', authenticator }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_PUBSUB_TOKEN)).toBeInstanceOf(InMemoryPubSub)
+  })
+
+  // A provided pubsub is used as-is.
+  it('uses a provided pubsub from the factory result', async () => {
+    const pubsub: IRealtimePubSub = {
+      publish: async () => undefined,
+      subscribe: async () => async () => undefined,
+    }
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useFactory: async () => ({ transport: 'sse', authenticator, pubsub }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_PUBSUB_TOKEN)).toBe(pubsub)
+  })
+
+  // Hooks default to an empty object.
+  it('defaults hooks to an empty object', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useFactory: async () => ({ transport: 'sse', authenticator }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_HOOKS_TOKEN)).toEqual({})
+  })
+
+  // Provided hooks are wired through.
+  it('uses hooks from the factory result', async () => {
+    const hooks: IConnectionLifecycleHooks = { onConnect: async () => undefined }
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useFactory: async () => ({ transport: 'sse', authenticator, hooks }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_HOOKS_TOKEN)).toBe(hooks)
+  })
+
+  // extraProviders are registered alongside the default providers.
+  it('registers extraProviders when provided', async () => {
+    const EXTRA_TOKEN = Symbol('EXTRA')
+    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+      extraProviders: [{ provide: EXTRA_TOKEN, useValue: 'extra' }],
+    }
+    const mod = await Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRootAsync(asyncOptions)],
+    }).compile()
+    expect(mod.get(EXTRA_TOKEN)).toBe('extra')
+  })
+
+  // imports and inject are passed through correctly.
+  it('passes through empty imports when not provided', () => {
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+    })
+    expect(dynamic.imports).toEqual([])
   })
 })
