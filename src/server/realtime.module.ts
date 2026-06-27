@@ -27,6 +27,7 @@ import { RealtimeService } from './services/realtime.service'
 import { RoomRegistry } from './services/room-registry.service'
 import { EventReplayBuffer } from './transports/sse/event-replay-buffer'
 import { HeartbeatService } from './transports/sse/heartbeat.service'
+import { SseSubscriptionHandler } from './transports/sse/sse-subscription.handler'
 import { SseTransport } from './transports/sse/sse.transport'
 
 /**
@@ -75,6 +76,7 @@ export class BymaxRealtimeModule {
       HeartbeatService,
       SseTransport,
       { provide: REALTIME_TRANSPORT_TOKEN, useExisting: SseTransport },
+      SseSubscriptionHandler,
       RealtimeService,
     ]
 

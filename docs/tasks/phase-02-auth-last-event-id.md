@@ -1,6 +1,6 @@
 # Phase 2 — Auth + Last-Event-ID + Reauthentication
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 12 tasks · **Last updated**: 2026-06-27
+> **Status**: 🔄 In Progress · **Progress**: 1 / 12 tasks · **Last updated**: 2026-06-27
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -46,7 +46,7 @@ When this phase is done, a consumer can authenticate via cookie or ticket, recon
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 2.1 | Refactor — extract `SseSubscriptionHandler` | 📋 ToDo | P0 | M | 1.13 |
+| 2.1 | Refactor — extract `SseSubscriptionHandler` | ✅ Done | P0 | M | 1.13 |
 | 2.2 | `IConnectionAuthenticator` — three patterns (docs + fixtures) | 📋 ToDo | P1 | M | 1.9 |
 | 2.3 | `@bymax-one/nest-auth` bridge — reference example (docs only) | 📋 ToDo | P2 | S | 2.2 |
 | 2.4 | `ReauthenticationService` — periodic re-check + positive cache | 📋 ToDo | P1 | M | 2.1 |
@@ -65,7 +65,7 @@ When this phase is done, a consumer can authenticate via cookie or ticket, recon
 
 ### Task 2.1 — Refactor: extract `SseSubscriptionHandler`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.13
@@ -1388,4 +1388,4 @@ Completion Protocol (after you finish):
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
-<!-- No entries yet — Phase 2 is ToDo. Entries are appended on task completion. -->
+- 2.1 ✅ 2026-06-27 — Extracted SseSubscriptionHandler from factory; factory is now a thin shell; FIFO eviction, onConnect hook, anti-buffering headers, and replay all moved to handler.
