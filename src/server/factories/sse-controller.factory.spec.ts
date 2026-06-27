@@ -42,6 +42,15 @@ describe('createSseController', () => {
     expect(handler.handle).toHaveBeenCalledWith(req, res)
   })
 
+  // The factory itself must NOT set response headers — SseSubscriptionHandler owns that.
+  it('does not set response headers directly (handler owns Cache-Control and X-Accel-Buffering)', async () => {
+    const handler = mkHandler()
+    const req = mkReq()
+    const res = mkRes()
+    await build(handler, '/events').subscribe(req, res)
+    expect(res.setHeader).not.toHaveBeenCalled()
+  })
+
   // The controller returns whatever the handler resolves to.
   it('returns the Observable returned by the handler', async () => {
     const subject = new Subject<MessageEvent>()

@@ -28,10 +28,7 @@ export function createSseController(endpoint: string): Type<unknown> {
       @Req() req: Request,
       @Res({ passthrough: true }) res: Response,
     ): Promise<Observable<MessageEvent>> {
-      // Send anti-buffering headers before the first byte.
-      // NestJS sets Content-Type: text/event-stream automatically for @Sse.
-      res.setHeader('Cache-Control', 'no-cache, no-transform')
-      res.setHeader('X-Accel-Buffering', 'no')
+      // Anti-buffering headers are set by SseSubscriptionHandler.handle — no duplication here.
       return this.handler.handle(req, res)
     }
   }
