@@ -1,6 +1,6 @@
 # Phase 2 — Auth + Last-Event-ID + Reauthentication
 
-> **Status**: 🔄 In Progress · **Progress**: 8 / 12 tasks · **Last updated**: 2026-06-27
+> **Status**: 🔄 In Progress · **Progress**: 9 / 12 tasks · **Last updated**: 2026-06-27
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -54,7 +54,7 @@ When this phase is done, a consumer can authenticate via cookie or ticket, recon
 | 2.6 | `Last-Event-ID` replay wiring + lifecycle hooks | ✅ Done | P1 | M | 1.12, 2.1 |
 | 2.7 | Effective heartbeat against real proxies | ✅ Done | P2 | S | 1.12 |
 | 2.8 | `forRootAsync` support | ✅ Done | P1 | M | 1.13 |
-| 2.9 | Tests — three auth patterns | 📋 ToDo | P1 | M | 2.2 |
+| 2.9 | Tests — three auth patterns | ✅ Done | P1 | M | 2.2 |
 | 2.10 | Tests — `ReauthenticationService` + lifecycle hooks | 📋 ToDo | P1 | M | 2.4, 2.6 |
 | 2.11 | Tests — `encodeSseEvent` + `Last-Event-ID` replay | 📋 ToDo | P1 | M | 2.5, 2.6 |
 | 2.12 | Phase 2 consolidated validation | 📋 ToDo | P1 | S | 2.1…2.11 |
@@ -1077,7 +1077,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.9 — Tests: three auth patterns
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.2
@@ -1396,3 +1396,4 @@ Completion Protocol (after you finish):
 - 2.6 ✅ 2026-06-27 — Confirmed Last-Event-ID replay in handler; added catchError to wire onError lifecycle hook; per-user EventReplayBuffer with parenthesized cap confirmed.
 - 2.7 ✅ 2026-06-27 — Added range validation [5000,90000]ms to HeartbeatService; anti-buffering headers moved to factory; proxy cheat sheet authored.
 - 2.8 ✅ 2026-06-27 — Added forRootAsync to BymaxRealtimeModule; validates+defaults inside factory; all Phase 2 providers registered; fixed endpoint /events with JSDoc trade-off note.
+- 2.9 ✅ 2026-06-27 — Authored specs for cookie-jwt, ticket, bearer fixtures and handler integration spec; jest configs extended to cover test/ directory.
