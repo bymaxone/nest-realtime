@@ -136,6 +136,18 @@ export class BymaxRealtimeModule {
    * ```
    */
   static forRootAsync(asyncOptions: BymaxRealtimeModuleAsyncOptions): DynamicModule {
+    // Exactly one async-options pattern must be provided; otherwise DI would inject
+    // `undefined` and surface a confusing Nest error instead of an actionable one.
+    const patterns = [
+      asyncOptions.useFactory,
+      asyncOptions.useClass,
+      asyncOptions.useExisting,
+    ].filter((pattern) => pattern !== undefined)
+    if (patterns.length !== 1) {
+      throw new Error(
+        `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: forRootAsync requires exactly one of useFactory, useClass, or useExisting (received ${patterns.length})`,
+      )
+    }
     // Internal token scoped to this call — avoids collisions between multiple forRootAsync calls.
     const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
 
