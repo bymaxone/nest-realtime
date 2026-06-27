@@ -13,13 +13,18 @@ export interface ConnectionAuthContext {
   /** Cookies parsed from the request/handshake headers. */
   readonly cookies: Record<string, string>
   /**
-   * Selected headers (lowercase keys). `authorization` is absent for SSE because
-   * browsers cannot attach an Authorization header to an `EventSource`.
+   * Selected headers (lowercase keys). `authorization` is always stripped for SSE:
+   * an `EventSource` cannot send custom headers, so it is never a valid SSE auth
+   * channel (use a cookie or the ticket pattern). It is available for WebSocket.
    */
   readonly headers: Record<string, string | undefined>
   /** Query string parameters — useful for the ticket pattern. */
   readonly query: Record<string, string | undefined>
-  /** Client IP — best-effort; may need `X-Forwarded-For` handling behind proxies. */
+  /**
+   * Client IP — best-effort. Derived from `X-Forwarded-For` when present, which is
+   * spoofable unless set by a trusted proxy; do not use it for security decisions
+   * without validating the proxy chain.
+   */
   readonly ip: string
   /** Raw User-Agent. */
   readonly userAgent: string | undefined

@@ -20,13 +20,18 @@ export interface CorsConfig {
   methods?: readonly string[]
 }
 
-/** SSE-transport-specific options. */
+/**
+ * SSE-transport-specific options.
+ *
+ * CORS for the SSE endpoint is intentionally not configured here: the endpoint is a
+ * standard HTTP GET, so cross-origin access is controlled at the NestJS application
+ * level (`app.enableCors(...)`). `CorsConfig` applies to the WebSocket transport.
+ */
 export interface SseOptions {
   endpoint?: string
   heartbeatMs?: number
   replayBufferSize?: number
   maxConnectionsPerUser?: number
-  cors?: CorsConfig
   emitConnectionEvent?: boolean
 }
 

@@ -24,7 +24,13 @@ function singleHeader(value: string | string[] | undefined): string | undefined 
   return typeof value === 'string' ? value : undefined
 }
 
-/** Resolve the best-effort client IP, preferring `X-Forwarded-For`. */
+/**
+ * Resolve the best-effort client IP, preferring `X-Forwarded-For`.
+ *
+ * NOTE: `X-Forwarded-For` is trusted verbatim and is therefore spoofable unless a
+ * trusted reverse proxy sets it. Do not use the resolved IP for security decisions
+ * (rate-limiting, block-lists) without validating the proxy chain.
+ */
 function resolveIp(req: Request): string {
   const forwarded = req.headers['x-forwarded-for']
   const candidate = (typeof forwarded === 'string' ? forwarded.split(',')[0] : undefined) ?? ''
@@ -33,19 +39,32 @@ function resolveIp(req: Request): string {
 
 /** Normalize header names to lowercase and flatten array values. */
 function normalizeHeaders(headers: Request['headers']): Record<string, string | undefined> {
-  const out: Record<string, string | undefined> = {}
+  const out = Object.create(null) as Record<string, string | undefined>
   for (const [key, value] of Object.entries(headers)) {
     out[key.toLowerCase()] = Array.isArray(value) ? value.join(',') : value
   }
   return out
 }
 
+/** Coerce Express's `ParsedQs` to flat string values (arrays/objects become undefined). */
+function sanitizeQuery(query: Request['query']): Record<string, string | undefined> {
+  const out = Object.create(null) as Record<string, string | undefined>
+  for (const [key, value] of Object.entries(query)) {
+    out[key] = typeof value === 'string' ? value : undefined
+  }
+  return out
+}
+
 /** Build the transport-agnostic auth context from the HTTP request. */
 function buildAuthContext(req: Request): ConnectionAuthContext {
+  const headers = normalizeHeaders(req.headers)
+  // EventSource cannot send custom headers, so `authorization` is never a valid SSE
+  // auth channel — strip it so a non-browser client cannot smuggle a bearer token.
+  delete headers['authorization']
   return {
     cookies: parseCookieHeader(singleHeader(req.headers['cookie']) ?? ''),
-    headers: normalizeHeaders(req.headers),
-    query: req.query as unknown as Record<string, string | undefined>,
+    headers,
+    query: sanitizeQuery(req.query),
     ip: resolveIp(req),
     userAgent: singleHeader(req.headers['user-agent']),
     transport: 'sse',

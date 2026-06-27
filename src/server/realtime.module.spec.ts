@@ -44,14 +44,14 @@ describe('BymaxRealtimeModule.forRoot', () => {
     )
   })
 
-  // The websocket transport is not available in this release.
+  // Only 'sse' is wired; the websocket transport is rejected at bootstrap.
   it('throws for the websocket transport', () => {
     expect(() => BymaxRealtimeModule.forRoot({ transport: 'websocket', authenticator })).toThrow(
       /not available/,
     )
   })
 
-  // The composite transport is not available in this release.
+  // Only 'sse' is wired; the composite transport is rejected at bootstrap.
   it('throws for the both transport', () => {
     expect(() => BymaxRealtimeModule.forRoot({ transport: 'both', authenticator })).toThrow(
       /not available/,

@@ -13,7 +13,6 @@ export const DEFAULT_SSE: Required<SseOptions> = {
   heartbeatMs: 30_000,
   replayBufferSize: 100,
   maxConnectionsPerUser: 5,
-  cors: { origin: true, credentials: true },
   emitConnectionEvent: true,
 }
 
@@ -26,8 +25,7 @@ export type ResolvedRealtimeOptions = Readonly<
  * Merge consumer options with the library's SSE defaults.
  *
  * Returns a frozen object whose `sse` is fully populated — callers must not mutate
- * it. Only SSE defaults are filled because SSE is the transport supported by this
- * release.
+ * it. Only SSE defaults are filled because SSE is the transport this module wires.
  */
 export function applyDefaults(options: BymaxRealtimeModuleOptions): ResolvedRealtimeOptions {
   return Object.freeze({

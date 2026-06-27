@@ -18,7 +18,7 @@
  * ```
  */
 export function parseCookieHeader(cookieHeader: string): Record<string, string> {
-  const out: Record<string, string> = {}
+  const out = Object.create(null) as Record<string, string>
   if (!cookieHeader) return out
   for (const pair of cookieHeader.split(';')) {
     const idx = pair.indexOf('=')

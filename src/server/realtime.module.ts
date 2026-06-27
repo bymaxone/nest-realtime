@@ -55,7 +55,7 @@ export class BymaxRealtimeModule {
     const resolved = applyDefaults(options)
     if (resolved.transport !== 'sse') {
       throw new Error(
-        `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: transport "${resolved.transport}" is not available yet; only 'sse' is supported in this release`,
+        `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: transport "${resolved.transport}" is not available; only 'sse' is supported`,
       )
     }
 

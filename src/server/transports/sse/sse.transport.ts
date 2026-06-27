@@ -162,16 +162,20 @@ export class SseTransport implements ITransport {
     if (params.auth.tenantId !== undefined) {
       this.rooms.join(params.connectionId, composeRoomId('TENANT', params.auth.tenantId))
     }
-    this.evictBeyondLimit(params.auth.userId)
-    await this.hooks.onConnect?.({
-      connectionId: record.connectionId,
-      userId: record.userId,
-      tenantId: record.tenantId,
-      transport: 'sse',
-      ip: record.ip,
-      userAgent: record.userAgent,
-      connectedAt: record.connectedAt,
-    })
+    await this.evictBeyondLimit(params.auth.userId)
+    try {
+      await this.hooks.onConnect?.({
+        connectionId: record.connectionId,
+        userId: record.userId,
+        tenantId: record.tenantId,
+        transport: 'sse',
+        ip: record.ip,
+        userAgent: record.userAgent,
+        connectedAt: record.connectedAt,
+      })
+    } catch (error) {
+      this.logger.error(`onConnect hook failed: ${(error as Error).message}`)
+    }
   }
 
   /** Idempotent cleanup for a connection — runs the disconnect hook exactly once. */
@@ -180,17 +184,21 @@ export class SseTransport implements ITransport {
     if (!record) return
     this.rooms.leaveAll(connectionId)
     this.heartbeat.stop(connectionId)
-    await this.hooks.onDisconnect?.({
-      connectionId: record.connectionId,
-      userId: record.userId,
-      tenantId: record.tenantId,
-      transport: 'sse',
-      ip: record.ip,
-      userAgent: record.userAgent,
-      connectedAt: record.connectedAt,
-      durationMs: Date.now() - record.connectedAt.getTime(),
-      ...(reason !== undefined ? { reason } : {}),
-    })
+    try {
+      await this.hooks.onDisconnect?.({
+        connectionId: record.connectionId,
+        userId: record.userId,
+        tenantId: record.tenantId,
+        transport: 'sse',
+        ip: record.ip,
+        userAgent: record.userAgent,
+        connectedAt: record.connectedAt,
+        durationMs: Date.now() - record.connectedAt.getTime(),
+        ...(reason !== undefined ? { reason } : {}),
+      })
+    } catch (error) {
+      this.logger.error(`onDisconnect hook failed: ${(error as Error).message}`)
+    }
   }
 
   /** Replay the events a user missed after `lastEventId`. */
@@ -268,9 +276,12 @@ export class SseTransport implements ITransport {
   async disconnectLocal(connectionId: string, reason?: string): Promise<void> {
     const record = this.connections.get(connectionId)
     if (!record || record.transport !== 'sse') return
+    // Clean up with the reason BEFORE closing the stream. The stream's finalize
+    // also calls unregisterConnection, but the record is already gone by then, so
+    // that call is a no-op and the disconnect reason still reaches onDisconnect.
+    await this.unregisterConnection(connectionId, reason)
     record.close$?.next()
     record.close$?.complete()
-    await this.unregisterConnection(connectionId, reason)
   }
 
   private buildMessage(id: string, event: string, data: unknown): MessageEvent {
@@ -328,13 +339,13 @@ export class SseTransport implements ITransport {
   }
 
   /** Evict a user's oldest connections (FIFO) when over `maxConnectionsPerUser`. */
-  private evictBeyondLimit(userId: string): void {
+  private async evictBeyondLimit(userId: string): Promise<void> {
     const max = this.options.sse?.maxConnectionsPerUser
     if (max === undefined || max <= 0) return
     let userConnections = this.connections.byUser(userId, 'sse')
     while (userConnections.length > max) {
       const oldest = userConnections.reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))
-      void this.disconnectLocal(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
+      await this.disconnectLocal(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
       userConnections = this.connections.byUser(userId, 'sse')
     }
   }

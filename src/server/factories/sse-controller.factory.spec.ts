@@ -208,4 +208,28 @@ describe('createSseController', () => {
     expect(context.userAgent).toBeUndefined()
     expect(getReplayEvents).not.toHaveBeenCalled()
   })
+
+  // Query parameters are flattened to strings; array/object values become undefined.
+  it('sanitizes query parameters to flat strings', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const transport = mkTransport({ authenticate })
+    const req = mkReq({ query: { ticket: 'abc', multi: ['a', 'b'] } })
+    await build(transport, mkHeartbeat()).subscribe(req, mkRes())
+    const context = authenticate.mock.calls[0]?.[0] as { query: Record<string, string | undefined> }
+    expect(context.query['ticket']).toBe('abc')
+    expect(context.query['multi']).toBeUndefined()
+  })
+
+  // The authorization header is stripped from the SSE auth context.
+  it('strips the authorization header from the SSE context', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const transport = mkTransport({ authenticate })
+    const req = mkReq({ headers: { authorization: 'Bearer secret', 'x-keep': 'yes' } })
+    await build(transport, mkHeartbeat()).subscribe(req, mkRes())
+    const context = authenticate.mock.calls[0]?.[0] as {
+      headers: Record<string, string | undefined>
+    }
+    expect(context.headers['authorization']).toBeUndefined()
+    expect(context.headers['x-keep']).toBe('yes')
+  })
 })

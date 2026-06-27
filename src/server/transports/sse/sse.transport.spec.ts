@@ -478,4 +478,41 @@ describe('SseTransport', () => {
     expect(connections.get('younger')).toBeDefined()
     expect(connections.get('newest')).toBeDefined()
   })
+
+  // A rejecting onConnect hook is isolated (logged, never propagated to the caller).
+  it('isolates a throwing onConnect hook', async () => {
+    const onConnect = jest.fn().mockRejectedValue(new Error('boom'))
+    const { transport } = build({ hooks: { onConnect } })
+    await expect(
+      transport.registerConnection({
+        connectionId: 'c1',
+        auth: { userId: 'u1' },
+        subject: new Subject<MessageEvent>(),
+        close$: new Subject<void>(),
+        ip: 'x',
+        userAgent: undefined,
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  // A rejecting onDisconnect hook is isolated (logged, never an unhandled rejection).
+  it('isolates a throwing onDisconnect hook', async () => {
+    const onDisconnect = jest.fn().mockRejectedValue(new Error('boom'))
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    await expect(transport.unregisterConnection('c1')).resolves.toBeUndefined()
+  })
+
+  // disconnectLocal forwards the reason before any finalize-style cleanup runs.
+  it('forwards the disconnect reason before the stream finalize cleanup', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    await transport.disconnectLocal('c1', 'revoked')
+    // Simulates the @Sse stream's finalize firing after disconnectLocal: the record
+    // is already gone, so this is a no-op and the reason was delivered exactly once.
+    await transport.unregisterConnection('c1')
+    expect(onDisconnect).toHaveBeenCalledTimes(1)
+    expect(onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ reason: 'revoked' }))
+  })
 })

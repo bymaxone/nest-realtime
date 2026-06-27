@@ -5,6 +5,8 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 
+// Format-level validation only: 'websocket' and 'both' are accepted config values,
+// but the module rejects them at bootstrap until those transports are implemented.
 const VALID_TRANSPORTS = new Set<string>(['sse', 'websocket', 'both'])
 
 /**
