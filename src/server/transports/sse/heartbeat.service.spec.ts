@@ -22,18 +22,18 @@ describe('HeartbeatService', () => {
 
   // Each interval writes a raw SSE keepalive comment to the response.
   it('writes ": keepalive" on every interval', () => {
-    heartbeat.start('c1', res, 1_000)
-    jest.advanceTimersByTime(3_000)
+    heartbeat.start('c1', res, 5_000)
+    jest.advanceTimersByTime(15_000)
     expect(write).toHaveBeenCalledTimes(3)
     expect(write).toHaveBeenLastCalledWith(': keepalive\n\n')
   })
 
   // stop clears the timer so no further keepalives are written.
   it('stops writing after stop()', () => {
-    heartbeat.start('c1', res, 1_000)
-    jest.advanceTimersByTime(1_000)
-    heartbeat.stop('c1')
+    heartbeat.start('c1', res, 5_000)
     jest.advanceTimersByTime(5_000)
+    heartbeat.stop('c1')
+    jest.advanceTimersByTime(25_000)
     expect(write).toHaveBeenCalledTimes(1)
   })
 
@@ -44,18 +44,18 @@ describe('HeartbeatService', () => {
 
   // Restarting the same connection replaces the prior timer (no duplicates).
   it('replaces an existing timer on restart', () => {
-    heartbeat.start('c1', res, 1_000)
-    heartbeat.start('c1', res, 1_000)
-    jest.advanceTimersByTime(1_000)
+    heartbeat.start('c1', res, 5_000)
+    heartbeat.start('c1', res, 5_000)
+    jest.advanceTimersByTime(5_000)
     expect(write).toHaveBeenCalledTimes(1)
   })
 
   // stopAll clears every active timer.
   it('clears all timers on stopAll', () => {
-    heartbeat.start('c1', res, 1_000)
-    heartbeat.start('c2', res, 1_000)
+    heartbeat.start('c1', res, 5_000)
+    heartbeat.start('c2', res, 5_000)
     heartbeat.stopAll()
-    jest.advanceTimersByTime(5_000)
+    jest.advanceTimersByTime(25_000)
     expect(write).not.toHaveBeenCalled()
   })
 
@@ -64,11 +64,31 @@ describe('HeartbeatService', () => {
     write.mockImplementation(() => {
       throw new Error('stream closed')
     })
-    heartbeat.start('c1', res, 1_000)
-    expect(() => jest.advanceTimersByTime(1_000)).not.toThrow()
+    heartbeat.start('c1', res, 5_000)
+    expect(() => jest.advanceTimersByTime(5_000)).not.toThrow()
     expect(write).toHaveBeenCalledTimes(1)
     // The timer was cleared on failure, so no further keepalives are attempted.
-    jest.advanceTimersByTime(5_000)
+    jest.advanceTimersByTime(25_000)
     expect(write).toHaveBeenCalledTimes(1)
+  })
+
+  // An interval below the 5 000 ms minimum throws REALTIME_INVALID_OPTIONS.
+  it('throws when the interval is below the minimum (5 000 ms)', () => {
+    expect(() => heartbeat.start('c1', res, 4_999)).toThrow('REALTIME_INVALID_OPTIONS')
+  })
+
+  // An interval above the 90 000 ms maximum throws REALTIME_INVALID_OPTIONS.
+  it('throws when the interval is above the maximum (90 000 ms)', () => {
+    expect(() => heartbeat.start('c1', res, 90_001)).toThrow('REALTIME_INVALID_OPTIONS')
+  })
+
+  // Boundary value: exactly 5 000 ms must be accepted.
+  it('accepts the minimum boundary value (5 000 ms)', () => {
+    expect(() => heartbeat.start('c1', res, 5_000)).not.toThrow()
+  })
+
+  // Boundary value: exactly 90 000 ms must be accepted.
+  it('accepts the maximum boundary value (90 000 ms)', () => {
+    expect(() => heartbeat.start('c1', res, 90_000)).not.toThrow()
   })
 })
