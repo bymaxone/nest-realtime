@@ -1157,7 +1157,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.10 — Tests: `ReauthenticationService` + lifecycle hooks
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.4, 2.6
@@ -1233,7 +1233,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.11 — Tests: `encodeSseEvent` + `Last-Event-ID` replay
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.5, 2.6
@@ -1307,7 +1307,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.12 — Phase 2 consolidated validation
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 2.1…2.11
