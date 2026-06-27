@@ -12,6 +12,7 @@ import { catchError, finalize, takeUntil } from 'rxjs/operators'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
 import {
+  DEFAULT_HEARTBEAT_MS,
   REALTIME_HOOKS_TOKEN,
   REALTIME_OPTIONS_TOKEN,
 } from '../../constants/injection-tokens.constants'
@@ -25,9 +26,6 @@ import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { SseTransport } from './sse.transport'
 import { HeartbeatService } from './heartbeat.service'
-
-/** Default heartbeat interval when `sse.heartbeatMs` is unset. */
-const DEFAULT_HEARTBEAT_MS = 30_000
 
 /** Coerce a possibly-multi-valued header to a single string. */
 function singleHeader(value: string | string[] | undefined): string | undefined {

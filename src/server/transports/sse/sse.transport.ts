@@ -7,6 +7,7 @@ import type { MessageEvent } from '@nestjs/common'
 import type { Subject } from 'rxjs'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 import {
+  DEFAULT_HEARTBEAT_MS,
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
   REALTIME_INSTANCE_ID_TOKEN,
@@ -32,9 +33,6 @@ import { RoomRegistry } from '../../services/room-registry.service'
 import { composeRoomId } from '../../utils/compose-room-id'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
-
-/** Default heartbeat interval when `sse.heartbeatMs` is unset. */
-const DEFAULT_HEARTBEAT_MS = 30_000
 
 interface EmitUserArgs {
   userId: string
