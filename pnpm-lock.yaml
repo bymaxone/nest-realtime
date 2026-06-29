@@ -90,8 +90,8 @@ importers:
         specifier: ^3.0.0
         version: 3.0.1
       eventsource:
-        specifier: ^3.0.0
-        version: 3.0.7
+        specifier: ^4.1.0
+        version: 4.1.0
       ioredis:
         specifier: ^5.0.0
         version: 5.11.1
@@ -2232,9 +2232,9 @@ packages:
     resolution: {integrity: sha512-kJezFj9YFAMLeORyi7aCLxLbD5/qWMQnoMVlVPyHIll7lgRJCc3JVln9Vgl9nwQi0YkMnhdGTMNn7CkRRAptMg==}
     engines: {node: '>=18.0.0'}
 
-  eventsource@3.0.7:
-    resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
-    engines: {node: '>=18.0.0'}
+  eventsource@4.1.0:
+    resolution: {integrity: sha512-2GuF51iuHX6A9xdTccMTsNb7VO0lHZihApxhvQzJB5A03DvHDd2FQepodbMaztPBmBcE/ox7o2gqaxGhYB9LhQ==}
+    engines: {node: '>=20.0.0'}
 
   execa@5.1.1:
     resolution: {integrity: sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg==}
@@ -6506,7 +6506,7 @@ snapshots:
 
   eventsource-parser@3.1.0: {}
 
-  eventsource@3.0.7:
+  eventsource@4.1.0:
     dependencies:
       eventsource-parser: 3.1.0
 
