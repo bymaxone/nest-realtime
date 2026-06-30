@@ -98,7 +98,11 @@ describe('HeartbeatService', () => {
   // undefined — wrong and detectable via a spy on the global function.
   it('does not call clearInterval when stopping an unregistered connection', () => {
     const clearSpy = jest.spyOn(global, 'clearInterval')
-    heartbeat.stop('never-started')
-    expect(clearSpy).not.toHaveBeenCalled()
+    try {
+      heartbeat.stop('never-started')
+      expect(clearSpy).not.toHaveBeenCalled()
+    } finally {
+      clearSpy.mockRestore()
+    }
   })
 })

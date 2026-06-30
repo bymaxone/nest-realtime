@@ -56,12 +56,13 @@ WebSocket connections (via Socket.IO handshake) support bearer tokens in `ctx.he
 When a connection is admitted, the library emits a `connection:established` event to the client with a public-safe metadata subset:
 
 ```typescript
-interface PublicConnectionMeta {
+{
   connectionId: string
-  userId: string
-  tenantId: string | undefined
-  transport: 'sse' | 'websocket'
-  connectedAt: Date
+  traits: {
+    userId: string
+    tenantId: string | undefined
+    roles: string[]
+  }
 }
 ```
 

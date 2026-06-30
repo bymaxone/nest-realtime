@@ -329,18 +329,22 @@ describe('RealtimeGateway', () => {
       parseCookieHeader: (cookieHeader: string) => Record<string, string>
     }
     const spy = jest.spyOn(cookieMod, 'parseCookieHeader')
-    authenticator.authenticate.mockResolvedValue(null)
-    // Socket handshake with no cookie key — handshake.headers.cookie is undefined.
-    const socket = {
-      ...makeSocket(),
-      handshake: {
-        address: '1.2.3.4',
-        auth: {},
-        headers: { 'user-agent': 'jest' }, // cookie key intentionally absent
-        query: {},
-      },
+    try {
+      authenticator.authenticate.mockResolvedValue(null)
+      // Socket handshake with no cookie key — handshake.headers.cookie is undefined.
+      const socket = {
+        ...makeSocket(),
+        handshake: {
+          address: '1.2.3.4',
+          auth: {},
+          headers: { 'user-agent': 'jest' }, // cookie key intentionally absent
+          query: {},
+        },
+      }
+      await gateway.handleConnection(socket as never)
+      expect(spy).toHaveBeenCalledWith('')
+    } finally {
+      spy.mockRestore()
     }
-    await gateway.handleConnection(socket as never)
-    expect(spy).toHaveBeenCalledWith('')
   })
 })

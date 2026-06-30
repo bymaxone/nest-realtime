@@ -883,11 +883,15 @@ describe('SseSubscriptionHandler', () => {
       parseCookieHeader: (cookieHeader: string) => Record<string, string>
     }
     const spy = jest.spyOn(cookieMod, 'parseCookieHeader')
-    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
-    const transport = mkTransport({ authenticate, emitConnectionEvent: false })
-    const req = mkReq({ headers: {} }) // no cookie header — singleHeader returns undefined
-    const handler = build(transport, mkHeartbeat(), mkOptions())
-    await handler.handle(req, mkRes())
-    expect(spy).toHaveBeenCalledWith('')
+    try {
+      const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+      const transport = mkTransport({ authenticate, emitConnectionEvent: false })
+      const req = mkReq({ headers: {} }) // no cookie header — singleHeader returns undefined
+      const handler = build(transport, mkHeartbeat(), mkOptions())
+      await handler.handle(req, mkRes())
+      expect(spy).toHaveBeenCalledWith('')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

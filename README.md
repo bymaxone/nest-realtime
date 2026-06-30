@@ -303,14 +303,14 @@ For a complete `@bymax-one/nest-auth` bridge example, see `docs/examples/auth/`.
 | `presence` | `IPresenceStorage` | _(none)_ | Online-user tracking. |
 | `hooks` | `IConnectionLifecycleHooks` | _(none)_ | Fire-and-forget connect/disconnect/error callbacks. |
 | `reauthenticationPolicy` | `ReauthenticationPolicy` | _(none)_ | Periodic credential revalidation. |
-| `sse.endpoint` | `string` | `'/realtime/events'` | SSE endpoint path. |
-| `sse.heartbeatMs` | `number` | `25_000` | Interval for `: keepalive` comment (ms). |
-| `sse.replayBufferSize` | `number` | `50` | Events kept per user for `Last-Event-ID` replay. |
-| `sse.maxConnectionsPerUser` | `number` | `10` | FIFO eviction limit (oldest closed, new admitted). |
+| `sse.endpoint` | `string` | `'/realtime/sse'` | SSE endpoint path. |
+| `sse.heartbeatMs` | `number` | `30_000` | Interval for `: keepalive` comment (ms). |
+| `sse.replayBufferSize` | `number` | `100` | Events kept per user for `Last-Event-ID` replay. |
+| `sse.maxConnectionsPerUser` | `number` | `5` | FIFO eviction limit (oldest closed, new admitted). |
 | `sse.emitConnectionEvent` | `boolean` | `true` | Send `connection:established` on connect. |
 | `websocket.namespace` | `string` | `'/'` | Socket.IO namespace. |
 | `websocket.cors` | `CorsConfig` | _(none)_ | CORS for the WebSocket endpoint. |
-| `websocket.maxConnectionsPerUser` | `number` | `10` | FIFO eviction limit. |
+| `websocket.maxConnectionsPerUser` | `number` | _(none)_ | Per-user FIFO eviction limit (opt-in). Disabled by default; only enforced when set to a positive number. |
 | `websocket.redisAdapter.pubClient` | `unknown` | _(none)_ | ioredis client for `@socket.io/redis-adapter`. |
 | `reauthenticationPolicy.intervalSeconds` | `number` | `300` | How often credentials are revalidated. |
 | `reauthenticationPolicy.onFailure` | `'disconnect' \| 'event'` | `'disconnect'` | Action on failed revalidation. |
@@ -490,7 +490,7 @@ SSE connections are long-lived HTTP responses. Certain proxy and CDN defaults ca
 | **Response body compression** | Disable for the SSE endpoint. `Content-Encoding: gzip` on a streaming response buffers the body, defeating SSE. |
 | **Proxy buffering** | Disable. Nginx: `proxy_buffering off`. The library sends `X-Accel-Buffering: no` automatically. |
 | **CDN caching** | Add `Cache-Control: no-transform, no-store` on the SSE response. The library sets this by default. |
-| **Connection timeout** | Set above your heartbeat interval (default 25s). ALB idle timeout default is 60s — compatible. |
+| **Connection timeout** | Set above your heartbeat interval (default 30s). ALB idle timeout default is 60s — compatible. |
 | **WebSocket + polling + load balancer** | Enable sticky sessions (IP hash or cookie affinity). Required for polling fallback; not required for WebSocket-only. |
 
 For Nginx, Cloudflare, AWS ALB, and serverless platform-specific notes, see `docs/architecture/infra-considerations.md`.
@@ -555,7 +555,7 @@ The library uses the `eventsource` npm package as an `EventSource` polyfill in N
 
 ## 🤝 Contributing
 
-Bug reports and security disclosures: please read [SECURITY.md](./SECURITY.md) before opening an issue.
+Bug reports and security disclosures: please read [SECURITY.md](https://github.com/bymaxone/nest-realtime/blob/main/SECURITY.md) before opening an issue.
 
 For feature requests and pull requests, open a GitHub issue first to discuss the change.
 
