@@ -209,4 +209,23 @@ describe('RedisRealtimePubSub', () => {
     await new Promise((r) => setTimeout(r, 10))
     expect(b).toHaveBeenCalledTimes(1)
   })
+
+  // The sub client's quit() is called when the last handler unsubscribes.
+  it('calls quit on the sub client when the last handler unsubscribes', async () => {
+    // Kills BlockStatement mutation that removes the try { await sub.quit() } block.
+    const quitMock = jest.fn().mockResolvedValue('OK')
+    const fakeSub = {
+      subscribe: jest.fn().mockResolvedValue('OK'),
+      on: jest.fn(),
+      quit: quitMock,
+    }
+    const fakePub = {
+      publish: jest.fn().mockResolvedValue(undefined),
+      duplicate: jest.fn().mockReturnValue(fakeSub),
+    }
+    const pubsub = new RedisRealtimePubSub({ client: fakePub as unknown as Redis })
+    const unsub = await pubsub.subscribe(jest.fn())
+    await unsub()
+    expect(quitMock).toHaveBeenCalled()
+  })
 })
