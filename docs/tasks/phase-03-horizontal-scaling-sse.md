@@ -1,6 +1,6 @@
 # Phase 3 — Horizontal Scaling (SSE)
 
-> **Status**: 📋 ToDo · **Progress**: 0 / 11 tasks · **Last updated**: 2026-06-23
+> **Status**: 👀 Review · **Progress**: 11 / 11 tasks · **Last updated**: 2026-06-29
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 4
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 5.4, § 5.5, § 10, § 11
 
@@ -46,17 +46,17 @@ This phase makes the SSE transport **horizontal-scaling capable**. It delivers t
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 3.1 | `InMemoryPubSub` refactor — async handlers + fan-out | 📋 ToDo | P0 | S | 1.13 |
-| 3.2 | `RealtimePubSubSubscriber` + `*Local` re-emit path + single-publish wiring | 📋 ToDo | P0 | L | 3.1, 1.13 |
-| 3.3 | `RedisRealtimePubSub` reference implementation | 📋 ToDo | P0 | S | 3.2 |
-| 3.4 | `IOfflineQueueStorage` wiring + `RedisOfflineQueue` + delivery service | 📋 ToDo | P1 | M | 1.9 |
-| 3.5 | Module wiring — pub/sub + offline-queue providers + graceful degradation | 📋 ToDo | P0 | M | 3.2, 3.3, 3.4, 2.8 |
-| 3.6 | Tests — `InMemoryPubSub` (async + handler errors) | 📋 ToDo | P1 | S | 3.1 |
-| 3.7 | Tests — `RealtimePubSubSubscriber` (echo prevention + dispatch) | 📋 ToDo | P0 | M | 3.2 |
-| 3.8 | Tests — `RedisRealtimePubSub` (`ioredis-mock`) | 📋 ToDo | P0 | M | 3.3 |
-| 3.9 | Tests — `RedisOfflineQueue` + delivery integration | 📋 ToDo | P1 | M | 3.4 |
-| 3.10 | Cross-instance fan-out test (2 simulated instances) | 📋 ToDo | P0 | L | 3.2, 3.3, 3.8 |
-| 3.11 | Phase 3 validation + barrel verification | 📋 ToDo | P0 | S | 3.1…3.10 |
+| 3.1 | `InMemoryPubSub` refactor — async handlers + fan-out | ✅ Done | P0 | S | 1.13 |
+| 3.2 | `RealtimePubSubSubscriber` + `*Local` re-emit path + single-publish wiring | ✅ Done | P0 | L | 3.1, 1.13 |
+| 3.3 | `RedisRealtimePubSub` reference implementation | ✅ Done | P0 | S | 3.2 |
+| 3.4 | `IOfflineQueueStorage` wiring + `RedisOfflineQueue` + delivery service | ✅ Done | P1 | M | 1.9 |
+| 3.5 | Module wiring — pub/sub + offline-queue providers + graceful degradation | ✅ Done | P0 | M | 3.2, 3.3, 3.4, 2.8 |
+| 3.6 | Tests — `InMemoryPubSub` (async + handler errors) | ✅ Done | P1 | S | 3.1 |
+| 3.7 | Tests — `RealtimePubSubSubscriber` (echo prevention + dispatch) | ✅ Done | P0 | M | 3.2 |
+| 3.8 | Tests — `RedisRealtimePubSub` (`ioredis-mock`) | ✅ Done | P0 | M | 3.3 |
+| 3.9 | Tests — `RedisOfflineQueue` + delivery integration | ✅ Done | P1 | M | 3.4 |
+| 3.10 | Cross-instance fan-out test (2 simulated instances) | ✅ Done | P0 | L | 3.2, 3.3, 3.8 |
+| 3.11 | Phase 3 validation + barrel verification | ✅ Done | P0 | S | 3.1…3.10 |
 
 ---
 
@@ -64,7 +64,7 @@ This phase makes the SSE transport **horizontal-scaling capable**. It delivers t
 
 ### Task 3.1 — `InMemoryPubSub` refactor — async handlers + fan-out
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.13
@@ -75,12 +75,12 @@ Phase 1 left `InMemoryPubSub` as a synchronous, no-op-publish stub. Make it an a
 
 #### Acceptance criteria
 
-- [ ] `InMemoryPubSub.publish` is asynchronous (`Promise`-based) and defers delivery one microtask (`await Promise.resolve()`) before iterating handlers, matching Redis async-callback semantics.
-- [ ] `publish` iterates every subscribed handler and calls each with the message.
-- [ ] A handler that throws is caught internally and does not block the remaining handlers nor propagate upstream.
-- [ ] `subscribe` registers the handler and returns an async unsubscribe that actually removes it (the next `publish` does not call a removed handler).
-- [ ] Existing Phase 1/2 tests still pass (the contract is preserved).
-- [ ] `pnpm typecheck` passes.
+- [x] `InMemoryPubSub.publish` is asynchronous (`Promise`-based) and defers delivery one microtask (`await Promise.resolve()`) before iterating handlers, matching Redis async-callback semantics.
+- [x] `publish` iterates every subscribed handler and calls each with the message.
+- [x] A handler that throws is caught internally and does not block the remaining handlers nor propagate upstream.
+- [x] `subscribe` registers the handler and returns an async unsubscribe that actually removes it (the next `publish` does not call a removed handler).
+- [x] Existing Phase 1/2 tests still pass (the contract is preserved).
+- [x] `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -167,7 +167,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.2 — `RealtimePubSubSubscriber` + `*Local` re-emit path + single-publish wiring
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 3.1, 1.13
@@ -178,15 +178,15 @@ Add the cross-instance core. A new `RealtimePubSubSubscriber` subscribes to `IRe
 
 #### Acceptance criteria
 
-- [ ] `RealtimePubSubSubscriber` is created, implements `OnModuleInit` (subscribes) and `OnApplicationShutdown` (unsubscribes), and is registered in the module providers.
-- [ ] **Echo prevention**: a message with `origin === instanceId` is dropped before dispatch.
-- [ ] The subscriber dispatches the five ops to the transport's **`*Local`** methods only (`emitToUserLocal`, `emitToTenantLocal`, `emitToRoomLocal`, `broadcastLocal`, `disconnectLocal`) — it NEVER calls a publishing method.
-- [ ] An unknown `op` is logged and skipped without throwing; a failure inside `handle` is caught and does not propagate.
-- [ ] A `subscribe` failure at bootstrap is logged (warn) and does **not** throw — the instance degrades to single-instance mode.
-- [ ] `SseTransport` exposes `emitToUserLocal` / `emitToTenantLocal` / `emitToRoomLocal` / `broadcastLocal` / `disconnectLocal`; none of them publish; each reuses the provided `id` (or generates one when absent) and appends to the replay buffer where the public path does.
-- [ ] `RealtimeService.emitTo*` / `broadcast` / `disconnect` do local delivery first, then a **single** `pubsub.publish({ op, args, origin: instanceId })` whose `args` carry the generated event `id`; `disconnect` publishes `op: 'disconnect'`.
-- [ ] `REALTIME_INSTANCE_ID_TOKEN` exists as a `Symbol` injection token (added to `constants/injection-tokens.constants.ts` if absent).
-- [ ] `pnpm typecheck` passes.
+- [x] `RealtimePubSubSubscriber` is created, implements `OnModuleInit` (subscribes) and `OnApplicationShutdown` (unsubscribes), and is registered in the module providers.
+- [x] **Echo prevention**: a message with `origin === instanceId` is dropped before dispatch.
+- [x] The subscriber dispatches the five ops to the transport's **`*Local`** methods only (`emitToUserLocal`, `emitToTenantLocal`, `emitToRoomLocal`, `broadcastLocal`, `disconnectLocal`) — it NEVER calls a publishing method.
+- [x] An unknown `op` is logged and skipped without throwing; a failure inside `handle` is caught and does not propagate.
+- [x] A `subscribe` failure at bootstrap is logged (warn) and does **not** throw — the instance degrades to single-instance mode.
+- [x] `SseTransport` exposes `emitToUserLocal` / `emitToTenantLocal` / `emitToRoomLocal` / `broadcastLocal` / `disconnectLocal`; none of them publish; each reuses the provided `id` (or generates one when absent) and appends to the replay buffer where the public path does.
+- [x] `RealtimeService.emitTo*` / `broadcast` / `disconnect` do local delivery first, then a **single** `pubsub.publish({ op, args, origin: instanceId })` whose `args` carry the generated event `id`; `disconnect` publishes `op: 'disconnect'`.
+- [x] `REALTIME_INSTANCE_ID_TOKEN` exists as a `Symbol` injection token (added to `constants/injection-tokens.constants.ts` if absent).
+- [x] `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -344,7 +344,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.3 — `RedisRealtimePubSub` reference implementation
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 3.2
@@ -355,14 +355,14 @@ Provide a concrete `IRealtimePubSub` backed by `ioredis`: a publish client plus 
 
 #### Acceptance criteria
 
-- [ ] `src/server/pubsub/redis-realtime-pubsub.ts` is created with a type-only `import type Redis from 'ioredis'` (does not break `pnpm typecheck` / `pnpm build` when `ioredis` is absent).
-- [ ] Constructor takes `{ pubClient, channel? }`; `channel` defaults to `'bymax:realtime'`.
-- [ ] `publish` JSON-encodes the message and `PUBLISH`es it to the channel.
-- [ ] `subscribe` lazily creates the subscribe client via `pubClient.duplicate()` on the first call only; multiple handlers share that one subscribe client.
-- [ ] Incoming messages are JSON-parsed and dispatched to every handler; a malformed payload is dropped silently.
-- [ ] The last `unsubscribe` removes its handler, then (when no handlers remain) unsubscribes and quits the subscribe client.
-- [ ] The export is added to `src/server/pubsub/index.ts`; it is **not** added to `src/server/index.ts` here (the main-barrel export is Task 3.5).
-- [ ] `pnpm typecheck` passes.
+- [x] `src/server/pubsub/redis-realtime-pubsub.ts` is created with a type-only `import type Redis from 'ioredis'` (does not break `pnpm typecheck` / `pnpm build` when `ioredis` is absent).
+- [x] Constructor takes `{ pubClient, channel? }`; `channel` defaults to `'bymax:realtime'`.
+- [x] `publish` JSON-encodes the message and `PUBLISH`es it to the channel.
+- [x] `subscribe` lazily creates the subscribe client via `pubClient.duplicate()` on the first call only; multiple handlers share that one subscribe client.
+- [x] Incoming messages are JSON-parsed and dispatched to every handler; a malformed payload is dropped silently.
+- [x] The last `unsubscribe` removes its handler, then (when no handlers remain) unsubscribes and quits the subscribe client.
+- [x] The export is added to `src/server/pubsub/index.ts`; it is **not** added to `src/server/index.ts` here (the main-barrel export is Task 3.5).
+- [x] `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -481,7 +481,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.4 — `IOfflineQueueStorage` wiring + `RedisOfflineQueue` + delivery service
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 1.9
@@ -492,15 +492,15 @@ Deliver the durable per-user offline queue. The `IOfflineQueueStorage` interface
 
 #### Acceptance criteria
 
-- [ ] `src/server/offline-queue/redis-offline-queue.ts` is created with a type-only `import type Redis from 'ioredis'`.
-- [ ] Constructor options: `{ client, keyPrefix?, maxPerUser?, ttlSeconds? }` defaulting to `'bymax:offline'`, `100`, `86400`.
-- [ ] `append` adds the JSON event to a per-user sorted set scored by the event id, trims to `maxPerUser` (keeping the most recent), and sets the TTL on each append.
-- [ ] `retrieveSince` returns events with id strictly greater than `sinceId` (exclusive lower bound) up to `limit`, comparing ids consistently with `EventReplayBuffer` (spec § 10.3 ordering invariant).
-- [ ] `acknowledge` removes events with id ≤ `upToId`.
-- [ ] `parseScore` handles both `{ms}-{counter}` and legacy numeric-only ids.
-- [ ] `OfflineQueueDeliveryService` is created and wired into `SseSubscriptionHandler.handle` after the ring-buffer replay: on `Last-Event-ID` + a configured queue it `retrieveSince`s, emits, and `acknowledge`s; ring-buffer events are not re-delivered (dedupe by id).
-- [ ] A barrel `src/server/offline-queue/index.ts` exports the implementation; the main-barrel export is wired in Task 3.5.
-- [ ] `pnpm typecheck` passes.
+- [x] `src/server/offline-queue/redis-offline-queue.ts` is created with a type-only `import type Redis from 'ioredis'`.
+- [x] Constructor options: `{ client, keyPrefix?, maxPerUser?, ttlSeconds? }` defaulting to `'bymax:offline'`, `100`, `86400`.
+- [x] `append` adds the JSON event to a per-user sorted set scored by the event id, trims to `maxPerUser` (keeping the most recent), and sets the TTL on each append.
+- [x] `retrieveSince` returns events with id strictly greater than `sinceId` (exclusive lower bound) up to `limit`, comparing ids consistently with `EventReplayBuffer` (spec § 10.3 ordering invariant).
+- [x] `acknowledge` removes events with id ≤ `upToId`.
+- [x] `parseScore` handles both `{ms}-{counter}` and legacy numeric-only ids.
+- [x] `OfflineQueueDeliveryService` is created and wired into `SseSubscriptionHandler.handle` after the ring-buffer replay: on `Last-Event-ID` + a configured queue it `retrieveSince`s, emits, and `acknowledge`s; ring-buffer events are not re-delivered (dedupe by id).
+- [x] A barrel `src/server/offline-queue/index.ts` exports the implementation; the main-barrel export is wired in Task 3.5.
+- [x] `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -633,7 +633,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.5 — Module wiring — pub/sub + offline-queue providers + graceful degradation
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 3.2, 3.3, 3.4, 2.8
@@ -644,13 +644,13 @@ Wire `BymaxRealtimeModule.forRoot` and `forRootAsync` to provide the pub/sub and
 
 #### Acceptance criteria
 
-- [ ] The pub/sub provider (token `REALTIME_PUBSUB_TOKEN`) defaults to a new `InMemoryPubSub` and emits an internal warn when `NODE_ENV === 'production'` and no `pubsub` was provided; a supplied `pubsub` is honoured.
-- [ ] The offline-queue provider (token `REALTIME_OFFLINE_QUEUE_TOKEN`) resolves to `opts.offlineQueue` or `undefined` (silent).
-- [ ] A `REALTIME_INSTANCE_ID_TOKEN` provider yields a per-process `randomUUID()`.
-- [ ] `RealtimePubSubSubscriber` and `OfflineQueueDeliveryService` are registered in both `forRoot` and `forRootAsync`.
-- [ ] Each `RealtimeService` publish is wrapped in try/catch — a publish failure is logged internally and the local emit still succeeds (graceful degradation; no upstream throw).
-- [ ] `src/server/index.ts` exports `RedisRealtimePubSub` + `RedisRealtimePubSubOptions` and `RedisOfflineQueue` + `RedisOfflineQueueOptions`.
-- [ ] `pnpm typecheck && pnpm build` pass.
+- [x] The pub/sub provider (token `REALTIME_PUBSUB_TOKEN`) defaults to a new `InMemoryPubSub` and emits an internal warn when `NODE_ENV === 'production'` and no `pubsub` was provided; a supplied `pubsub` is honoured.
+- [x] The offline-queue provider (token `REALTIME_OFFLINE_QUEUE_TOKEN`) resolves to `opts.offlineQueue` or `undefined` (silent).
+- [x] A `REALTIME_INSTANCE_ID_TOKEN` provider yields a per-process `randomUUID()`.
+- [x] `RealtimePubSubSubscriber` and `OfflineQueueDeliveryService` are registered in both `forRoot` and `forRootAsync`.
+- [x] Each `RealtimeService` publish is wrapped in try/catch — a publish failure is logged internally and the local emit still succeeds (graceful degradation; no upstream throw).
+- [x] `src/server/index.ts` exports `RedisRealtimePubSub` + `RedisRealtimePubSubOptions` and `RedisOfflineQueue` + `RedisOfflineQueueOptions`.
+- [x] `pnpm typecheck && pnpm build` pass.
 
 #### Files to create / modify
 
@@ -758,7 +758,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.6 — Tests — `InMemoryPubSub` (async + handler errors)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 3.1
@@ -769,8 +769,8 @@ Refresh the `InMemoryPubSub` spec for the async fan-out refactor: prove async de
 
 #### Acceptance criteria
 
-- [ ] At least 7 cases covering: `publish` calls all handlers; `publish` is asynchronous (deferred via `await Promise.resolve()`); `subscribe` adds a handler and returns an unsubscribe; unsubscribe removes the handler so a later `publish` does not call it; a throwing handler does not block others; multiple independent subscriptions work; and a light stress pass (1000 messages × 10 handlers — all received).
-- [ ] **100% line/branch coverage** on `in-memory-pubsub.ts`.
+- [x] At least 7 cases covering: `publish` calls all handlers; `publish` is asynchronous (deferred via `await Promise.resolve()`); `subscribe` adds a handler and returns an unsubscribe; unsubscribe removes the handler so a later `publish` does not call it; a throwing handler does not block others; multiple independent subscriptions work; and a light stress pass (1000 messages × 10 handlers — all received).
+- [x] **100% line/branch coverage** on `in-memory-pubsub.ts`.
 
 #### Files to create / modify
 
@@ -826,7 +826,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.7 — Tests — `RealtimePubSubSubscriber` (echo prevention + dispatch)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 3.2
@@ -837,9 +837,9 @@ Cover the subscriber: lifecycle (subscribe on init, unsubscribe on shutdown), ec
 
 #### Acceptance criteria
 
-- [ ] At least 10 cases covering: `onModuleInit` calls `pubsub.subscribe`; `onApplicationShutdown` calls unsubscribe; a message with `origin === instanceId` is ignored; a message with `origin !== instanceId` is processed; each of `emitToUser` / `emitToTenant` / `emitToRoom` / `broadcast` / `disconnect` calls the matching `*Local` method with the right args; an error inside `handle` does not propagate; and an unknown `op` is skipped without throwing.
-- [ ] A `subscribe` rejection at bootstrap is asserted to be caught (no throw, warn logged).
-- [ ] `IRealtimePubSub` and the transport local-ops are mocked; **100% line/branch coverage** on `realtime-pubsub-subscriber.ts`.
+- [x] At least 10 cases covering: `onModuleInit` calls `pubsub.subscribe`; `onApplicationShutdown` calls unsubscribe; a message with `origin === instanceId` is ignored; a message with `origin !== instanceId` is processed; each of `emitToUser` / `emitToTenant` / `emitToRoom` / `broadcast` / `disconnect` calls the matching `*Local` method with the right args; an error inside `handle` does not propagate; and an unknown `op` is skipped without throwing.
+- [x] A `subscribe` rejection at bootstrap is asserted to be caught (no throw, warn logged).
+- [x] `IRealtimePubSub` and the transport local-ops are mocked; **100% line/branch coverage** on `realtime-pubsub-subscriber.ts`.
 
 #### Files to create / modify
 
@@ -902,7 +902,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.8 — Tests — `RedisRealtimePubSub` (`ioredis-mock`)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 3.3
@@ -913,9 +913,9 @@ Cover `RedisRealtimePubSub` against `ioredis-mock` (a devDependency): JSON publi
 
 #### Acceptance criteria
 
-- [ ] `ioredis-mock` is added as a devDependency.
-- [ ] At least 7 cases covering: `publish` sends JSON to the channel; the first `subscribe` creates the subscribe client via `.duplicate()`; an incoming message is parsed and dispatched; multiple handlers share one subscribe client; the last `unsubscribe` quits the subscribe client; a malformed JSON message is dropped silently; `publish` after `pub.quit()` rejects (Redis behaviour — not the lib's responsibility); and the channel is customizable via options.
-- [ ] **100% line/branch coverage** on `redis-realtime-pubsub.ts`.
+- [x] `ioredis-mock` is added as a devDependency.
+- [x] At least 7 cases covering: `publish` sends JSON to the channel; the first `subscribe` creates the subscribe client via `.duplicate()`; an incoming message is parsed and dispatched; multiple handlers share one subscribe client; the last `unsubscribe` quits the subscribe client; a malformed JSON message is dropped silently; `publish` after `pub.quit()` rejects (Redis behaviour — not the lib's responsibility); and the channel is customizable via options.
+- [x] **100% line/branch coverage** on `redis-realtime-pubsub.ts`.
 
 #### Files to create / modify
 
@@ -982,7 +982,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.9 — Tests — `RedisOfflineQueue` + delivery integration
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 3.4
@@ -993,9 +993,9 @@ Cover the offline queue against `ioredis-mock` and the delivery wiring as an int
 
 #### Acceptance criteria
 
-- [ ] `src/server/offline-queue/redis-offline-queue.spec.ts` has at least 8 cases: `append` adds to the sorted set; `append` trims when above `maxPerUser` (keeping most recent); `append` sets the TTL; `retrieveSince` returns events with score strictly above `sinceScore` (exclusive); `retrieveSince` respects `limit`; `acknowledge` removes events with score ≤ `upToScore`; `parseScore` handles `{ms}-{counter}` and legacy numeric ids; an empty user yields `[]`.
-- [ ] `test/e2e/offline-queue-delivery.e2e-spec.ts` has at least 4 cases: reconnect without a queue → ring-buffer-only behaviour; reconnect with a queue + `sinceId` → fetch, emit, acknowledge; a queue that throws → internal log and the connection still proceeds; ring buffer + queue → dedupe by id (queue delivers only events not already in the ring buffer).
-- [ ] **100% line/branch coverage** on `redis-offline-queue.ts` and `offline-queue-delivery.service.ts`.
+- [x] `src/server/offline-queue/redis-offline-queue.spec.ts` has at least 8 cases: `append` adds to the sorted set; `append` trims when above `maxPerUser` (keeping most recent); `append` sets the TTL; `retrieveSince` returns events with score strictly above `sinceScore` (exclusive); `retrieveSince` respects `limit`; `acknowledge` removes events with score ≤ `upToScore`; `parseScore` handles `{ms}-{counter}` and legacy numeric ids; an empty user yields `[]`.
+- [x] `test/e2e/offline-queue-delivery.e2e-spec.ts` has at least 4 cases: reconnect without a queue → ring-buffer-only behaviour; reconnect with a queue + `sinceId` → fetch, emit, acknowledge; a queue that throws → internal log and the connection still proceeds; ring buffer + queue → dedupe by id (queue delivers only events not already in the ring buffer).
+- [x] **100% line/branch coverage** on `redis-offline-queue.ts` and `offline-queue-delivery.service.ts`.
 
 #### Files to create / modify
 
@@ -1064,7 +1064,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.10 — Cross-instance fan-out test (2 simulated instances)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 3.2, 3.3, 3.8
@@ -1075,11 +1075,11 @@ The decisive test for the phase: prove that an emit on one instance reaches a co
 
 #### Acceptance criteria
 
-- [ ] `test/e2e/cross-instance.e2e-spec.ts` is created with at least 4 scenarios: instance A emits → a connection on instance B receives; echo prevention (A does not double-emit to itself); graceful degradation (`pubsub.publish` throws → local emit still works); and a 5-instance light-stress fan-out (one emits, the other four receive).
-- [ ] A `createTestInstance(redisOpts)` helper builds an isolated module per call (sharing the `ioredis-mock` instance / its `.duplicate()`).
-- [ ] Echo prevention is verified (no double-emit on the origin instance); graceful degradation is verified.
-- [ ] The test isolates cleanly — no leaked instances/handles after `afterAll`.
-- [ ] Critical-path coverage holds (pub/sub + subscriber paths).
+- [x] `test/e2e/cross-instance.e2e-spec.ts` is created with at least 4 scenarios: instance A emits → a connection on instance B receives; echo prevention (A does not double-emit to itself); graceful degradation (`pubsub.publish` throws → local emit still works); and a 5-instance light-stress fan-out (one emits, the other four receive).
+- [x] A `createTestInstance(redisOpts)` helper builds an isolated module per call (sharing the `ioredis-mock` instance / its `.duplicate()`).
+- [x] Echo prevention is verified (no double-emit on the origin instance); graceful degradation is verified.
+- [x] The test isolates cleanly — no leaked instances/handles after `afterAll`.
+- [x] Critical-path coverage holds (pub/sub + subscriber paths).
 
 #### Files to create / modify
 
@@ -1159,7 +1159,7 @@ Completion Protocol (after you finish):
 
 ### Task 3.11 — Phase 3 validation + barrel verification
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 3.1…3.10
@@ -1170,11 +1170,11 @@ Consolidated phase gate: run the full static + test + build + size pipeline, con
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` all pass.
-- [ ] **100% line/branch coverage** on every file implemented in this phase; mutation focus (Stryker break 95) noted for the critical paths at the pre-release gate.
-- [ ] The server bundle stays **≤ 18 KB brotli** (the Redis reference adds only a small compressed delta; `ioredis` is never bundled).
-- [ ] Smoke import of `{ BymaxRealtimeModule, RealtimeService, RedisRealtimePubSub, RedisOfflineQueue }` from the built package works (mock backend acceptable).
-- [ ] `/bymax-quality:code-review` was run over `src/server/pubsub/` and `src/server/offline-queue/` and findings were applied.
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` all pass.
+- [x] **100% line/branch coverage** on every file implemented in this phase; mutation focus (Stryker break 95) noted for the critical paths at the pre-release gate.
+- [x] The server bundle stays **≤ 18 KB brotli** (the Redis reference adds only a small compressed delta; `ioredis` is never bundled).
+- [x] Smoke import of `{ BymaxRealtimeModule, RealtimeService, RedisRealtimePubSub, RedisOfflineQueue }` from the built package works (mock backend acceptable).
+- [x] `/bymax-quality:code-review` was run over `src/server/pubsub/` and `src/server/offline-queue/` and findings were applied.
 
 #### Files to create / modify
 
@@ -1244,4 +1244,14 @@ Completion Protocol (after you finish):
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
-<!-- No entries yet — appended as tasks complete. -->
+- 3.1 ✅ 2026-06-29 — Refactored `InMemoryPubSub` into async microtask-deferred fan-out with per-handler error isolation.
+- 3.2 ✅ 2026-06-29 — Added `RealtimePubSubSubscriber` (echo prevention + `*Local` dispatch) and five non-publishing `*Local` methods on `SseTransport`.
+- 3.3 ✅ 2026-06-29 — Implemented `RedisRealtimePubSub` with type-only `ioredis` import, lazy duplicate subscribe client, and silent malformed-payload drop.
+- 3.4 ✅ 2026-06-29 — Added `RedisOfflineQueue` (sorted-set, FIFO trim, TTL) and `OfflineQueueDeliveryService` wired into `SseSubscriptionHandler` with ring-buffer dedupe.
+- 3.5 ✅ 2026-06-29 — Wired pub/sub + offline-queue + instance-id providers in `BymaxRealtimeModule`, added graceful-degradation try/catch in `RealtimeService`, and exported Redis classes from the main barrel.
+- 3.6 ✅ 2026-06-29 — Wrote `InMemoryPubSub` spec (7+ cases) covering async delivery, handler isolation, unsubscribe, and a 1000-message stress pass.
+- 3.7 ✅ 2026-06-29 — Wrote `RealtimePubSubSubscriber` spec (12 cases) covering lifecycle, echo prevention, all five op dispatches, error isolation, and bootstrap-failure degradation.
+- 3.8 ✅ 2026-06-29 — Wrote `RedisRealtimePubSub` spec against `ioredis-mock` (8 cases) covering JSON publish, lazy subscribe client, multi-handler sharing, quit-on-last-unsubscribe, and malformed-payload drop.
+- 3.9 ✅ 2026-06-29 — Wrote `RedisOfflineQueue` spec (8 cases) and offline-queue delivery e2e spec (4 cases) covering append/trim/TTL, exclusive retrieve, acknowledge, and ring-buffer dedupe.
+- 3.10 ✅ 2026-06-29 — Wrote cross-instance e2e spec proving A→B fan-out, echo prevention, graceful degradation, and 5-instance light-stress fan-out using shared `ioredis-mock`.
+- 3.11 ✅ 2026-06-29 — Passed all quality gates (typecheck, lint, 100% coverage, e2e, build, size ≤ 18 KB brotli); applied code-review and security-review findings.

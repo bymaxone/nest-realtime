@@ -6,11 +6,13 @@ import { UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import type { Observable } from 'rxjs'
-import { Subject } from 'rxjs'
+import { firstValueFrom, Subject } from 'rxjs'
+import { take } from 'rxjs/operators'
 import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
+import type { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
 import type { HeartbeatService } from './heartbeat.service'
 import type { SseTransport } from './sse.transport'
 import { SseSubscriptionHandler } from './sse-subscription.handler'
@@ -128,12 +130,16 @@ describe('SseSubscriptionHandler', () => {
     expect(collect(stream)).toEqual([])
   })
 
-  // The heartbeat is started with the configured interval.
+  // The heartbeat is started with the configured interval after registration resolves.
   it('starts the heartbeat with the configured interval', async () => {
     const transport = mkTransport()
     const heartbeat = mkHeartbeat()
     const handler = build(transport, heartbeat, mkOptions({ sse: { heartbeatMs: 45_000 } }))
-    await handler.handle(mkReq(), mkRes())
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    // Yield to the microtask queue so registerConnection's .then() runs.
+    await Promise.resolve()
+    sub.unsubscribe()
     expect(heartbeat.start).toHaveBeenCalledWith(expect.any(String), expect.anything(), 45_000)
   })
 
@@ -142,7 +148,10 @@ describe('SseSubscriptionHandler', () => {
     const transport = mkTransport()
     const heartbeat = mkHeartbeat()
     const handler = build(transport, heartbeat, mkOptions())
-    await handler.handle(mkReq(), mkRes())
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
     expect(heartbeat.start).toHaveBeenCalledWith(expect.any(String), expect.anything(), 30_000)
   })
 
@@ -190,12 +199,13 @@ describe('SseSubscriptionHandler', () => {
     expect(transport.getReplayEvents).not.toHaveBeenCalled()
   })
 
-  // registerConnection is called with the correct parameters.
+  // registerConnection is called with the correct parameters on subscribe.
   it('passes connection parameters to registerConnection', async () => {
     const transport = mkTransport()
     const req = mkReq({ ip: '1.2.3.4', headers: { 'user-agent': 'jest' } })
     const handler = build(transport, mkHeartbeat(), mkOptions())
-    await handler.handle(req, mkRes())
+    const stream = await handler.handle(req, mkRes())
+    stream.subscribe().unsubscribe()
     expect(transport.registerConnection).toHaveBeenCalledWith(
       expect.objectContaining({ ip: '1.2.3.4', userAgent: 'jest' }),
     )
@@ -206,7 +216,8 @@ describe('SseSubscriptionHandler', () => {
     const transport = mkTransport()
     const req = mkReq({ headers: { 'x-forwarded-for': '1.2.3.4, 5.6.7.8' } })
     const handler = build(transport, mkHeartbeat(), mkOptions())
-    await handler.handle(req, mkRes())
+    const stream = await handler.handle(req, mkRes())
+    stream.subscribe().unsubscribe()
     expect(transport.registerConnection).toHaveBeenCalledWith(
       expect.objectContaining({ ip: '1.2.3.4' }),
     )
@@ -216,7 +227,8 @@ describe('SseSubscriptionHandler', () => {
   it('falls back to req.ip when X-Forwarded-For is absent', async () => {
     const transport = mkTransport()
     const handler = build(transport, mkHeartbeat(), mkOptions())
-    await handler.handle(mkReq({ ip: '9.9.9.9' }), mkRes())
+    const stream = await handler.handle(mkReq({ ip: '9.9.9.9' }), mkRes())
+    stream.subscribe().unsubscribe()
     expect(transport.registerConnection).toHaveBeenCalledWith(
       expect.objectContaining({ ip: '9.9.9.9' }),
     )
@@ -226,7 +238,8 @@ describe('SseSubscriptionHandler', () => {
   it('resolves IP to "unknown" when nothing is available', async () => {
     const transport = mkTransport()
     const handler = build(transport, mkHeartbeat(), mkOptions())
-    await handler.handle(mkReq(), mkRes())
+    const stream = await handler.handle(mkReq(), mkRes())
+    stream.subscribe().unsubscribe()
     expect(transport.registerConnection).toHaveBeenCalledWith(
       expect.objectContaining({ ip: 'unknown' }),
     )
@@ -277,7 +290,8 @@ describe('SseSubscriptionHandler', () => {
     })
     const tenantResolver = jest.fn().mockReturnValue('from-resolver')
     const handler = build(transport, mkHeartbeat(), mkOptions({ tenantResolver }))
-    await handler.handle(mkReq(), mkRes())
+    const stream = await handler.handle(mkReq(), mkRes())
+    stream.subscribe().unsubscribe()
     expect(tenantResolver).toHaveBeenCalled()
     expect(transport.registerConnection).toHaveBeenCalledWith(
       expect.objectContaining({ auth: expect.objectContaining({ tenantId: 'from-resolver' }) }),
@@ -290,7 +304,8 @@ describe('SseSubscriptionHandler', () => {
       authenticate: jest.fn().mockResolvedValue({ userId: 'u1', tenantId: 'original' }),
     })
     const handler = build(transport, mkHeartbeat(), mkOptions({ tenantResolver: () => undefined }))
-    await handler.handle(mkReq(), mkRes())
+    const stream = await handler.handle(mkReq(), mkRes())
+    stream.subscribe().unsubscribe()
     expect(transport.registerConnection).toHaveBeenCalledWith(
       expect.objectContaining({ auth: expect.objectContaining({ tenantId: 'original' }) }),
     )
@@ -303,19 +318,23 @@ describe('SseSubscriptionHandler', () => {
       getConnection: jest.fn().mockReturnValue(mkRecord('c1', 'u1')),
     })
     const handler = build(transport, mkHeartbeat(), mkOptions())
-    await handler.handle(mkReq(), mkRes())
+    const stream = await handler.handle(mkReq(), mkRes())
+    stream.subscribe().unsubscribe()
     const call = (transport.registerConnection as jest.Mock).mock.calls[0]?.[0] as {
       auth: { tenantId?: string }
     }
     expect(call.auth.tenantId).toBeUndefined()
   })
 
-  // onConnect hook is fired best-effort after registration when the connection record exists.
+  // onConnect hook is fired best-effort after registration resolves.
   it('fires onConnect best-effort after registration', async () => {
     const onConnect = jest.fn().mockResolvedValue(undefined)
     const transport = mkTransport()
     const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
-    await handler.handle(mkReq(), mkRes())
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
     expect(onConnect).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }))
   })
 
@@ -324,7 +343,11 @@ describe('SseSubscriptionHandler', () => {
     const onConnect = jest.fn().mockRejectedValue(new Error('hook boom'))
     const transport = mkTransport()
     const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
-    await expect(handler.handle(mkReq(), mkRes())).resolves.toBeDefined()
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+    expect(onConnect).toHaveBeenCalled()
   })
 
   // When getConnection returns undefined, onConnect is silently skipped.
@@ -332,7 +355,10 @@ describe('SseSubscriptionHandler', () => {
     const onConnect = jest.fn()
     const transport = mkTransport({ getConnection: jest.fn().mockReturnValue(undefined) })
     const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
-    await handler.handle(mkReq(), mkRes())
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
     expect(onConnect).not.toHaveBeenCalled()
   })
 
@@ -357,7 +383,8 @@ describe('SseSubscriptionHandler', () => {
       mkHeartbeat(),
       mkOptions({ sse: { maxConnectionsPerUser: 1 } }),
     )
-    await handler.handle(mkReq(), mkRes())
+    const stream = await handler.handle(mkReq(), mkRes())
+    stream.subscribe().unsubscribe()
     // The handler must call registerConnection so the transport can enforce the cap.
     expect(transport.registerConnection).toHaveBeenCalledTimes(1)
     // The handler must NOT call disconnect — eviction is entirely the transport's responsibility.
@@ -384,6 +411,8 @@ describe('SseSubscriptionHandler', () => {
         completed = true
       },
     })
+    // Yield so registerConnection's async body runs and capturedSubject is assigned.
+    await Promise.resolve()
     capturedSubject!.error(new Error('stream-error'))
     // catchError converts the error to EMPTY, completing the stream synchronously.
     expect(completed).toBe(true)
@@ -417,5 +446,246 @@ describe('SseSubscriptionHandler', () => {
     const transport = mkTransport()
     const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), mkOptions(), undefined)
     await expect(handler.handle(mkReq(), mkRes())).resolves.toBeDefined()
+  })
+
+  // Offline queue events are mapped to MessageEvents and emitted after ring-buffer replay.
+  it('emits offline queue events as MessageEvents when Last-Event-ID is set', async () => {
+    const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
+    const offlineDelivery = {
+      retrieve: jest
+        .fn()
+        .mockResolvedValue([{ id: 'q1', event: 'queued', data: { x: 1 }, emittedAt: new Date() }]),
+      acknowledge: jest.fn().mockResolvedValue(undefined),
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const events = collect(stream)
+    const queued = events.filter((e) => e.id === 'q1')
+    expect(queued).toHaveLength(1)
+    expect(queued[0]?.type).toBe('queued')
+    expect(queued[0]?.data).toEqual({ x: 1 })
+  })
+
+  // With the subscribe-before-register structure, subject already has a listener before
+  // registerConnection runs. Any subject.next() inside registerConnection goes directly
+  // to the subscriber — nothing is dropped or buffered.
+  it('does not drop a live event emitted inside registerConnection (subscribe-before-register guarantee)', async () => {
+    const liveEvent: MessageEvent = { id: 'live-1', type: 'live', data: { v: 1 } }
+    const transport = mkTransport({
+      registerConnection: jest
+        .fn()
+        .mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+          // Simulate a concurrent emit arriving the instant registration completes.
+          params.subject.next(liveEvent)
+        }),
+      emitConnectionEvent: false,
+      getReplayEvents: jest.fn().mockReturnValue([]),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const stream = await handler.handle(mkReq(), mkRes())
+    const events: MessageEvent[] = []
+    const sub = stream.subscribe((e) => events.push(e))
+    // Yield to the microtask queue so registerConnection's async body runs.
+    await Promise.resolve()
+    sub.unsubscribe()
+    expect(events).toContainEqual(liveEvent)
+  })
+
+  // Offline queue events must appear before live events in the stream regardless of
+  // when the concurrent live emit arrives (ordering invariant).
+  it('delivers offline queue events before live events that race registration (ordering invariant)', async () => {
+    const liveEvent: MessageEvent = { id: 'live-1', type: 'live', data: { v: 1 } }
+    const transport = mkTransport({
+      registerConnection: jest
+        .fn()
+        .mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+          // Racing live event arrives the moment registration completes.
+          params.subject.next(liveEvent)
+        }),
+      emitConnectionEvent: false,
+      getReplayEvents: jest.fn().mockReturnValue([]),
+    })
+    const offlineDelivery = {
+      retrieve: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'off-1', event: 'offline', data: { q: 1 }, emittedAt: new Date() },
+        ]),
+      acknowledge: jest.fn().mockResolvedValue(undefined),
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const events: MessageEvent[] = []
+    const sub = stream.subscribe((e) => events.push(e))
+    // Yield to the microtask queue so registerConnection's async body runs.
+    await Promise.resolve()
+    sub.unsubscribe()
+    expect(events).toHaveLength(2)
+    // Offline (queue) event must precede the racing live event.
+    expect(events[0]?.type).toBe('offline')
+    expect(events[1]?.type).toBe('live')
+  })
+
+  // A replay event with no id falls back to '' in the ringBufferIds set (id ?? '' branch).
+  it('handles replay events with undefined id when building ringBufferIds', async () => {
+    // A MessageEvent without id covers the `e.id ?? ''` fallback branch.
+    const replayEvent: MessageEvent = { type: 'x', data: {} }
+    const transport = mkTransport({
+      getReplayEvents: jest.fn().mockReturnValue([replayEvent]),
+      emitConnectionEvent: false,
+    })
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const events = collect(stream)
+    expect(events).toHaveLength(1)
+    expect(events[0]?.type).toBe('x')
+  })
+
+  // When registerConnection rejects, onError fires best-effort and the stream errors
+  // so the @Sse consumer receives a deterministic failure response.
+  it('routes a registerConnection failure to onError and errors the stream', async () => {
+    const regError = new Error('registration-failed')
+    const transport = mkTransport({
+      registerConnection: jest.fn().mockRejectedValue(regError),
+      emitConnectionEvent: false,
+    })
+    const onError = jest.fn()
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onError })
+    const stream = await handler.handle(mkReq(), mkRes())
+    const errors: unknown[] = []
+    stream.subscribe({ error: (err) => errors.push(err) })
+    // The rejected promise propagates through .then() then .catch(), requiring two
+    // microtask hops before the catch handler (and subscriber.error) fires.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toBe(regError)
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ error: regError }))
+  })
+
+  // FINDING A: registration is async and can resolve AFTER the downstream subscriber has
+  // already torn down. The late .then() must NOT fire onConnect or start a fresh heartbeat
+  // (that would leak the connection + write after close); it must instead perform idempotent
+  // late cleanup (heartbeat stop + unregister) so no registered connection is left behind.
+  it('does not activate when registration resolves after unsubscribe (late cleanup only)', async () => {
+    let resolveRegistration: () => void = () => undefined
+    const registerConnection = jest.fn().mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRegistration = resolve
+      }),
+    )
+    const onConnect = jest.fn()
+    const heartbeat = mkHeartbeat()
+    const transport = mkTransport({ registerConnection, emitConnectionEvent: false })
+    const handler = build(transport, heartbeat, mkOptions(), { onConnect })
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    // Client disconnects before registration completes: finalize() runs once.
+    sub.unsubscribe()
+    expect(heartbeat.stop).toHaveBeenCalledTimes(1)
+    expect(transport.unregisterConnection).toHaveBeenCalledTimes(1)
+    // Registration now resolves LATE — the .then() observes a closed subscriber.
+    resolveRegistration()
+    await Promise.resolve()
+    await Promise.resolve()
+    // No re-activation: onConnect never fires and no heartbeat is started.
+    expect(onConnect).not.toHaveBeenCalled()
+    expect(heartbeat.start).not.toHaveBeenCalled()
+    // Late cleanup ran idempotently: stop + unregister fired a second time, nothing leaked.
+    expect(heartbeat.stop).toHaveBeenCalledTimes(2)
+    expect(transport.unregisterConnection).toHaveBeenCalledTimes(2)
+  })
+
+  // FINDING B: the offline queue is acknowledged exactly once, AFTER the gap events have
+  // been emitted to an open subscriber — retrieve no longer prunes the durable queue.
+  it('acknowledges the offline queue exactly once after emission to an open subscriber', async () => {
+    const queued = { id: 'q1', event: 'queued', data: { x: 1 }, emittedAt: new Date() }
+    const acknowledge = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
+    const offlineDelivery = {
+      retrieve: jest.fn().mockResolvedValue([queued]),
+      acknowledge,
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const events: MessageEvent[] = []
+    const sub = stream.subscribe((e) => events.push(e))
+    // The queue event emitted synchronously on subscribe — ack must follow that emission.
+    expect(events.map((e) => e.id)).toContain('q1')
+    expect(acknowledge).toHaveBeenCalledTimes(1)
+    expect(acknowledge).toHaveBeenCalledWith('u1', [queued])
+    sub.unsubscribe()
+  })
+
+  // FINDING B: when the stream is never subscribed (client disconnects before subscribing),
+  // the durable queue must NOT be acknowledged — the events stay durable for redelivery.
+  it('does not acknowledge the offline queue when the stream is never subscribed', async () => {
+    const acknowledge = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
+    const offlineDelivery = {
+      retrieve: jest
+        .fn()
+        .mockResolvedValue([{ id: 'q1', event: 'queued', data: {}, emittedAt: new Date() }]),
+      acknowledge,
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    expect(acknowledge).not.toHaveBeenCalled()
+  })
+
+  // FINDING B: a subscriber that closes DURING emission (take(1)) leaves the subscriber
+  // closed at the ack check, so the queue is left durable rather than acknowledged.
+  it('does not acknowledge when the subscriber closes during emission', async () => {
+    const acknowledge = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({
+      getReplayEvents: jest.fn().mockReturnValue([]),
+      emitConnectionEvent: false,
+    })
+    const offlineDelivery = {
+      retrieve: jest
+        .fn()
+        .mockResolvedValue([{ id: 'q1', event: 'queued', data: {}, emittedAt: new Date() }]),
+      acknowledge,
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    // take(1) completes and closes the subscriber the instant the first event is emitted.
+    const first = await firstValueFrom(stream.pipe(take(1)))
+    expect(first.id).toBe('q1')
+    expect(acknowledge).not.toHaveBeenCalled()
   })
 })

@@ -2,7 +2,7 @@
  * @fileoverview Integration tests for the dynamic module wiring.
  * @layer composition
  */
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { BymaxRealtimeModule } from './realtime.module'
 import { RealtimeService } from './services/realtime.service'
@@ -81,6 +81,20 @@ describe('BymaxRealtimeModule.forRoot', () => {
     expect(mod.get(REALTIME_PUBSUB_TOKEN)).toBe(pubsub)
   })
 
+  // In production, omitting pubsub logs a single-instance warning.
+  it('logs a production warning when pubsub is omitted in NODE_ENV=production', () => {
+    const original = process.env['NODE_ENV']
+    process.env['NODE_ENV'] = 'production'
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator })
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+    } finally {
+      process.env['NODE_ENV'] = original
+      warnSpy.mockRestore()
+    }
+  })
+
   // Hooks default to an empty object when none are provided.
   it('defaults hooks to an empty object', async () => {
     const mod = await Test.createTestingModule({
@@ -142,6 +156,28 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
       ],
     }).compile()
     expect(mod.get(REALTIME_PUBSUB_TOKEN)).toBeInstanceOf(InMemoryPubSub)
+  })
+
+  // In production, omitting pubsub in the factory result logs a single-instance warning.
+  it('logs a production warning when forRootAsync pubsub is omitted in NODE_ENV=production', async () => {
+    const original = process.env['NODE_ENV']
+    process.env['NODE_ENV'] = 'production'
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const mod = await Test.createTestingModule({
+        imports: [
+          BymaxRealtimeModule.forRootAsync({
+            useFactory: async () => ({ transport: 'sse', authenticator }),
+          }),
+        ],
+      }).compile()
+      await mod.init()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+      await mod.close()
+    } finally {
+      process.env['NODE_ENV'] = original
+      warnSpy.mockRestore()
+    }
   })
 
   // A provided pubsub is used as-is.

@@ -13,6 +13,12 @@ export { ConnectionRegistry } from './services/connection-registry.service'
 // Default pub/sub (useful for tests; consumers rarely instantiate it directly)
 export { InMemoryPubSub } from './pubsub/in-memory-pubsub'
 
+// Optional Redis-backed implementations (require ioredis peer)
+export { RedisRealtimePubSub } from './pubsub/redis-realtime-pubsub'
+export type { RedisRealtimePubSubOptions } from './pubsub/redis-realtime-pubsub'
+export { RedisOfflineQueue } from './offline-queue/redis-offline-queue'
+export type { RedisOfflineQueueOptions } from './offline-queue/redis-offline-queue'
+
 // Contracts
 export type {
   ITransport,

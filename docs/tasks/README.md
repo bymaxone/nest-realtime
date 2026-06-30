@@ -1,6 +1,6 @@
 # Development Tasks — @bymax-one/nest-realtime
 
-> **Last updated:** 2026-06-27
+> **Last updated:** 2026-06-29
 > **Source roadmap:** [`../development_plan.md`](../development_plan.md) · **Spec:** [`../technical_specification.md`](../technical_specification.md)
 
 Tasks live **one file per phase** in this folder (`phase-NN-<slug>.md`), following the Bymax task-doc convention (same pattern as `bymax-one/rust-auth`). Each phase file is self-contained: context, rules-of-phase, reference docs, a task index, the tasks (each with an executable **Agent prompt** in a 4-backtick fence), and a completion log.
@@ -15,11 +15,11 @@ Tasks live **one file per phase** in this folder (`phase-NN-<slug>.md`), followi
 |---|---|---|---|
 | 1 | [`phase-01-foundation-sse.md`](./phase-01-foundation-sse.md) | 16 / 16 | ✅ Done |
 | 2 | [`phase-02-auth-last-event-id.md`](./phase-02-auth-last-event-id.md) | 12 / 12 | ✅ Done |
-| 3 | [`phase-03-horizontal-scaling-sse.md`](./phase-03-horizontal-scaling-sse.md) | 0 / 11 | 📋 ToDo |
+| 3 | [`phase-03-horizontal-scaling-sse.md`](./phase-03-horizontal-scaling-sse.md) | 11 / 11 | 👀 Review |
 | 4 | [`phase-04-websocket-transport.md`](./phase-04-websocket-transport.md) | 0 / 12 | 📋 ToDo |
 | 5 | [`phase-05-frontend-react.md`](./phase-05-frontend-react.md) | 0 / 12 | 📋 ToDo |
 | 6 | [`phase-06-release.md`](./phase-06-release.md) | 0 / 10 | 📋 ToDo |
-| | **Total** | **28 / 73** | 🔄 38% |
+| | **Total** | **39 / 73** | 🔄 53% |
 
 ---
 

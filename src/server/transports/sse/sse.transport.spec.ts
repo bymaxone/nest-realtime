@@ -2,18 +2,17 @@
  * @fileoverview Unit tests for the SSE transport (delivery, fan-out, teardown).
  * @layer transport
  */
+import { Logger } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import { Subject } from 'rxjs'
+import type { IOfflineQueueStorage } from '../../interfaces/offline-queue-storage.interface'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import type { IConnectionAuthenticator } from '../../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
-import type {
-  IRealtimePubSub,
-  RealtimePubSubMessage,
-} from '../../interfaces/realtime-pubsub.interface'
+import type { IRealtimePubSub } from '../../interfaces/realtime-pubsub.interface'
 import type {
   BymaxRealtimeModuleOptions,
   SseOptions,
@@ -21,8 +20,6 @@ import type {
 import { HeartbeatService } from './heartbeat.service'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { SseTransport } from './sse.transport'
-
-type RemoteHandler = (message: RealtimePubSubMessage) => void
 
 function makeOptions(sse?: SseOptions): BymaxRealtimeModuleOptions {
   return {
@@ -36,6 +33,7 @@ function build(opts?: {
   sse?: SseOptions
   hooks?: IConnectionLifecycleHooks
   instanceId?: string
+  offlineQueue?: IOfflineQueueStorage
 }) {
   const connections = new ConnectionRegistry()
   const rooms = new RoomRegistry()
@@ -61,6 +59,7 @@ function build(opts?: {
     hooks,
     options,
     opts?.instanceId ?? 'inst-1',
+    opts?.offlineQueue,
   )
   return { transport, connections, rooms, replay, authenticate, publish, subscribe, unsubscribe }
 }
@@ -193,59 +192,6 @@ describe('SseTransport', () => {
     addConn(connections, { connectionId: 'c1', userId: 'u1' })
     publish.mockRejectedValueOnce(new Error('redis down'))
     await expect(transport.emitToUser('u1', 'foo', {})).resolves.toBeUndefined()
-  })
-
-  // Remote bus messages are delivered locally without being re-published.
-  it('dispatches a remote message to *Local without re-publishing', async () => {
-    const { transport, connections, publish, subscribe } = build()
-    const { received } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
-    await transport.onModuleInit()
-    const handler = subscribe.mock.calls[0]?.[0] as RemoteHandler
-    handler({
-      op: 'emitToUser',
-      args: { userId: 'u1', event: 'foo', data: {}, id: 'x-1' },
-      origin: 'other',
-    })
-    expect(received).toHaveLength(1)
-    expect(publish).not.toHaveBeenCalled()
-  })
-
-  // Self-originated remote messages are filtered out (no double delivery).
-  it('ignores remote messages from its own origin', async () => {
-    const { transport, connections, subscribe } = build()
-    const { received } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
-    await transport.onModuleInit()
-    const handler = subscribe.mock.calls[0]?.[0] as RemoteHandler
-    handler({
-      op: 'emitToUser',
-      args: { userId: 'u1', event: 'foo', data: {}, id: 'x' },
-      origin: 'inst-1',
-    })
-    expect(received).toHaveLength(0)
-  })
-
-  // Every remote op routes to the matching local handler.
-  it('routes every remote op to its local handler', async () => {
-    const { transport, connections, rooms, publish, subscribe } = build()
-    const user = addConn(connections, { connectionId: 'cu', userId: 'u1', tenantId: 't1' })
-    rooms.join('cu', 'room:a')
-    await transport.onModuleInit()
-    const handler = subscribe.mock.calls[0]?.[0] as RemoteHandler
-    handler({
-      op: 'emitToTenant',
-      args: { tenantId: 't1', event: 'e', data: {}, id: '1' },
-      origin: 'o',
-    })
-    handler({
-      op: 'emitToRoom',
-      args: { roomId: 'room:a', event: 'e', data: {}, id: '2' },
-      origin: 'o',
-    })
-    handler({ op: 'broadcast', args: { event: 'e', data: {}, id: '3' }, origin: 'o' })
-    expect(user.received).toHaveLength(3)
-    handler({ op: 'disconnect', args: { connectionId: 'cu', reason: 'x' }, origin: 'o' })
-    expect(connections.get('cu')).toBeUndefined()
-    expect(publish).not.toHaveBeenCalled()
   })
 
   // A local disconnect completes close$ and unregisters the connection.
@@ -395,23 +341,14 @@ describe('SseTransport', () => {
     expect(all).toEqual([])
   })
 
-  // onModuleInit subscribes and onApplicationShutdown unsubscribes and tears down.
-  it('wires and tears down the bus subscription', async () => {
-    const { transport, connections, subscribe, unsubscribe } = build()
+  // shutdown tears down all SSE connections and stops the heartbeat.
+  it('tears down all SSE connections on shutdown', async () => {
+    const { transport, connections } = build()
     const { close$ } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
     let completed = false
     close$.subscribe({ complete: () => (completed = true) })
-    await transport.onModuleInit()
-    expect(subscribe).toHaveBeenCalledTimes(1)
     await transport.onApplicationShutdown()
-    expect(unsubscribe).toHaveBeenCalledTimes(1)
     expect(completed).toBe(true)
-  })
-
-  // onApplicationShutdown without a prior subscription does not throw.
-  it('shuts down cleanly without a subscription', async () => {
-    const { transport } = build()
-    await expect(transport.onApplicationShutdown()).resolves.toBeUndefined()
   })
 
   // The heartbeat interval getter honors config and falls back to the default.
@@ -492,6 +429,67 @@ describe('SseTransport', () => {
     addConn(connections, { connectionId: 'c1', userId: 'u1' })
     expect(transport.getConnection('c1')).toBeDefined()
     expect(transport.getConnection('missing')).toBeUndefined()
+  })
+
+  // emitToUser with an offline queue and zero local connections calls append once.
+  it('calls offlineQueue.append when user has no local SSE connections', async () => {
+    // Covers: offline queue is configured and user is fully offline on this instance.
+    const append = jest.fn().mockResolvedValue(undefined)
+    const offlineQueue = {
+      append,
+      retrieveSince: jest.fn(),
+      acknowledge: jest.fn(),
+    } as unknown as IOfflineQueueStorage
+    const { transport } = build({ offlineQueue })
+    await transport.emitToUser('u1', 'foo', { x: 1 })
+    expect(append).toHaveBeenCalledTimes(1)
+    expect(append).toHaveBeenCalledWith(
+      'u1',
+      expect.objectContaining({ event: 'foo', data: { x: 1 }, emittedAt: expect.any(Date) }),
+    )
+  })
+
+  // emitToUser with an offline queue but >=1 live connection does not call append.
+  it('does not call offlineQueue.append when the user has a live local connection', async () => {
+    // Covers: user has an active SSE connection — offline queue must not be written.
+    const append = jest.fn().mockResolvedValue(undefined)
+    const offlineQueue = {
+      append,
+      retrieveSince: jest.fn(),
+      acknowledge: jest.fn(),
+    } as unknown as IOfflineQueueStorage
+    const { transport, connections } = build({ offlineQueue })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    await transport.emitToUser('u1', 'foo', {})
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  // emitToUser without an offline queue resolves normally with no side effects.
+  it('resolves normally when no offline queue is configured', async () => {
+    // Covers: baseline — no offlineQueue injected; emitToUser must not throw.
+    const { transport } = build()
+    await expect(transport.emitToUser('u1', 'foo', {})).resolves.toBeUndefined()
+  })
+
+  // emitToUser swallows an offlineQueue.append rejection and logs a warn.
+  it('swallows offlineQueue.append rejections and logs a warn', async () => {
+    // Covers: fire-and-forget .catch swallows the error so the live emit path is unaffected.
+    const append = jest.fn().mockRejectedValue(new Error('queue down'))
+    const offlineQueue = {
+      append,
+      retrieveSince: jest.fn(),
+      acknowledge: jest.fn(),
+    } as unknown as IOfflineQueueStorage
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const { transport } = build({ offlineQueue })
+      await transport.emitToUser('u1', 'foo', {})
+      // One microtask flush to let the fire-and-forget .catch run.
+      await Promise.resolve()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Offline queue append failed'))
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   // A rejecting onDisconnect hook is isolated (logged, never an unhandled rejection).

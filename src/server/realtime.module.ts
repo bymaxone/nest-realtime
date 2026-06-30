@@ -25,6 +25,8 @@ import type {
   BymaxRealtimeModuleOptionsFactory,
 } from './interfaces/realtime-module-options.interface'
 import { InMemoryPubSub } from './pubsub/in-memory-pubsub'
+import { RealtimePubSubSubscriber } from './pubsub/realtime-pubsub-subscriber'
+import { OfflineQueueDeliveryService } from './offline-queue/offline-queue-delivery.service'
 import { ConnectionRegistry } from './services/connection-registry.service'
 import { EventIdGenerator } from './services/event-id-generator.service'
 import { RealtimeService } from './services/realtime.service'
@@ -66,6 +68,13 @@ export class BymaxRealtimeModule {
     }
 
     const instanceId = randomUUID()
+
+    if (!resolved.pubsub && process.env['NODE_ENV'] === 'production') {
+      BymaxRealtimeModule.logger.warn(
+        'No IRealtimePubSub provided in production — single-instance only. Provide a Redis-backed IRealtimePubSub for horizontal scaling.',
+      )
+    }
+
     const providers: Provider[] = [
       { provide: REALTIME_OPTIONS_TOKEN, useValue: resolved },
       { provide: REALTIME_INSTANCE_ID_TOKEN, useValue: instanceId },
@@ -84,6 +93,8 @@ export class BymaxRealtimeModule {
       SseSubscriptionHandler,
       RealtimeService,
       ReauthenticationService,
+      RealtimePubSubSubscriber,
+      OfflineQueueDeliveryService,
     ]
 
     BymaxRealtimeModule.logger.log(
@@ -163,7 +174,11 @@ export class BymaxRealtimeModule {
                 `${REALTIME_ERROR_CODES.INVALID_OPTIONS}: useFactory returned nothing`,
               )
             validateOptions(raw)
-            return applyDefaults(raw)
+            const resolved = applyDefaults(raw)
+            BymaxRealtimeModule.logger.log(
+              `Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`,
+            )
+            return resolved
           },
           inject: [...(asyncOptions.inject ?? [])],
         }
@@ -177,7 +192,11 @@ export class BymaxRealtimeModule {
                 `${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options factory returned nothing`,
               )
             validateOptions(raw)
-            return applyDefaults(raw)
+            const resolved = applyDefaults(raw)
+            BymaxRealtimeModule.logger.log(
+              `Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`,
+            )
+            return resolved
           },
           inject: [asyncOptions.useClass ? FACTORY_TOKEN : asyncOptions.useExisting!],
         }
@@ -196,7 +215,14 @@ export class BymaxRealtimeModule {
 
     const pubsubProvider: Provider = {
       provide: REALTIME_PUBSUB_TOKEN,
-      useFactory: (opts: BymaxRealtimeModuleOptions) => opts.pubsub ?? new InMemoryPubSub(),
+      useFactory: (opts: BymaxRealtimeModuleOptions) => {
+        if (!opts.pubsub && process.env['NODE_ENV'] === 'production') {
+          BymaxRealtimeModule.logger.warn(
+            'No IRealtimePubSub provided in production — single-instance only. Provide a Redis-backed IRealtimePubSub for horizontal scaling.',
+          )
+        }
+        return opts.pubsub ?? new InMemoryPubSub()
+      },
       inject: [REALTIME_OPTIONS_TOKEN],
     }
 
@@ -235,6 +261,8 @@ export class BymaxRealtimeModule {
       SseSubscriptionHandler,
       RealtimeService,
       ReauthenticationService,
+      RealtimePubSubSubscriber,
+      OfflineQueueDeliveryService,
       ...(asyncOptions.extraProviders ?? []),
     ]
 

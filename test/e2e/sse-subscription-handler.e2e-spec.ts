@@ -171,13 +171,15 @@ describe('SseSubscriptionHandler — integration with auth fixtures', () => {
       cookieAuth = new CookieJwtAuthenticator(JWT_SECRET)
     })
 
-    // The connection is registered with the transport after authentication.
+    // The connection is registered with the transport on subscribe.
     it('calls transport.registerConnection after a successful auth', async () => {
       const token = sign({ sub: 'u1', tid: 't1' }, JWT_SECRET, { expiresIn: '1h' })
       const req = mkReq({ headers: { cookie: `access_token=${token}` } })
       const transport = mkTransport(cookieAuth)
       const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), mkOptions(cookieAuth))
-      await handler.handle(req, mkRes())
+      const stream = await handler.handle(req, mkRes())
+      // Subscribe so the Observable's subscriber callback wires registration.
+      stream.subscribe().unsubscribe()
       expect(transport.registerConnection).toHaveBeenCalledWith(
         expect.objectContaining({ auth: expect.objectContaining({ userId: 'u1' }) }),
       )
@@ -190,9 +192,12 @@ describe('SseSubscriptionHandler — integration with auth fixtures', () => {
       const hooks: IConnectionLifecycleHooks = { onConnect: jest.fn() }
       const transport = mkTransport(cookieAuth)
       const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), mkOptions(cookieAuth), hooks)
-      await handler.handle(req, mkRes())
+      const stream = await handler.handle(req, mkRes())
+      // Subscribe so the Observable's subscriber callback wires registration.
+      const sub = stream.subscribe()
       // Allow best-effort microtask to resolve.
       await Promise.resolve()
+      sub.unsubscribe()
       expect(hooks.onConnect).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }))
     })
   })

@@ -91,9 +91,12 @@ describe('Connection lifecycle hooks — integration', () => {
     const onConnect = jest.fn()
     const hooks: IConnectionLifecycleHooks = { onConnect }
     const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), mkOptions(), hooks)
-    await handler.handle(mkReq(), mkRes())
+    const stream$ = await handler.handle(mkReq(), mkRes())
+    // Subscribe first so the Observable's subscriber callback wires registration.
+    const sub = stream$.subscribe()
     // onConnect is best-effort — flush one microtask turn.
     await Promise.resolve()
+    sub.unsubscribe()
     expect(onConnect).toHaveBeenCalledWith(
       expect.objectContaining({
         connectionId: record.connectionId,
