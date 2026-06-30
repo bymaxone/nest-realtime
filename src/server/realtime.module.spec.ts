@@ -7,11 +7,16 @@ import { Test } from '@nestjs/testing'
 import { assertWsPeerDeps, BymaxRealtimeModule } from './realtime.module'
 import { RealtimeService } from './services/realtime.service'
 import { ConnectionRegistry } from './services/connection-registry.service'
+import { SseTransport } from './transports/sse/sse.transport'
 import { WebSocketTransport } from './transports/websocket/websocket.transport'
 import { RealtimeGateway } from './transports/websocket/realtime.gateway'
 import { CompositeTransport } from './transports/composite/composite.transport'
 import { InMemoryPubSub } from './pubsub/in-memory-pubsub'
-import { REALTIME_HOOKS_TOKEN, REALTIME_PUBSUB_TOKEN } from './constants/injection-tokens.constants'
+import {
+  REALTIME_HOOKS_TOKEN,
+  REALTIME_PUBSUB_TOKEN,
+  REALTIME_TRANSPORT_TOKEN,
+} from './constants/injection-tokens.constants'
 import type {
   BymaxRealtimeModuleOptions,
   BymaxRealtimeModuleAsyncOptions,
@@ -133,6 +138,62 @@ describe('BymaxRealtimeModule.forRoot', () => {
       imports: [BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator, hooks })],
     }).compile()
     expect(mod.get(REALTIME_HOOKS_TOKEN)).toBe(hooks)
+  })
+
+  // REALTIME_TRANSPORT_TOKEN must resolve to SseTransport for transport='sse'.
+  // Kills mutations that swap the 'sse' branch with the 'both' or default branch.
+  it('binds REALTIME_TRANSPORT_TOKEN to SseTransport for transport sse', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator })],
+    }).compile()
+    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(SseTransport)
+  })
+
+  // REALTIME_TRANSPORT_TOKEN must resolve to WebSocketTransport for transport='websocket'.
+  it('binds REALTIME_TRANSPORT_TOKEN to WebSocketTransport for transport websocket', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRoot({ transport: 'websocket', authenticator })],
+    }).compile()
+    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(WebSocketTransport)
+  })
+
+  // REALTIME_TRANSPORT_TOKEN must resolve to CompositeTransport for transport='both'.
+  it('binds REALTIME_TRANSPORT_TOKEN to CompositeTransport for transport both', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRoot({ transport: 'both', authenticator })],
+    }).compile()
+    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(CompositeTransport)
+  })
+
+  // When pubsub IS provided in production the single-instance warning must NOT fire.
+  // Kills the && → || mutation that would warn even when pubsub is present.
+  it('does not warn in production when pubsub is provided', () => {
+    const pubsub: IRealtimePubSub = {
+      publish: async () => undefined,
+      subscribe: async () => async () => undefined,
+    }
+    const original = process.env['NODE_ENV']
+    process.env['NODE_ENV'] = 'production'
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator, pubsub })
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+    } finally {
+      process.env['NODE_ENV'] = original
+      warnSpy.mockRestore()
+    }
+  })
+
+  // forRoot must log a Bootstrapped line so operators can confirm the module initialised.
+  // Kills StringLiteral mutations that replace the log template with an empty string.
+  it('logs a Bootstrapped line on forRoot', () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator })
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Bootstrapped'))
+    } finally {
+      logSpy.mockRestore()
+    }
   })
 })
 
@@ -418,6 +479,127 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     })
     await expect(testModule.compile()).rejects.toThrow(/transport hint/)
   })
+
+  // When no transport hint is provided, the legacy path is used and REALTIME_TRANSPORT_TOKEN
+  // must resolve at runtime to the correct transport.  These tests kill the string mutations
+  // in buildLegacyAsyncTransportProviders' inner if-chain ('sse' → '', 'websocket' → '').
+  it('resolves SseTransport via legacy async path when transport is sse', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useFactory: async () => ({ transport: 'sse', authenticator }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(SseTransport)
+  })
+
+  it('resolves WebSocketTransport via legacy async path when transport is websocket', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useFactory: async () => ({ transport: 'websocket', authenticator }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(WebSocketTransport)
+  })
+
+  it('resolves CompositeTransport via legacy async path when transport is both', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useFactory: async () => ({ transport: 'both', authenticator }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(CompositeTransport)
+  })
+
+  // With a transport hint, the async path uses buildAsyncTransportProviders.
+  // These tests verify the token is bound correctly for each hinted mode.
+  it('binds REALTIME_TRANSPORT_TOKEN to SseTransport when transport hint is sse', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useFactory: async () => ({ transport: 'sse', authenticator }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(SseTransport)
+  })
+
+  it('binds REALTIME_TRANSPORT_TOKEN to WebSocketTransport when transport hint is websocket', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'websocket',
+          useFactory: async () => ({ transport: 'websocket', authenticator }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(WebSocketTransport)
+  })
+
+  it('binds REALTIME_TRANSPORT_TOKEN to CompositeTransport when transport hint is both', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'both',
+          useFactory: async () => ({ transport: 'both', authenticator }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(CompositeTransport)
+  })
+
+  // When pubsub IS provided in production, the single-instance warning must NOT fire.
+  // Kills the && → || mutation in the pubsubProvider factory.
+  it('does not warn in production when pubsub is provided via factory', async () => {
+    const pubsub: IRealtimePubSub = {
+      publish: async () => undefined,
+      subscribe: async () => async () => undefined,
+    }
+    const original = process.env['NODE_ENV']
+    process.env['NODE_ENV'] = 'production'
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const mod = await Test.createTestingModule({
+        imports: [
+          BymaxRealtimeModule.forRootAsync({
+            useFactory: async () => ({ transport: 'sse', authenticator, pubsub }),
+          }),
+        ],
+      }).compile()
+      await mod.init()
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+      await mod.close()
+    } finally {
+      process.env['NODE_ENV'] = original
+      warnSpy.mockRestore()
+    }
+  })
+
+  // resolveAsyncOptions must log a Bootstrapped line via the module logger.
+  // Kills StringLiteral mutations that replace the log template with an empty string.
+  it('logs a Bootstrapped line when resolving async options', async () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      const mod = await Test.createTestingModule({
+        imports: [
+          BymaxRealtimeModule.forRootAsync({
+            useFactory: async () => ({ transport: 'sse', authenticator }),
+          }),
+        ],
+      }).compile()
+      await mod.init()
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Bootstrapped'))
+      await mod.close()
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
 })
 
 describe('assertWsPeerDeps', () => {
@@ -441,5 +623,15 @@ describe('assertWsPeerDeps', () => {
       throw new Error('Cannot find module')
     }
     expect(() => assertWsPeerDeps(failingResolver)).toThrow(/socket\.io/)
+  })
+
+  // The resolver must be called with the EXACT package names — kills StringLiteral
+  // mutations that change '@nestjs/websockets' or 'socket.io' to an empty string.
+  it('calls the resolver with @nestjs/websockets and socket.io', () => {
+    const resolved: string[] = []
+    const capturingResolver = (id: string) => { resolved.push(id); return '/fake/path' }
+    assertWsPeerDeps(capturingResolver)
+    expect(resolved).toContain('@nestjs/websockets')
+    expect(resolved).toContain('socket.io')
   })
 })

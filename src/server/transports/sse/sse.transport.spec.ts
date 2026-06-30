@@ -500,6 +500,38 @@ describe('SseTransport', () => {
     await expect(transport.unregisterConnection('c1')).resolves.toBeUndefined()
   })
 
+  // When the onDisconnect hook throws, the error is logged via logger.error.
+  // Kills BlockStatement and StringLiteral mutations on the error call.
+  it('logs the hook error when onDisconnect throws', async () => {
+    const onDisconnect = jest.fn().mockRejectedValue(new Error('hook-error'))
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      await transport.unregisterConnection('c1')
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('hook-error'))
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  // onDisconnect hook receives the connection metadata: transport type, userId, and connectedAt.
+  // Kills mutations that replace the transport field or durationMs arithmetic.
+  it('passes transport, userId, and a non-negative durationMs to the onDisconnect hook', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    await transport.unregisterConnection('c1')
+    const meta = (onDisconnect as jest.Mock).mock.calls[0]?.[0] as {
+      transport: string
+      userId: string
+      durationMs: number
+    }
+    expect(meta.transport).toBe('sse')
+    expect(meta.userId).toBe('u1')
+    expect(meta.durationMs).toBeGreaterThanOrEqual(0)
+  })
+
   // disconnectLocal forwards the reason before any finalize-style cleanup runs.
   it('forwards the disconnect reason before the stream finalize cleanup', async () => {
     const onDisconnect = jest.fn()
@@ -511,5 +543,56 @@ describe('SseTransport', () => {
     await transport.unregisterConnection('c1')
     expect(onDisconnect).toHaveBeenCalledTimes(1)
     expect(onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ reason: 'revoked' }))
+  })
+
+  // disconnectLocal calls close$.next() so downstream takeUntil operators see the emission.
+  // Kills BlockStatement mutations that remove the .next() call.
+  it('emits on close$ (next) before completing it in disconnectLocal', async () => {
+    const { transport, connections } = build()
+    const { close$ } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    let nexted = false
+    close$.subscribe({ next: () => { nexted = true } })
+    await transport.disconnectLocal('c1')
+    expect(nexted).toBe(true)
+  })
+
+  // A pub/sub publish failure is logged with the error text.
+  // Kills BlockStatement and StringLiteral mutations on the warn call in publish.
+  it('logs the error message when pubsub.publish fails', async () => {
+    const { transport, connections, publish } = build()
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    publish.mockRejectedValueOnce(new Error('redis-down'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await transport.emitToUser('u1', 'foo', {})
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('redis-down'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // A failing connection (throwing subject.next) is logged with the error text.
+  // Kills BlockStatement and StringLiteral mutations on the warn call in deliver.
+  it('logs the error when a connection subject.next throws', async () => {
+    const { transport, connections } = build()
+    connections.register({
+      connectionId: 'bad',
+      userId: 'u1',
+      tenantId: undefined,
+      transport: 'sse',
+      ip: 'x',
+      userAgent: undefined,
+      connectedAt: new Date(),
+      subject: { next: () => { throw new Error('deliver-error') } } as unknown as Subject<MessageEvent>,
+      close$: new Subject<void>(),
+      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+    })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await transport.emitToUser('u1', 'foo', {})
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('deliver-error'))
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })

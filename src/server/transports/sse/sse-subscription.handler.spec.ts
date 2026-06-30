@@ -2,7 +2,7 @@
  * @fileoverview Unit tests for SseSubscriptionHandler.
  * @layer transport
  */
-import { UnauthorizedException } from '@nestjs/common'
+import { Logger, UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import type { Observable } from 'rxjs'
@@ -659,6 +659,104 @@ describe('SseSubscriptionHandler', () => {
     )
     await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
     expect(acknowledge).not.toHaveBeenCalled()
+  })
+
+  // When a lifecycle hook throws, fireHook logs a warn with the error message.
+  // Kills BlockStatement and StringLiteral mutations on the logger.warn in fireHook.
+  it('logs a warn when a lifecycle hook throws', async () => {
+    const onConnect = jest.fn().mockRejectedValue(new Error('hook-crash'))
+    const transport = mkTransport()
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
+      const stream = await handler.handle(mkReq(), mkRes())
+      const sub = stream.subscribe()
+      await Promise.resolve()
+      await Promise.resolve()
+      sub.unsubscribe()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hook-crash'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // onConnect receives the full connection metadata including transport type.
+  // Kills mutations to transport: 'sse', ip, and connectedAt in buildMeta.
+  it('passes full metadata including transport sse to the onConnect hook', async () => {
+    const onConnect = jest.fn()
+    const record = mkRecord('conn-1', 'u1')
+    const transport = mkTransport({
+      getConnection: jest.fn().mockReturnValue(record),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+    const meta = (onConnect as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(meta['transport']).toBe('sse')
+    expect(meta['connectionId']).toBe('conn-1')
+    expect(meta['ip']).toBe('127.0.0.1')
+    expect(meta['connectedAt']).toBeInstanceOf(Date)
+  })
+
+  // onError receives transport: 'sse' when the stream errors.
+  // Kills StringLiteral mutations on 'sse' in the onError call arguments.
+  it('passes transport sse to the onError hook when the stream errors', async () => {
+    let capturedSubject: Subject<MessageEvent> | undefined
+    const transport = mkTransport({
+      registerConnection: jest
+        .fn()
+        .mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+          capturedSubject = params.subject
+        }),
+      emitConnectionEvent: false,
+    })
+    const onError = jest.fn()
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onError })
+    const stream$ = await handler.handle(mkReq(), mkRes())
+    stream$.subscribe()
+    await Promise.resolve()
+    capturedSubject!.error(new Error('stream-error'))
+    await Promise.resolve()
+    const ctx = (onError as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(ctx['transport']).toBe('sse')
+  })
+
+  // onError receives transport: 'sse' when registerConnection rejects.
+  // Kills StringLiteral mutations on 'sse' in the activateConnection onError call.
+  it('passes transport sse to onError when registerConnection rejects', async () => {
+    const transport = mkTransport({
+      registerConnection: jest.fn().mockRejectedValue(new Error('reg-fail')),
+      emitConnectionEvent: false,
+    })
+    const onError = jest.fn()
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onError })
+    const stream = await handler.handle(mkReq(), mkRes())
+    stream.subscribe({ error: () => undefined })
+    await Promise.resolve()
+    await Promise.resolve()
+    const ctx = (onError as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(ctx['transport']).toBe('sse')
+  })
+
+  // When offlineDelivery is configured but Last-Event-ID is absent, retrieve must NOT be called.
+  // Kills the && → || mutation in the queueEvents ternary condition.
+  it('does not call retrieve when offlineDelivery is configured but Last-Event-ID is absent', async () => {
+    const retrieve = jest.fn().mockResolvedValue([])
+    const offlineDelivery = {
+      retrieve,
+      acknowledge: jest.fn().mockResolvedValue(undefined),
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      mkTransport({ emitConnectionEvent: false }),
+      mkHeartbeat(),
+      mkOptions(),
+      undefined,
+      offlineDelivery,
+    )
+    await handler.handle(mkReq(), mkRes())
+    expect(retrieve).not.toHaveBeenCalled()
   })
 
   // FINDING B: a subscriber that closes DURING emission (take(1)) leaves the subscriber

@@ -71,4 +71,28 @@ describe('createSseController', () => {
     const handler = mkHandler()
     await expect(build(handler, 'realtime/sse').subscribe(mkReq(), mkRes())).resolves.toBeDefined()
   })
+
+  // The @Sse path metadata is stored WITHOUT the leading slash — NestJS resolves '/events'
+  // and 'events' identically via the decorator, so the strip logic is an intentional
+  // normalization. Verifying the metadata kills mutations to the startsWith branch or slice.
+  it('registers the @Sse route with the leading slash removed', () => {
+    const cls = createSseController('/events')
+    const path = Reflect.getMetadata('path', cls.prototype.subscribe) as string
+    expect(path).toBe('events')
+  })
+
+  it('registers the @Sse route verbatim when endpoint has no leading slash', () => {
+    const cls = createSseController('realtime/sse')
+    const path = Reflect.getMetadata('path', cls.prototype.subscribe) as string
+    expect(path).toBe('realtime/sse')
+  })
+
+  it('registers a different path for each factory call (no shared state)', () => {
+    const cls1 = createSseController('/stream-a')
+    const cls2 = createSseController('/stream-b')
+    const path1 = Reflect.getMetadata('path', cls1.prototype.subscribe) as string
+    const path2 = Reflect.getMetadata('path', cls2.prototype.subscribe) as string
+    expect(path1).toBe('stream-a')
+    expect(path2).toBe('stream-b')
+  })
 })
