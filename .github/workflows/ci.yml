@@ -33,7 +33,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test:cov
-      - run: pnpm test:e2e
+      # Cross-instance tests require Redis and run on a daily schedule instead.
+      - run: pnpm test:e2e -- --testPathIgnorePatterns=cross-instance
       - run: pnpm build
       - run: pnpm size
 

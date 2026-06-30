@@ -1,0 +1,47 @@
+# Scheduled cross-instance E2E suite. Runs daily and on demand.
+# Intentionally kept off the per-PR path — the cross-instance tests require a
+# real Redis service container and take longer than the standard PR gate.
+name: E2E Cross-Instance
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # daily at 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cross-instance:
+    name: cross-instance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run cross-instance E2E tests
+        run: pnpm test:e2e -- --testPathPattern=cross-instance
+        env:
+          REDIS_URL: redis://localhost:6379
