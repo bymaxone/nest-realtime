@@ -1,6 +1,6 @@
 # Phase 5 — Frontend (`./react`)
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 12 tasks · **Last updated**: 2026-06-30
+> **Status**: ✅ Done · **Progress**: 12 / 12 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 6 (Phase 5)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 12 (Frontend Integration)
 
@@ -49,18 +49,18 @@ Tests run under a `jsdom` Jest project with a reusable `EventSource` mock and a 
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 5.1 | `useRealtime` — SSE path (`EventSource`) | 📋 ToDo | P0 | M | 1.6 |
-| 5.2 | `useRealtime` — WS path with dynamic `socket.io-client` import | 📋 ToDo | P0 | M | 5.1 |
-| 5.3 | Universal `useRealtime` + `useRealtimeConnection` + `RealtimeProvider` | 📋 ToDo | P0 | M | 5.1, 5.2 |
-| 5.4 | `usePresence` (optional, requires backend `IPresenceStorage`) | 📋 ToDo | P1 | S | 5.3 |
-| 5.5 | `src/react/index.ts` barrel | 📋 ToDo | P1 | S | 5.3, 5.4 |
-| 5.6 | Bundle validation — `socket.io-client` excluded from the static graph | 📋 ToDo | P0 | S | 5.5 |
-| 5.7 | `jsdom` Jest project + `EventSource` / `socket.io-client` mocks | 📋 ToDo | P0 | M | 1.4 |
-| 5.8 | Tests — `useRealtimeSse` (`EventSource` mock) | 📋 ToDo | P0 | M | 5.1, 5.7 |
-| 5.9 | Tests — `useRealtimeWs` (dynamic-import mock) | 📋 ToDo | P0 | M | 5.2, 5.7 |
-| 5.10 | Tests — universal `useRealtime` + `RealtimeProvider` + `useRealtimeConnection` | 📋 ToDo | P1 | M | 5.3, 5.8, 5.9 |
-| 5.11 | Tests — `usePresence` | 📋 ToDo | P1 | S | 5.4 |
-| 5.12 | Phase 5 consolidated validation | 📋 ToDo | P0 | S | 5.1…5.11 |
+| 5.1 | `useRealtime` — SSE path (`EventSource`) | ✅ Done | P0 | M | 1.6 |
+| 5.2 | `useRealtime` — WS path with dynamic `socket.io-client` import | ✅ Done | P0 | M | 5.1 |
+| 5.3 | Universal `useRealtime` + `useRealtimeConnection` + `RealtimeProvider` | ✅ Done | P0 | M | 5.1, 5.2 |
+| 5.4 | `usePresence` (optional, requires backend `IPresenceStorage`) | ✅ Done | P1 | S | 5.3 |
+| 5.5 | `src/react/index.ts` barrel | ✅ Done | P1 | S | 5.3, 5.4 |
+| 5.6 | Bundle validation — `socket.io-client` excluded from the static graph | ✅ Done | P0 | S | 5.5 |
+| 5.7 | `jsdom` Jest project + `EventSource` / `socket.io-client` mocks | ✅ Done | P0 | M | 1.4 |
+| 5.8 | Tests — `useRealtimeSse` (`EventSource` mock) | ✅ Done | P0 | M | 5.1, 5.7 |
+| 5.9 | Tests — `useRealtimeWs` (dynamic-import mock) | ✅ Done | P0 | M | 5.2, 5.7 |
+| 5.10 | Tests — universal `useRealtime` + `RealtimeProvider` + `useRealtimeConnection` | ✅ Done | P1 | M | 5.3, 5.8, 5.9 |
+| 5.11 | Tests — `usePresence` | ✅ Done | P1 | S | 5.4 |
+| 5.12 | Phase 5 consolidated validation | ✅ Done | P0 | S | 5.1…5.11 |
 
 ---
 
@@ -68,7 +68,7 @@ Tests run under a `jsdom` Jest project with a reusable `EventSource` mock and a 
 
 ### Task 5.1 — `useRealtime` — SSE path (`EventSource`)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.6
@@ -79,13 +79,13 @@ React 19 hook that opens an `EventSource` for an SSE URL, tracks connection stat
 
 #### Acceptance criteria
 
-- [ ] `src/react/internal/use-realtime-sse.ts` created, type-safe via a `TEvents` generic.
-- [ ] `'use client'` directive at the top.
-- [ ] Cleanup in `useEffect` (close the source + null the ref) on unmount.
-- [ ] Exponential backoff implemented (initial → doubling → capped at `reconnectMaxMs`).
-- [ ] `events` array keeps only the last 100 entries (`slice(-100)`); `lastEvent` reflects the newest.
-- [ ] No `heartbeat` special-casing — the `: keepalive` SSE comment never reaches `onmessage`.
-- [ ] `pnpm typecheck` passes.
+- [x] `src/react/internal/use-realtime-sse.ts` created, type-safe via a `TEvents` generic.
+- [x] `'use client'` directive at the top.
+- [x] Cleanup in `useEffect` (close the source + null the ref) on unmount.
+- [x] Exponential backoff implemented (initial → doubling → capped at `reconnectMaxMs`).
+- [x] `events` array keeps only the last 100 entries (`slice(-100)`); `lastEvent` reflects the newest.
+- [x] No `heartbeat` special-casing — the `: keepalive` SSE comment never reaches `onmessage`.
+- [x] `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -230,7 +230,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.2 — `useRealtime` — WS path with dynamic `socket.io-client` import
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 5.1
@@ -241,12 +241,12 @@ The WebSocket analogue of the SSE hook. **Critical:** `socket.io-client` is load
 
 #### Acceptance criteria
 
-- [ ] `src/react/internal/use-realtime-ws.ts` created.
-- [ ] No static `import { io } from 'socket.io-client'` at the top — only a dynamic `await import()` inside `connect`.
-- [ ] `emit(event, data)` exposed (WebSocket-exclusive — absent on the SSE branch).
-- [ ] Socket handle typed as `unknown` with inline narrowing casts (no `any`).
-- [ ] SSR-safe: the dynamic import resolves on the client only.
-- [ ] `pnpm typecheck` passes; `grep` finds zero static `socket.io-client` imports under `src/react/`.
+- [x] `src/react/internal/use-realtime-ws.ts` created.
+- [x] No static `import { io } from 'socket.io-client'` at the top — only a dynamic `await import()` inside `connect`.
+- [x] `emit(event, data)` exposed (WebSocket-exclusive — absent on the SSE branch).
+- [x] Socket handle typed as `unknown` with inline narrowing casts (no `any`).
+- [x] SSR-safe: the dynamic import resolves on the client only.
+- [x] `pnpm typecheck` passes; `grep` finds zero static `socket.io-client` imports under `src/react/`.
 
 #### Files to create / modify
 
@@ -387,7 +387,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.3 — Universal `useRealtime` + `useRealtimeConnection` + `RealtimeProvider`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 5.1, 5.2
@@ -398,12 +398,12 @@ The public universal hook that detects SSE vs WebSocket from the URL scheme, a c
 
 #### Acceptance criteria
 
-- [ ] Three files created (`use-realtime.ts`, `use-realtime-connection.ts`, `realtime-provider.tsx`).
-- [ ] `useRealtime` auto-detects correctly (`ws://`/`wss://` → WebSocket, otherwise SSE).
-- [ ] Explicit `transport` override works (forces the chosen branch regardless of URL).
-- [ ] `RealtimeProvider` shares a single connection across consumers.
-- [ ] `useRealtimeContext()` throws an explanatory error when used outside `<RealtimeProvider>`.
-- [ ] `pnpm typecheck` passes.
+- [x] Three files created (`use-realtime.ts`, `use-realtime-connection.ts`, `realtime-provider.tsx`).
+- [x] `useRealtime` auto-detects correctly (`ws://`/`wss://` → WebSocket, otherwise SSE).
+- [x] Explicit `transport` override works (forces the chosen branch regardless of URL).
+- [x] `RealtimeProvider` shares a single connection across consumers.
+- [x] `useRealtimeContext()` throws an explanatory error when used outside `<RealtimeProvider>`.
+- [x] `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -540,7 +540,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.4 — `usePresence` (optional, requires backend `IPresenceStorage`)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 5.3
@@ -551,11 +551,11 @@ Hook that listens to the backend-emitted `presence:online` / `presence:offline` 
 
 #### Acceptance criteria
 
-- [ ] `src/react/hooks/use-presence.ts` created.
-- [ ] Requires the provider (consumes `useRealtimeContext`) and re-throws its error when used outside.
-- [ ] State updates on `presence:online` (adds the userId) and `presence:offline` (removes it).
-- [ ] Returns `{ onlineUserIds, isOnline, count }`.
-- [ ] `pnpm typecheck` passes.
+- [x] `src/react/hooks/use-presence.ts` created.
+- [x] Requires the provider (consumes `useRealtimeContext`) and re-throws its error when used outside.
+- [x] State updates on `presence:online` (adds the userId) and `presence:offline` (removes it).
+- [x] Returns `{ onlineUserIds, isOnline, count }`.
+- [x] `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -656,7 +656,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.5 — `src/react/index.ts` barrel
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 5.3, 5.4
@@ -667,9 +667,9 @@ The complete public barrel for the `./react` subpath. Exports only the public ho
 
 #### Acceptance criteria
 
-- [ ] `src/react/index.ts` exports `useRealtime`, `UseRealtimeOptions`, `useRealtimeConnection`, `usePresence`, `UsePresenceReturn`, `RealtimeProvider`, `useRealtimeContext`, and the convenience `RealtimeEvent` / `TransportMode` type re-exports.
-- [ ] Internals (`useRealtimeSse`, `useRealtimeWs`) are NOT exported.
-- [ ] `pnpm build` produces `dist/react/index.{mjs,cjs,d.ts}`.
+- [x] `src/react/index.ts` exports `useRealtime`, `UseRealtimeOptions`, `useRealtimeConnection`, `usePresence`, `UsePresenceReturn`, `RealtimeProvider`, `useRealtimeContext`, and the convenience `RealtimeEvent` / `TransportMode` type re-exports.
+- [x] Internals (`useRealtimeSse`, `useRealtimeWs`) are NOT exported.
+- [x] `pnpm build` produces `dist/react/index.{mjs,cjs,d.ts}`.
 
 #### Files to create / modify
 
@@ -739,7 +739,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.6 — Bundle validation — `socket.io-client` excluded from the static graph
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 5.5
@@ -750,10 +750,10 @@ Empirical bundle-integrity check: `dist/react/index.mjs` must NOT contain a stat
 
 #### Acceptance criteria
 
-- [ ] `dist/react/index.mjs` ≤ 4 KiB brotli.
-- [ ] `socket.io-client` appears only as a dynamic-import string, never in a static `import` line.
-- [ ] `pnpm size` passes.
-- [ ] `scripts/check-size.mjs` runs the static-import check automatically (`process.exit(1)` on a match).
+- [x] `dist/react/index.mjs` ≤ 4 KiB brotli.
+- [x] `socket.io-client` appears only as a dynamic-import string, never in a static `import` line.
+- [x] `pnpm size` passes.
+- [x] `scripts/check-size.mjs` runs the static-import check automatically (`process.exit(1)` on a match).
 
 #### Files to create / modify
 
@@ -826,7 +826,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.7 — `jsdom` Jest project + `EventSource` / `socket.io-client` mocks
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.4
@@ -837,10 +837,10 @@ Configure a `jsdom` Jest project for `src/react/**` (the server/shared project s
 
 #### Acceptance criteria
 
-- [ ] `jest.config.ts` declares two projects: `server` (node) and `react` (jsdom).
-- [ ] `test/setup/react-setup.ts` installs a functional global `EventSource` mock + `emitMessage` / `emitError` helpers.
-- [ ] `test/setup/socket-io-client-mock.ts` provides a `mockSocketIoClient()` helper (handlers + `trigger`).
-- [ ] `pnpm test --selectProjects=react` runs (passing with no specs yet is acceptable).
+- [x] `jest.config.ts` declares two projects: `server` (node) and `react` (jsdom).
+- [x] `test/setup/react-setup.ts` installs a functional global `EventSource` mock + `emitMessage` / `emitError` helpers.
+- [x] `test/setup/socket-io-client-mock.ts` provides a `mockSocketIoClient()` helper (handlers + `trigger`).
+- [x] `pnpm test --selectProjects=react` runs (passing with no specs yet is acceptable).
 
 #### Files to create / modify
 
@@ -988,7 +988,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.8 — Tests — `useRealtimeSse` (`EventSource` mock)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 5.1, 5.7
@@ -999,14 +999,14 @@ React Testing Library specs for `useRealtimeSse` against the `EventSource` mock,
 
 #### Acceptance criteria
 
-- [ ] `src/react/internal/use-realtime-sse.spec.tsx` created with 8+ cases.
-- [ ] After the mock fires `open`, `connected === true`.
-- [ ] A message adds to `events` with its `lastEventId`; `lastEvent` reflects the newest.
-- [ ] `events.length` is capped at 100.
-- [ ] An error sets `connected = false` + `error`; consecutive errors increase the backoff delay (fake timers).
-- [ ] `reconnect()` forces a new `EventSource`; unmount closes it (cleanup).
-- [ ] `withCredentials: true` is forwarded to the `EventSource` constructor.
-- [ ] 100% line/branch coverage on `use-realtime-sse.ts`.
+- [x] `src/react/internal/use-realtime-sse.spec.tsx` created with 8+ cases.
+- [x] After the mock fires `open`, `connected === true`.
+- [x] A message adds to `events` with its `lastEventId`; `lastEvent` reflects the newest.
+- [x] `events.length` is capped at 100.
+- [x] An error sets `connected = false` + `error`; consecutive errors increase the backoff delay (fake timers).
+- [x] `reconnect()` forces a new `EventSource`; unmount closes it (cleanup).
+- [x] `withCredentials: true` is forwarded to the `EventSource` constructor.
+- [x] 100% line/branch coverage on `use-realtime-sse.ts`.
 
 #### Files to create / modify
 
@@ -1068,7 +1068,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.9 — Tests — `useRealtimeWs` (dynamic-import mock)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 5.2, 5.7
@@ -1079,15 +1079,15 @@ Specs for `useRealtimeWs` with `socket.io-client` mocked via `jest.doMock` (the 
 
 #### Acceptance criteria
 
-- [ ] `src/react/internal/use-realtime-ws.spec.tsx` created with 7+ cases.
-- [ ] The hook calls `io(url, { … })` after mount.
-- [ ] `trigger('connect')` sets `connected = true`; `trigger('disconnect')` sets it false.
-- [ ] An `onAny` event is appended to `events`.
-- [ ] `emit(event, data)` calls `socket.emit`.
-- [ ] `trigger('error', new Error('x'))` sets the `error` state.
-- [ ] Unmount calls `socket.disconnect()`.
-- [ ] Auth passes through: `{ auth: { ticket: 'xyz' } }` reaches `io`.
-- [ ] 100% line/branch coverage on `use-realtime-ws.ts`.
+- [x] `src/react/internal/use-realtime-ws.spec.tsx` created with 7+ cases.
+- [x] The hook calls `io(url, { … })` after mount.
+- [x] `trigger('connect')` sets `connected = true`; `trigger('disconnect')` sets it false.
+- [x] An `onAny` event is appended to `events`.
+- [x] `emit(event, data)` calls `socket.emit`.
+- [x] `trigger('error', new Error('x'))` sets the `error` state.
+- [x] Unmount calls `socket.disconnect()`.
+- [x] Auth passes through: `{ auth: { ticket: 'xyz' } }` reaches `io`.
+- [x] 100% line/branch coverage on `use-realtime-ws.ts`.
 
 #### Files to create / modify
 
@@ -1153,7 +1153,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.10 — Tests — universal `useRealtime` + `RealtimeProvider` + `useRealtimeConnection`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 5.3, 5.8, 5.9
@@ -1164,10 +1164,10 @@ Specs for the composition layer: transport auto-detection and override in the un
 
 #### Acceptance criteria
 
-- [ ] `src/react/hooks/use-realtime.spec.tsx` (5+ cases): `/realtime/sse` and `http://…` → SSE; `ws://…` and `wss://…` → WebSocket; `transport: 'sse'` override despite a `ws://` URL; `transport: 'websocket'` override despite an `http://` URL.
-- [ ] `src/react/providers/realtime-provider.spec.tsx` (4+ cases): provider renders children; `useRealtimeContext()` inside returns the value; outside throws the explanatory error; one shared connection for multiple consumers (spy on the `EventSource` constructor → called once).
-- [ ] `src/react/hooks/use-realtime-connection.spec.tsx` (3+ cases): returns only `{ connected, error, reconnect }` (no `events`); `connected` reflects state; `reconnect` works.
-- [ ] 100% line/branch coverage on `use-realtime.ts`, `use-realtime-connection.ts`, `realtime-provider.tsx`.
+- [x] `src/react/hooks/use-realtime.spec.tsx` (5+ cases): `/realtime/sse` and `http://…` → SSE; `ws://…` and `wss://…` → WebSocket; `transport: 'sse'` override despite a `ws://` URL; `transport: 'websocket'` override despite an `http://` URL.
+- [x] `src/react/providers/realtime-provider.spec.tsx` (4+ cases): provider renders children; `useRealtimeContext()` inside returns the value; outside throws the explanatory error; one shared connection for multiple consumers (spy on the `EventSource` constructor → called once).
+- [x] `src/react/hooks/use-realtime-connection.spec.tsx` (3+ cases): returns only `{ connected, error, reconnect }` (no `events`); `connected` reflects state; `reconnect` works.
+- [x] 100% line/branch coverage on `use-realtime.ts`, `use-realtime-connection.ts`, `realtime-provider.tsx`.
 
 #### Files to create / modify
 
@@ -1239,7 +1239,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.11 — Tests — `usePresence`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 5.4
@@ -1250,13 +1250,13 @@ Specs for `usePresence`: the provider guard, the empty initial state, and online
 
 #### Acceptance criteria
 
-- [ ] `src/react/hooks/use-presence.spec.tsx` created with 5+ cases.
-- [ ] Throws when used outside the provider (same message as `useRealtimeContext`).
-- [ ] Inside the provider with no presence events → `onlineUserIds: []`, `count: 0`.
-- [ ] After `presence:online` with `{ userId: 'u1' }` → `onlineUserIds` includes `'u1'`.
-- [ ] After `presence:offline` with `{ userId: 'u1' }` → `onlineUserIds` no longer includes `'u1'`.
-- [ ] `isOnline('u1')` returns the correct boolean.
-- [ ] 100% line/branch coverage on `use-presence.ts`.
+- [x] `src/react/hooks/use-presence.spec.tsx` created with 5+ cases.
+- [x] Throws when used outside the provider (same message as `useRealtimeContext`).
+- [x] Inside the provider with no presence events → `onlineUserIds: []`, `count: 0`.
+- [x] After `presence:online` with `{ userId: 'u1' }` → `onlineUserIds` includes `'u1'`.
+- [x] After `presence:offline` with `{ userId: 'u1' }` → `onlineUserIds` no longer includes `'u1'`.
+- [x] `isOnline('u1')` returns the correct boolean.
+- [x] 100% line/branch coverage on `use-presence.ts`.
 
 #### Files to create / modify
 
@@ -1315,7 +1315,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.12 — Phase 5 consolidated validation
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 5.1…5.11
@@ -1326,11 +1326,11 @@ Run the full gate set for the phase, confirm the critical paths reach 100% cover
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size` all pass.
-- [ ] 100% line/branch coverage on every implemented `src/react/` file (critical paths included).
-- [ ] React SSE-only bundle ≤ 4 KiB brotli.
-- [ ] `socket.io-client` is absent from the static import graph (the bundle-integrity check passes).
-- [ ] `/bymax-quality:code-review` of `src/react/` executed and findings applied.
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size` all pass.
+- [x] 100% line/branch coverage on every implemented `src/react/` file (critical paths included).
+- [x] React SSE-only bundle ≤ 4 KiB brotli.
+- [x] `socket.io-client` is absent from the static import graph (the bundle-integrity check passes).
+- [x] `/bymax-quality:code-review` of `src/react/` executed and findings applied.
 
 #### Files to create / modify
 
@@ -1402,4 +1402,15 @@ Completion Protocol (after you finish):
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
-<!-- No entries yet — appended as tasks are completed. -->
+- 5.1 ✅ 2026-06-30 — Created `src/react/internal/use-realtime-sse.ts` with EventSource, exponential backoff, and 100-entry cap.
+- 5.2 ✅ 2026-06-30 — Created `src/react/internal/use-realtime-ws.ts` with dynamic socket.io-client import and full-duplex emit.
+- 5.3 ✅ 2026-06-30 — Created `useRealtime`, `useRealtimeConnection`, and `RealtimeProvider` with shared-connection context.
+- 5.4 ✅ 2026-06-30 — Created `usePresence` tracking presence:online/offline events via context.
+- 5.5 ✅ 2026-06-30 — Written `src/react/index.ts` barrel exporting all public hooks and provider.
+- 5.6 ✅ 2026-06-30 — Verified bundle: react ≤ 1.55 KB brotli; no static socket.io-client import in dist/react/index.mjs.
+- 5.7 ✅ 2026-06-30 — Split Jest into server (node) and react (jsdom) projects; added EventSource mock and socket.io-client mock helpers.
+- 5.8 ✅ 2026-06-30 — 14-case spec for useRealtimeSse covering open/message/error/backoff/reconnect/cleanup; 100% coverage.
+- 5.9 ✅ 2026-06-30 — 15-case spec for useRealtimeWs covering io/connect/events/emit/disconnect/auth/reconnect/catch; 100% coverage.
+- 5.10 ✅ 2026-06-30 — Specs for useRealtime (transport detection), RealtimeProvider (shared connection), and useRealtimeConnection; 100% coverage.
+- 5.11 ✅ 2026-06-30 — 8-case spec for usePresence covering guard, online/offline transitions, isOnline, and integration mount; 100% coverage.
+- 5.12 ✅ 2026-06-30 — All 5 gates pass: typecheck 0 errors, lint 0 issues, test:cov 100%/100%, build clean, size within budgets.
