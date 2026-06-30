@@ -24,3 +24,20 @@ export const RESERVED_EVENT_NAMES = {
 
 /** Union of reserved event name values. */
 export type ReservedEventName = (typeof RESERVED_EVENT_NAMES)[keyof typeof RESERVED_EVENT_NAMES]
+
+/**
+ * Application-level presence event names emitted by an `IPresenceStorage`
+ * implementation and consumed by the `usePresence` client hook.
+ *
+ * These are named transport events — carried over the `event:` SSE field and as
+ * Socket.IO event names — so a client must subscribe to them explicitly to
+ * preserve the event `type`. The native `EventSource.onmessage` callback only
+ * receives the default `message` event, never these named ones.
+ */
+export const PRESENCE_EVENT_NAMES = {
+  ONLINE: 'presence:online',
+  OFFLINE: 'presence:offline',
+} as const
+
+/** Union of presence event name values. */
+export type PresenceEventName = (typeof PRESENCE_EVENT_NAMES)[keyof typeof PRESENCE_EVENT_NAMES]

@@ -5,34 +5,12 @@ import type { Config } from 'jest'
  * coverage on every implemented file. Type-only files (interfaces, `*.type.ts`)
  * and barrels are excluded because they carry no executable logic.
  *
- * Kept self-contained (no cross-config import) so the TypeScript config loads
- * under the package's native ESM resolution.
- *
- * Both `src/` (library) and `test/fixtures` + `test/integration` (fixture specs and
- * integration specs) are included so fixture and integration suites run alongside
- * unit tests with the same configuration.
+ * Two Jest projects share the coverage run:
+ *   - `server` — NestJS + shared code; node environment.
+ *   - `react`  — React 19 hooks + provider; jsdom environment.
  */
 const config: Config = {
   rootDir: '.',
-  testEnvironment: 'node',
-  moduleFileExtensions: ['ts', 'js', 'json'],
-  testMatch: [
-    '<rootDir>/src/**/*.spec.ts',
-    '<rootDir>/test/fixtures/**/*.spec.ts',
-    '<rootDir>/test/integration/**/*.spec.ts',
-  ],
-  setupFiles: ['reflect-metadata'],
-  transform: {
-    '^.+\\.ts$': [
-      'ts-jest',
-      { tsconfig: '<rootDir>/tsconfig.jest.json', isolatedModules: true },
-    ],
-  },
-  moduleNameMapper: {
-    '^@bymax-one/nest-realtime$': '<rootDir>/src/server/index.ts',
-    '^@bymax-one/nest-realtime/shared$': '<rootDir>/src/shared/index.ts',
-    '^@bymax-one/nest-realtime/react$': '<rootDir>/src/react/index.ts',
-  },
   maxWorkers: '50%',
   passWithNoTests: true,
   clearMocks: true,
@@ -43,8 +21,11 @@ const config: Config = {
     'src/server/**/*.ts',
     'src/shared/**/*.ts',
     'src/react/**/*.ts',
+    'src/react/**/*.tsx',
     '!**/index.ts',
+    '!**/index.tsx',
     '!**/*.spec.ts',
+    '!**/*.spec.tsx',
     '!**/interfaces/**',
     '!**/*.interface.ts',
     '!**/*.type.ts',
@@ -54,6 +35,52 @@ const config: Config = {
   coverageThreshold: {
     global: { statements: 100, branches: 100, functions: 100, lines: 100 },
   },
+  projects: [
+    {
+      displayName: 'server',
+      testMatch: [
+        '<rootDir>/src/server/**/*.spec.ts',
+        '<rootDir>/src/shared/**/*.spec.ts',
+        '<rootDir>/test/fixtures/**/*.spec.ts',
+        '<rootDir>/test/integration/**/*.spec.ts',
+      ],
+      testEnvironment: 'node',
+      moduleFileExtensions: ['ts', 'js', 'json'],
+      setupFiles: ['reflect-metadata'],
+      transform: {
+        '^.+\\.ts$': [
+          'ts-jest',
+          { tsconfig: '<rootDir>/tsconfig.jest.json', isolatedModules: true },
+        ],
+      },
+      moduleNameMapper: {
+        '^@bymax-one/nest-realtime$': '<rootDir>/src/server/index.ts',
+        '^@bymax-one/nest-realtime/shared$': '<rootDir>/src/shared/index.ts',
+        '^@bymax-one/nest-realtime/react$': '<rootDir>/src/react/index.ts',
+      },
+    },
+    {
+      displayName: 'react',
+      testMatch: [
+        '<rootDir>/src/react/**/*.spec.tsx',
+        '<rootDir>/src/react/**/*.spec.ts',
+      ],
+      testEnvironment: 'jsdom',
+      moduleFileExtensions: ['tsx', 'ts', 'js', 'json'],
+      setupFilesAfterEnv: ['<rootDir>/test/setup/react-setup.ts'],
+      transform: {
+        '^.+\\.(ts|tsx)$': [
+          'ts-jest',
+          { tsconfig: '<rootDir>/tsconfig.jest.json', isolatedModules: true },
+        ],
+      },
+      moduleNameMapper: {
+        '^@bymax-one/nest-realtime$': '<rootDir>/src/server/index.ts',
+        '^@bymax-one/nest-realtime/shared$': '<rootDir>/src/shared/index.ts',
+        '^@bymax-one/nest-realtime/react$': '<rootDir>/src/react/index.ts',
+      },
+    },
+  ],
 }
 
 export default config
