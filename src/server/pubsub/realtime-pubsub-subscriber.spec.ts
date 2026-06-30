@@ -2,6 +2,7 @@
  * @fileoverview Unit tests for RealtimePubSubSubscriber.
  * @layer infrastructure
  */
+import { Logger } from '@nestjs/common'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import type { SseTransport } from '../transports/sse/sse.transport'
 import { RealtimePubSubSubscriber } from './realtime-pubsub-subscriber'
@@ -164,11 +165,69 @@ describe('RealtimePubSubSubscriber', () => {
     await expect(subscriber.onModuleInit()).resolves.toBeUndefined()
   })
 
+  // The subscribe-failure warn message includes the error text so operators can diagnose it.
+  it('logs the error message when subscribe fails', async () => {
+    const { pubsub } = buildPubSub()
+    pubsub.subscribe.mockRejectedValueOnce(new Error('redis down'))
+    const sse = buildSse()
+    const subscriber = new RealtimePubSubSubscriber(pubsub as never, 'inst-1', sse)
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await subscriber.onModuleInit()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('redis down'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   // A failing unsubscribe on shutdown is swallowed.
   it('swallows an unsubscribe failure on shutdown', async () => {
     const { subscriber, unsubscribe } = build()
     await subscriber.onModuleInit()
     unsubscribe.mockRejectedValueOnce(new Error('network error'))
     await expect(subscriber.onApplicationShutdown()).resolves.toBeUndefined()
+  })
+
+  // The unsubscribe-failure warn message includes the error text so operators can diagnose it.
+  it('logs the error message when unsubscribe fails on shutdown', async () => {
+    const { subscriber, unsubscribe } = build()
+    await subscriber.onModuleInit()
+    unsubscribe.mockRejectedValueOnce(new Error('network error'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await subscriber.onApplicationShutdown()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('network error'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // Warn message from a throwing SSE dispatch includes the error text.
+  it('logs the error message when SSE dispatch throws', async () => {
+    const { subscriber, getHandler, sse } = build()
+    ;(sse.broadcastLocal as jest.Mock).mockImplementation(() => {
+      throw new Error('dispatch-boom')
+    })
+    await subscriber.onModuleInit()
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      getHandler()!({ op: 'broadcast', args: { event: 'x', data: {}, id: '1' }, origin: 'remote' })
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('dispatch-boom'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // The unknown-op warn message includes the op value so operators know which op was sent.
+  it('logs the unknown op value when an unrecognised op is received', async () => {
+    const { subscriber, getHandler } = build()
+    await subscriber.onModuleInit()
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      getHandler()!({ op: 'badOp' as never, args: {}, origin: 'remote' })
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('badOp'))
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })

@@ -187,4 +187,65 @@ describe('RedisRealtimePubSub', () => {
     await pubsub.subscribe(jest.fn())
     expect(fakePub.duplicate).toHaveBeenCalledTimes(2)
   })
+  // The default channel must be the 'bymax:realtime' string, not an empty string.
+  it('publishes to the bymax:realtime channel when no channel option is provided', async () => {
+    const client = new RedisMock() as unknown as Redis
+    const publishSpy = jest.spyOn(client as unknown as { publish: jest.Mock }, 'publish')
+    const pubsub = new RedisRealtimePubSub({ client })
+    await pubsub.publish(msg)
+    expect(publishSpy).toHaveBeenCalledWith('bymax:realtime', expect.any(String))
+    publishSpy.mockRestore()
+  })
+
+  // The second handler must still receive messages after the first handler unsubscribes.
+  it('second handler receives messages after first handler is removed', async () => {
+    const { pubsub } = build()
+    const a = jest.fn()
+    const b = jest.fn()
+    const unsub1 = await pubsub.subscribe(a)
+    await pubsub.subscribe(b)
+    await unsub1()
+    await pubsub.publish(msg)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(b).toHaveBeenCalledTimes(1)
+  })
+
+  // The sub client's quit() is called when the last handler unsubscribes.
+  it('calls quit on the sub client when the last handler unsubscribes', async () => {
+    // Kills BlockStatement mutation that removes the try { await sub.quit() } block.
+    const quitMock = jest.fn().mockResolvedValue('OK')
+    const fakeSub = {
+      subscribe: jest.fn().mockResolvedValue('OK'),
+      on: jest.fn(),
+      quit: quitMock,
+    }
+    const fakePub = {
+      publish: jest.fn().mockResolvedValue(undefined),
+      duplicate: jest.fn().mockReturnValue(fakeSub),
+    }
+    const pubsub = new RedisRealtimePubSub({ client: fakePub as unknown as Redis })
+    const unsub = await pubsub.subscribe(jest.fn())
+    await unsub()
+    expect(quitMock).toHaveBeenCalled()
+  })
+
+  // Kills L78 ConditionalExpression: `if (this.handlers.size === 0)` → `if (true)`.
+  // With two handlers, removing only the first still leaves handlers.size=1, so quit must NOT fire.
+  it('does not quit the sub client when a second handler is still registered', async () => {
+    const quitMock = jest.fn().mockResolvedValue('OK')
+    const fakeSub = {
+      subscribe: jest.fn().mockResolvedValue('OK'),
+      on: jest.fn(),
+      quit: quitMock,
+    }
+    const fakePub = {
+      publish: jest.fn().mockResolvedValue(undefined),
+      duplicate: jest.fn().mockReturnValue(fakeSub),
+    }
+    const pubsub = new RedisRealtimePubSub({ client: fakePub as unknown as Redis })
+    const unsub1 = await pubsub.subscribe(jest.fn())
+    await pubsub.subscribe(jest.fn())
+    await unsub1()
+    expect(quitMock).not.toHaveBeenCalled()
+  })
 })

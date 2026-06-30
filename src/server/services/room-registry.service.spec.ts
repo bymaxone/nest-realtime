@@ -80,4 +80,27 @@ describe('RoomRegistry', () => {
   it('is a no-op when leaveAll targets an unknown connection', () => {
     expect(() => rooms.leaveAll('ghost')).not.toThrow()
   })
+  // Leaving one room must preserve membership in remaining rooms — the connection entry
+  // is only deleted from connectionRooms when ALL rooms are left.
+  it('preserves membership in other rooms after leaving one room', () => {
+    rooms.join('c1', 'room:a')
+    rooms.join('c1', 'room:b')
+    rooms.leave('c1', 'room:a')
+    expect(rooms.members('room:b')).toContain('c1')
+    expect(rooms.roomsOf('c1')).toContain('room:b')
+  })
+
+  // Kills L40 ConditionalExpression mutation (condition → false).
+  // When leave() empties a connection's room-set the entry must be DELETED from
+  // connectionRooms, not kept as an empty Set.  roomsOf() cannot distinguish the two
+  // cases (both yield []), so we inspect the private map via a type cast.
+  // With the mutation the condition is always false so delete never executes, leaving
+  // the connection key in the map indefinitely — a memory leak on long-lived servers.
+  it('deletes the connectionRooms entry when the last room is left', () => {
+    rooms.join('c1', 'room:solo')
+    rooms.leave('c1', 'room:solo')
+    const internalMap = (rooms as unknown as { connectionRooms: Map<string, Set<string>> })
+      .connectionRooms
+    expect(internalMap.has('c1')).toBe(false)
+  })
 })

@@ -133,4 +133,43 @@ describe('CompositeTransport', () => {
     await composite.emitToUser('u-1', 'evt', {})
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('partially failed'))
   })
+
+  it('fanOut warn includes the op name emitToTenant', async () => {
+    sseMock.emitToTenant.mockRejectedValue(new Error('sse-tenant-down'))
+    await composite.emitToTenant('t-1', 'evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToTenant'))
+  })
+
+  it('fanOut warn includes the op name emitToRoom', async () => {
+    sseMock.emitToRoom.mockRejectedValue(new Error('sse-room-down'))
+    await composite.emitToRoom('room:x', 'evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToRoom'))
+  })
+
+  it('fanOut warn includes the op name broadcast', async () => {
+    sseMock.broadcast.mockRejectedValue(new Error('sse-broadcast-down'))
+    await composite.broadcast('evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('broadcast'))
+  })
+
+  it('fanOut warn includes the op name emitToUser', async () => {
+    sseMock.emitToUser.mockRejectedValue(new Error('sse-user-down'))
+    await composite.emitToUser('u-1', 'evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToUser'))
+  })
+
+  // Kills L89 StringLiteral: `'broadcast'` → `""`.
+  // Existing test error contains 'broadcast' so passes mutation; this one uses neutral error msg.
+  it('fanOut warn for broadcast names the operation even when the error message does not contain broadcast', async () => {
+    sseMock.broadcast.mockRejectedValue(new Error('transport-down'))
+    await composite.broadcast('evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('broadcast'))
+  })
+
+  it('fanOut warn contains the raw rejection reason when the reason has no .message', async () => {
+    // Kills ?? → && mutation: without ??, undefined && reason = undefined, not the reason string.
+    sseMock.emitToUser.mockRejectedValue('sentinel-reason-value')
+    await composite.emitToUser('u-1', 'evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('sentinel-reason-value'))
+  })
 })

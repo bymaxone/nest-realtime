@@ -18,8 +18,8 @@ Tasks live **one file per phase** in this folder (`phase-NN-<slug>.md`), followi
 | 3 | [`phase-03-horizontal-scaling-sse.md`](./phase-03-horizontal-scaling-sse.md) | 11 / 11 | ✅ Done |
 | 4 | [`phase-04-websocket-transport.md`](./phase-04-websocket-transport.md) | 12 / 12 | ✅ Done |
 | 5 | [`phase-05-frontend-react.md`](./phase-05-frontend-react.md) | 12 / 12 | ✅ Done |
-| 6 | [`phase-06-release.md`](./phase-06-release.md) | 0 / 10 | 📋 ToDo |
-| | **Total** | **63 / 73** | 🔄 86% (5/6 phases) |
+| 6 | [`phase-06-release.md`](./phase-06-release.md) | 9 / 10 | 🟡 Partial |
+| | **Total** | **72 / 73** | 🔄 99% (5/6 phases) |
 
 ---
 

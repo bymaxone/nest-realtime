@@ -173,6 +173,28 @@ describe('RedisOfflineQueue', () => {
     await expect(queue.append('u1', mkEvent('1-0'))).resolves.toBeUndefined()
   })
 
+  // retrieveSince with a sinceId at the max counter value includes the event at the wrap boundary.
+  it('includes the event exactly at the wrap-to-next-millisecond boundary', async () => {
+    const { queue } = build()
+    await queue.append('u1', mkEvent('1000-999999'))
+    await queue.append('u1', mkEvent('1001-000000'))
+    await queue.append('u1', mkEvent('1001-000001'))
+    const events = await queue.retrieveSince('u1', '1000-999999', 10)
+    expect(events.map((e) => e.id)).toEqual(['1001-000000', '1001-000001'])
+  })
+
+  // acknowledge removes exactly the events up to and including upToId but leaves
+  // the event at lexKeyNext(upToId) untouched (validates the exclusive upper bound).
+  it('does not acknowledge the event immediately after upToId', async () => {
+    const { queue } = build()
+    await queue.append('u1', mkEvent('100-0'))
+    await queue.append('u1', mkEvent('100-1'))
+    await queue.append('u1', mkEvent('100-2'))
+    await queue.acknowledge('u1', '100-0')
+    const remaining = await queue.retrieveSince('u1', '0-0', 10)
+    expect(remaining.map((e) => e.id)).toEqual(['100-1', '100-2'])
+  })
+
   // append throws when pipeline.exec() embeds a per-command error (covers if (error) throw).
   it('throws when pipeline.exec() returns a per-command error', async () => {
     // Covers: `if (error) throw error` when ioredis embeds an error in the results tuple.
@@ -185,5 +207,39 @@ describe('RedisOfflineQueue', () => {
       ]),
     })
     await expect(queue.append('u1', mkEvent('1-0'))).rejects.toThrow('boom')
+  })
+  // Plain numeric sinceId must be excluded from results (same id is the boundary).
+  it('excludes a plain numeric sinceId event from retrieveSince', async () => {
+    const { queue } = build()
+    await queue.append('u1', mkEvent('1700000000000'))
+    const events = await queue.retrieveSince('u1', '1700000000000', 10)
+    expect(events).toHaveLength(0)
+  })
+
+  // retrieveSince with a plain numeric sinceId returns the event at sinceId+1 counter.
+  it('returns the event at sinceId counter+1 when sinceId is a plain numeric id', async () => {
+    const { queue } = build()
+    await queue.append('u1', mkEvent('1700000000000-1'))
+    const events = await queue.retrieveSince('u1', '1700000000000', 10)
+    expect(events).toHaveLength(1)
+    expect(events[0]!.id).toBe('1700000000000-1')
+  })
+
+  // acknowledge must remove an event stored with a plain numeric id from durable storage.
+  it('acknowledge removes an event stored with a plain numeric id', async () => {
+    const { queue } = build()
+    await queue.append('u1', mkEvent('1700000000000'))
+    await queue.acknowledge('u1', '1700000000000')
+    const remaining = await queue.retrieveSince('u1', '0-0', 10)
+    expect(remaining).toHaveLength(0)
+  })
+
+  // zrem must not be called when no events match the acknowledge range (avoids spreading empty array).
+  it('does not call zrem when acknowledge finds an empty match set', async () => {
+    const { queue, client } = build()
+    const zremSpy = jest.spyOn(client as unknown as { zrem: jest.Mock }, 'zrem')
+    await queue.acknowledge('u1', '999-999999')
+    expect(zremSpy).not.toHaveBeenCalled()
+    zremSpy.mockRestore()
   })
 })

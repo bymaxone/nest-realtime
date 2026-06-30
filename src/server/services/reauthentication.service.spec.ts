@@ -2,6 +2,7 @@
  * @fileoverview Unit tests for the periodic re-authentication service.
  * @layer application
  */
+import { Logger } from '@nestjs/common'
 import { RESERVED_EVENT_NAMES } from '../../shared/constants/reserved-events.constants'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { ReauthenticationService } from './reauthentication.service'
@@ -84,6 +85,37 @@ describe('ReauthenticationService', () => {
     expect(connections.allByTransport).not.toHaveBeenCalled()
   })
 
+  // The 'no revalidate' log message includes the key phrase so operators know it is disabled.
+  it('logs the disabled message when revalidate is absent', () => {
+    const connections = mkConnections([])
+    const realtime = mkRealtime()
+    const auth = mkAuth()
+    const svc = build(connections, realtime, auth, mkOptions())
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      svc.onModuleInit()
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('reauthentication disabled'))
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  // The scheduled log includes the interval so operators can verify the configured cadence.
+  it('logs the interval when revalidate is present and the timer is scheduled', () => {
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const connections = mkConnections([])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 42 }))
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      svc.onModuleInit()
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('42'))
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
   // When revalidate is present, the timer fires on the configured interval.
   it('schedules a revalidation cycle on the configured interval', async () => {
     const revalidate = jest.fn().mockResolvedValue(true)
@@ -144,6 +176,30 @@ describe('ReauthenticationService', () => {
     await flush()
     expect(revalidate).toHaveBeenCalledTimes(1)
     // Tick 3 (t=30s): now-lastValid=20_000 > 15_000 → expired, revalidate again.
+    jest.advanceTimersByTime(10_000)
+    await flush()
+    expect(revalidate).toHaveBeenCalledTimes(2)
+  })
+
+  // Kills L120 EqualityOperator: `now - lastValid < cacheTtlMs` → `<=`.
+  // At tick 2 with interval=10s and ttl=10_000ms, diff=10_000=ttl. Original (<) revalidates; mutation (<=) skips.
+  it('revalidates when now-lastValid equals cacheTtlMs exactly (boundary: < not <=)', async () => {
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const connections = mkConnections([mkRecord()])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(
+      connections,
+      realtime,
+      auth,
+      mkOptions({ intervalSeconds: 10, cacheTtlMs: 10_000 }),
+    )
+    svc.onModuleInit()
+    // Tick 1 (t=10_000): revalidate runs, cache set at t=10_000.
+    jest.advanceTimersByTime(10_000)
+    await flush()
+    expect(revalidate).toHaveBeenCalledTimes(1)
+    // Tick 2 (t=20_000): diff=10_000=cacheTtlMs. Original (<) → re-run. Mutation (<=) → skip.
     jest.advanceTimersByTime(10_000)
     await flush()
     expect(revalidate).toHaveBeenCalledTimes(2)
@@ -345,6 +401,26 @@ describe('ReauthenticationService', () => {
     expect(realtime.emitToUser).not.toHaveBeenCalled()
   })
 
+  // The onReauthenticationFailed hook failure warn includes the error message.
+  it('logs the warn when the onReauthenticationFailed hook throws', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const connections = mkConnections([mkRecord()])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const hooks = {
+      onReauthenticationFailed: jest.fn().mockRejectedValue(new Error('hook-crash')),
+    }
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }), hooks)
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await svc.runCycle()
+      await flush()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hook-crash'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   // A truthy non-boolean return from revalidate must not pass (strict === true required).
   it('calls handleFailure when revalidate returns a truthy non-boolean value', async () => {
     // Returning a user-like object is a common mistake — should be treated as failure.
@@ -359,5 +435,34 @@ describe('ReauthenticationService', () => {
       'c1',
       REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
     )
+  })
+
+  // revalidate receives the tenantId from originalAuth when it is defined.
+  it('passes tenantId to revalidate when originalAuth.tenantId is set', async () => {
+    // Kills ObjectLiteral mutation { tenantId: conn.originalAuth.tenantId } → {}.
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const connections = mkConnections([mkRecord()]) // mkRecord sets tenantId: 't1'
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
+    await svc.runCycle()
+    expect(revalidate).toHaveBeenCalledWith('c1', expect.objectContaining({ tenantId: 't1' }))
+  })
+
+  // The warn message for a throwing revalidate includes the connectionId.
+  it('includes the connectionId in the warn when revalidate throws', async () => {
+    // Kills StringLiteral mutation that blanks the warn template prefix.
+    const revalidate = jest.fn().mockRejectedValue(new Error('auth error'))
+    const connections = mkConnections([mkRecord('conn-xy', 'u1')])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await svc.runCycle()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('conn-xy'))
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })

@@ -61,6 +61,20 @@ describe('OfflineQueueDeliveryService', () => {
       expect(result).toEqual([])
     })
 
+    // The retrieve-failure warn includes the error message so operators can diagnose it.
+    it('logs the error message when retrieveSince fails', async () => {
+      const storage = mkStorage()
+      ;(storage.retrieveSince as jest.Mock).mockRejectedValueOnce(new Error('queue-down'))
+      const service = new OfflineQueueDeliveryService(storage)
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      try {
+        await service.retrieve('u1', 'last-1', new Set())
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('queue-down'))
+      } finally {
+        warnSpy.mockRestore()
+      }
+    })
+
     // When retrieveSince returns exactly RETRIEVE_LIMIT events, a warn is logged.
     it('warns when retrieveSince returns exactly the retrieve limit', async () => {
       // Covers: the `=== RETRIEVE_LIMIT` branch that warns about a potential event gap.
@@ -109,6 +123,34 @@ describe('OfflineQueueDeliveryService', () => {
       ;(storage.acknowledge as jest.Mock).mockRejectedValueOnce(new Error('redis down'))
       const service = new OfflineQueueDeliveryService(storage)
       await expect(service.acknowledge('u1', [mkEvent('1')])).resolves.toBeUndefined()
+    })
+
+    // The acknowledge-failure warn includes the error message so operators can diagnose it.
+    it('logs the error message when acknowledge fails', async () => {
+      const storage = mkStorage()
+      ;(storage.acknowledge as jest.Mock).mockRejectedValueOnce(new Error('ack-failure'))
+      const service = new OfflineQueueDeliveryService(storage)
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      try {
+        await service.acknowledge('u1', [mkEvent('1')])
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ack-failure'))
+      } finally {
+        warnSpy.mockRestore()
+      }
+    })
+  })
+  describe('retrieve limit warning', () => {
+    // When fewer than 200 events are returned, the retrieve-limit warning must NOT fire.
+    it('does not warn when fewer than the retrieve limit events are returned', async () => {
+      const storage = mkStorage([{ id: '1-0', event: 'foo', data: {}, emittedAt: new Date() }])
+      const service = new OfflineQueueDeliveryService(storage)
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      try {
+        await service.retrieve('u1', '0-0', new Set())
+        expect(warnSpy).not.toHaveBeenCalled()
+      } finally {
+        warnSpy.mockRestore()
+      }
     })
   })
 })

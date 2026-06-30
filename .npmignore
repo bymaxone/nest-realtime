@@ -16,3 +16,7 @@ pnpm-workspace.yaml
 pnpm-lock.yaml
 stryker.config.json
 scripts/
+AGENTS.md
+CLAUDE.md
+SECURITY.md
+

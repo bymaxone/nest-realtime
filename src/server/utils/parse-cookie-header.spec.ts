@@ -32,4 +32,23 @@ describe('parseCookieHeader', () => {
   it('preserves "=" inside a value', () => {
     expect(parseCookieHeader('t=YQ==')).toEqual({ t: 'YQ==' })
   })
+
+  // Leading and trailing whitespace in a cookie value is trimmed.
+  it('trims whitespace from cookie values', () => {
+    expect(parseCookieHeader('key= trimmed ')).toEqual({ key: 'trimmed' })
+  })
+
+  // Whitespace-only value after trimming is stored as empty string.
+  it('stores an empty string when the value is only whitespace', () => {
+    expect(parseCookieHeader('key=   ')).toEqual({ key: '' })
+  })
+
+  // Kills L22 ConditionalExpression mutation (condition → false).
+  // The guard `if (!cookieHeader) return out` handles undefined inputs that callers may
+  // pass despite the string signature (e.g. missing header coerced through ?? '').
+  // With the mutation the guard never runs so undefined.split(';') throws a TypeError.
+  // Note: '' is NOT a distinguishing input — the normal split path also yields {} for ''.
+  it('returns {} for undefined without throwing (guard-only path)', () => {
+    expect(parseCookieHeader(undefined as unknown as string)).toEqual({})
+  })
 })

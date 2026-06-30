@@ -3,6 +3,7 @@
  * @layer transport
  */
 import 'reflect-metadata'
+import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
@@ -89,6 +90,17 @@ describe('WebSocketTransport', () => {
     expect(transport.kind).toBe('websocket')
   })
 
+  it('setServer logs the wiring message', () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      const server = makeServer()
+      transport.setServer(server as never)
+      expect(logSpy).toHaveBeenCalledWith('Socket.IO server wired to WebSocketTransport')
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
   it('authenticator() returns the injected IConnectionAuthenticator', () => {
     // The gateway uses authenticator() to get the auth instance without circular injection.
     const auth = transport.authenticator()
@@ -169,6 +181,19 @@ describe('WebSocketTransport', () => {
     )
   })
 
+  it('registerSocket passes ip, userAgent, tenantId, and connectedAt to onConnect', async () => {
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, auth)
+    expect(hooks.onConnect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ip: '127.0.0.1',
+        userAgent: 'test',
+        tenantId: 'tenant-1',
+        connectedAt: expect.any(Date),
+      }),
+    )
+  })
+
   it('registerSocket skips tenant room when tenantId is absent', async () => {
     // No tenant room is joined when auth.tenantId is undefined.
     const socket = makeSocket()
@@ -191,6 +216,18 @@ describe('WebSocketTransport', () => {
         reason: 'test-reason',
         durationMs: expect.any(Number),
       }),
+    )
+    const meta = (hooks.onDisconnect as jest.Mock).mock.calls[0]?.[0] as { durationMs: number }
+    // durationMs must be an elapsed duration, not a timestamp sum (~3.5e12 ms).
+    expect(meta.durationMs).toBeLessThan(60000)
+  })
+
+  it('unregisterSocket passes transport websocket to onDisconnect', async () => {
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, auth)
+    await transport.unregisterSocket('sock-1', 'test-reason')
+    expect(hooks.onDisconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ transport: 'websocket' }),
     )
   })
 
@@ -272,6 +309,29 @@ describe('WebSocketTransport', () => {
     await expect(transport.disconnect('sock-1')).resolves.toBeUndefined()
   })
 
+  // Socket must be indexed by the user: room so user-scoped fan-out reaches it.
+  it('registers the socket in the user: prefixed room registry entry', async () => {
+    const socket = makeSocket('sock-r')
+    await transport.registerSocket(socket as never, auth)
+    expect(roomRegistry.roomsOf('sock-r')).toContain('user:u-1')
+  })
+
+  // When tenantId is present, the socket joins the tenant: room for tenant fan-out.
+  it('registers the socket in the tenant: prefixed room registry entry when tenantId is present', async () => {
+    const socket = makeSocket('sock-t')
+    await transport.registerSocket(socket as never, auth)
+    expect(roomRegistry.roomsOf('sock-t')).toContain('tenant:tenant-1')
+  })
+
+  // Without a tenantId, no tenant room entry must appear in the registry.
+  it('does not create a tenant room registry entry when tenantId is absent', async () => {
+    const socket = makeSocket('sock-nt')
+    await transport.registerSocket(socket as never, { userId: 'u-2' })
+    const rooms = roomRegistry.roomsOf('sock-nt')
+    const tenantRooms = rooms.filter((r) => r.startsWith('tenant:'))
+    expect(tenantRooms).toHaveLength(0)
+  })
+
   describe('evictBeyondLimit (maxConnectionsPerUser)', () => {
     it('does not evict when maxConnectionsPerUser is not set', async () => {
       // No eviction occurs when the limit is not configured.
@@ -316,6 +376,25 @@ describe('WebSocketTransport', () => {
       await t.registerSocket(socket2 as never, { userId: 'u-1', tenantId: 'tenant-1' })
 
       expect(socket1.disconnect).toHaveBeenCalledWith(true)
+    })
+
+    it('does not evict when connection count equals the exact maximum', async () => {
+      // With >=, the while condition fires for length==max, evicting one too many.
+      const socket1 = makeSocket('e-1')
+      const socket2 = makeSocket('e-2')
+      const server = makeServer(
+        new Map([
+          ['e-1', socket1],
+          ['e-2', socket2],
+        ]),
+      )
+      const module = await buildModule({ websocket: { maxConnectionsPerUser: 2 } })
+      const t = module.get(WebSocketTransport)
+      t.setServer(server as never)
+      await t.registerSocket(socket1 as never, { userId: 'u-exact', tenantId: 'tenant-1' })
+      await t.registerSocket(socket2 as never, { userId: 'u-exact', tenantId: 'tenant-1' })
+      expect(socket1.disconnect).not.toHaveBeenCalled()
+      expect(socket2.disconnect).not.toHaveBeenCalled()
     })
 
     it('does not evict when count is within limit', async () => {
@@ -380,6 +459,82 @@ describe('WebSocketTransport', () => {
 
       // The oldest connection (s-b) must have been disconnected.
       expect(socket2.disconnect).toHaveBeenCalledWith(true)
+    })
+
+    it('evicts the oldest connection when it appears at index 1 in the reduce', async () => {
+      // With limit=2: register a-newer first (index 0), manually inject b-older with an
+      // earlier connectedAt (index 1). Registering c-trigger (3rd) must evict b-older,
+      // not a-newer. If reduce always picks 'a' (first), a-newer would be evicted instead.
+      const sockA = makeSocket('a-newer')
+      const sockB = makeSocket('b-older')
+      const sockC = makeSocket('c-trigger')
+      const server = makeServer(
+        new Map([
+          ['a-newer', sockA],
+          ['b-older', sockB],
+          ['c-trigger', sockC],
+        ]),
+      )
+      const module = await buildModule({ websocket: { maxConnectionsPerUser: 2 } })
+      const t = module.get(WebSocketTransport)
+      const reg = module.get(ConnectionRegistry)
+      t.setServer(server as never)
+
+      // Register a-newer so it is at index 0 in the byUser set.
+      await t.registerSocket(sockA as never, { userId: 'u-ord2', tenantId: 't-2' })
+      // Directly inject b-older with a connectedAt 2 s before a-newer (index 1, but older).
+      const recA = reg.get('a-newer')!
+      reg.register({
+        connectionId: 'b-older',
+        userId: 'u-ord2',
+        tenantId: 't-2',
+        transport: 'websocket',
+        ip: '127.0.0.1',
+        userAgent: 'test',
+        connectedAt: new Date(recA.connectedAt.getTime() - 2000),
+        subject: null,
+        close$: null,
+        originalAuth: { userId: 'u-ord2', tenantId: 't-2', roles: [] },
+      })
+      // Register c-trigger: 3 connections > limit 2 → evict once → b-older must be chosen.
+      await t.registerSocket(sockC as never, { userId: 'u-ord2', tenantId: 't-2' })
+      expect(sockB.disconnect).toHaveBeenCalledWith(true)
+      expect(sockA.disconnect).not.toHaveBeenCalled()
+    })
+
+    // Kills L266 EqualityOperator: `a.connectedAt <= b.connectedAt` → `<`.
+    // When timestamps are equal, `<=` picks index-0 (first-registered) to evict; `<` picks index-1 instead.
+    it('evicts the first-registered connection when two connections share the same connectedAt', async () => {
+      jest.useFakeTimers()
+      try {
+        const sockFirst = makeSocket('s-first')
+        const sockSecond = makeSocket('s-second')
+        const sockTrigger = makeSocket('s-trigger')
+        const server = makeServer(
+          new Map([
+            ['s-first', sockFirst],
+            ['s-second', sockSecond],
+            ['s-trigger', sockTrigger],
+          ]),
+        )
+        const module = await buildModule({ websocket: { maxConnectionsPerUser: 2 } })
+        const t = module.get(WebSocketTransport)
+        t.setServer(server as never)
+
+        // Both register at the same frozen timestamp → identical connectedAt.
+        await t.registerSocket(sockFirst as never, { userId: 'u-tie', tenantId: 't-1' })
+        await t.registerSocket(sockSecond as never, { userId: 'u-tie', tenantId: 't-1' })
+
+        // Trigger eviction: 3 connections > limit 2.
+        await t.registerSocket(sockTrigger as never, { userId: 'u-tie', tenantId: 't-1' })
+
+        // With `<=`, equal timestamps → first (index 0) is "oldest" and gets evicted.
+        // With mutation `<`, T < T = false → second (index 1) is picked instead.
+        expect(sockFirst.disconnect).toHaveBeenCalledWith(true)
+        expect(sockSecond.disconnect).not.toHaveBeenCalled()
+      } finally {
+        jest.useRealTimers()
+      }
     })
 
     it('does not evict when limit is zero or negative (disabled)', async () => {

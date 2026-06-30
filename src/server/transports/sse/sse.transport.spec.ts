@@ -110,7 +110,11 @@ describe('SseTransport', () => {
     expect(replay.size('u1')).toBe(1)
     expect(publish).toHaveBeenCalledTimes(1)
     expect(publish).toHaveBeenCalledWith(
-      expect.objectContaining({ op: 'emitToUser', origin: 'inst-1' }),
+      expect.objectContaining({
+        op: 'emitToUser',
+        origin: 'inst-1',
+        args: expect.objectContaining({ userId: 'u1', event: 'foo', data: { x: 1 } }),
+      }),
     )
   })
 
@@ -132,20 +136,31 @@ describe('SseTransport', () => {
     await transport.emitToTenant('t1', 'foo', {})
     expect(a.received).toHaveLength(1)
     expect(b.received).toHaveLength(0)
-    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ op: 'emitToTenant' }))
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'emitToTenant',
+        args: expect.objectContaining({ tenantId: 't1', event: 'foo' }),
+      }),
+    )
   })
 
   // emitToRoom delivers to SSE members only, skipping ws and unknown members.
   it('emits to room members, skipping non-sse and unknown members', async () => {
-    const { transport, connections, rooms } = build()
+    const { transport, connections, rooms, publish } = build()
     const sse = addConn(connections, { connectionId: 'c_sse', userId: 'u1' })
     const ws = addConn(connections, { connectionId: 'c_ws', userId: 'u2', transport: 'websocket' })
     rooms.join('c_sse', 'room:a')
     rooms.join('c_ws', 'room:a')
     rooms.join('c_ghost', 'room:a')
-    await transport.emitToRoom('room:a', 'foo', {})
+    await transport.emitToRoom('room:a', 'foo', { val: 1 })
     expect(sse.received).toHaveLength(1)
     expect(ws.received).toHaveLength(0)
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'emitToRoom',
+        args: expect.objectContaining({ roomId: 'room:a', event: 'foo', data: { val: 1 } }),
+      }),
+    )
   })
 
   // broadcast reaches every SSE connection.
@@ -158,7 +173,12 @@ describe('SseTransport', () => {
     expect(a.received).toHaveLength(1)
     expect(b.received).toHaveLength(1)
     expect(ws.received).toHaveLength(0)
-    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ op: 'broadcast' }))
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'broadcast',
+        args: expect.objectContaining({ event: 'foo', data: {} }),
+      }),
+    )
   })
 
   // A failing connection is isolated so other connections still receive events.
@@ -215,7 +235,12 @@ describe('SseTransport', () => {
     await transport.disconnect('missing')
     await transport.disconnect('ws1')
     expect(publish).toHaveBeenCalledTimes(2)
-    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ op: 'disconnect' }))
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'disconnect',
+        args: expect.objectContaining({ connectionId: expect.any(String) }),
+      }),
+    )
   })
 
   // disconnectLocal on an unknown/non-sse connection is a no-op.
@@ -500,6 +525,38 @@ describe('SseTransport', () => {
     await expect(transport.unregisterConnection('c1')).resolves.toBeUndefined()
   })
 
+  // When the onDisconnect hook throws, the error is logged via logger.error.
+  // Kills BlockStatement and StringLiteral mutations on the error call.
+  it('logs the hook error when onDisconnect throws', async () => {
+    const onDisconnect = jest.fn().mockRejectedValue(new Error('hook-error'))
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      await transport.unregisterConnection('c1')
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('hook-error'))
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  // onDisconnect hook receives the connection metadata: transport type, userId, and connectedAt.
+  // Kills mutations that replace the transport field or durationMs arithmetic.
+  it('passes transport, userId, and a non-negative durationMs to the onDisconnect hook', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    await transport.unregisterConnection('c1')
+    const meta = (onDisconnect as jest.Mock).mock.calls[0]?.[0] as {
+      transport: string
+      userId: string
+      durationMs: number
+    }
+    expect(meta.transport).toBe('sse')
+    expect(meta.userId).toBe('u1')
+    expect(meta.durationMs).toBeGreaterThanOrEqual(0)
+  })
+
   // disconnectLocal forwards the reason before any finalize-style cleanup runs.
   it('forwards the disconnect reason before the stream finalize cleanup', async () => {
     const onDisconnect = jest.fn()
@@ -511,5 +568,128 @@ describe('SseTransport', () => {
     await transport.unregisterConnection('c1')
     expect(onDisconnect).toHaveBeenCalledTimes(1)
     expect(onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ reason: 'revoked' }))
+  })
+
+  // disconnectLocal calls close$.next() so downstream takeUntil operators see the emission.
+  // Kills BlockStatement mutations that remove the .next() call.
+  it('emits on close$ (next) before completing it in disconnectLocal', async () => {
+    const { transport, connections } = build()
+    const { close$ } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    let nexted = false
+    close$.subscribe({
+      next: () => {
+        nexted = true
+      },
+    })
+    await transport.disconnectLocal('c1')
+    expect(nexted).toBe(true)
+  })
+
+  // A pub/sub publish failure is logged with the error text.
+  // Kills BlockStatement and StringLiteral mutations on the warn call in publish.
+  it('logs the error message when pubsub.publish fails', async () => {
+    const { transport, connections, publish } = build()
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    publish.mockRejectedValueOnce(new Error('redis-down'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await transport.emitToUser('u1', 'foo', {})
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('redis-down'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // A failing connection (throwing subject.next) is logged with the error text.
+  // Kills BlockStatement and StringLiteral mutations on the warn call in deliver.
+  it('logs the error when a connection subject.next throws', async () => {
+    const { transport, connections } = build()
+    connections.register({
+      connectionId: 'bad',
+      userId: 'u1',
+      tenantId: undefined,
+      transport: 'sse',
+      ip: 'x',
+      userAgent: undefined,
+      connectedAt: new Date(),
+      subject: {
+        next: () => {
+          throw new Error('deliver-error')
+        },
+      } as unknown as Subject<MessageEvent>,
+      close$: new Subject<void>(),
+      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+    })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await transport.emitToUser('u1', 'foo', {})
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('deliver-error'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // durationMs must be the difference between now and connectedAt, not their sum.
+  it('durationMs in onDisconnect hook is a small elapsed value, not a timestamp sum', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    const past = new Date(Date.now() - 50)
+    connections.register({
+      connectionId: 'c1',
+      userId: 'u1',
+      tenantId: undefined,
+      transport: 'sse',
+      ip: '127.0.0.1',
+      userAgent: undefined,
+      connectedAt: past,
+      subject: new Subject<MessageEvent>(),
+      close$: new Subject<void>(),
+      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+    })
+    await transport.unregisterConnection('c1')
+    const meta = (onDisconnect as jest.Mock).mock.calls[0]?.[0] as { durationMs: number }
+    expect(meta.durationMs).toBeGreaterThanOrEqual(50)
+    expect(meta.durationMs).toBeLessThan(60000)
+  })
+
+  // disconnectLocal must be a no-op for WebSocket connections — only SSE connections are torn down here.
+  it('disconnectLocal is a no-op for a WebSocket connection', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'ws1', userId: 'u1', transport: 'websocket' })
+    await transport.disconnectLocal('ws1')
+    expect(onDisconnect).not.toHaveBeenCalled()
+    expect(connections.get('ws1')).toBeDefined()
+  })
+
+  // Kills L280 ConditionalExpression: `conn.transport === 'sse'` → `true`.
+  // emitToRoomLocal must only deliver to SSE connections; a WS conn with a real Subject must be skipped.
+  it('emitToRoomLocal does not deliver to a websocket connection in the room', async () => {
+    const { transport, connections, rooms } = build()
+    const sse = addConn(connections, { connectionId: 'c-sse', userId: 'u1', transport: 'sse' })
+
+    const wsReceived: MessageEvent[] = []
+    const wsSubject = new Subject<MessageEvent>()
+    wsSubject.subscribe((m) => wsReceived.push(m))
+    connections.register({
+      connectionId: 'c-ws',
+      userId: 'u2',
+      tenantId: undefined,
+      transport: 'websocket',
+      ip: '127.0.0.1',
+      userAgent: undefined,
+      connectedAt: new Date(),
+      subject: wsSubject,
+      close$: new Subject<void>(),
+      originalAuth: { userId: 'u2', tenantId: undefined, roles: undefined },
+    })
+
+    rooms.join('c-sse', 'room:x')
+    rooms.join('c-ws', 'room:x')
+
+    transport.emitToRoomLocal('room:x', 'ping', {}, 'id-1')
+
+    expect(sse.received).toHaveLength(1)
+    expect(wsReceived).toHaveLength(0)
   })
 })

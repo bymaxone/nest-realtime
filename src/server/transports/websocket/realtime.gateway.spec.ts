@@ -3,6 +3,7 @@
  * @layer transport
  */
 import 'reflect-metadata'
+import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
 import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
@@ -81,6 +82,28 @@ describe('RealtimeGateway', () => {
     const fakeServer = {}
     gateway.afterInit(fakeServer as never)
     expect(transportMock.setServer).toHaveBeenCalledWith(fakeServer)
+  })
+
+  it('afterInit logs the initialized message', () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      gateway.afterInit({} as never)
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('initialized'))
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  it('handleConnection logs the error message when authenticate throws', async () => {
+    authenticator.authenticate.mockRejectedValue(new Error('token-verify-fail'))
+    const socket = makeSocket()
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      await gateway.handleConnection(socket as never)
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('token-verify-fail'))
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   it('handleConnection calls registerSocket on valid auth', async () => {
@@ -281,5 +304,47 @@ describe('RealtimeGateway', () => {
     const socket = makeSocket()
     await expect(gateway.handleConnection(socket as never)).resolves.toBeUndefined()
     expect(socket.disconnect).toHaveBeenCalledWith(true)
+  })
+
+  it('does not add a ticket key when ticket is absent from both query and auth', async () => {
+    // Kills ConditionalExpression true mutation: with "if (true)", query.ticket=undefined is set
+    // explicitly, making the key appear even when no ticket was present.
+    authenticator.authenticate.mockResolvedValue(null)
+    const socket = makeSocket({ auth: {}, query: {} })
+    await gateway.handleConnection(socket as never)
+    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
+    expect(Object.keys(ctx['query'] as object)).not.toContain('ticket')
+  })
+
+  // Kills L94 StringLiteral mutation ('' → "Stryker was here!").
+  // When handshake.headers.cookie is absent (undefined), the ?? operator must fall back
+  // to '' so parseCookieHeader receives an empty string, not the Stryker sentinel.
+  // Both inputs yield {} from parseCookieHeader (no '=' in sentinel), so we spy on
+  // the module export to observe the exact argument passed by the gateway.
+  it('calls parseCookieHeader with empty string when handshake has no cookie header', async () => {
+    const cookieMod = require('../../utils/parse-cookie-header') as {
+      parseCookieHeader: (cookieHeader: string) => Record<string, string>
+    }
+    const spy = jest.spyOn(cookieMod, 'parseCookieHeader')
+    try {
+      authenticator.authenticate.mockResolvedValue(null)
+      // Socket handshake with no cookie key — handshake.headers.cookie is undefined.
+      const socket = {
+        ...makeSocket(),
+        handshake: {
+          address: '1.2.3.4',
+          auth: {},
+          headers: { 'user-agent': 'jest' }, // cookie key intentionally absent
+          query: {},
+        },
+      }
+      await gateway.handleConnection(socket as never)
+      expect(spy).toHaveBeenCalledWith('')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

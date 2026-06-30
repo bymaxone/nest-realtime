@@ -2,7 +2,7 @@
  * @fileoverview Unit tests for SseSubscriptionHandler.
  * @layer transport
  */
-import { UnauthorizedException } from '@nestjs/common'
+import { Logger, UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import type { Observable } from 'rxjs'
@@ -557,6 +557,58 @@ describe('SseSubscriptionHandler', () => {
     expect(events[0]?.type).toBe('x')
   })
 
+  // Kills L194 StringLiteral: `e.id ?? ''` → `e.id ?? "Stryker was here!"`.
+  // The ringBufferIds Set is passed as 3rd arg to retrieve; undefined ids must fall back to ''.
+  it('passes empty-string fallback in ringBufferIds when a replay event has no id', async () => {
+    const replayEvent: MessageEvent = { type: 'x', data: {} }
+    const retrieveMock = jest.fn().mockResolvedValue([])
+    const transport = mkTransport({
+      getReplayEvents: jest.fn().mockReturnValue([replayEvent]),
+      emitConnectionEvent: false,
+    })
+    const offlineDelivery = {
+      retrieve: retrieveMock,
+      acknowledge: jest.fn().mockResolvedValue(undefined),
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    collect(stream)
+    expect(retrieveMock).toHaveBeenCalledWith('u1', '0', expect.any(Set))
+    const ids = retrieveMock.mock.calls[0]?.[2] as Set<string>
+    expect(ids.has('')).toBe(true)
+  })
+
+  // Kills L237 ConditionalExpression (`true`) and L237 EqualityOperator (`>= 0`).
+  // With empty queueEvents (retrieve returns []), acknowledge must NOT be called.
+  it('does not acknowledge the offline queue when queueEvents is empty (retrieve returns [])', async () => {
+    const acknowledge = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({
+      getReplayEvents: jest.fn().mockReturnValue([]),
+      emitConnectionEvent: false,
+    })
+    const offlineDelivery = {
+      retrieve: jest.fn().mockResolvedValue([]),
+      acknowledge,
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const sub = stream.subscribe()
+    sub.unsubscribe()
+    expect(acknowledge).not.toHaveBeenCalled()
+  })
+
   // When registerConnection rejects, onError fires best-effort and the stream errors
   // so the @Sse consumer receives a deterministic failure response.
   it('routes a registerConnection failure to onError and errors the stream', async () => {
@@ -661,6 +713,104 @@ describe('SseSubscriptionHandler', () => {
     expect(acknowledge).not.toHaveBeenCalled()
   })
 
+  // When a lifecycle hook throws, fireHook logs a warn with the error message.
+  // Kills BlockStatement and StringLiteral mutations on the logger.warn in fireHook.
+  it('logs a warn when a lifecycle hook throws', async () => {
+    const onConnect = jest.fn().mockRejectedValue(new Error('hook-crash'))
+    const transport = mkTransport()
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
+      const stream = await handler.handle(mkReq(), mkRes())
+      const sub = stream.subscribe()
+      await Promise.resolve()
+      await Promise.resolve()
+      sub.unsubscribe()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hook-crash'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // onConnect receives the full connection metadata including transport type.
+  // Kills mutations to transport: 'sse', ip, and connectedAt in buildMeta.
+  it('passes full metadata including transport sse to the onConnect hook', async () => {
+    const onConnect = jest.fn()
+    const record = mkRecord('conn-1', 'u1')
+    const transport = mkTransport({
+      getConnection: jest.fn().mockReturnValue(record),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+    const meta = (onConnect as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(meta['transport']).toBe('sse')
+    expect(meta['connectionId']).toBe('conn-1')
+    expect(meta['ip']).toBe('127.0.0.1')
+    expect(meta['connectedAt']).toBeInstanceOf(Date)
+  })
+
+  // onError receives transport: 'sse' when the stream errors.
+  // Kills StringLiteral mutations on 'sse' in the onError call arguments.
+  it('passes transport sse to the onError hook when the stream errors', async () => {
+    let capturedSubject: Subject<MessageEvent> | undefined
+    const transport = mkTransport({
+      registerConnection: jest
+        .fn()
+        .mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+          capturedSubject = params.subject
+        }),
+      emitConnectionEvent: false,
+    })
+    const onError = jest.fn()
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onError })
+    const stream$ = await handler.handle(mkReq(), mkRes())
+    stream$.subscribe()
+    await Promise.resolve()
+    capturedSubject!.error(new Error('stream-error'))
+    await Promise.resolve()
+    const ctx = (onError as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(ctx['transport']).toBe('sse')
+  })
+
+  // onError receives transport: 'sse' when registerConnection rejects.
+  // Kills StringLiteral mutations on 'sse' in the activateConnection onError call.
+  it('passes transport sse to onError when registerConnection rejects', async () => {
+    const transport = mkTransport({
+      registerConnection: jest.fn().mockRejectedValue(new Error('reg-fail')),
+      emitConnectionEvent: false,
+    })
+    const onError = jest.fn()
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onError })
+    const stream = await handler.handle(mkReq(), mkRes())
+    stream.subscribe({ error: () => undefined })
+    await Promise.resolve()
+    await Promise.resolve()
+    const ctx = (onError as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(ctx['transport']).toBe('sse')
+  })
+
+  // When offlineDelivery is configured but Last-Event-ID is absent, retrieve must NOT be called.
+  // Kills the && → || mutation in the queueEvents ternary condition.
+  it('does not call retrieve when offlineDelivery is configured but Last-Event-ID is absent', async () => {
+    const retrieve = jest.fn().mockResolvedValue([])
+    const offlineDelivery = {
+      retrieve,
+      acknowledge: jest.fn().mockResolvedValue(undefined),
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      mkTransport({ emitConnectionEvent: false }),
+      mkHeartbeat(),
+      mkOptions(),
+      undefined,
+      offlineDelivery,
+    )
+    await handler.handle(mkReq(), mkRes())
+    expect(retrieve).not.toHaveBeenCalled()
+  })
+
   // FINDING B: a subscriber that closes DURING emission (take(1)) leaves the subscriber
   // closed at the ack check, so the queue is left durable rather than acknowledged.
   it('does not acknowledge when the subscriber closes during emission', async () => {
@@ -687,5 +837,61 @@ describe('SseSubscriptionHandler', () => {
     const first = await firstValueFrom(stream.pipe(take(1)))
     expect(first.id).toBe('q1')
     expect(acknowledge).not.toHaveBeenCalled()
+  })
+
+  it('trims whitespace from the X-Forwarded-For candidate before using it as the IP', async () => {
+    // Without trim(), " 1.2.3.4 " leaks as-is into the connection ip.
+    const transport = mkTransport()
+    const req = mkReq({ headers: { 'x-forwarded-for': ' 1.2.3.4 , 5.6.7.8' } })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const stream = await handler.handle(req, mkRes())
+    stream.subscribe().unsubscribe()
+    expect(transport.registerConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ ip: '1.2.3.4' }),
+    )
+  })
+
+  it('joins array-valued headers with a comma separator in the auth context', async () => {
+    // Kills StringLiteral mutation that changes join(',') to join('').
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const transport = mkTransport({ authenticate })
+    const req = mkReq({ headers: { 'x-multi': ['part-a', 'part-b'] as unknown as string } })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    await handler.handle(req, mkRes())
+    const context = authenticate.mock.calls[0]?.[0] as { headers: Record<string, string> }
+    expect(context.headers['x-multi']).toBe('part-a,part-b')
+  })
+
+  it('sets transport to "sse" in the auth context passed to authenticate', async () => {
+    // Kills StringLiteral mutation that blanks out the transport field.
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const transport = mkTransport({ authenticate })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    await handler.handle(mkReq(), mkRes())
+    const context = authenticate.mock.calls[0]?.[0] as { transport: string }
+    expect(context.transport).toBe('sse')
+  })
+
+  // Kills L75 StringLiteral mutation ('' → "Stryker was here!").
+  // When no cookie header is present singleHeader(undefined) returns undefined and
+  // the ?? operator must fall back to '' — not the Stryker sentinel.
+  // parseCookieHeader("Stryker was here!") and parseCookieHeader('') both yield {}
+  // so the cookies field alone cannot distinguish them; we spy on the module export
+  // to observe the exact argument the handler passes.
+  it('calls parseCookieHeader with empty string when no cookie header is present', async () => {
+    const cookieMod = require('../../utils/parse-cookie-header') as {
+      parseCookieHeader: (cookieHeader: string) => Record<string, string>
+    }
+    const spy = jest.spyOn(cookieMod, 'parseCookieHeader')
+    try {
+      const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+      const transport = mkTransport({ authenticate, emitConnectionEvent: false })
+      const req = mkReq({ headers: {} }) // no cookie header — singleHeader returns undefined
+      const handler = build(transport, mkHeartbeat(), mkOptions())
+      await handler.handle(req, mkRes())
+      expect(spy).toHaveBeenCalledWith('')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

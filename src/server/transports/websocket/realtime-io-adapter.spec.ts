@@ -137,6 +137,19 @@ describe('RealtimeIoAdapter', () => {
     expect(server.adapter).toHaveBeenCalled()
   })
 
+  it('logs the Redis adapter registered message on successful install', () => {
+    const pubClient = { duplicate: jest.fn().mockReturnValue({}) }
+    const server = makeServer()
+    superSpy.mockReturnValue(server)
+
+    const adapter = new RealtimeIoAdapter(
+      makeApp({ websocket: { redisAdapter: { pubClient } } }) as never,
+    )
+    adapter.createIOServer(3000)
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Redis adapter registered'))
+  })
+
   it('tolerates a createAdapter failure — logs error, does NOT throw', () => {
     // Broken adapter install degrades to single-instance; no uncaught exception.
     const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as {
@@ -155,5 +168,25 @@ describe('RealtimeIoAdapter', () => {
     )
     expect(() => adapter.createIOServer(3000)).not.toThrow()
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Redis not available'))
+  })
+
+  it('error log contains "Falling back" when the Redis adapter installation throws', () => {
+    // Kills StringLiteral mutation that blanks out the fallback message.
+    const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as {
+      createAdapter: jest.Mock
+    }
+    createAdapter.mockImplementationOnce(() => {
+      throw new Error('Redis down')
+    })
+
+    const pubClient = { duplicate: jest.fn().mockReturnValue({}) }
+    const server = makeServer()
+    superSpy.mockReturnValue(server)
+
+    const adapter = new RealtimeIoAdapter(
+      makeApp({ websocket: { redisAdapter: { pubClient } } }) as never,
+    )
+    adapter.createIOServer(3000)
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Falling back'))
   })
 })

@@ -91,4 +91,18 @@ describe('HeartbeatService', () => {
   it('accepts the maximum boundary value (90 000 ms)', () => {
     expect(() => heartbeat.start('c1', res, 90_000)).not.toThrow()
   })
+
+  // Kills L84 ConditionalExpression mutation (condition → true).
+  // stop() for a connection that has NO timer must NOT call clearInterval.
+  // With the mutation the guard is always true, so clearInterval is called with
+  // undefined — wrong and detectable via a spy on the global function.
+  it('does not call clearInterval when stopping an unregistered connection', () => {
+    const clearSpy = jest.spyOn(global, 'clearInterval')
+    try {
+      heartbeat.stop('never-started')
+      expect(clearSpy).not.toHaveBeenCalled()
+    } finally {
+      clearSpy.mockRestore()
+    }
+  })
 })
