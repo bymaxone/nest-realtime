@@ -38,7 +38,7 @@ export interface RedisRealtimePubSubOptions {
 export class RedisRealtimePubSub implements IRealtimePubSub {
   private readonly pub: Redis
   private readonly channel: string
-  private sub: Redis | null = null
+  private subInit: Promise<Redis> | null = null
   private readonly handlers = new Set<(message: RealtimePubSubMessage) => void>()
 
   constructor(options: RedisRealtimePubSubOptions) {
@@ -46,39 +46,60 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     this.channel = options.channel ?? 'bymax:realtime'
   }
 
+  /** JSON-encodes the message and PUBLISHes it to the configured channel. */
   async publish(message: RealtimePubSubMessage): Promise<void> {
     await this.pub.publish(this.channel, JSON.stringify(message))
   }
 
+  /**
+   * Lazily creates the single shared subscribe client on first call; returns an async
+   * unsubscribe that quits the client when the last handler is removed. Concurrent
+   * subscribe calls are idempotent — only one client is ever created. Malformed
+   * payloads are dropped silently.
+   */
   async subscribe(handler: (message: RealtimePubSubMessage) => void): Promise<() => Promise<void>> {
-    if (!this.sub) {
-      this.sub = this.pub.duplicate()
-      await this.sub.subscribe(this.channel)
-      this.sub.on('message', (_ch: string, payload: string) => {
-        let msg: RealtimePubSubMessage
-        try {
-          msg = JSON.parse(payload) as RealtimePubSubMessage
-        } catch {
-          // Silently drop malformed payloads.
-          return
-        }
-        for (const h of this.handlers) {
-          try {
-            h(msg)
-          } catch {
-            // Best-effort fan-out.
-          }
-        }
-      })
-    }
-
     this.handlers.add(handler)
-
+    const sub = await this.ensureSubscriber()
     return async () => {
       this.handlers.delete(handler)
-      if (this.handlers.size === 0 && this.sub) {
-        await this.sub.quit()
-        this.sub = null
+      if (this.handlers.size === 0) {
+        this.subInit = null
+        try {
+          await sub.quit()
+        } catch {
+          // Quit failures are non-fatal; the reference is already cleared so the
+          // next subscribe rebuilds a fresh client.
+        }
+      }
+    }
+  }
+
+  /** Lazily create the single shared subscribe client (idempotent under concurrent calls). */
+  private ensureSubscriber(): Promise<Redis> {
+    if (!this.subInit) this.subInit = this.createSubscriber()
+    return this.subInit
+  }
+
+  private async createSubscriber(): Promise<Redis> {
+    const sub = this.pub.duplicate()
+    await sub.subscribe(this.channel)
+    sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
+    return sub
+  }
+
+  private dispatch(payload: string): void {
+    let msg: RealtimePubSubMessage
+    try {
+      msg = JSON.parse(payload) as RealtimePubSubMessage
+    } catch {
+      // Silently drop malformed payloads.
+      return
+    }
+    for (const h of this.handlers) {
+      try {
+        h(msg)
+      } catch {
+        // Best-effort fan-out.
       }
     }
   }

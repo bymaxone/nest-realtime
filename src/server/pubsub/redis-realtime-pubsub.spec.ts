@@ -2,16 +2,16 @@
  * @fileoverview Unit tests for RedisRealtimePubSub using ioredis-mock.
  * @layer infrastructure
  */
-const RedisMock = require('ioredis-mock') as { new (): object }
+import RedisMock from 'ioredis-mock'
+import type { Redis } from 'ioredis'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
 const msg: RealtimePubSubMessage = { op: 'broadcast', args: { event: 'x' }, origin: 'inst-1' }
 
 function build(channel?: string) {
-  const client = new RedisMock()
-  const opts =
-    channel !== undefined ? { client: client as never, channel } : { client: client as never }
+  const client = new RedisMock() as unknown as Redis
+  const opts = channel !== undefined ? { client, channel } : { client }
   const pubsub = new RedisRealtimePubSub(opts)
   return { pubsub, client }
 }
@@ -113,5 +113,47 @@ describe('RedisRealtimePubSub', () => {
     await pubsub.publish(msg)
     await new Promise((r) => setTimeout(r, 0))
     expect(received).toHaveLength(1)
+  })
+
+  // Concurrent subscribe() calls are idempotent — the sub client is created exactly once.
+  it('concurrent subscribe() calls create the sub client only once', async () => {
+    // Covers: ensureSubscriber() returns the same in-flight promise for concurrent calls.
+    const { pubsub, client } = build()
+    const duplicateSpy = jest.spyOn(client, 'duplicate')
+    await Promise.all([pubsub.subscribe(jest.fn()), pubsub.subscribe(jest.fn())])
+    expect(duplicateSpy).toHaveBeenCalledTimes(1)
+  })
+
+  // When quit() rejects on the last unsubscribe, the unsubscribe still resolves and the
+  // next subscribe creates a fresh client.
+  it('swallows a quit failure and lets the next subscribe create a new client', async () => {
+    // Covers: subInit is cleared before quit so a failing quit does not strand the reference.
+    const makeSub = (quitImpl: () => Promise<void>) => ({
+      subscribe: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn(),
+      quit: jest.fn().mockImplementation(quitImpl),
+    })
+
+    let callCount = 0
+    const fakePub = {
+      publish: jest.fn().mockResolvedValue(undefined),
+      duplicate: jest
+        .fn()
+        .mockImplementation(() =>
+          callCount++ === 0
+            ? makeSub(() => Promise.reject(new Error('quit failure')))
+            : makeSub(() => Promise.resolve()),
+        ),
+    }
+
+    const pubsub = new RedisRealtimePubSub({ client: fakePub as unknown as Redis })
+    const unsub = await pubsub.subscribe(jest.fn())
+
+    // The last unsubscribe triggers quit — must resolve even if quit rejects.
+    await expect(unsub()).resolves.toBeUndefined()
+
+    // Next subscribe must call duplicate again (new client, since subInit was cleared).
+    await pubsub.subscribe(jest.fn())
+    expect(fakePub.duplicate).toHaveBeenCalledTimes(2)
   })
 })

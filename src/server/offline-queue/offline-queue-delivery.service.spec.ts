@@ -2,11 +2,15 @@
  * @fileoverview Unit tests for OfflineQueueDeliveryService.
  * @layer application
  */
+import { Logger } from '@nestjs/common'
 import type {
   IOfflineQueueStorage,
   OfflineQueuedEvent,
 } from '../interfaces/offline-queue-storage.interface'
 import { OfflineQueueDeliveryService } from './offline-queue-delivery.service'
+
+/** Must match the module-private RETRIEVE_LIMIT constant. */
+const RETRIEVE_LIMIT = 200
 
 function mkEvent(id: string): OfflineQueuedEvent {
   return { id, event: 'foo', data: { id }, emittedAt: new Date() }
@@ -72,5 +76,23 @@ describe('OfflineQueueDeliveryService', () => {
     const service = new OfflineQueueDeliveryService(storage)
     const result = await service.deliver('u1', 'last-1', new Set())
     expect(result).toHaveLength(1)
+  })
+
+  // When retrieveSince returns exactly RETRIEVE_LIMIT events, a warn is logged.
+  it('warns when retrieveSince returns exactly the retrieve limit', async () => {
+    // Covers: the `=== RETRIEVE_LIMIT` branch that warns about a potential event gap.
+    const events = Array.from<unknown, OfflineQueuedEvent>({ length: RETRIEVE_LIMIT }, (_, i) =>
+      mkEvent(String(i + 1)),
+    )
+    const storage = mkStorage(events)
+    const service = new OfflineQueueDeliveryService(storage)
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const result = await service.deliver('u1', 'last-1', new Set())
+      expect(result).toHaveLength(RETRIEVE_LIMIT)
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('limit'))
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })

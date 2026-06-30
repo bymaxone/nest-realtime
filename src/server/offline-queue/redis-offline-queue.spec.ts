@@ -2,18 +2,43 @@
  * @fileoverview Unit tests for RedisOfflineQueue using ioredis-mock.
  * @layer infrastructure
  */
-const RedisMock = require('ioredis-mock') as { new (): object }
+import RedisMock from 'ioredis-mock'
+import type { Redis } from 'ioredis'
 import type { OfflineQueuedEvent } from '../interfaces/offline-queue-storage.interface'
 import { RedisOfflineQueue } from './redis-offline-queue'
+
+/** Minimal pipeline fake — implement only the methods append uses. */
+function makeFakePipeline(execResult: [Error | null, unknown][] | null) {
+  return {
+    zadd: jest.fn(),
+    zremrangebyrank: jest.fn(),
+    expire: jest.fn(),
+    exec: jest.fn().mockResolvedValue(execResult),
+  }
+}
+
+/** Wrap a fake pipeline factory into a minimal fake Redis client. Cast once at boundary. */
+function fakeClientWithPipeline(execResult: [Error | null, unknown][] | null): Redis {
+  const pipeline = makeFakePipeline(execResult)
+  return {
+    pipeline: jest.fn().mockReturnValue(pipeline),
+  } as unknown as Redis
+}
 
 function mkEvent(id: string, event = 'foo'): OfflineQueuedEvent {
   return { id, event, data: { id }, emittedAt: new Date() }
 }
 
+// Shared client reset between tests — ioredis-mock uses a global in-process store.
+const sharedClient = new RedisMock() as unknown as Redis
+
+beforeEach(async () => {
+  await sharedClient.flushall()
+})
+
 function build(opts?: { maxPerUser?: number; ttlSeconds?: number }) {
-  const client = new RedisMock()
-  const queue = new RedisOfflineQueue({ client: client as never, ...opts })
-  return { queue, client }
+  const queue = new RedisOfflineQueue({ client: sharedClient, ...opts })
+  return { queue, client: sharedClient }
 }
 
 describe('RedisOfflineQueue', () => {
@@ -95,5 +120,37 @@ describe('RedisOfflineQueue', () => {
     const { queue } = build()
     const events = await queue.retrieveSince('u1', '0-0', 10)
     expect(events).toHaveLength(0)
+  })
+
+  // emittedAt is restored as a Date after the JSON round-trip through Redis.
+  it('returns emittedAt as a Date after JSON serialization round-trip', async () => {
+    // Covers: the JSON.parse reviver correctly restores emittedAt from string to Date.
+    const { queue } = build()
+    const original = new Date('2024-01-01T00:00:00.000Z')
+    await queue.append('u1', { id: '100-0', event: 'x', data: {}, emittedAt: original })
+    const events = await queue.retrieveSince('u1', '99-0', 10)
+    expect(events[0]!.emittedAt).toBeInstanceOf(Date)
+    expect(events[0]!.emittedAt.getTime()).toBe(original.getTime())
+  })
+
+  // append resolves when pipeline.exec() returns null (covers the ?? [] null branch).
+  it('resolves when pipeline.exec() returns null', async () => {
+    // Covers: the `?? []` null-coalescing branch when exec() resolves to null.
+    const queue = new RedisOfflineQueue({ client: fakeClientWithPipeline(null) })
+    await expect(queue.append('u1', mkEvent('1-0'))).resolves.toBeUndefined()
+  })
+
+  // append throws when pipeline.exec() embeds a per-command error (covers if (error) throw).
+  it('throws when pipeline.exec() returns a per-command error', async () => {
+    // Covers: `if (error) throw error` when ioredis embeds an error in the results tuple.
+    const boom = new Error('boom')
+    const queue = new RedisOfflineQueue({
+      client: fakeClientWithPipeline([
+        [boom, null],
+        [null, 1],
+        [null, 1],
+      ]),
+    })
+    await expect(queue.append('u1', mkEvent('1-0'))).rejects.toThrow('boom')
   })
 })

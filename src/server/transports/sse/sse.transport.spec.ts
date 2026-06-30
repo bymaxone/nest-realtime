@@ -2,8 +2,10 @@
  * @fileoverview Unit tests for the SSE transport (delivery, fan-out, teardown).
  * @layer transport
  */
+import { Logger } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import { Subject } from 'rxjs'
+import type { IOfflineQueueStorage } from '../../interfaces/offline-queue-storage.interface'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { EventIdGenerator } from '../../services/event-id-generator.service'
@@ -31,6 +33,7 @@ function build(opts?: {
   sse?: SseOptions
   hooks?: IConnectionLifecycleHooks
   instanceId?: string
+  offlineQueue?: IOfflineQueueStorage
 }) {
   const connections = new ConnectionRegistry()
   const rooms = new RoomRegistry()
@@ -56,6 +59,7 @@ function build(opts?: {
     hooks,
     options,
     opts?.instanceId ?? 'inst-1',
+    opts?.offlineQueue,
   )
   return { transport, connections, rooms, replay, authenticate, publish, subscribe, unsubscribe }
 }
@@ -425,6 +429,67 @@ describe('SseTransport', () => {
     addConn(connections, { connectionId: 'c1', userId: 'u1' })
     expect(transport.getConnection('c1')).toBeDefined()
     expect(transport.getConnection('missing')).toBeUndefined()
+  })
+
+  // emitToUser with an offline queue and zero local connections calls append once.
+  it('calls offlineQueue.append when user has no local SSE connections', async () => {
+    // Covers: offline queue is configured and user is fully offline on this instance.
+    const append = jest.fn().mockResolvedValue(undefined)
+    const offlineQueue = {
+      append,
+      retrieveSince: jest.fn(),
+      acknowledge: jest.fn(),
+    } as unknown as IOfflineQueueStorage
+    const { transport } = build({ offlineQueue })
+    await transport.emitToUser('u1', 'foo', { x: 1 })
+    expect(append).toHaveBeenCalledTimes(1)
+    expect(append).toHaveBeenCalledWith(
+      'u1',
+      expect.objectContaining({ event: 'foo', data: { x: 1 }, emittedAt: expect.any(Date) }),
+    )
+  })
+
+  // emitToUser with an offline queue but >=1 live connection does not call append.
+  it('does not call offlineQueue.append when the user has a live local connection', async () => {
+    // Covers: user has an active SSE connection — offline queue must not be written.
+    const append = jest.fn().mockResolvedValue(undefined)
+    const offlineQueue = {
+      append,
+      retrieveSince: jest.fn(),
+      acknowledge: jest.fn(),
+    } as unknown as IOfflineQueueStorage
+    const { transport, connections } = build({ offlineQueue })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    await transport.emitToUser('u1', 'foo', {})
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  // emitToUser without an offline queue resolves normally with no side effects.
+  it('resolves normally when no offline queue is configured', async () => {
+    // Covers: baseline — no offlineQueue injected; emitToUser must not throw.
+    const { transport } = build()
+    await expect(transport.emitToUser('u1', 'foo', {})).resolves.toBeUndefined()
+  })
+
+  // emitToUser swallows an offlineQueue.append rejection and logs a warn.
+  it('swallows offlineQueue.append rejections and logs a warn', async () => {
+    // Covers: fire-and-forget .catch swallows the error so the live emit path is unaffected.
+    const append = jest.fn().mockRejectedValue(new Error('queue down'))
+    const offlineQueue = {
+      append,
+      retrieveSince: jest.fn(),
+      acknowledge: jest.fn(),
+    } as unknown as IOfflineQueueStorage
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const { transport } = build({ offlineQueue })
+      await transport.emitToUser('u1', 'foo', {})
+      // One microtask flush to let the fire-and-forget .catch run.
+      await Promise.resolve()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Offline queue append failed'))
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   // A rejecting onDisconnect hook is isolated (logged, never an unhandled rejection).

@@ -11,6 +11,7 @@ import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
+import type { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
 import type { HeartbeatService } from './heartbeat.service'
 import type { SseTransport } from './sse.transport'
 import { SseSubscriptionHandler } from './sse-subscription.handler'
@@ -417,5 +418,47 @@ describe('SseSubscriptionHandler', () => {
     const transport = mkTransport()
     const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), mkOptions(), undefined)
     await expect(handler.handle(mkReq(), mkRes())).resolves.toBeDefined()
+  })
+
+  // Offline queue events are mapped to MessageEvents and emitted after ring-buffer replay.
+  it('emits offline queue events as MessageEvents when Last-Event-ID is set', async () => {
+    const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
+    const offlineDelivery = {
+      deliver: jest
+        .fn()
+        .mockResolvedValue([{ id: 'q1', event: 'queued', data: { x: 1 }, emittedAt: new Date() }]),
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const events = collect(stream)
+    const queued = events.filter((e) => e.id === 'q1')
+    expect(queued).toHaveLength(1)
+    expect(queued[0]?.type).toBe('queued')
+    expect(queued[0]?.data).toEqual({ x: 1 })
+  })
+
+  // A replay event with no id falls back to '' in the ringBufferIds set (id ?? '' branch).
+  it('handles replay events with undefined id when building ringBufferIds', async () => {
+    // A MessageEvent without id covers the `e.id ?? ''` fallback branch.
+    const replayEvent: MessageEvent = { type: 'x', data: {} }
+    const transport = mkTransport({
+      getReplayEvents: jest.fn().mockReturnValue([replayEvent]),
+      emitConnectionEvent: false,
+    })
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const events = collect(stream)
+    expect(events).toHaveLength(1)
+    expect(events[0]?.type).toBe('x')
   })
 })

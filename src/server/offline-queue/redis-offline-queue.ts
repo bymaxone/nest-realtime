@@ -76,7 +76,10 @@ export class RedisOfflineQueue implements IOfflineQueueStorage {
     // Trim oldest entries beyond the per-user cap.
     pipeline.zremrangebyrank(key, 0, -(this.maxPerUser + 1))
     pipeline.expire(key, this.ttlSeconds)
-    await pipeline.exec()
+    const results = (await pipeline.exec()) ?? []
+    for (const [error] of results) {
+      if (error) throw error
+    }
   }
 
   async retrieveSince(
@@ -94,7 +97,12 @@ export class RedisOfflineQueue implements IOfflineQueueStorage {
       0,
       limit,
     )
-    return raw.map((entry) => JSON.parse(entry) as OfflineQueuedEvent)
+    return raw.map(
+      (entry) =>
+        JSON.parse(entry, (key, value: unknown) =>
+          key === 'emittedAt' ? new Date(value as string) : value,
+        ) as OfflineQueuedEvent,
+    )
   }
 
   async acknowledge(userId: string, upToId: string): Promise<void> {

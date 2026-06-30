@@ -174,7 +174,11 @@ export class BymaxRealtimeModule {
                 `${REALTIME_ERROR_CODES.INVALID_OPTIONS}: useFactory returned nothing`,
               )
             validateOptions(raw)
-            return applyDefaults(raw)
+            const resolved = applyDefaults(raw)
+            BymaxRealtimeModule.logger.log(
+              `Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`,
+            )
+            return resolved
           },
           inject: [...(asyncOptions.inject ?? [])],
         }
@@ -188,7 +192,11 @@ export class BymaxRealtimeModule {
                 `${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options factory returned nothing`,
               )
             validateOptions(raw)
-            return applyDefaults(raw)
+            const resolved = applyDefaults(raw)
+            BymaxRealtimeModule.logger.log(
+              `Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`,
+            )
+            return resolved
           },
           inject: [asyncOptions.useClass ? FACTORY_TOKEN : asyncOptions.useExisting!],
         }

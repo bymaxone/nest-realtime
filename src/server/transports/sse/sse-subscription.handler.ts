@@ -122,6 +122,7 @@ export class SseSubscriptionHandler {
     @Inject(HeartbeatService) private readonly heartbeat: HeartbeatService,
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
     @Optional() @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks?: IConnectionLifecycleHooks,
+    // Optional so the handler can be unit-constructed in isolation; the module always registers it.
     @Optional()
     @Inject(OfflineQueueDeliveryService)
     private readonly offlineDelivery?: OfflineQueueDeliveryService,

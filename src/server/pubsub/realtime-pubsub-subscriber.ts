@@ -66,7 +66,7 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
       this.unsubscribe = await this.pubsub.subscribe((msg) => this.handle(msg))
     } catch (err) {
       this.logger.warn(
-        `Failed to subscribe to pub/sub: ${(err as Error).message}. Running in single-instance mode.`,
+        `Failed to subscribe to pub/sub: ${(err as Error).message}. Cross-instance fan-out disabled; remote events will not reach this instance.`,
       )
     }
   }
@@ -112,8 +112,10 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
           void this.sse.disconnectLocal(a.connectionId, a.reason)
           break
         }
-        default:
-          this.logger.warn(`Unknown pub/sub op: ${String((msg as { op: unknown }).op)}`)
+        default: {
+          const exhaustive: never = msg.op
+          this.logger.warn(`Unknown pub/sub op: ${String(exhaustive)}`)
+        }
       }
     } catch (err) {
       this.logger.warn(`Pub/sub message handling failed: ${(err as Error).message}`)

@@ -53,6 +53,12 @@ export class OfflineQueueDeliveryService {
       return []
     }
 
+    if (events.length === RETRIEVE_LIMIT) {
+      this.logger.warn(
+        `Offline queue retrieve hit the ${RETRIEVE_LIMIT}-event limit for user; older gap events may be dropped.`,
+      )
+    }
+
     const gap = events.filter((e) => !ringBufferIds.has(e.id))
 
     if (gap.length > 0) {

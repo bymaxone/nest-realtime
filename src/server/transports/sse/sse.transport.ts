@@ -2,7 +2,7 @@
  * @fileoverview SSE transport: local delivery + single cross-instance publish.
  * @layer transport
  */
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import type { Subject } from 'rxjs'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
@@ -11,9 +11,11 @@ import {
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
   REALTIME_INSTANCE_ID_TOKEN,
+  REALTIME_OFFLINE_QUEUE_TOKEN,
   REALTIME_OPTIONS_TOKEN,
   REALTIME_PUBSUB_TOKEN,
 } from '../../constants/injection-tokens.constants'
+import type { IOfflineQueueStorage } from '../../interfaces/offline-queue-storage.interface'
 import type {
   AuthenticationResult,
   ConnectionAuthContext,
@@ -74,6 +76,9 @@ export class SseTransport implements ITransport {
     @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks: IConnectionLifecycleHooks,
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
     @Inject(REALTIME_INSTANCE_ID_TOKEN) private readonly instanceId: string,
+    @Optional()
+    @Inject(REALTIME_OFFLINE_QUEUE_TOKEN)
+    private readonly offlineQueue?: IOfflineQueueStorage,
   ) {}
 
   /** Tear down every SSE connection and stop heartbeat on process shutdown. */
@@ -186,6 +191,16 @@ export class SseTransport implements ITransport {
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
     const id = this.idGen.next()
     this.emitToUserLocal(userId, event, data, id)
+    // Persist for a fully-offline user (no live connection on this instance) so the
+    // event can be replayed on reconnect. Fire-and-forget: a queue failure must never
+    // break the live emit path (graceful degradation).
+    if (this.offlineQueue && this.connections.byUser(userId, 'sse').length === 0) {
+      void this.offlineQueue
+        .append(userId, { id, event, data, emittedAt: new Date() })
+        .catch((error: unknown) =>
+          this.logger.warn(`Offline queue append failed: ${(error as Error).message}`),
+        )
+    }
     await this.publish({ op: 'emitToUser', args: { userId, event, data, id } })
   }
 
@@ -225,17 +240,39 @@ export class SseTransport implements ITransport {
     await this.publish({ op: 'disconnect', args: { connectionId, reason } })
   }
 
+  /**
+   * Deliver an event to a user's local SSE connections and update the replay buffer.
+   *
+   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
+   */
   emitToUserLocal(userId: string, event: string, data: unknown, id: string): void {
     const message = this.buildMessage(id, event, data)
     this.replayBuffer.append(userId, message)
     for (const conn of this.connections.byUser(userId, 'sse')) this.deliver(conn, message)
   }
 
+  /**
+   * Deliver an event to all local SSE connections for a tenant.
+   *
+   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
+   * @remarks Events sent via tenant/room/broadcast are NOT written to the per-user replay
+   * buffer or offline queue — only emitToUser populates per-user replay/offline state.
+   */
   emitToTenantLocal(tenantId: string, event: string, data: unknown, id: string): void {
     const message = this.buildMessage(id, event, data)
     for (const conn of this.connections.byTenant(tenantId, 'sse')) this.deliver(conn, message)
   }
 
+  /**
+   * Deliver an event to all local SSE connections that joined the given room.
+   *
+   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
+   * @remarks Events sent via tenant/room/broadcast are NOT written to the per-user replay
+   * buffer or offline queue — only emitToUser populates per-user replay/offline state.
+   */
   emitToRoomLocal(roomId: string, event: string, data: unknown, id: string): void {
     const message = this.buildMessage(id, event, data)
     for (const connectionId of this.rooms.members(roomId)) {
@@ -244,12 +281,25 @@ export class SseTransport implements ITransport {
     }
   }
 
+  /**
+   * Deliver an event to all local SSE connections.
+   *
+   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
+   * @remarks Events sent via tenant/room/broadcast are NOT written to the per-user replay
+   * buffer or offline queue — only emitToUser populates per-user replay/offline state.
+   */
   broadcastLocal(event: string, data: unknown, id: string): void {
     const message = this.buildMessage(id, event, data)
     for (const conn of this.connections.allByTransport('sse')) this.deliver(conn, message)
   }
 
-  /** Tear down a locally-owned SSE stream, then clean up (no re-publish). */
+  /**
+   * Tear down a locally-owned SSE stream, then clean up (no re-publish).
+   *
+   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
+   */
   async disconnectLocal(connectionId: string, reason?: string): Promise<void> {
     const record = this.connections.get(connectionId)
     if (!record || record.transport !== 'sse') return

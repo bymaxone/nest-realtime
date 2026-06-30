@@ -1,7 +1,7 @@
 # Development Plan — @bymax-one/nest-realtime
 
 > **Version:** 2.0.0
-> **Last updated:** 2026-06-27
+> **Last updated:** 2026-06-29
 > **Status:** Draft for execution
 > **Reference spec:** [`docs/technical_specification.md`](./technical_specification.md)
 > **Target engine:** NestJS `@Sse()` + RxJS 7.x (default) + Socket.IO 4.x (opt-in)
@@ -68,8 +68,8 @@ The phase order respects the dependency graph (Appendix A): contracts before tra
 
 ### 1.4 Progress
 
-- **Overall progress:** 🔄 2 / 6 phases done (33%) — 28 / 73 tasks (38%)
-- **Active phase:** **Phase 3** (Horizontal Scaling (SSE)) — 🔄 In Progress
+- **Overall progress:** 🔄 2 / 6 phases done (33%) — 39 / 73 tasks (53%)
+- **Active phase:** **Phase 3** (Horizontal Scaling (SSE)) — 👀 Review
 - **Blocked:** none
 
 ### 1.5 Phase dashboard
@@ -80,11 +80,11 @@ Canonical phase status. Each row links to that phase's task file in [`docs/tasks
 | --- | --- | --- | --- | --- | --- |
 | 1 | [Foundation + SSE Transport](./tasks/phase-01-foundation-sse.md) | ✅ Done | 16/16 | MEDIUM | 2026-06-27 |
 | 2 | [Auth + Last-Event-ID + Reauthentication](./tasks/phase-02-auth-last-event-id.md) | ✅ Done | 12/12 | MEDIUM | 2026-06-27 |
-| 3 | [Horizontal Scaling (SSE)](./tasks/phase-03-horizontal-scaling-sse.md) | 🔄 In Progress | 0/11 | HIGH | 2026-06-29 |
+| 3 | [Horizontal Scaling (SSE)](./tasks/phase-03-horizontal-scaling-sse.md) | 👀 Review | 11/11 | HIGH | 2026-06-29 |
 | 4 | [WebSocket Transport](./tasks/phase-04-websocket-transport.md) | 📋 ToDo | 0/12 | HIGH | 2026-06-23 |
 | 5 | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md) | 📋 ToDo | 0/12 | MEDIUM | 2026-06-23 |
 | 6 | [Release v0.1.0](./tasks/phase-06-release.md) | 📋 ToDo | 0/10 | LOW | 2026-06-23 |
-| | **Total** | 🔄 **2 / 6 phases** | **28 / 73 tasks** | — | — |
+| | **Total** | 🔄 **2 / 6 phases** | **39 / 73 tasks** | — | — |
 
 > **No time estimate** — this plan is intended for execution by AI agents. Duration in human days does not apply. Relative complexity per phase is in the dashboard above and detailed per sub-step in the [Complexity Matrix in Appendix B](#appendix-b--complexity-matrix). Use those signals to prioritize more careful human review on HIGH complexity phases (Phase 3 and Phase 4).
 
