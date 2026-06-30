@@ -122,4 +122,31 @@ describe('validateOptions', () => {
     expect(warnSpy).not.toHaveBeenCalled()
     warnSpy.mockRestore()
   })
+
+  // cacheTtlMs barely over intervalSeconds*1000 must warn — distinguishes ×1000 from ×1001.
+  it('warns when cacheTtlMs is 1 ms over intervalSeconds*1000', () => {
+    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
+    validateOptions({
+      transport: 'sse',
+      authenticator,
+      reauthenticationPolicy: { intervalSeconds: 1, cacheTtlMs: 1001 },
+    })
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('cacheTtlMs'),
+      'BymaxRealtimeModule',
+    )
+    warnSpy.mockRestore()
+  })
+
+  // cacheTtlMs exactly at intervalSeconds*1000 → no warning (boundary check for ×1000).
+  it('does not warn when cacheTtlMs equals 1*1000 (interval 1 second)', () => {
+    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
+    validateOptions({
+      transport: 'sse',
+      authenticator,
+      reauthenticationPolicy: { intervalSeconds: 1, cacheTtlMs: 1000 },
+    })
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
 })

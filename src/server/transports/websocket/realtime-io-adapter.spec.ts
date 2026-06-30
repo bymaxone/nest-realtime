@@ -137,6 +137,19 @@ describe('RealtimeIoAdapter', () => {
     expect(server.adapter).toHaveBeenCalled()
   })
 
+  it('logs the Redis adapter registered message on successful install', () => {
+    const pubClient = { duplicate: jest.fn().mockReturnValue({}) }
+    const server = makeServer()
+    superSpy.mockReturnValue(server)
+
+    const adapter = new RealtimeIoAdapter(
+      makeApp({ websocket: { redisAdapter: { pubClient } } }) as never,
+    )
+    adapter.createIOServer(3000)
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Redis adapter registered'))
+  })
+
   it('tolerates a createAdapter failure — logs error, does NOT throw', () => {
     // Broken adapter install degrades to single-instance; no uncaught exception.
     const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as {

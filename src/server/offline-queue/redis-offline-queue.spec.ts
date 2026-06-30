@@ -173,6 +173,28 @@ describe('RedisOfflineQueue', () => {
     await expect(queue.append('u1', mkEvent('1-0'))).resolves.toBeUndefined()
   })
 
+  // retrieveSince with a sinceId at the max counter value includes the event at the wrap boundary.
+  it('includes the event exactly at the wrap-to-next-millisecond boundary', async () => {
+    const { queue } = build()
+    await queue.append('u1', mkEvent('1000-999999'))
+    await queue.append('u1', mkEvent('1001-000000'))
+    await queue.append('u1', mkEvent('1001-000001'))
+    const events = await queue.retrieveSince('u1', '1000-999999', 10)
+    expect(events.map((e) => e.id)).toEqual(['1001-000000', '1001-000001'])
+  })
+
+  // acknowledge removes exactly the events up to and including upToId but leaves
+  // the event at lexKeyNext(upToId) untouched (validates the exclusive upper bound).
+  it('does not acknowledge the event immediately after upToId', async () => {
+    const { queue } = build()
+    await queue.append('u1', mkEvent('100-0'))
+    await queue.append('u1', mkEvent('100-1'))
+    await queue.append('u1', mkEvent('100-2'))
+    await queue.acknowledge('u1', '100-0')
+    const remaining = await queue.retrieveSince('u1', '0-0', 10)
+    expect(remaining.map((e) => e.id)).toEqual(['100-1', '100-2'])
+  })
+
   // append throws when pipeline.exec() embeds a per-command error (covers if (error) throw).
   it('throws when pipeline.exec() returns a per-command error', async () => {
     // Covers: `if (error) throw error` when ioredis embeds an error in the results tuple.

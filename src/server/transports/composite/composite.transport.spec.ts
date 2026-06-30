@@ -133,4 +133,28 @@ describe('CompositeTransport', () => {
     await composite.emitToUser('u-1', 'evt', {})
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('partially failed'))
   })
+
+  it('fanOut warn includes the op name emitToTenant', async () => {
+    sseMock.emitToTenant.mockRejectedValue(new Error('sse-tenant-down'))
+    await composite.emitToTenant('t-1', 'evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToTenant'))
+  })
+
+  it('fanOut warn includes the op name emitToRoom', async () => {
+    sseMock.emitToRoom.mockRejectedValue(new Error('sse-room-down'))
+    await composite.emitToRoom('room:x', 'evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToRoom'))
+  })
+
+  it('fanOut warn includes the op name broadcast', async () => {
+    sseMock.broadcast.mockRejectedValue(new Error('sse-broadcast-down'))
+    await composite.broadcast('evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('broadcast'))
+  })
+
+  it('fanOut warn includes the op name emitToUser', async () => {
+    sseMock.emitToUser.mockRejectedValue(new Error('sse-user-down'))
+    await composite.emitToUser('u-1', 'evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToUser'))
+  })
 })

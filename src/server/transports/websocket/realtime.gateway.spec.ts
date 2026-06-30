@@ -3,6 +3,7 @@
  * @layer transport
  */
 import 'reflect-metadata'
+import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
 import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
@@ -81,6 +82,28 @@ describe('RealtimeGateway', () => {
     const fakeServer = {}
     gateway.afterInit(fakeServer as never)
     expect(transportMock.setServer).toHaveBeenCalledWith(fakeServer)
+  })
+
+  it('afterInit logs the initialized message', () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      gateway.afterInit({} as never)
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('initialized'))
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  it('handleConnection logs the error message when authenticate throws', async () => {
+    authenticator.authenticate.mockRejectedValue(new Error('token-verify-fail'))
+    const socket = makeSocket()
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      await gateway.handleConnection(socket as never)
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('token-verify-fail'))
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   it('handleConnection calls registerSocket on valid auth', async () => {

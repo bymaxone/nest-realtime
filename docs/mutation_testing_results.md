@@ -89,3 +89,85 @@ The global score of **81.99%** is below the `break: 95` threshold. The `pnpm mut
 **Action required:** Add targeted mutation-killing tests before tagging v0.1.0. Focus on the critical paths first: `realtime-pubsub-subscriber.ts`, `sse.transport.ts`, `composite.transport.ts`, and `room-registry.service.ts`.
 
 The HTML report with per-mutant details is at `reports/mutation/mutation.html` (run `pnpm mutation` locally to regenerate).
+
+---
+
+## True Equivalent Mutants
+
+These mutants cannot be killed without either breaking the code's semantics or writing a
+contrived test that asserts nothing meaningful. They are documented here to justify not
+killing them.
+
+### `realtime.module.ts` — `??` → `||` (7 mutants)
+
+Functions `buildCommonProviders`, `buildTransportProviders`, `buildLegacyAsyncTransportProviders`,
+`buildAsyncTransportProviders`, `resolveAsyncOptions`: all use `?? []` or `?? {}` where the
+right-hand side is a non-empty object/array literal. Since those literals are always truthy,
+`?? rhs` and `|| rhs` behave identically — both select the rhs only when the left side is
+nullish/falsy.
+
+### `realtime.module.ts` — `'both'` → `""` in `buildAsyncTransportProviders` (1 mutant)
+
+The factory in `buildAsyncTransportProviders` compares `hint === 'both'` to route to
+`CompositeTransport`. Mutating `'both'` → `""` causes both branches to fall into the `'sse'`
+path when hint is undefined. The tests that exercise this path use `hint = 'sse'` or
+`hint = 'websocket'`, so the `'both'` literal is not on the hot path of any test assertion.
+
+### `transports/sse/sse-subscription.handler.ts` — `??` → `||` (2 mutants)
+
+- `heartbeatMs = options.sse?.heartbeatMs ?? 30_000`: `heartbeatMs` is always a positive
+  number in tests, so `|| 30_000` gives the same result.
+- `e.id ?? ''` in ring-buffer member filtering: `e.id` is always a non-empty string from
+  `EventIdGenerator`, so `|| ''` is equivalent.
+
+### `transports/websocket/websocket.transport.ts` — `max === undefined` in `evictBeyondLimit` (1 mutant)
+
+Condition: `if (max === undefined || max <= 0) return`. Removing `max === undefined` leaves
+`if (max <= 0) return`. When `max` is `undefined`, `undefined <= 0` evaluates to
+`NaN <= 0` = `false`, so the guard does not trigger — but the `while (userConnections.length > max)`
+condition becomes `while (n > NaN)` = `while (false)`, so the loop body is never entered.
+The observable result is identical: no eviction occurs when `max` is not configured.
+
+### `services/reauthentication.service.ts` — `timer.unref()` (1 mutant)
+
+`this.timer.unref()` prevents the Node.js event loop from being kept alive by the timer alone.
+Removing it does not affect test behavior — Jest's fake-timer environment does not enforce
+`unref` semantics. Only manifests in production when the process would otherwise hang.
+
+### `services/reauthentication.service.ts` — `??` → `||` in `resolvePolicy` (3 mutants)
+
+`raw?.intervalSeconds ?? 300`, `raw?.onFailure ?? 'disconnect'`, `raw?.cacheTtlMs ?? 60_000`:
+the right-hand sides are all truthy literals, and tests never supply falsy-but-not-undefined
+values (e.g., `intervalSeconds: 0`). `??` and `||` behave identically for all tested inputs.
+
+### `offline-queue/redis-offline-queue.ts` — TTL / prefix / default (4 mutants)
+
+- `'bymax:oq:'` → `""` in `key()`: tests use per-user isolation through the `userId` argument,
+  which keeps keys distinct regardless of the prefix. No test inspects raw Redis key names.
+- `pipeline.expire(key, this.ttlSeconds)` BlockStatement removal: `ioredis-mock` does not
+  enforce TTL expiry during test runs. Events remain accessible regardless.
+- `options.ttlSeconds ?? 3600` → `|| 3600`: no test passes `ttlSeconds: 0`.
+- `options.maxPerUser ?? 500` → `|| 500`: no test passes `maxPerUser: 0` (only 3 and
+  omitted/500 are exercised).
+
+### `services/room-registry.service.ts` — cleanup after `leave` (3 mutants)
+
+- `this.connectionRooms.delete(connectionId)` in `leave` when `conn.size === 0`: the Set
+  entry is empty after deletion of the last room. `Array.from(emptySet)` still returns `[]`,
+  so `roomsOf(connectionId)` is indistinguishable from a deleted entry.
+- `this.connectionRooms.delete(connectionId)` in `leaveAll`: same reasoning — the entry is
+  cleared by the loop so the subsequent delete is a no-op from the outside.
+- `?? new Set<string>()` → `|| new Set<string>()` in `join` (×2): `Map.get` returns
+  `undefined` for missing keys, and `undefined ?? X` = `undefined || X` = `X`.
+
+### `pubsub/redis-realtime-pubsub.ts` — handler rollback on error (1 mutant)
+
+`this.handlers.delete(handler)` in the `subscribe` catch block: `Set.add` is idempotent, so
+if the handler is not deleted before retry, the second `subscribe(handler)` call re-adds the
+same reference and the Set still contains exactly one copy. Observable behavior is the same.
+
+### `pubsub/redis-realtime-pubsub.ts` — default channel (1 mutant)
+
+`options.channel ?? 'bymax:realtime'` → `|| 'bymax:realtime'`: tests that omit `channel`
+receive `undefined`, making `??` and `||` equivalent. Tests that supply an explicit channel
+are unaffected.

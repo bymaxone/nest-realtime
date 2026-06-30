@@ -32,4 +32,14 @@ describe('parseCookieHeader', () => {
   it('preserves "=" inside a value', () => {
     expect(parseCookieHeader('t=YQ==')).toEqual({ t: 'YQ==' })
   })
+
+  // Leading and trailing whitespace in a cookie value is trimmed.
+  it('trims whitespace from cookie values', () => {
+    expect(parseCookieHeader('key= trimmed ')).toEqual({ key: 'trimmed' })
+  })
+
+  // Whitespace-only value after trimming is stored as empty string.
+  it('stores an empty string when the value is only whitespace', () => {
+    expect(parseCookieHeader('key=   ')).toEqual({ key: '' })
+  })
 })

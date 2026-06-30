@@ -3,6 +3,7 @@
  * @layer transport
  */
 import 'reflect-metadata'
+import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
@@ -89,6 +90,17 @@ describe('WebSocketTransport', () => {
     expect(transport.kind).toBe('websocket')
   })
 
+  it('setServer logs the wiring message', () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      const server = makeServer()
+      transport.setServer(server as never)
+      expect(logSpy).toHaveBeenCalledWith('Socket.IO server wired to WebSocketTransport')
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
   it('authenticator() returns the injected IConnectionAuthenticator', () => {
     // The gateway uses authenticator() to get the auth instance without circular injection.
     const auth = transport.authenticator()
@@ -169,6 +181,19 @@ describe('WebSocketTransport', () => {
     )
   })
 
+  it('registerSocket passes ip, userAgent, tenantId, and connectedAt to onConnect', async () => {
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, auth)
+    expect(hooks.onConnect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ip: '127.0.0.1',
+        userAgent: 'test',
+        tenantId: 'tenant-1',
+        connectedAt: expect.any(Date),
+      }),
+    )
+  })
+
   it('registerSocket skips tenant room when tenantId is absent', async () => {
     // No tenant room is joined when auth.tenantId is undefined.
     const socket = makeSocket()
@@ -191,6 +216,15 @@ describe('WebSocketTransport', () => {
         reason: 'test-reason',
         durationMs: expect.any(Number),
       }),
+    )
+  })
+
+  it('unregisterSocket passes transport websocket to onDisconnect', async () => {
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, auth)
+    await transport.unregisterSocket('sock-1', 'test-reason')
+    expect(hooks.onDisconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ transport: 'websocket' }),
     )
   })
 

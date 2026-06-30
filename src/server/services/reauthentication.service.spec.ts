@@ -2,6 +2,7 @@
  * @fileoverview Unit tests for the periodic re-authentication service.
  * @layer application
  */
+import { Logger } from '@nestjs/common'
 import { RESERVED_EVENT_NAMES } from '../../shared/constants/reserved-events.constants'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { ReauthenticationService } from './reauthentication.service'
@@ -82,6 +83,39 @@ describe('ReauthenticationService', () => {
     jest.advanceTimersByTime(600_000) // advance 10 minutes — no timer should fire
     await flush()
     expect(connections.allByTransport).not.toHaveBeenCalled()
+  })
+
+  // The 'no revalidate' log message includes the key phrase so operators know it is disabled.
+  it('logs the disabled message when revalidate is absent', () => {
+    const connections = mkConnections([])
+    const realtime = mkRealtime()
+    const auth = mkAuth()
+    const svc = build(connections, realtime, auth, mkOptions())
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      svc.onModuleInit()
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('reauthentication disabled'),
+      )
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  // The scheduled log includes the interval so operators can verify the configured cadence.
+  it('logs the interval when revalidate is present and the timer is scheduled', () => {
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const connections = mkConnections([])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 42 }))
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      svc.onModuleInit()
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('42'))
+    } finally {
+      logSpy.mockRestore()
+    }
   })
 
   // When revalidate is present, the timer fires on the configured interval.
@@ -343,6 +377,26 @@ describe('ReauthenticationService', () => {
     // undefined ?? true === true → treated as success (absent revalidate is not a failure).
     expect(realtime.disconnect).not.toHaveBeenCalled()
     expect(realtime.emitToUser).not.toHaveBeenCalled()
+  })
+
+  // The onReauthenticationFailed hook failure warn includes the error message.
+  it('logs the warn when the onReauthenticationFailed hook throws', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const connections = mkConnections([mkRecord()])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const hooks = {
+      onReauthenticationFailed: jest.fn().mockRejectedValue(new Error('hook-crash')),
+    }
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }), hooks)
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await svc.runCycle()
+      await flush()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hook-crash'))
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   // A truthy non-boolean return from revalidate must not pass (strict === true required).
