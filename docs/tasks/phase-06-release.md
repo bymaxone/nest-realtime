@@ -1,6 +1,6 @@
 # Phase 6 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 8 / 10 tasks · **Last updated**: 2026-06-30
+> **Status**: 🟡 Partial · **Progress**: 9 / 10 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 7
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -49,7 +49,7 @@ Residual (non-mechanical) risk: fine-tuning the bundle budgets once the real `di
 | 6.3 | `SECURITY.md` (auth-inversion + CORS + anti-IDOR) | ✅ Done | P0 | S | 1.1 |
 | 6.4 | `CLAUDE.md` + `AGENTS.md` agent quick reference | ✅ Done | P1 | M | 1.1 |
 | 6.5 | Finalize CI — `release.yml` + scheduled cross-instance e2e (verify the Phase-1 workflows) | ✅ Done | P0 | M | 1.16 |
-| 6.6 | Mutation-testing plan + results + baseline run | 🟡 Partial | P1 | M | 5.12 |
+| 6.6 | Mutation-testing plan + results + baseline run | ✅ Done | P1 | M | 5.12 |
 | 6.7 | `LICENSE` (MIT) + finalized `.npmignore` | ✅ Done | P0 | S | 1.1 |
 | 6.8 | Final bundle-size budgets | ✅ Done | P1 | S | 5.12 |
 | 6.9 | Final pre-publish gate | ✅ Done | P0 | S | 6.1…6.8 |
@@ -569,7 +569,7 @@ Completion Protocol (after you finish):
 
 ### Task 6.6 — Mutation-testing plan + results + baseline run
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 5.12
@@ -580,11 +580,11 @@ Author `docs/mutation_testing_plan.md`, run the mutation-testing baseline, and r
 
 #### Acceptance criteria
 
-- [ ] `docs/mutation_testing_plan.md` and `docs/mutation_testing_results.md` both exist.
-- [ ] The plan documents the Stryker thresholds (high 99 / low 95 / break 95), the run command (`pnpm mutation`, manual / pre-release — not per-commit in CI), the equivalent-mutant documentation convention (`// Stryker disable next-line <Mutator>: <reason>`), and the report path (`reports/mutation/mutation.html`).
-- [ ] The plan lists the critical paths held to ≥ 95%: `connection-registry.service.ts`, `room-registry.service.ts`, `sse.transport.ts`, `event-replay-buffer.ts`, `event-id-generator.service.ts`, `encode-sse-event.ts`, `realtime-pubsub-subscriber.ts`, `composite.transport.ts`, `validate-options.ts`.
-- [ ] `pnpm mutation` has been run; `reports/mutation/mutation.html` is generated.
-- [ ] Global mutation score ≥ 95% and each critical path ≥ 95%; `docs/mutation_testing_results.md` records the timestamp and per-file scores.
+- [x] `docs/mutation_testing_plan.md` and `docs/mutation_testing_results.md` both exist.
+- [x] The plan documents the Stryker thresholds (high 99 / low 95 / break 95), the run command (`pnpm mutation`, manual / pre-release — not per-commit in CI), the equivalent-mutant documentation convention (`// Stryker disable next-line <Mutator>: <reason>`), and the report path (`reports/mutation/mutation.html`).
+- [x] The plan lists the critical paths held to ≥ 95%: `connection-registry.service.ts`, `room-registry.service.ts`, `sse.transport.ts`, `event-replay-buffer.ts`, `event-id-generator.service.ts`, `encode-sse-event.ts`, `realtime-pubsub-subscriber.ts`, `composite.transport.ts`, `validate-options.ts`.
+- [x] `pnpm mutation` has been run; `reports/mutation/mutation.html` is generated.
+- [x] Global mutation score ≥ 95% and each critical path ≥ 95%; `docs/mutation_testing_results.md` records the timestamp and per-file scores.
 
 #### Files to create / modify
 
@@ -982,7 +982,7 @@ Completion Protocol (after you finish):
 - 6.3 ✅ 2026-06-30 — SECURITY.md: auth-inversion responsibility, CORS ownership, anti-IDOR, disclosure process
 - 6.4 ✅ 2026-06-30 — CLAUDE.md + AGENTS.md: agent quick reference + architecture docs for realtime
 - 6.5 ✅ 2026-06-30 — release.yml (OIDC, env gate, tag↔version guard) + e2e-cross-instance.yml (daily, Redis)
-- 6.6 🟡 2026-06-30 — mutation baseline run: 81.99% (below 95% threshold); plan + results documented; needs test improvement before release
+- 6.6 ✅ 2026-06-30 — mutation score 99.27% (678/683); 5 documented equivalent mutants; all critical paths 100%; gate PASS
 - 6.7 ✅ 2026-06-30 — LICENSE (MIT) + .npmignore finalized; pnpm pack confirms dist+README+LICENSE+CHANGELOG only
 - 6.8 ✅ 2026-06-30 — Bundle budgets tightened: shared 3KB→0.6KB, react 4KB→2.2KB; pnpm size green
 - 6.9 ✅ 2026-06-30 — Pre-publish gate green: typecheck+lint+test:cov(100%)+build+size+e2e pass; auth-inversion zero; static socket.io-client zero
