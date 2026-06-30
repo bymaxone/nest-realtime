@@ -17,6 +17,8 @@ export class EventSourceMock {
   onopen: ((ev: Event) => void) | null = null
   onmessage: ((ev: MessageEvent) => void) | null = null
   onerror: ((ev: Event) => void) | null = null
+  /** Named-event listeners registered via addEventListener, keyed by event name. */
+  readonly listeners = new Map<string, Set<(ev: MessageEvent) => void>>()
 
   constructor(url: string, opts?: EventSourceInit) {
     this.url = url
@@ -32,12 +34,14 @@ export class EventSourceMock {
     this.readyState = 2
   }
 
-  addEventListener(): void {
-    // Stub — named-event subscriptions are out of scope for these unit tests.
+  addEventListener(type: string, handler: (ev: MessageEvent) => void): void {
+    const set = this.listeners.get(type) ?? new Set()
+    set.add(handler)
+    this.listeners.set(type, set)
   }
 
-  removeEventListener(): void {
-    // Stub.
+  removeEventListener(type: string, handler: (ev: MessageEvent) => void): void {
+    this.listeners.get(type)?.delete(handler)
   }
 
   dispatchEvent(): boolean {
@@ -58,6 +62,27 @@ export class EventSourceMock {
 export function emitMessage(source: EventSourceMock, data: unknown, lastEventId = ''): void {
   const ev = new MessageEvent('message', { data: JSON.stringify(data), lastEventId })
   source.onmessage?.(ev)
+}
+
+/**
+ * Simulate a named SSE event (e.g. `presence:online`) on a mock `EventSource`.
+ *
+ * Dispatches to listeners registered via `addEventListener(type, …)`, mirroring
+ * how browsers route named events away from `onmessage`.
+ *
+ * @param source      - The `EventSourceMock` instance to fire the event on.
+ * @param type        - The named event type (the SSE `event:` field value).
+ * @param data        - Payload — will be JSON-serialized to mimic the wire format.
+ * @param lastEventId - Optional Last-Event-ID string.
+ */
+export function emitNamedEvent(
+  source: EventSourceMock,
+  type: string,
+  data: unknown,
+  lastEventId = '',
+): void {
+  const ev = new MessageEvent(type, { data: JSON.stringify(data), lastEventId })
+  source.listeners.get(type)?.forEach((handler) => handler(ev))
 }
 
 /**

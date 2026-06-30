@@ -6,7 +6,12 @@
  * cleanup on unmount, and `withCredentials` forwarding.
  */
 import { act, renderHook } from '@testing-library/react'
-import { emitError, emitMessage, EventSourceMock } from '../../../test/setup/react-setup'
+import {
+  emitError,
+  emitMessage,
+  emitNamedEvent,
+  EventSourceMock,
+} from '../../../test/setup/react-setup'
 import { useRealtimeSse } from './use-realtime-sse'
 
 describe('useRealtimeSse', () => {
@@ -70,6 +75,47 @@ describe('useRealtimeSse', () => {
     expect(result.current.events).toHaveLength(1)
     expect(result.current.events[0]?.id).toBe('ev-1')
     expect(result.current.events[0]?.data).toEqual({ foo: 42 })
+  })
+
+  it('records a default onmessage event with type "message"', async () => {
+    // The default (unnamed) SSE event must keep the W3C default type of "message".
+    const { result } = renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10))
+    })
+    act(() => {
+      emitMessage(lastInstance(), { foo: 1 }, 'ev-1')
+    })
+    expect(result.current.events[0]?.type).toBe('message')
+  })
+
+  it('delivers named SSE events with their type preserved (presence over SSE)', async () => {
+    // Named events (e.g. presence:online) arrive via addEventListener, NOT onmessage —
+    // their `type` must survive so usePresence works over the SSE transport.
+    const { result } = renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10))
+    })
+    const source = lastInstance()
+    act(() => {
+      emitNamedEvent(source, 'presence:online', { userId: 'u1' }, 'ev-2')
+    })
+    expect(result.current.events).toHaveLength(1)
+    expect(result.current.lastEvent?.type).toBe('presence:online')
+    expect(result.current.lastEvent?.data).toEqual({ userId: 'u1' })
+    expect(result.current.lastEvent?.id).toBe('ev-2')
+  })
+
+  it('subscribes to reserved named events such as connection:established', async () => {
+    // Reserved catalog events are also named events and must flow through with type.
+    const { result } = renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10))
+    })
+    act(() => {
+      emitNamedEvent(lastInstance(), 'connection:established', { connectionId: 'c1' })
+    })
+    expect(result.current.lastEvent?.type).toBe('connection:established')
   })
 
   it('updates lastEvent to reflect the most recently received message', async () => {

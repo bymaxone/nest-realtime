@@ -1,9 +1,15 @@
 /**
- * @fileoverview Lightweight connection-state hook — no event accumulation.
+ * @fileoverview Connection-state-only view over the universal realtime hook.
  * @layer react/hooks
  *
- * Use when you only need to know whether the connection is live and want to
+ * Use when a component only needs to know whether the connection is live and to
  * trigger a manual reconnect. For full event streaming use `useRealtime`.
+ *
+ * This is a thin projection over `useRealtime`: it opens the same underlying
+ * connection and that connection still receives and accumulates events
+ * internally. The hook simply does not expose the `events` array (or `lastEvent`
+ * / `emit`) in its return value — so consumers get a narrow, stable surface, not
+ * a separate lighter-weight subscription.
  *
  * Note: `'use client'` is required for React Server Components compatibility.
  */
@@ -11,10 +17,12 @@
 import { useRealtime, type UseRealtimeOptions } from './use-realtime'
 
 /**
- * Lite realtime hook — exposes only `connected`, `error`, and `reconnect`.
+ * Connection-state view — returns only `connected`, `error`, and `reconnect`.
  *
- * Useful for status indicators, connection guards, or simple error-handling UI
- * where the events array is unnecessary overhead.
+ * Useful for status indicators, connection guards, or simple error-handling UI.
+ * The shared underlying `useRealtime` connection still processes events; this
+ * hook intentionally omits the `events` array from what it returns to keep the
+ * surface small and focused on connection status.
  *
  * @example
  * function ConnectionStatus() {

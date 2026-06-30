@@ -79,6 +79,7 @@ type SocketLike = {
   on: (event: string, handler: (...args: unknown[]) => void) => void
   onAny: (handler: (eventName: string, payload: unknown) => void) => void
   emit: (event: string, data: unknown) => void
+  removeAllListeners: () => void
   disconnect: () => void
 }
 
@@ -107,8 +108,24 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
   // Typed as `unknown` and narrowed via inline casts — avoids a static type import.
   const socketRef = useRef<unknown>(null)
 
+  // Tear down the current socket (remove listeners + disconnect) and clear the ref.
+  // Removing listeners first prevents the abandoned socket's `disconnect` handler from
+  // mutating state after a new socket has taken its place.
+  const disposeSocket = useCallback(() => {
+    const sock = socketRef.current as SocketLike | null
+    if (sock) {
+      sock.removeAllListeners()
+      sock.disconnect()
+    }
+    socketRef.current = null
+  }, [])
+
   const connect = useCallback(async () => {
     if (opts.enabled === false) return
+    // Dispose any existing socket BEFORE opening a new one so reconnect() never leaks
+    // the previous connection or leaves stale listeners mutating state.
+    disposeSocket()
+    setConnected(false)
     try {
       // DYNAMIC IMPORT — the bundler keeps socket.io-client out of the static graph.
       const { io } = await import('socket.io-client')
@@ -136,17 +153,15 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)))
     }
-  }, [opts.enabled, opts.url, opts.auth, opts.path])
+  }, [opts.enabled, opts.url, opts.auth, opts.path, disposeSocket])
 
   useEffect(() => {
     if (opts.enabled === false) return
     void connect()
-    return () => {
-      const sock = socketRef.current as SocketLike | null
-      sock?.disconnect()
-      socketRef.current = null
-    }
-  }, [connect, opts.enabled])
+    // Unmount cleanup disconnects exactly once — `disposeSocket` is idempotent and
+    // clears the ref, so a later cleanup never double-disconnects a live socket.
+    return () => disposeSocket()
+  }, [connect, opts.enabled, disposeSocket])
 
   const emit = useCallback((event: string, data: unknown): void => {
     const sock = socketRef.current as SocketLike | null

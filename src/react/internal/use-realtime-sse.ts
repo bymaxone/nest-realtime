@@ -7,11 +7,17 @@
  * reconnect storms. The native EventSource auto-sends `Last-Event-ID` from its
  * internal state — this hook does not duplicate that logic.
  *
+ * Named server events (the reserved catalog plus presence) are delivered by the
+ * browser ONLY to listeners registered with `addEventListener(name, …)`, never to
+ * `onmessage`. This hook subscribes to those names so each event's `type` is
+ * preserved end-to-end (e.g. `presence:online`), matching the WebSocket branch.
+ *
  * Note: `'use client'` at the top is required for React Server Components
  * compatibility — this module accesses `EventSource` and React state.
  */
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { PRESENCE_EVENT_NAMES, RESERVED_EVENT_NAMES } from '../../shared'
 /** Options for the SSE internal hook. */
 export interface UseRealtimeSseOptions {
   /** SSE endpoint URL, e.g. `'/realtime/sse'`. */
@@ -31,6 +37,23 @@ export interface UseRealtimeSseOptions {
 
 /** Maximum number of events kept in memory per hook instance. */
 const MAX_EVENTS = 100
+
+/**
+ * Named SSE events this hook subscribes to so their `type` survives transport.
+ *
+ * `RESERVED_EVENT_NAMES.ERROR` is intentionally excluded: the browser dispatches
+ * the EventSource connection-failure signal under the same `'error'` name, so a
+ * data listener there would collide with `onerror` and parse an empty payload.
+ */
+const NAMED_SSE_EVENTS: readonly string[] = [
+  RESERVED_EVENT_NAMES.CONNECTION_ESTABLISHED,
+  RESERVED_EVENT_NAMES.CONNECTION_REAUTH_FAILED,
+  RESERVED_EVENT_NAMES.CONNECTION_CREDENTIAL_EXPIRING,
+  RESERVED_EVENT_NAMES.ROOM_JOINED,
+  RESERVED_EVENT_NAMES.ROOM_LEFT,
+  PRESENCE_EVENT_NAMES.ONLINE,
+  PRESENCE_EVENT_NAMES.OFFLINE,
+]
 
 /** Accumulated event shape returned by the hook. */
 export type SseEventEntry<TEvents extends Record<string, unknown>> = {
@@ -115,16 +138,24 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
       timerRef.current = setTimeout(connect, delay)
     }
 
-    // Default `message` event. The `: keepalive` SSE heartbeat is a raw comment and
-    // never surfaces to `onmessage` (per spec §6.1 and §13). No special-casing needed.
-    source.onmessage = (e: MessageEvent) => {
+    // Single handler for both the default `message` event and every named event.
+    // `e.type` is `'message'` for the default stream and the event name for named
+    // listeners, so the original event `type` is preserved either way. The
+    // `: keepalive` heartbeat is a raw comment and never surfaces here (spec §6.1, §13).
+    const handleEvent = (e: MessageEvent): void => {
       const entry: SseEventEntry<TEvents> = {
-        type: 'message' as keyof TEvents,
+        type: e.type as keyof TEvents,
         data: JSON.parse(e.data as string) as TEvents[keyof TEvents],
         id: e.lastEventId,
       }
       setEvents((prev) => [...prev, entry].slice(-MAX_EVENTS))
       setLastEvent(entry)
+    }
+    source.onmessage = handleEvent
+    // Browsers route named events only to per-name listeners — subscribe so events
+    // like `presence:online` keep their `type` instead of being dropped.
+    for (const name of NAMED_SSE_EVENTS) {
+      source.addEventListener(name, handleEvent as EventListener)
     }
   }, [opts.enabled, opts.url, opts.withCredentials, opts.reconnectInitialMs, opts.reconnectMaxMs])
 

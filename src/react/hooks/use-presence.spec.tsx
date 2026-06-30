@@ -11,7 +11,7 @@
  */
 import React from 'react'
 import { act, renderHook } from '@testing-library/react'
-import { EventSourceMock } from '../../../test/setup/react-setup'
+import { emitNamedEvent, EventSourceMock } from '../../../test/setup/react-setup'
 import { RealtimeProvider, useRealtimeContext } from '../providers/realtime-provider'
 import { usePresence } from './use-presence'
 
@@ -139,6 +139,24 @@ describe('usePresence', () => {
     expect(result.current.onlineUserIds).toHaveLength(0)
   })
 
+  it('returns onlineUserIds sorted regardless of arrival order', () => {
+    // The documented contract is a sorted array — insertion order (u3, u1, u2) must
+    // not leak through; the output must be ['u1', 'u2', 'u3'].
+    const { rerender, result } = renderHook(
+      ({ events }: { events: Array<{ type: string; data: unknown }> }) => {
+        mockUseContext.mockReturnValue(makeContextStub(events))
+        return usePresence()
+      },
+      { initialProps: { events: [{ type: 'presence:online', data: { userId: 'u3' } }] } },
+    )
+    act(() => {})
+    rerender({ events: [{ type: 'presence:online', data: { userId: 'u1' } }] })
+    act(() => {})
+    rerender({ events: [{ type: 'presence:online', data: { userId: 'u2' } }] })
+    act(() => {})
+    expect(result.current.onlineUserIds).toEqual(['u1', 'u2', 'u3'])
+  })
+
   it('does not crash when the events array is empty (no lastEv)', () => {
     // The early return when events is empty must not cause any error.
     mockUseContext.mockReturnValue(makeContextStub([]))
@@ -182,5 +200,39 @@ describe('usePresence — real provider guard (unmocked)', () => {
     expect(() => renderHook(() => usePresence(), { wrapper })).not.toThrow()
     ;(global as unknown as { EventSource: unknown }).EventSource = OriginalEventSource
     instances = []
+  })
+
+  it('marks a user online from a named presence:online SSE event end-to-end', async () => {
+    // Full SSE path: the provider opens an EventSource, the SSE hook subscribes to the
+    // named presence event, and usePresence reflects it — proving presence works over SSE.
+    const instances: EventSourceMock[] = []
+    const OriginalEventSource = global.EventSource
+
+    const TrackedMock = class extends EventSourceMock {
+      constructor(url: string, opts?: EventSourceInit) {
+        super(url, opts)
+        instances.push(this)
+      }
+    }
+    ;(global as unknown as { EventSource: unknown }).EventSource = TrackedMock
+
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <RealtimeProvider options={{ url: '/realtime/sse' }}>{children}</RealtimeProvider>
+    )
+
+    const { result } = renderHook(() => usePresence(), { wrapper })
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10))
+    })
+
+    const source = instances[instances.length - 1]!
+    act(() => {
+      emitNamedEvent(source, 'presence:online', { userId: 'u1' }, 'ev-1')
+    })
+    act(() => {})
+
+    expect(result.current.isOnline('u1')).toBe(true)
+    expect(result.current.onlineUserIds).toEqual(['u1'])
+    ;(global as unknown as { EventSource: unknown }).EventSource = OriginalEventSource
   })
 })

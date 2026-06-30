@@ -27,12 +27,24 @@ const mockSocket = {
     anyHandler = h
   },
   emit: jest.fn<void, [string, unknown]>(),
+  removeAllListeners: jest.fn<void, []>(),
   disconnect: jest.fn<void, []>(),
 }
 
 const mockIo = jest.fn(() => mockSocket)
 
 jest.mock('socket.io-client', () => ({ io: mockIo }))
+
+/** A self-contained fake socket — used to distinguish individual connections. */
+function makeFreshSocket() {
+  return {
+    on: jest.fn<void, [string, (...args: unknown[]) => void]>(),
+    onAny: jest.fn<void, [(event: string, payload: unknown) => void]>(),
+    emit: jest.fn<void, [string, unknown]>(),
+    removeAllListeners: jest.fn<void, []>(),
+    disconnect: jest.fn<void, []>(),
+  }
+}
 
 // Helpers to trigger events on the fake socket.
 function trigger(event: string, ...args: unknown[]): void {
@@ -48,8 +60,10 @@ beforeEach(() => {
   socketHandlers.clear()
   anyHandler = undefined
   mockSocket.emit.mockReset()
+  mockSocket.removeAllListeners.mockReset()
   mockSocket.disconnect.mockReset()
-  mockIo.mockClear()
+  mockIo.mockReset()
+  mockIo.mockReturnValue(mockSocket)
 })
 
 describe('useRealtimeWs', () => {
@@ -194,6 +208,38 @@ describe('useRealtimeWs', () => {
       result.current.reconnect()
     })
     await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(2))
+  })
+
+  it('disconnects and unlistens the previous socket before reconnect (no leak)', async () => {
+    // reconnect() must tear down the old socket (removeAllListeners + disconnect) before
+    // creating a new one, so exactly one live socket remains and the old one cannot
+    // keep mutating state via stale listeners.
+    const socketA = makeFreshSocket()
+    const socketB = makeFreshSocket()
+    mockIo.mockReturnValueOnce(socketA).mockReturnValueOnce(socketB)
+
+    const { result } = renderHook(() => useRealtimeWs({ url: 'ws://localhost' }))
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      result.current.reconnect()
+    })
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(2))
+
+    // Old socket torn down exactly once; the new socket stays live.
+    expect(socketA.removeAllListeners).toHaveBeenCalledTimes(1)
+    expect(socketA.disconnect).toHaveBeenCalledTimes(1)
+    expect(socketB.disconnect).not.toHaveBeenCalled()
+  })
+
+  it('does not disconnect anything on the very first connect (no prior socket)', async () => {
+    // The dispose-before-connect guard must skip teardown when no socket exists yet.
+    const socketA = makeFreshSocket()
+    mockIo.mockReturnValueOnce(socketA)
+    renderHook(() => useRealtimeWs({ url: 'ws://localhost' }))
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    expect(socketA.disconnect).not.toHaveBeenCalled()
+    expect(socketA.removeAllListeners).not.toHaveBeenCalled()
   })
 
   it('does not call io() when reconnect() is invoked while disabled', async () => {
