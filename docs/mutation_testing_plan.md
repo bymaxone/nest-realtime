@@ -57,14 +57,14 @@ pnpm mutation:incremental
 
 ### Equivalent mutant documentation
 
-When a mutant genuinely cannot be killed (true equivalent), suppress it with an inline annotation rather than lowering the threshold:
+When a mutant genuinely cannot be killed (true equivalent), document it — with a file:line reference, the mutator, and a justification proving equivalence — in the "Documented equivalent mutants" section of [`mutation_testing_results.md`](./mutation_testing_results.md). This is the convention used in this project (no inline suppressions were added). An inline `// Stryker disable next-line <Mutator>: <reason>` annotation is an acceptable alternative where it reads more clearly at the call site:
 
 ```typescript
 // Stryker disable next-line ArithmeticOperator: <reason why the mutant is equivalent>
 const offset = base + delta
 ```
 
-Never suppress by lowering `thresholds.break`. Every suppression requires a clear reason.
+Never suppress by lowering `thresholds.break`. Every documented equivalent (or suppression) requires a clear, provable reason.
 
 ---
 

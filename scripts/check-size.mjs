@@ -20,7 +20,7 @@ import { dirname, join } from 'node:path'
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// Budgets calibrated against measured v0.1.0 brotli sizes with ~15% headroom:
+// Budgets calibrated against measured v0.1.0 brotli sizes, with per-bundle headroom:
 //   server 17.13 KB → 18 KB  (5% headroom — already tight)
 //   shared  0.44 KB →  0.6 KB (37% headroom, kept slightly generous for future constants)
 //   react   1.90 KB →  2.2 KB (16% headroom)

@@ -44,7 +44,7 @@ Stryker runs were orchestrator-owned and authoritative. Kill tests were written 
 
 ### Per-file results
 
-All files reached 100% effective mutation score in the final run. The only file with surviving mutants is `sse-subscription.handler.ts`; all 5 survivors are genuine equivalent mutants, documented in the next section.
+Every file except `sse-subscription.handler.ts` reached a 100% effective mutation score in the final run. That file's 5 surviving mutants are all genuine equivalent mutants (documented in the next section), so 100% of *killable* mutants are covered.
 
 | File | Survived | Status |
 |---|---|---|
