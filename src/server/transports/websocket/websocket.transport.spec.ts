@@ -34,11 +34,14 @@ function makeSocket(id = 'sock-1') {
 /** Minimal mocked socket.io Server. */
 function makeServer(sockets: Map<string, ReturnType<typeof makeSocket>> = new Map()) {
   const toChain = { emit: jest.fn() }
+  const inChain = { disconnectSockets: jest.fn() }
   return {
     to: jest.fn().mockReturnValue(toChain),
+    in: jest.fn().mockReturnValue(inChain),
     emit: jest.fn(),
     sockets: { sockets },
     _toChain: toChain,
+    _inChain: inChain,
   }
 }
 
@@ -149,6 +152,13 @@ describe('WebSocketTransport', () => {
     expect(socket.join).toHaveBeenCalledWith('tenant:tenant-1')
   })
 
+  it('registerSocket joins the per-connection room for cross-node revocation', async () => {
+    // Each socket joins connection:{id} so disconnect() can target it via the adapter.
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, auth)
+    expect(socket.join).toHaveBeenCalledWith('connection:sock-1')
+  })
+
   it('registerSocket fires hooks.onConnect', async () => {
     // The onConnect lifecycle hook must be called after registration.
     const socket = makeSocket()
@@ -234,21 +244,32 @@ describe('WebSocketTransport', () => {
     expect(roomRegistry.roomsOf('sock-1')).not.toContain('room:y')
   })
 
-  it('disconnect calls socket.disconnect(true)', async () => {
-    // disconnect force-closes the socket.
+  it('disconnect closes the local socket and broadcasts adapter-aware revocation', async () => {
+    // A socket on this node is closed directly (fast path) AND disconnectSockets
+    // is broadcast to connection:{id} so remote nodes revoke it too.
     const socket = makeSocket()
     const server = makeServer(new Map([['sock-1', socket]]))
     transport.setServer(server as never)
 
     await transport.disconnect('sock-1')
     expect(socket.disconnect).toHaveBeenCalledWith(true)
+    expect(server.in).toHaveBeenCalledWith('connection:sock-1')
+    expect(server._inChain.disconnectSockets).toHaveBeenCalledWith(true)
   })
 
-  it('disconnect is a no-op for unknown connectionId', async () => {
-    // Disconnecting an unknown socket must not throw.
+  it('disconnect revokes cross-node even when the socket is not local', async () => {
+    // No local socket → the adapter-aware disconnectSockets still fans out to the
+    // node that holds the connection. The test fails if cross-node revocation is dropped.
     const server = makeServer()
     transport.setServer(server as never)
-    await expect(transport.disconnect('missing')).resolves.toBeUndefined()
+    await expect(transport.disconnect('remote-id')).resolves.toBeUndefined()
+    expect(server.in).toHaveBeenCalledWith('connection:remote-id')
+    expect(server._inChain.disconnectSockets).toHaveBeenCalledWith(true)
+  })
+
+  it('disconnect is a safe no-op when the server is unset', async () => {
+    // Without a wired server there is nothing to revoke; it must not throw.
+    await expect(transport.disconnect('sock-1')).resolves.toBeUndefined()
   })
 
   describe('evictBeyondLimit (maxConnectionsPerUser)', () => {

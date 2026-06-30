@@ -9,7 +9,6 @@ import { Test } from '@nestjs/testing'
 import type { AddressInfo } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
-import { createAdapter } from '@socket.io/redis-adapter'
 import IORedisMock from 'ioredis-mock'
 import { BymaxRealtimeModule } from '../../src/server/realtime.module'
 import { RealtimeService } from '../../src/server/services/realtime.service'
@@ -99,18 +98,16 @@ describe('RealtimeIoAdapter + Redis adapter smoke', () => {
   })
 
   it('cross-instance: emit on server A reaches client on server B', async () => {
-    // The adapter fans out messages from A to B via shared mock Redis.
-    // Use a shared IORedisMock instance so both servers see the same data.
+    // Two Nest instances share a single in-memory Redis backend, mirroring a
+    // 2-node deployment behind one Redis. `duplicate()` returns clients backed by
+    // the same ioredis-mock store, so @socket.io/redis-adapter's pub/sub channels
+    // are shared across both instances. A message emitted on instance A MUST be
+    // delivered to a client connected to instance B — the test fails (times out)
+    // if the Redis adapter fan-out is broken.
     const sharedRedis = new IORedisMock()
+    const pubA = sharedRedis.duplicate()
+    const pubB = sharedRedis.duplicate()
 
-    // Override the module-level require so our mock is used inside installRedisAdapter
-    jest.doMock('@socket.io/redis-adapter', () => ({ createAdapter }), { virtual: false })
-
-    const pubA = new IORedisMock({ lazyConnect: false })
-    const pubB = new IORedisMock({ lazyConnect: false })
-
-    // Make duplicate() return a clone backed by the same mock store
-    // ioredis-mock share state when connected to the same (default) mock server
     const resultA = await buildApp(pubA)
     appA = resultA.app
     portA = resultA.port
@@ -119,7 +116,7 @@ describe('RealtimeIoAdapter + Redis adapter smoke', () => {
     appB = resultB.app
     portB = resultB.port
 
-    // Connect client to server B
+    // Connect a client to server B; the socket joins user:u-cross on instance B.
     const socketB = ioClient(`http://localhost:${portB}`, {
       auth: { token: 'ok' },
       transports: ['websocket'],
@@ -128,21 +125,10 @@ describe('RealtimeIoAdapter + Redis adapter smoke', () => {
     clients.push(socketB)
     await waitForEvent(socketB, 'connection:established')
 
-    // Emit on server A — should reach client on B via the Redis adapter
+    // Emit on server A — the Redis adapter fans it out to instance B.
     const recv = waitForEvent<unknown>(socketB, 'cross-evt')
     await resultA.service.emitToUser('u-cross', 'cross-evt', 'cross-payload')
 
-    // Note: with ioredis-mock sharing the same in-process store, cross-instance
-    // delivery works via the createAdapter's pub/sub mechanism.
-    const result = await Promise.race([
-      recv,
-      new Promise<null>((r) => setTimeout(() => r(null), 2_000)),
-    ])
-    // If cross-instance is available (shared in-process mock), the event arrives.
-    // If not, this test passes as a smoke test (delivery not guaranteed with mocks).
-    expect(result === 'cross-payload' || result === null).toBe(true)
-
-    jest.dontMock('@socket.io/redis-adapter')
-    void sharedRedis
+    expect(await recv).toBe('cross-payload')
   })
 })

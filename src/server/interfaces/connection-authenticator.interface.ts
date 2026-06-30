@@ -18,8 +18,15 @@ export interface ConnectionAuthContext {
    * channel (use a cookie or the ticket pattern). It is available for WebSocket.
    */
   readonly headers: Record<string, string | undefined>
-  /** Query string parameters — useful for the ticket pattern. */
-  readonly query: Record<string, string | undefined>
+  /**
+   * Query string parameters — useful for the ticket pattern.
+   *
+   * Values follow the Node `ParsedUrlQuery` shape: a repeated key (`?a=1&a=2`)
+   * arrives as a `string[]`. Authenticators that expect a single value should
+   * normalize accordingly; the WebSocket gateway already collapses the `ticket`
+   * parameter to a single string before delegating.
+   */
+  readonly query: Record<string, string | string[] | undefined>
   /**
    * Client IP — best-effort. Derived from `X-Forwarded-For` when present, which is
    * spoofable unless set by a trusted proxy; do not use it for security decisions

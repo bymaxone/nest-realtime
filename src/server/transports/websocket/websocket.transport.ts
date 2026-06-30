@@ -22,6 +22,16 @@ import { ROOM_PREFIXES } from '../../constants/room-prefixes.constants'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 
 /**
+ * Prefix of the per-socket room each connection joins at registration. It makes
+ * a single connection addressable as `connection:{connectionId}` so revocation
+ * can target it via the adapter-aware `disconnectSockets`, reaching the socket on
+ * whatever node currently holds it (cross-node revocation under
+ * `@socket.io/redis-adapter`). This is an internal addressing room, not a
+ * consumer-facing application room.
+ */
+const CONNECTION_ROOM_PREFIX = 'connection'
+
+/**
  * WebSocket transport implementing `ITransport` over a Socket.IO `Server`.
  *
  * Emit methods call `server.to(room).emit(event, data)`. Cross-instance fan-out
@@ -103,6 +113,8 @@ export class WebSocketTransport implements ITransport {
 
     await socket.join(`${ROOM_PREFIXES.USER}:${auth.userId}`)
     if (auth.tenantId) await socket.join(`${ROOM_PREFIXES.TENANT}:${auth.tenantId}`)
+    // Per-connection room — enables adapter-aware cross-node revocation in disconnect().
+    await socket.join(`${CONNECTION_ROOM_PREFIX}:${socket.id}`)
 
     this.rooms.join(socket.id, `${ROOM_PREFIXES.USER}:${auth.userId}`)
     if (auth.tenantId) this.rooms.join(socket.id, `${ROOM_PREFIXES.TENANT}:${auth.tenantId}`)
@@ -220,14 +232,24 @@ export class WebSocketTransport implements ITransport {
   }
 
   /**
-   * Force-disconnect a specific connection via the Socket.IO API.
+   * Force-disconnect a specific connection — adapter-aware, so revocation works
+   * across nodes.
+   *
+   * A socket local to this node is closed directly as a fast path. Regardless,
+   * `disconnectSockets` is broadcast to the connection's `connection:{id}` room:
+   * under `@socket.io/redis-adapter` this fans out to remote nodes, so a
+   * connection pinned to another instance is still force-closed. The local socket
+   * has already left the room by then, so the broadcast does not double-close it.
    *
    * @param connectionId - The socket `id` of the connection to disconnect.
    * @param _reason - Optional reason string (unused at the Socket.IO level; passed to `unregisterSocket`).
    */
   async disconnect(connectionId: string, _reason?: string): Promise<void> {
-    const socket = this.server?.sockets.sockets.get(connectionId)
-    if (socket) socket.disconnect(true)
+    const server = this.server
+    if (!server) return
+    const local = server.sockets.sockets.get(connectionId)
+    if (local) local.disconnect(true)
+    server.in(`${CONNECTION_ROOM_PREFIX}:${connectionId}`).disconnectSockets(true)
   }
 
   /**

@@ -4,8 +4,9 @@
  */
 import { randomUUID } from 'node:crypto'
 import { Global, Logger, Module } from '@nestjs/common'
-import type { DynamicModule, Provider } from '@nestjs/common'
+import type { DynamicModule, Provider, Type } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../shared/constants/error-codes.constants'
+import type { TransportMode } from '../shared/types/transport-mode.type'
 import { applyDefaults } from './config/default-options'
 import type { ResolvedRealtimeOptions } from './config/default-options'
 import { validateOptions } from './config/validate-options'
@@ -124,6 +125,95 @@ function buildTransportProviders(resolved: ResolvedRealtimeOptions): {
 }
 
 /**
+ * Legacy async transport providers — registered when no synchronous `transport`
+ * hint is supplied. Every transport is wired and `REALTIME_TRANSPORT_TOKEN`
+ * resolves the active one at runtime from the resolved options. This path boots
+ * Socket.IO and requires the WS peer deps regardless of the configured mode.
+ */
+function buildLegacyAsyncTransportProviders(): Provider[] {
+  return [
+    SseTransport,
+    SseSubscriptionHandler,
+    WebSocketTransport,
+    CompositeTransport,
+    RealtimeGateway,
+    RealtimePubSubSubscriber,
+    {
+      provide: REALTIME_TRANSPORT_TOKEN,
+      useFactory: (
+        opts: BymaxRealtimeModuleOptions,
+        sse: SseTransport,
+        ws: WebSocketTransport,
+        composite: CompositeTransport,
+      ) => {
+        if (opts.transport === 'sse') return sse
+        if (opts.transport === 'websocket') return ws
+        return composite
+      },
+      inject: [REALTIME_OPTIONS_TOKEN, SseTransport, WebSocketTransport, CompositeTransport],
+    },
+  ]
+}
+
+/**
+ * Build the async-mode transport providers and SSE controllers, mirroring
+ * `forRoot`'s conditional registration.
+ *
+ * When a synchronous `transport` hint is supplied, WebSocket providers (and the
+ * gateway) are registered only for `'websocket'`/`'both'`, the SSE controller
+ * only for `'sse'`/`'both'`, and the WS peer dependencies are asserted up front —
+ * so an SSE-only setup never registers the gateway, never boots Socket.IO, and
+ * never requires the optional WS peer deps. Without the hint, the legacy path
+ * registers every transport and resolves the active one at runtime.
+ */
+function buildAsyncTransportProviders(mode: TransportMode | undefined): {
+  providers: Provider[]
+  controllers: Type<unknown>[]
+} {
+  if (mode === 'sse') {
+    return {
+      providers: [
+        SseTransport,
+        SseSubscriptionHandler,
+        RealtimePubSubSubscriber,
+        { provide: REALTIME_TRANSPORT_TOKEN, useExisting: SseTransport },
+      ],
+      controllers: [createSseController('/events')],
+    }
+  }
+  if (mode === 'websocket') {
+    assertWsPeerDeps()
+    return {
+      providers: [
+        WebSocketTransport,
+        RealtimeGateway,
+        { provide: REALTIME_TRANSPORT_TOKEN, useExisting: WebSocketTransport },
+      ],
+      controllers: [],
+    }
+  }
+  if (mode === 'both') {
+    assertWsPeerDeps()
+    return {
+      providers: [
+        SseTransport,
+        SseSubscriptionHandler,
+        WebSocketTransport,
+        CompositeTransport,
+        RealtimeGateway,
+        RealtimePubSubSubscriber,
+        { provide: REALTIME_TRANSPORT_TOKEN, useExisting: CompositeTransport },
+      ],
+      controllers: [createSseController('/events')],
+    }
+  }
+  return {
+    providers: buildLegacyAsyncTransportProviders(),
+    controllers: [createSseController('/events')],
+  }
+}
+
+/**
  * Realtime module — supports SSE, WebSocket, or both transports. Registered
  * globally so a single configuration serves the whole application.
  */
@@ -131,6 +221,37 @@ function buildTransportProviders(resolved: ResolvedRealtimeOptions): {
 @Module({})
 export class BymaxRealtimeModule {
   private static readonly logger = new Logger(BymaxRealtimeModule.name)
+
+  /**
+   * Validate a raw async factory result, enforce the optional synchronous
+   * `transport` hint, apply defaults, and log the bootstrap line.
+   *
+   * @throws when the factory returned nothing, the options are invalid, or the
+   *   resolved transport disagrees with the synchronous hint used to gate
+   *   provider registration.
+   */
+  private static resolveAsyncOptions(
+    raw: BymaxRealtimeModuleOptions | null | undefined,
+    transportHint: TransportMode | undefined,
+    instanceId: string,
+    source: string,
+  ): ResolvedRealtimeOptions {
+    if (!raw) {
+      throw new Error(`${REALTIME_ERROR_CODES.INVALID_OPTIONS}: ${source} returned nothing`)
+    }
+    validateOptions(raw)
+    if (transportHint !== undefined && raw.transport !== transportHint) {
+      throw new Error(
+        `${REALTIME_ERROR_CODES.INVALID_OPTIONS}: forRootAsync transport hint '${transportHint}' ` +
+          `does not match the resolved transport '${raw.transport}'`,
+      )
+    }
+    const resolved = applyDefaults(raw)
+    BymaxRealtimeModule.logger.log(
+      `Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`,
+    )
+    return resolved
+  }
 
   /**
    * Configure the module synchronously.
@@ -199,9 +320,16 @@ export class BymaxRealtimeModule {
    * a non-default endpoint with async configuration should use `forRoot` and
    * pre-resolve the options before passing them.
    *
+   * Pass a synchronous `transport` hint to gate WebSocket wiring exactly as
+   * `forRoot` does — an SSE-only application then never registers the gateway,
+   * never boots Socket.IO, and never requires the optional WS peer deps. Without
+   * the hint, every transport provider is registered and the active one is
+   * resolved at runtime from the factory result.
+   *
    * @example
    * ```ts
    * BymaxRealtimeModule.forRootAsync({
+   *   transport: 'sse',
    *   imports: [ConfigModule],
    *   inject: [ConfigService],
    *   useFactory: async (cfg: ConfigService) => ({
@@ -229,36 +357,24 @@ export class BymaxRealtimeModule {
     const resolvedOptionsProvider: Provider = asyncOptions.useFactory
       ? {
           provide: REALTIME_OPTIONS_TOKEN,
-          useFactory: async (...args: unknown[]) => {
-            const raw = await asyncOptions.useFactory!(...args)
-            if (!raw)
-              throw new Error(
-                `${REALTIME_ERROR_CODES.INVALID_OPTIONS}: useFactory returned nothing`,
-              )
-            validateOptions(raw)
-            const resolved = applyDefaults(raw)
-            BymaxRealtimeModule.logger.log(
-              `Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`,
-            )
-            return resolved
-          },
+          useFactory: async (...args: unknown[]) =>
+            BymaxRealtimeModule.resolveAsyncOptions(
+              await asyncOptions.useFactory!(...args),
+              asyncOptions.transport,
+              instanceId,
+              'useFactory',
+            ),
           inject: [...(asyncOptions.inject ?? [])],
         }
       : {
           provide: REALTIME_OPTIONS_TOKEN,
-          useFactory: async (factory: BymaxRealtimeModuleOptionsFactory) => {
-            const raw = await factory.createRealtimeOptions()
-            if (!raw)
-              throw new Error(
-                `${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options factory returned nothing`,
-              )
-            validateOptions(raw)
-            const resolved = applyDefaults(raw)
-            BymaxRealtimeModule.logger.log(
-              `Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`,
-            )
-            return resolved
-          },
+          useFactory: async (factory: BymaxRealtimeModuleOptionsFactory) =>
+            BymaxRealtimeModule.resolveAsyncOptions(
+              await factory.createRealtimeOptions(),
+              asyncOptions.transport,
+              instanceId,
+              'options factory',
+            ),
           inject: [asyncOptions.useClass ? FACTORY_TOKEN : asyncOptions.useExisting!],
         }
 
@@ -303,30 +419,12 @@ export class BymaxRealtimeModule {
       inject: [REALTIME_OPTIONS_TOKEN],
     }
 
-    // For async mode, we always register all possible transport providers and
-    // let the REALTIME_TRANSPORT_TOKEN factory resolve dynamically at runtime
-    // based on the resolved options. The SSE controller defaults to /events.
-    const asyncTransportProviders: Provider[] = [
-      SseTransport,
-      SseSubscriptionHandler,
-      WebSocketTransport,
-      CompositeTransport,
-      RealtimeGateway,
-      {
-        provide: REALTIME_TRANSPORT_TOKEN,
-        useFactory: (
-          opts: BymaxRealtimeModuleOptions,
-          sse: SseTransport,
-          ws: WebSocketTransport,
-          composite: CompositeTransport,
-        ) => {
-          if (opts.transport === 'sse') return sse
-          if (opts.transport === 'websocket') return ws
-          return composite
-        },
-        inject: [REALTIME_OPTIONS_TOKEN, SseTransport, WebSocketTransport, CompositeTransport],
-      },
-    ]
+    // Transport providers (and the SSE controller) mirror forRoot's conditional
+    // registration when a synchronous `transport` hint is supplied; otherwise the
+    // legacy path registers every transport and resolves the active one at runtime.
+    const { providers: transportProviders, controllers } = buildAsyncTransportProviders(
+      asyncOptions.transport,
+    )
 
     const providers: Provider[] = [
       ...factoryClassProvider,
@@ -344,9 +442,8 @@ export class BymaxRealtimeModule {
       HeartbeatService,
       RealtimeService,
       ReauthenticationService,
-      RealtimePubSubSubscriber,
       OfflineQueueDeliveryService,
-      ...asyncTransportProviders,
+      ...transportProviders,
       ...(asyncOptions.extraProviders ?? []),
     ]
 
@@ -354,7 +451,7 @@ export class BymaxRealtimeModule {
       module: BymaxRealtimeModule,
       imports: asyncOptions.imports ?? [],
       providers,
-      controllers: [createSseController('/events')],
+      controllers,
       exports: [
         RealtimeService,
         ConnectionRegistry,

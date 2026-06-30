@@ -43,6 +43,14 @@ export interface WebSocketOptions {
   pingIntervalMs?: number
   pingTimeoutMs?: number
   maxConnectionsPerUser?: number
+  /**
+   * Emit a `connection:established` event to the client immediately after a
+   * successful WebSocket handshake. Defaults to `true`.
+   *
+   * Transport-neutral for WebSocket and independent of `sse.emitConnectionEvent`,
+   * so toggling the SSE flag never changes WebSocket behavior.
+   */
+  emitConnectionEvent?: boolean
   redisAdapter?: {
     /**
      * The ioredis client used by `@socket.io/redis-adapter`. Typed `unknown` so
@@ -82,6 +90,19 @@ export interface BymaxRealtimeModuleOptionsFactory {
 
 /** Asynchronous module configuration — the standard NestJS dynamic-module pattern. */
 export interface BymaxRealtimeModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
+  /**
+   * Optional synchronous transport mode. When provided, it gates WebSocket
+   * provider registration at module-definition time — exactly as `forRoot` does —
+   * so an SSE-only application never registers the gateway, never boots a
+   * Socket.IO server, and never requires the optional WebSocket peer dependencies.
+   *
+   * It MUST equal the `transport` returned by the async factory; a mismatch fails
+   * fast at bootstrap. When omitted, every transport provider is registered and
+   * the active transport is resolved at runtime from the factory result (which
+   * boots Socket.IO and requires the WS peer deps regardless of the configured
+   * mode).
+   */
+  transport?: TransportMode
   useFactory?: (
     ...args: unknown[]
   ) => BymaxRealtimeModuleOptions | Promise<BymaxRealtimeModuleOptions>

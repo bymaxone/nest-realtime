@@ -7,6 +7,9 @@ import { Test } from '@nestjs/testing'
 import { assertWsPeerDeps, BymaxRealtimeModule } from './realtime.module'
 import { RealtimeService } from './services/realtime.service'
 import { ConnectionRegistry } from './services/connection-registry.service'
+import { WebSocketTransport } from './transports/websocket/websocket.transport'
+import { RealtimeGateway } from './transports/websocket/realtime.gateway'
+import { CompositeTransport } from './transports/composite/composite.transport'
 import { InMemoryPubSub } from './pubsub/in-memory-pubsub'
 import { REALTIME_HOOKS_TOKEN, REALTIME_PUBSUB_TOKEN } from './constants/injection-tokens.constants'
 import type {
@@ -355,6 +358,65 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     }).compile()
     const service = mod.get(RealtimeService)
     expect(service).toBeInstanceOf(RealtimeService)
+  })
+
+  // A synchronous 'sse' hint gates WS wiring: no gateway, no WS transport, one controller.
+  it('does not register WebSocket providers when the transport hint is sse', () => {
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+    })
+    expect(dynamic.providers).not.toContain(RealtimeGateway)
+    expect(dynamic.providers).not.toContain(WebSocketTransport)
+    expect(dynamic.controllers).toHaveLength(1)
+  })
+
+  // An SSE-only async module with the hint compiles without any WebSocket provider.
+  it('wires an SSE-only module via forRootAsync with the transport hint', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useFactory: async () => ({ transport: 'sse', authenticator }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(RealtimeService)).toBeInstanceOf(RealtimeService)
+  })
+
+  // A synchronous 'websocket' hint registers the gateway + WS transport and no SSE controller.
+  it('registers the gateway and no SSE controller when the transport hint is websocket', () => {
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'websocket',
+      useFactory: async () => ({ transport: 'websocket', authenticator }),
+    })
+    expect(dynamic.providers).toContain(RealtimeGateway)
+    expect(dynamic.providers).toContain(WebSocketTransport)
+    expect(dynamic.controllers).toHaveLength(0)
+  })
+
+  // A synchronous 'both' hint registers every transport and the SSE controller.
+  it('registers all transports and the SSE controller when the transport hint is both', () => {
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'both',
+      useFactory: async () => ({ transport: 'both', authenticator }),
+    })
+    expect(dynamic.providers).toContain(RealtimeGateway)
+    expect(dynamic.providers).toContain(CompositeTransport)
+    expect(dynamic.controllers).toHaveLength(1)
+  })
+
+  // A transport hint that disagrees with the factory result fails fast at bootstrap.
+  it('rejects when the transport hint does not match the resolved transport', async () => {
+    const testModule = Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useFactory: async () => ({ transport: 'websocket', authenticator }),
+        }),
+      ],
+    })
+    await expect(testModule.compile()).rejects.toThrow(/transport hint/)
   })
 })
 

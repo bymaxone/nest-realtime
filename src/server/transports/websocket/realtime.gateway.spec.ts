@@ -230,14 +230,36 @@ describe('RealtimeGateway', () => {
     expect(ctx['cookies']).toEqual({})
   })
 
-  it('suppresses connection:established when emitConnectionEvent is false', async () => {
-    // The event is not emitted when explicitly disabled.
-    const module: TestingModule = await buildModule({ sse: { emitConnectionEvent: false } })
+  it('suppresses connection:established when websocket.emitConnectionEvent is false', async () => {
+    // The event is not emitted when explicitly disabled via the WS option.
+    const module: TestingModule = await buildModule({ websocket: { emitConnectionEvent: false } })
     const gw = module.get(RealtimeGateway)
     authenticator.authenticate.mockResolvedValue(validAuth)
     const socket = makeSocket()
     await gw.handleConnection(socket as never)
     expect(socket.emit).not.toHaveBeenCalled()
+  })
+
+  it('emits connection:established over WebSocket even when sse.emitConnectionEvent is false', async () => {
+    // WS connection-event behavior is decoupled from the SSE-namespaced flag.
+    const module: TestingModule = await buildModule({ sse: { emitConnectionEvent: false } })
+    const gw = module.get(RealtimeGateway)
+    authenticator.authenticate.mockResolvedValue(validAuth)
+    const socket = makeSocket()
+    await gw.handleConnection(socket as never)
+    expect(socket.emit).toHaveBeenCalledWith('connection:established', expect.any(Object))
+  })
+
+  it('normalizes an array-valued ticket query parameter to its first value', async () => {
+    // ParsedUrlQuery can yield string[]; the single-value ticket is collapsed.
+    authenticator.authenticate.mockResolvedValue(null)
+    const socket = makeSocket({ query: { ticket: ['t-first', 't-second'] as unknown as string } })
+    await gateway.handleConnection(socket as never)
+    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
+    expect((ctx['query'] as Record<string, unknown>)['ticket']).toBe('t-first')
   })
 
   it('handleConnection disconnects socket and does not throw when authenticate() throws', async () => {
