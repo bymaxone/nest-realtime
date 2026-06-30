@@ -106,7 +106,7 @@
     "@socket.io/redis-adapter": "^8.0.0",
     "@stryker-mutator/core": "^8.0.0",
     "@stryker-mutator/jest-runner": "^8.0.0",
-    "@stryker-mutator/typescript-checker": "^8.0.0",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
     "@testing-library/react": "^16.0.0",
     "@types/express": "^5.0.0",
     "@types/ioredis-mock": "^8.2.7",
