@@ -1,6 +1,6 @@
 # Phase 4 — WebSocket Transport
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 12 tasks · **Last updated**: 2026-06-29
+> **Status**: 👀 Review · **Progress**: 12 / 12 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 5
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 6
 
@@ -45,18 +45,18 @@ This is the second HIGH-complexity phase. The WebSocket handshake auth differs f
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 4.1 | `WebSocketTransport` — `ITransport` over Socket.IO | 📋 ToDo | P1 | M | 1.9, 1.11 |
-| 4.2 | `RealtimeGateway` — `@WebSocketGateway()` lifecycle + auth | 📋 ToDo | P1 | M | 4.1, 2.1 |
-| 4.3 | WebSocket handshake auth — 3 patterns unified | 📋 ToDo | P1 | S | 4.2, 2.2 |
-| 4.4 | `@socket.io/redis-adapter` via `RealtimeIoAdapter` | 📋 ToDo | P1 | M | 4.2 |
-| 4.5 | `CompositeTransport` — `transport: 'both'` | 📋 ToDo | P1 | M | 1.12, 4.1 |
-| 4.6 | Module wiring — sse/websocket/both + barrel exports | 📋 ToDo | P1 | M | 4.1, 4.2, 4.4, 4.5 |
-| 4.7 | Auth handshake differences — docs + extraction spec | 📋 ToDo | P2 | S | 4.3 |
-| 4.8 | Tests — `WebSocketTransport` unit + `socket.io-client` e2e | 📋 ToDo | P1 | L | 4.1, 4.2 |
-| 4.9 | Tests — `RealtimeGateway` lifecycle + auth-fail paths | 📋 ToDo | P1 | L | 4.2, 4.3 |
-| 4.10 | Tests — `CompositeTransport` fan-out + tolerance | 📋 ToDo | P1 | M | 4.5 |
-| 4.11 | Tests — Redis adapter unit + cross-instance smoke | 📋 ToDo | P2 | M | 4.4 |
-| 4.12 | Phase validation + 3-mode smoke | 📋 ToDo | P1 | S | 4.1…4.11 |
+| 4.1 | `WebSocketTransport` — `ITransport` over Socket.IO | ✅ Done | P1 | M | 1.9, 1.11 |
+| 4.2 | `RealtimeGateway` — `@WebSocketGateway()` lifecycle + auth | ✅ Done | P1 | M | 4.1, 2.1 |
+| 4.3 | WebSocket handshake auth — 3 patterns unified | ✅ Done | P1 | S | 4.2, 2.2 |
+| 4.4 | `@socket.io/redis-adapter` via `RealtimeIoAdapter` | ✅ Done | P1 | M | 4.2 |
+| 4.5 | `CompositeTransport` — `transport: 'both'` | ✅ Done | P1 | M | 1.12, 4.1 |
+| 4.6 | Module wiring — sse/websocket/both + barrel exports | ✅ Done | P1 | M | 4.1, 4.2, 4.4, 4.5 |
+| 4.7 | Auth handshake differences — docs + extraction spec | ✅ Done | P2 | S | 4.3 |
+| 4.8 | Tests — `WebSocketTransport` unit + `socket.io-client` e2e | ✅ Done | P1 | L | 4.1, 4.2 |
+| 4.9 | Tests — `RealtimeGateway` lifecycle + auth-fail paths | ✅ Done | P1 | L | 4.2, 4.3 |
+| 4.10 | Tests — `CompositeTransport` fan-out + tolerance | ✅ Done | P1 | M | 4.5 |
+| 4.11 | Tests — Redis adapter unit + cross-instance smoke | ✅ Done | P2 | M | 4.4 |
+| 4.12 | Phase validation + 3-mode smoke | ✅ Done | P1 | S | 4.1…4.11 |
 
 ---
 
@@ -64,7 +64,7 @@ This is the second HIGH-complexity phase. The WebSocket handshake auth differs f
 
 ### Task 4.1 — `WebSocketTransport` — `ITransport` over Socket.IO
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 1.9, 1.11
@@ -182,7 +182,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.2 — `RealtimeGateway` — `@WebSocketGateway()` lifecycle + auth
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 4.1, 2.1
@@ -286,7 +286,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.3 — WebSocket handshake auth — 3 patterns unified
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 4.2, 2.2
@@ -368,7 +368,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.4 — `@socket.io/redis-adapter` via `RealtimeIoAdapter`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 4.2
@@ -473,7 +473,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.5 — `CompositeTransport` — `transport: 'both'`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 1.12, 4.1
@@ -556,7 +556,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.6 — Module wiring — sse/websocket/both + barrel exports
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 4.1, 4.2, 4.4, 4.5
@@ -648,7 +648,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.7 — Auth handshake differences — docs + extraction spec
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: S
 - **Depends on**: 4.3
@@ -730,7 +730,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.8 — Tests — `WebSocketTransport` unit + `socket.io-client` e2e
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: L
 - **Depends on**: 4.1, 4.2
@@ -814,7 +814,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.9 — Tests — `RealtimeGateway` lifecycle + auth-fail paths
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: L
 - **Depends on**: 4.2, 4.3
@@ -893,7 +893,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.10 — Tests — `CompositeTransport` fan-out + tolerance
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 4.5
@@ -968,7 +968,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.11 — Tests — Redis adapter unit + cross-instance smoke
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: M
 - **Depends on**: 4.4
@@ -1047,7 +1047,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.12 — Phase validation + 3-mode smoke
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 4.1…4.11
@@ -1139,4 +1139,15 @@ Completion Protocol (after you finish):
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
-<!-- No entries yet — appended as tasks complete. -->
+- 4.1 ✅ 2026-06-30 — `WebSocketTransport` implementing `ITransport` over Socket.IO with FIFO eviction
+- 4.2 ✅ 2026-06-30 — `RealtimeGateway` with fail-closed handshake auth and lifecycle hooks
+- 4.3 ✅ 2026-06-30 — Three-pattern handshake auth (cookie, ticket, Bearer) unified in gateway
+- 4.4 ✅ 2026-06-30 — `RealtimeIoAdapter` with lazy `@socket.io/redis-adapter` install via `createAdapter(pub, pub.duplicate())`
+- 4.5 ✅ 2026-06-30 — `CompositeTransport` fan-out with `Promise.allSettled` tolerance; `kind === 'sse'`
+- 4.6 ✅ 2026-06-30 — Module wiring for sse/websocket/both; `RealtimePubSubSubscriber` scoped to SSE modes; barrel exports
+- 4.7 ✅ 2026-06-30 — Auth handshake differences doc + `auth-extraction.spec.ts` covering all three patterns
+- 4.8 ✅ 2026-06-30 — `WebSocketTransport` unit spec + `socket.io-client` e2e with auth/room/eviction coverage
+- 4.9 ✅ 2026-06-30 — `RealtimeGateway` lifecycle + auth-fail spec with 100% branch coverage
+- 4.10 ✅ 2026-06-30 — `CompositeTransport` fan-out, tolerance, and kind=sse tests
+- 4.11 ✅ 2026-06-30 — `RealtimeIoAdapter` unit spec + `ws-redis-adapter.e2e-spec.ts` with `ioredis-mock`
+- 4.12 ✅ 2026-06-30 — All gates passing: typecheck, lint, 100% coverage, build, size, e2e; auth-inversion grep = zero

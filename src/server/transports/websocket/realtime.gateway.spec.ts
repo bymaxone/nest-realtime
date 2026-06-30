@@ -5,20 +5,25 @@
 import 'reflect-metadata'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
-import { RealtimeGateway } from './realtime.gateway'
-import { WebSocketTransport } from './websocket.transport'
 import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
-import type { AuthenticationResult, IConnectionAuthenticator } from '../../interfaces/connection-authenticator.interface'
+import type {
+  AuthenticationResult,
+  IConnectionAuthenticator,
+} from '../../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+import { WebSocketTransport } from './websocket.transport'
+import { RealtimeGateway } from './realtime.gateway'
 
 /** Build a minimal mock Socket with configurable handshake. */
-function makeSocket(opts: {
-  id?: string
-  auth?: Record<string, string>
-  cookie?: string
-  headers?: Record<string, string>
-  query?: Record<string, string>
-} = {}) {
+function makeSocket(
+  opts: {
+    id?: string
+    auth?: Record<string, string>
+    cookie?: string
+    headers?: Record<string, string>
+    query?: Record<string, string>
+  } = {},
+) {
   return {
     id: opts.id ?? 'sock-1',
     handshake: {
@@ -39,7 +44,9 @@ function makeSocket(opts: {
 
 describe('RealtimeGateway', () => {
   let gateway: RealtimeGateway
-  let transportMock: jest.Mocked<Pick<WebSocketTransport, 'setServer' | 'authenticator' | 'registerSocket' | 'unregisterSocket'>>
+  let transportMock: jest.Mocked<
+    Pick<WebSocketTransport, 'setServer' | 'authenticator' | 'registerSocket' | 'unregisterSocket'>
+  >
   let authenticator: jest.Mocked<IConnectionAuthenticator>
   const validAuth: AuthenticationResult = { userId: 'u-1', tenantId: 't-1', roles: ['admin'] }
 
@@ -129,7 +136,10 @@ describe('RealtimeGateway', () => {
     authenticator.authenticate.mockResolvedValue(null)
     const socket = makeSocket({ cookie: 'token=abc; x=1' })
     await gateway.handleConnection(socket as never)
-    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<string, unknown>
+    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
     expect(ctx['cookies']).toEqual({ token: 'abc', x: '1' })
   })
 
@@ -138,7 +148,10 @@ describe('RealtimeGateway', () => {
     authenticator.authenticate.mockResolvedValue(null)
     const socket = makeSocket({ headers: { 'X-Custom-Header': 'value' } })
     await gateway.handleConnection(socket as never)
-    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<string, unknown>
+    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
     expect((ctx['headers'] as Record<string, string>)['x-custom-header']).toBe('value')
   })
 
@@ -147,7 +160,10 @@ describe('RealtimeGateway', () => {
     authenticator.authenticate.mockResolvedValue(null)
     const socket = makeSocket({ auth: { token: 'tok-xyz' } })
     await gateway.handleConnection(socket as never)
-    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<string, unknown>
+    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
     expect((ctx['headers'] as Record<string, string>)['authorization']).toBe('Bearer tok-xyz')
   })
 
@@ -156,7 +172,10 @@ describe('RealtimeGateway', () => {
     authenticator.authenticate.mockResolvedValue(null)
     const socket = makeSocket({ auth: { ticket: 'otp_999' } })
     await gateway.handleConnection(socket as never)
-    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<string, unknown>
+    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
     expect((ctx['query'] as Record<string, string>)['ticket']).toBe('otp_999')
   })
 
@@ -175,12 +194,19 @@ describe('RealtimeGateway', () => {
       handshake: {
         address: '1.2.3.4',
         auth: {},
-        headers: { 'x-forwarded-for': ['1.2.3.4', '5.6.7.8'] as unknown as string, 'user-agent': 'jest', cookie: '' },
+        headers: {
+          'x-forwarded-for': ['1.2.3.4', '5.6.7.8'] as unknown as string,
+          'user-agent': 'jest',
+          cookie: '',
+        },
         query: {},
       },
     }
     await gateway.handleConnection(socket as never)
-    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<string, unknown>
+    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
     expect((ctx['headers'] as Record<string, string>)['x-forwarded-for']).toBe('1.2.3.4,5.6.7.8')
   })
 
@@ -197,7 +223,10 @@ describe('RealtimeGateway', () => {
       },
     }
     await gateway.handleConnection(socket as never)
-    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<string, unknown>
+    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
     expect(ctx['cookies']).toEqual({})
   })
 
@@ -211,13 +240,24 @@ describe('RealtimeGateway', () => {
     expect(socket.emit).not.toHaveBeenCalled()
   })
 
-  it('a registerSocket rejection does not propagate out of handleConnection', async () => {
-    // Transport errors must not break the connection lifecycle.
+  it('handleConnection disconnects socket and does not throw when authenticate() throws', async () => {
+    // Fail-closed: an exception from the authenticator must not leave the socket connected.
+    // The error is caught, logged, and socket.disconnect(true) is called so the socket
+    // cannot linger in an unregistered state and receive broadcast events.
+    authenticator.authenticate.mockRejectedValue(new Error('token verify failed'))
+    const socket = makeSocket()
+    await expect(gateway.handleConnection(socket as never)).resolves.toBeUndefined()
+    expect(socket.disconnect).toHaveBeenCalledWith(true)
+    expect(transportMock.registerSocket).not.toHaveBeenCalled()
+  })
+
+  it('handleConnection disconnects socket and does not throw when registerSocket() throws', async () => {
+    // Any unexpected error from downstream transport is caught: the socket is forcibly
+    // disconnected rather than leaving it in a partially-registered limbo state.
     authenticator.authenticate.mockResolvedValue(validAuth)
     transportMock.registerSocket.mockRejectedValue(new Error('DB down'))
     const socket = makeSocket()
-    await expect(gateway.handleConnection(socket as never)).rejects.toThrow('DB down')
-    // Verified that errors from registerSocket propagate — but the gateway does not swallow them
-    // The gateway itself doesn't add try/catch, so the error bubbles; Socket.IO handles it upstream
+    await expect(gateway.handleConnection(socket as never)).resolves.toBeUndefined()
+    expect(socket.disconnect).toHaveBeenCalledWith(true)
   })
 })

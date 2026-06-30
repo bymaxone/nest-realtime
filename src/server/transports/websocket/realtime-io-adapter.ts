@@ -5,9 +5,13 @@
 import { Logger } from '@nestjs/common'
 import type { INestApplicationContext } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
+import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
 import type { ServerOptions } from 'socket.io'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
+
+/** Shape of the lazily-required `@socket.io/redis-adapter` module. */
+type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
 
 /**
  * Custom NestJS `IoAdapter` that:
@@ -75,13 +79,9 @@ export class RealtimeIoAdapter extends IoAdapter {
    * not crash the lib. A load or install failure is logged and tolerated;
    * the lib degrades gracefully to single-instance mode.
    */
-  private installRedisAdapter(
-    server: { adapter: (a: unknown) => void },
-    pubClient: unknown,
-  ): void {
+  private installRedisAdapter(server: { adapter: (a: unknown) => void }, pubClient: unknown): void {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { createAdapter } = require('@socket.io/redis-adapter') as typeof import('@socket.io/redis-adapter')
+      const { createAdapter } = require('@socket.io/redis-adapter') as RedisAdapterModule
       const pub = pubClient as { duplicate: () => unknown }
       const sub = pub.duplicate()
       server.adapter(createAdapter(pub as never, sub as never))

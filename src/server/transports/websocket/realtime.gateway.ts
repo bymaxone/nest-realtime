@@ -3,13 +3,8 @@
  * @layer transport
  */
 import { Inject, Logger } from '@nestjs/common'
-import {
-  OnGatewayConnection,
-  OnGatewayDisconnect,
-  OnGatewayInit,
-  WebSocketGateway,
-  WebSocketServer,
-} from '@nestjs/websockets'
+import type { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from '@nestjs/websockets'
+import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets'
 import type { Server, Socket } from 'socket.io'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
@@ -28,13 +23,16 @@ import { WebSocketTransport } from './websocket.transport'
  * Namespace, CORS, ping options, and the Redis adapter are applied by
  * `RealtimeIoAdapter` (not here), because `@WebSocketGateway()` args are
  * evaluated at class-decoration time — before the module options are resolved.
+ *
+ * CORS is intentionally disabled in the decorator (`origin: false`). The real
+ * policy is applied by `RealtimeIoAdapter.createIOServer` from the consumer's
+ * `websocket.cors` option. Leaving it open-by-default here would allow any
+ * origin to make credentialed connections before the adapter overrides the policy.
  */
 @WebSocketGateway({
-  cors: { origin: true, credentials: true },
+  cors: { origin: false },
 })
-export class RealtimeGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
-{
+export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(RealtimeGateway.name)
 
   @WebSocketServer()
@@ -63,41 +61,49 @@ export class RealtimeGateway
    * `socket.handshake.auth.token` and `.ticket` are the Socket.IO-idiomatic paths
    * (set via `io(url, { auth: { token } })`); the gateway normalizes them into the
    * context so the authenticator sees a single unified shape regardless of client.
+   *
+   * Fail-closed: any thrown error disconnects the socket immediately so it cannot
+   * linger in an unregistered state and receive broadcast events.
    */
   async handleConnection(socket: Socket): Promise<void> {
-    const ctx = {
-      cookies: parseCookieHeader(socket.handshake.headers.cookie ?? ''),
-      headers: this.normalizeHeaders(socket.handshake.headers),
-      query: socket.handshake.query as Record<string, string | undefined>,
-      ip: socket.handshake.address,
-      userAgent: socket.handshake.headers['user-agent'],
-      transport: 'websocket' as const,
-    }
+    try {
+      const ctx = {
+        cookies: parseCookieHeader(socket.handshake.headers.cookie ?? ''),
+        headers: this.normalizeHeaders(socket.handshake.headers),
+        query: socket.handshake.query as Record<string, string | undefined>,
+        ip: socket.handshake.address,
+        userAgent: socket.handshake.headers['user-agent'],
+        transport: 'websocket' as const,
+      }
 
-    // Merge Socket.IO's dedicated auth field (spec §8.1, bearer + ticket patterns).
-    const handshakeAuth = socket.handshake.auth as
-      | { token?: string; ticket?: string }
-      | undefined
-    if (handshakeAuth?.token) {
-      ctx.headers['authorization'] = `Bearer ${handshakeAuth.token}`
-    }
-    if (handshakeAuth?.ticket) {
-      ctx.query = { ...ctx.query, ticket: handshakeAuth.ticket }
-    }
+      // Merge Socket.IO's dedicated auth field (spec §8.1, bearer + ticket patterns).
+      const handshakeAuth = socket.handshake.auth as { token?: string; ticket?: string } | undefined
+      if (handshakeAuth?.token) {
+        ctx.headers['authorization'] = `Bearer ${handshakeAuth.token}`
+      }
+      if (handshakeAuth?.ticket) {
+        ctx.query = { ...ctx.query, ticket: handshakeAuth.ticket }
+      }
 
-    const auth = await this.transport.authenticator().authenticate(ctx)
-    if (!auth) {
+      const auth = await this.transport.authenticator().authenticate(ctx)
+      if (!auth) {
+        socket.disconnect(true)
+        return
+      }
+
+      await this.transport.registerSocket(socket, auth)
+
+      if (this.options.sse?.emitConnectionEvent !== false) {
+        socket.emit(RESERVED_EVENT_NAMES.CONNECTION_ESTABLISHED, {
+          connectionId: socket.id,
+          traits: { userId: auth.userId, tenantId: auth.tenantId, roles: auth.roles },
+        })
+      }
+    } catch (err) {
+      this.logger.error(
+        `handleConnection threw for socket ${socket.id} — disconnecting: ${(err as Error).message}`,
+      )
       socket.disconnect(true)
-      return
-    }
-
-    await this.transport.registerSocket(socket, auth)
-
-    if (this.options.sse?.emitConnectionEvent !== false) {
-      socket.emit(RESERVED_EVENT_NAMES.CONNECTION_ESTABLISHED, {
-        connectionId: socket.id,
-        traits: { userId: auth.userId, tenantId: auth.tenantId, roles: auth.roles },
-      })
     }
   }
 

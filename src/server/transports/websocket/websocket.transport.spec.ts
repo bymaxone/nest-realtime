@@ -5,15 +5,17 @@
 import 'reflect-metadata'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
-import { WebSocketTransport } from './websocket.transport'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import {
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
+  REALTIME_OPTIONS_TOKEN,
 } from '../../constants/injection-tokens.constants'
 import type { AuthenticationResult } from '../../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
+import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+import { WebSocketTransport } from './websocket.transport'
 
 /** Minimal mocked socket.io Socket. */
 function makeSocket(id = 'sock-1') {
@@ -52,22 +54,28 @@ describe('WebSocketTransport', () => {
     roles: ['user'],
   }
 
-  beforeEach(async () => {
+  /** Build the test module with optional module options override. */
+  async function buildModule(
+    opts: Partial<BymaxRealtimeModuleOptions> = {},
+  ): Promise<TestingModule> {
     hooks = {
       onConnect: jest.fn().mockResolvedValue(undefined),
       onDisconnect: jest.fn().mockResolvedValue(undefined),
     }
-
-    const module: TestingModule = await Test.createTestingModule({
+    return Test.createTestingModule({
       providers: [
         WebSocketTransport,
         ConnectionRegistry,
         RoomRegistry,
         { provide: REALTIME_AUTHENTICATOR_TOKEN, useValue: { authenticate: jest.fn() } },
         { provide: REALTIME_HOOKS_TOKEN, useValue: hooks },
+        { provide: REALTIME_OPTIONS_TOKEN, useValue: opts },
       ],
     }).compile()
+  }
 
+  beforeEach(async () => {
+    const module = await buildModule()
     transport = module.get(WebSocketTransport)
     connectionRegistry = module.get(ConnectionRegistry)
     roomRegistry = module.get(RoomRegistry)
@@ -241,5 +249,138 @@ describe('WebSocketTransport', () => {
     const server = makeServer()
     transport.setServer(server as never)
     await expect(transport.disconnect('missing')).resolves.toBeUndefined()
+  })
+
+  describe('evictBeyondLimit (maxConnectionsPerUser)', () => {
+    it('does not evict when maxConnectionsPerUser is not set', async () => {
+      // No eviction occurs when the limit is not configured.
+      const socket1 = makeSocket('s-1')
+      const socket2 = makeSocket('s-2')
+      const server = makeServer(
+        new Map([
+          ['s-1', socket1],
+          ['s-2', socket2],
+        ]),
+      )
+
+      const module = await buildModule({})
+      const t = module.get(WebSocketTransport)
+      t.setServer(server as never)
+
+      await t.registerSocket(socket1 as never, { userId: 'u-1', tenantId: 'tenant-1' })
+      await t.registerSocket(socket2 as never, { userId: 'u-1', tenantId: 'tenant-1' })
+
+      // Both connections should remain.
+      expect(socket1.disconnect).not.toHaveBeenCalled()
+      expect(socket2.disconnect).not.toHaveBeenCalled()
+    })
+
+    it('evicts the oldest connection when maxConnectionsPerUser is exceeded', async () => {
+      // When limit = 1, registering a second connection evicts the first (FIFO).
+      const socket1 = makeSocket('s-1')
+      const socket2 = makeSocket('s-2')
+      const server = makeServer(
+        new Map([
+          ['s-1', socket1],
+          ['s-2', socket2],
+        ]),
+      )
+
+      const module = await buildModule({ websocket: { maxConnectionsPerUser: 1 } })
+      const t = module.get(WebSocketTransport)
+      t.setServer(server as never)
+
+      // Register s-1 first (oldest), then s-2 which should evict s-1.
+      await t.registerSocket(socket1 as never, { userId: 'u-1', tenantId: 'tenant-1' })
+      await t.registerSocket(socket2 as never, { userId: 'u-1', tenantId: 'tenant-1' })
+
+      expect(socket1.disconnect).toHaveBeenCalledWith(true)
+    })
+
+    it('does not evict when count is within limit', async () => {
+      // No eviction when the number of connections is within the allowed limit.
+      const socket1 = makeSocket('s-1')
+      const server = makeServer(new Map([['s-1', socket1]]))
+
+      const module = await buildModule({ websocket: { maxConnectionsPerUser: 2 } })
+      const t = module.get(WebSocketTransport)
+      t.setServer(server as never)
+
+      await t.registerSocket(socket1 as never, { userId: 'u-1', tenantId: 'tenant-1' })
+
+      expect(socket1.disconnect).not.toHaveBeenCalled()
+    })
+
+    it('evicts the connection at index [1] when it has an earlier connectedAt (reduce b-branch)', async () => {
+      // When byUser returns [newer, older], the reduce must pick the older (b-path).
+      const socket1 = makeSocket('s-a')
+      const socket2 = makeSocket('s-b')
+      const socket3 = makeSocket('s-c')
+      const server = makeServer(
+        new Map([
+          ['s-a', socket1],
+          ['s-b', socket2],
+          ['s-c', socket3],
+        ]),
+      )
+
+      const module = await buildModule({ websocket: { maxConnectionsPerUser: 1 } })
+      const t = module.get(WebSocketTransport)
+      const reg = module.get(ConnectionRegistry)
+      t.setServer(server as never)
+
+      // Register s-a and s-b; after s-b is added s-a gets evicted (limit=1).
+      await t.registerSocket(socket1 as never, { userId: 'u-br', tenantId: 't-1' })
+      await t.registerSocket(socket2 as never, { userId: 'u-br', tenantId: 't-1' })
+
+      // At this point only s-b remains. Inject a synthetic record for s-a with a
+      // LATER connectedAt than s-b so that when s-c triggers eviction, byUser
+      // returns [s-a(newer), s-b(older)] and the reduce `b` path picks s-b.
+      const recB = reg.get('s-b')
+      if (recB) {
+        // Re-register s-a with a future connectedAt directly in the registry.
+        reg.register({
+          connectionId: 's-a',
+          userId: 'u-br',
+          tenantId: 't-1',
+          transport: 'websocket',
+          ip: '127.0.0.1',
+          userAgent: 'test',
+          connectedAt: new Date(Date.now() + 1_000),
+          subject: null,
+          close$: null,
+          originalAuth: { userId: 'u-br', tenantId: 't-1', roles: [] },
+        })
+      }
+
+      // Now byUser('u-br') = [s-b(older), s-a(newer)] with insertion order.
+      // Registering s-c triggers eviction → reduce picks s-b (b-path) as oldest.
+      await t.registerSocket(socket3 as never, { userId: 'u-br', tenantId: 't-1' })
+
+      // The oldest connection (s-b) must have been disconnected.
+      expect(socket2.disconnect).toHaveBeenCalledWith(true)
+    })
+
+    it('does not evict when limit is zero or negative (disabled)', async () => {
+      // A zero or negative limit is treated as disabled.
+      const socket1 = makeSocket('s-1')
+      const socket2 = makeSocket('s-2')
+      const server = makeServer(
+        new Map([
+          ['s-1', socket1],
+          ['s-2', socket2],
+        ]),
+      )
+
+      const module = await buildModule({ websocket: { maxConnectionsPerUser: 0 } })
+      const t = module.get(WebSocketTransport)
+      t.setServer(server as never)
+
+      await t.registerSocket(socket1 as never, { userId: 'u-1', tenantId: 'tenant-1' })
+      await t.registerSocket(socket2 as never, { userId: 'u-1', tenantId: 'tenant-1' })
+
+      expect(socket1.disconnect).not.toHaveBeenCalled()
+      expect(socket2.disconnect).not.toHaveBeenCalled()
+    })
   })
 })

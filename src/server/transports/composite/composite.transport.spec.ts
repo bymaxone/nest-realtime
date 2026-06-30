@@ -6,9 +6,9 @@ import 'reflect-metadata'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
-import { CompositeTransport } from './composite.transport'
 import { SseTransport } from '../sse/sse.transport'
 import { WebSocketTransport } from '../websocket/websocket.transport'
+import { CompositeTransport } from './composite.transport'
 
 /** Build a minimal mock of the methods we need from a transport. */
 function makeTransportMock() {

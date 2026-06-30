@@ -10,13 +10,16 @@ import type {
   AuthenticationResult,
 } from '../../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
+import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import {
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
+  REALTIME_OPTIONS_TOKEN,
 } from '../../constants/injection-tokens.constants'
 import { ROOM_PREFIXES } from '../../constants/room-prefixes.constants'
+import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 
 /**
  * WebSocket transport implementing `ITransport` over a Socket.IO `Server`.
@@ -41,6 +44,7 @@ export class WebSocketTransport implements ITransport {
     @Inject(RoomRegistry) private readonly rooms: RoomRegistry,
     @Inject(REALTIME_AUTHENTICATOR_TOKEN) private readonly auth: IConnectionAuthenticator,
     @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks: IConnectionLifecycleHooks,
+    @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
   ) {}
 
   /**
@@ -48,6 +52,8 @@ export class WebSocketTransport implements ITransport {
    *
    * All emit methods silently no-op until this is called, so the transport is
    * safe to construct before the HTTP server is ready.
+   *
+   * @param server - The live Socket.IO `Server` instance from the NestJS gateway.
    */
   setServer(server: Server): void {
     this.server = server
@@ -60,6 +66,8 @@ export class WebSocketTransport implements ITransport {
    * The gateway uses this to avoid a circular injection: `RealtimeGateway` →
    * `WebSocketTransport` → authenticator, rather than injecting the token
    * directly in the gateway.
+   *
+   * @returns The consumer-provided `IConnectionAuthenticator` instance.
    */
   authenticator(): IConnectionAuthenticator {
     return this.auth
@@ -74,6 +82,9 @@ export class WebSocketTransport implements ITransport {
    *
    * Cross-instance fan-out is handled by `@socket.io/redis-adapter`; this method
    * does not publish to `IRealtimePubSub`.
+   *
+   * @param socket - The authenticated Socket.IO socket instance.
+   * @param auth - The resolved authentication result containing userId, tenantId, and roles.
    */
   async registerSocket(socket: Socket, auth: AuthenticationResult): Promise<void> {
     const connectedAt = new Date()
@@ -96,6 +107,8 @@ export class WebSocketTransport implements ITransport {
     this.rooms.join(socket.id, `${ROOM_PREFIXES.USER}:${auth.userId}`)
     if (auth.tenantId) this.rooms.join(socket.id, `${ROOM_PREFIXES.TENANT}:${auth.tenantId}`)
 
+    await this.evictBeyondLimit(auth.userId)
+
     await this.hooks.onConnect?.({
       connectionId: socket.id,
       userId: auth.userId,
@@ -113,6 +126,9 @@ export class WebSocketTransport implements ITransport {
    * Removes the record from `ConnectionRegistry`, clears all room membership
    * from `RoomRegistry`, and fires the `onDisconnect` lifecycle hook with the
    * computed `durationMs`.
+   *
+   * @param connectionId - The Socket.IO socket `id` of the disconnected connection.
+   * @param reason - Optional reason string forwarded to the `onDisconnect` hook.
    */
   async unregisterSocket(connectionId: string, reason?: string): Promise<void> {
     const record = this.connections.unregister(connectionId)
@@ -132,27 +148,55 @@ export class WebSocketTransport implements ITransport {
     await this.hooks.onDisconnect?.(disconnectMeta)
   }
 
-  /** Send an event to every connection of a user (uses `user:{userId}` room). */
+  /**
+   * Send an event to every connection of a user (uses `user:{userId}` room).
+   *
+   * @param userId - Target user identifier.
+   * @param event - Event name to emit.
+   * @param data - Payload forwarded to all matching connections.
+   */
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
     this.server?.to(`${ROOM_PREFIXES.USER}:${userId}`).emit(event, data)
   }
 
-  /** Send an event to every connection within a tenant (uses `tenant:{tenantId}` room). */
+  /**
+   * Send an event to every connection within a tenant (uses `tenant:{tenantId}` room).
+   *
+   * @param tenantId - Target tenant identifier.
+   * @param event - Event name to emit.
+   * @param data - Payload forwarded to all matching connections.
+   */
   async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
     this.server?.to(`${ROOM_PREFIXES.TENANT}:${tenantId}`).emit(event, data)
   }
 
-  /** Send an event to every connection in an arbitrary room. */
+  /**
+   * Send an event to every connection in an arbitrary room.
+   *
+   * @param roomId - The fully-qualified room identifier (e.g., `user:u-1`, `tenant:t-1`).
+   * @param event - Event name to emit.
+   * @param data - Payload forwarded to all connections in the room.
+   */
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
     this.server?.to(roomId).emit(event, data)
   }
 
-  /** Broadcast an event to all connected clients. */
+  /**
+   * Broadcast an event to all connected clients.
+   *
+   * @param event - Event name to emit.
+   * @param data - Payload forwarded to every connected socket.
+   */
   async broadcast(event: string, data: unknown): Promise<void> {
     this.server?.emit(event, data)
   }
 
-  /** Join a connection to an additional room (updates both Socket.IO and `RoomRegistry`). */
+  /**
+   * Join a connection to an additional room (updates both Socket.IO and `RoomRegistry`).
+   *
+   * @param connectionId - The socket `id` of the connection to join.
+   * @param roomId - The room to join.
+   */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
     const socket = this.server?.sockets.sockets.get(connectionId)
     if (socket) {
@@ -161,7 +205,12 @@ export class WebSocketTransport implements ITransport {
     }
   }
 
-  /** Remove a connection from a room (updates both Socket.IO and `RoomRegistry`). */
+  /**
+   * Remove a connection from a room (updates both Socket.IO and `RoomRegistry`).
+   *
+   * @param connectionId - The socket `id` of the connection to remove.
+   * @param roomId - The room to leave.
+   */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
     const socket = this.server?.sockets.sockets.get(connectionId)
     if (socket) {
@@ -170,9 +219,32 @@ export class WebSocketTransport implements ITransport {
     }
   }
 
-  /** Force-disconnect a specific connection via the Socket.IO API. */
+  /**
+   * Force-disconnect a specific connection via the Socket.IO API.
+   *
+   * @param connectionId - The socket `id` of the connection to disconnect.
+   * @param _reason - Optional reason string (unused at the Socket.IO level; passed to `unregisterSocket`).
+   */
   async disconnect(connectionId: string, _reason?: string): Promise<void> {
     const socket = this.server?.sockets.sockets.get(connectionId)
     if (socket) socket.disconnect(true)
+  }
+
+  /**
+   * Evict the user's oldest WebSocket connections (FIFO) when over
+   * `websocket.maxConnectionsPerUser`. Emits `REALTIME_TOO_MANY_CONNECTIONS`
+   * as the disconnect reason — never rejects the new connection with HTTP 429.
+   */
+  private async evictBeyondLimit(userId: string): Promise<void> {
+    const max = this.options.websocket?.maxConnectionsPerUser
+    if (max === undefined || max <= 0) return
+
+    let userConnections = this.connections.byUser(userId, 'websocket')
+    while (userConnections.length > max) {
+      const oldest = userConnections.reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))
+      await this.disconnect(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
+      await this.unregisterSocket(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
+      userConnections = this.connections.byUser(userId, 'websocket')
+    }
   }
 }

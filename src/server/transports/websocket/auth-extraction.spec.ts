@@ -5,19 +5,24 @@
 import 'reflect-metadata'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
-import { RealtimeGateway } from './realtime.gateway'
-import { WebSocketTransport } from './websocket.transport'
 import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
-import type { ConnectionAuthContext, IConnectionAuthenticator } from '../../interfaces/connection-authenticator.interface'
+import type {
+  ConnectionAuthContext,
+  IConnectionAuthenticator,
+} from '../../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+import { WebSocketTransport } from './websocket.transport'
+import { RealtimeGateway } from './realtime.gateway'
 
 /** Builds a minimal fake Socket.IO socket for testing. */
-function makeSocket(overrides: {
-  auth?: Record<string, string>
-  cookieHeader?: string
-  headers?: Record<string, string>
-  query?: Record<string, string>
-} = {}) {
+function makeSocket(
+  overrides: {
+    auth?: Record<string, string>
+    cookieHeader?: string
+    headers?: Record<string, string>
+    query?: Record<string, string>
+  } = {},
+) {
   const capturedCtx: Record<string, unknown>[] = []
   const authenticator: IConnectionAuthenticator = {
     authenticate: jest.fn(async (ctx: ConnectionAuthContext) => {
@@ -106,9 +111,7 @@ describe('RealtimeGateway — handshake auth extraction', () => {
 
     expect(capturedCtx).toHaveLength(1)
     const ctx = capturedCtx[0]!
-    expect((ctx['headers'] as Record<string, string>)['authorization']).toBe(
-      'Bearer eyJhbGci.test',
-    )
+    expect((ctx['headers'] as Record<string, string>)['authorization']).toBe('Bearer eyJhbGci.test')
   })
 
   it('normalizes auth.ticket into ctx.query.ticket', async () => {

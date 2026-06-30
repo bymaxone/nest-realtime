@@ -7,6 +7,7 @@ import { Global, Logger, Module } from '@nestjs/common'
 import type { DynamicModule, Provider } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../shared/constants/error-codes.constants'
 import { applyDefaults } from './config/default-options'
+import type { ResolvedRealtimeOptions } from './config/default-options'
 import { validateOptions } from './config/validate-options'
 import {
   REALTIME_AUTHENTICATOR_TOKEN,
@@ -80,13 +81,12 @@ function buildCommonProviders(
     HeartbeatService,
     RealtimeService,
     ReauthenticationService,
-    RealtimePubSubSubscriber,
     OfflineQueueDeliveryService,
   ]
 }
 
 /** Build transport-specific providers + the REALTIME_TRANSPORT_TOKEN binding. */
-function buildTransportProviders(resolved: BymaxRealtimeModuleOptions): {
+function buildTransportProviders(resolved: ResolvedRealtimeOptions): {
   providers: Provider[]
   controllers: Parameters<typeof createSseController>[0][]
   gateways: Provider[]
@@ -97,9 +97,9 @@ function buildTransportProviders(resolved: BymaxRealtimeModuleOptions): {
   const gateways: Provider[] = []
 
   if (transport === 'sse') {
-    providers.push(SseTransport, SseSubscriptionHandler)
+    providers.push(SseTransport, SseSubscriptionHandler, RealtimePubSubSubscriber)
     providers.push({ provide: REALTIME_TRANSPORT_TOKEN, useExisting: SseTransport })
-    controllers.push(resolved.sse?.endpoint ?? '/events')
+    controllers.push(resolved.sse.endpoint)
   } else if (transport === 'websocket') {
     assertWsPeerDeps()
     providers.push(WebSocketTransport)
@@ -108,9 +108,15 @@ function buildTransportProviders(resolved: BymaxRealtimeModuleOptions): {
   } else {
     // 'both'
     assertWsPeerDeps()
-    providers.push(SseTransport, WebSocketTransport, CompositeTransport, SseSubscriptionHandler)
+    providers.push(
+      SseTransport,
+      WebSocketTransport,
+      CompositeTransport,
+      SseSubscriptionHandler,
+      RealtimePubSubSubscriber,
+    )
     providers.push({ provide: REALTIME_TRANSPORT_TOKEN, useExisting: CompositeTransport })
-    controllers.push(resolved.sse?.endpoint ?? '/events')
+    controllers.push(resolved.sse.endpoint)
     gateways.push(RealtimeGateway)
   }
 
@@ -150,7 +156,11 @@ export class BymaxRealtimeModule {
     }
 
     const common = buildCommonProviders(resolved, instanceId)
-    const { providers: transportProviders, controllers, gateways } = buildTransportProviders(resolved)
+    const {
+      providers: transportProviders,
+      controllers,
+      gateways,
+    } = buildTransportProviders(resolved)
 
     BymaxRealtimeModule.logger.log(
       `Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`,

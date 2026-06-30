@@ -5,9 +5,9 @@
 import 'reflect-metadata'
 import { Logger } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
-import { RealtimeIoAdapter } from './realtime-io-adapter'
 import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+import { RealtimeIoAdapter } from './realtime-io-adapter'
 
 // Mock @socket.io/redis-adapter so the lazy require inside installRedisAdapter
 // is controllable in tests without needing the actual package wired to Redis.
@@ -17,11 +17,9 @@ jest.mock('@socket.io/redis-adapter', () => ({ createAdapter: jest.fn().mockRetu
 
 /** Mock INestApplicationContext returning the provided options. */
 function makeApp(options: Partial<BymaxRealtimeModuleOptions> = {}) {
+  const mockMap = new Map<symbol, unknown>([[REALTIME_OPTIONS_TOKEN, options]])
   return {
-    get: jest.fn((token: symbol) => {
-      if (token === REALTIME_OPTIONS_TOKEN) return options
-      return undefined
-    }),
+    get: jest.fn((token: symbol) => mockMap.get(token)),
   }
 }
 
@@ -36,7 +34,9 @@ describe('RealtimeIoAdapter', () => {
   let logSpy: jest.SpyInstance
 
   beforeEach(() => {
-    superSpy = jest.spyOn(IoAdapter.prototype, 'createIOServer').mockImplementation(() => makeServer())
+    superSpy = jest
+      .spyOn(IoAdapter.prototype, 'createIOServer')
+      .mockImplementation(() => makeServer())
     errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
   })
@@ -139,7 +139,9 @@ describe('RealtimeIoAdapter', () => {
 
   it('tolerates a createAdapter failure — logs error, does NOT throw', () => {
     // Broken adapter install degrades to single-instance; no uncaught exception.
-    const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as { createAdapter: jest.Mock }
+    const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as {
+      createAdapter: jest.Mock
+    }
     createAdapter.mockImplementationOnce(() => {
       throw new Error('Redis not available')
     })

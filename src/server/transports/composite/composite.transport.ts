@@ -33,7 +33,13 @@ export class CompositeTransport implements ITransport {
     @Inject(WebSocketTransport) private readonly ws: WebSocketTransport,
   ) {}
 
-  /** Emit to all connections of a user across both transports. */
+  /**
+   * Emit to all connections of a user across both transports.
+   *
+   * @param userId - Target user identifier.
+   * @param event - Event name to emit.
+   * @param data - Payload forwarded to all matching connections.
+   */
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
     await this.fanOut(
       'emitToUser',
@@ -42,7 +48,13 @@ export class CompositeTransport implements ITransport {
     )
   }
 
-  /** Emit to all connections within a tenant across both transports. */
+  /**
+   * Emit to all connections within a tenant across both transports.
+   *
+   * @param tenantId - Target tenant identifier.
+   * @param event - Event name to emit.
+   * @param data - Payload forwarded to all matching connections.
+   */
   async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
     await this.fanOut(
       'emitToTenant',
@@ -51,7 +63,13 @@ export class CompositeTransport implements ITransport {
     )
   }
 
-  /** Emit to all connections in a room across both transports. */
+  /**
+   * Emit to all connections in a room across both transports.
+   *
+   * @param roomId - The fully-qualified room identifier.
+   * @param event - Event name to emit.
+   * @param data - Payload forwarded to all connections in the room.
+   */
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
     await this.fanOut(
       'emitToRoom',
@@ -60,7 +78,12 @@ export class CompositeTransport implements ITransport {
     )
   }
 
-  /** Broadcast to all connected clients across both transports. */
+  /**
+   * Broadcast to all connected clients across both transports.
+   *
+   * @param event - Event name to emit.
+   * @param data - Payload forwarded to every connected client.
+   */
   async broadcast(event: string, data: unknown): Promise<void> {
     await this.fanOut(
       'broadcast',
