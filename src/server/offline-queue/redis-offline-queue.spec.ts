@@ -133,6 +133,39 @@ describe('RedisOfflineQueue', () => {
     expect(events[0]!.emittedAt.getTime()).toBe(original.getTime())
   })
 
+  // Intra-millisecond events are stored and retrieved in counter order even when
+  // many share the same epoch-millisecond (regression guard for the double-precision bug).
+  it('preserves ordering for many events within the same millisecond', async () => {
+    const { queue } = build()
+    const COUNT = 300
+    for (let i = 1; i <= COUNT; i++) {
+      await queue.append('u1', mkEvent(`1000-${String(i).padStart(6, '0')}`))
+    }
+    const events = await queue.retrieveSince('u1', '1000-000000', COUNT)
+    expect(events).toHaveLength(COUNT)
+    for (let i = 0; i < COUNT; i++) {
+      expect(events[i]!.id).toBe(`1000-${String(i + 1).padStart(6, '0')}`)
+    }
+  })
+
+  // acknowledge on an empty (or fully-acknowledged) queue is a no-op.
+  it('acknowledge on an empty queue resolves without error', async () => {
+    const { queue } = build()
+    await expect(queue.acknowledge('u1', '100-0')).resolves.toBeUndefined()
+  })
+
+  // When sinceId carries the maximum counter value (999999) the next sort key wraps to
+  // the next millisecond, ensuring retrieveSince still excludes the boundary event.
+  it('retrieveSince wraps to the next millisecond when sinceId counter is at max', async () => {
+    const { queue } = build()
+    await queue.append('u1', mkEvent('1000-999999'))
+    await queue.append('u1', mkEvent('1001-000001'))
+    // sinceId = '1000-999999' — lexKeyNext must wrap to '1001-000000', so only '1001-000001' is returned.
+    const events = await queue.retrieveSince('u1', '1000-999999', 10)
+    expect(events).toHaveLength(1)
+    expect(events[0]!.id).toBe('1001-000001')
+  })
+
   // append resolves when pipeline.exec() returns null (covers the ?? [] null branch).
   it('resolves when pipeline.exec() returns null', async () => {
     // Covers: the `?? []` null-coalescing branch when exec() resolves to null.

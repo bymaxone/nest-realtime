@@ -47,13 +47,14 @@ describe('InMemoryPubSub', () => {
     expect(safe).toHaveBeenCalledWith(message)
   })
 
-  // subscribe is idempotent — adding the same function reference twice delivers it twice.
-  it('tracks the same handler added twice as two distinct entries', async () => {
+  // The handlers store is a Set — subscribing the same function reference twice is
+  // de-duplicated, so the handler is invoked exactly once per publish.
+  it('de-duplicates the same handler reference subscribed twice', async () => {
     const handler = jest.fn()
     await pubsub.subscribe(handler)
     await pubsub.subscribe(handler)
     await pubsub.publish(message)
-    // Set.add with the same reference counts once only.
+    // Set.add with the same reference is a no-op, so the handler fires only once.
     expect(handler).toHaveBeenCalledTimes(1)
   })
 

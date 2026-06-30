@@ -56,10 +56,23 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * unsubscribe that quits the client when the last handler is removed. Concurrent
    * subscribe calls are idempotent — only one client is ever created. Malformed
    * payloads are dropped silently.
+   *
+   * If the subscriber client cannot be created (e.g. Redis temporarily unavailable),
+   * the handler registration is rolled back and the cached init promise is cleared so
+   * the next call retries from scratch.
    */
   async subscribe(handler: (message: RealtimePubSubMessage) => void): Promise<() => Promise<void>> {
     this.handlers.add(handler)
-    const sub = await this.ensureSubscriber()
+    let sub: Redis
+    try {
+      sub = await this.ensureSubscriber()
+    } catch (err) {
+      // Atomically undo the handler registration and clear the failed init promise
+      // so the next subscribe() retries with a fresh client.
+      this.handlers.delete(handler)
+      this.subInit = null
+      throw err
+    }
     return async () => {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {

@@ -115,6 +115,37 @@ describe('RedisRealtimePubSub', () => {
     expect(received).toHaveLength(1)
   })
 
+  // When subscriber init fails, the handler is rolled back and subInit is cleared so the
+  // next subscribe() retries with a fresh client instead of re-awaiting the rejected promise.
+  it('rolls back handler and clears subInit when subscriber init fails', async () => {
+    let duplicateCall = 0
+    const failingSub = {
+      subscribe: jest.fn().mockRejectedValue(new Error('redis down')),
+      on: jest.fn(),
+    }
+    const recoverySub = {
+      subscribe: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn(),
+      quit: jest.fn().mockResolvedValue(undefined),
+    }
+    const fakePub = {
+      publish: jest.fn().mockResolvedValue(undefined),
+      duplicate: jest
+        .fn()
+        .mockImplementation(() => (duplicateCall++ === 0 ? failingSub : recoverySub)),
+    }
+    const pubsub = new RedisRealtimePubSub({ client: fakePub as unknown as Redis })
+    const handler = jest.fn()
+
+    // First subscribe fails — must reject and not leave the handler registered.
+    await expect(pubsub.subscribe(handler)).rejects.toThrow('redis down')
+
+    // Second subscribe must retry (duplicate called a second time) and succeed.
+    const unsub = await pubsub.subscribe(handler)
+    expect(fakePub.duplicate).toHaveBeenCalledTimes(2)
+    await unsub()
+  })
+
   // Concurrent subscribe() calls are idempotent — the sub client is created exactly once.
   it('concurrent subscribe() calls create the sub client only once', async () => {
     // Covers: ensureSubscriber() returns the same in-flight promise for concurrent calls.
