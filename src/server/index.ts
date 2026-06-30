@@ -53,6 +53,12 @@ export {
   REALTIME_INSTANCE_ID_TOKEN,
 } from './constants/injection-tokens.constants'
 
+// WebSocket transport surface
+export { WebSocketTransport } from './transports/websocket/websocket.transport'
+export { RealtimeGateway } from './transports/websocket/realtime.gateway'
+export { RealtimeIoAdapter } from './transports/websocket/realtime-io-adapter'
+export { CompositeTransport } from './transports/composite/composite.transport'
+
 // Room helpers
 export { composeRoomId } from './utils/compose-room-id'
 
