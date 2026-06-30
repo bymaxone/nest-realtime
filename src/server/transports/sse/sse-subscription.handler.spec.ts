@@ -786,4 +786,37 @@ describe('SseSubscriptionHandler', () => {
     expect(first.id).toBe('q1')
     expect(acknowledge).not.toHaveBeenCalled()
   })
+
+  it('trims whitespace from the X-Forwarded-For candidate before using it as the IP', async () => {
+    // Without trim(), " 1.2.3.4 " leaks as-is into the connection ip.
+    const transport = mkTransport()
+    const req = mkReq({ headers: { 'x-forwarded-for': ' 1.2.3.4 , 5.6.7.8' } })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const stream = await handler.handle(req, mkRes())
+    stream.subscribe().unsubscribe()
+    expect(transport.registerConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ ip: '1.2.3.4' }),
+    )
+  })
+
+  it('joins array-valued headers with a comma separator in the auth context', async () => {
+    // Kills StringLiteral mutation that changes join(',') to join('').
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const transport = mkTransport({ authenticate })
+    const req = mkReq({ headers: { 'x-multi': ['part-a', 'part-b'] as unknown as string } })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    await handler.handle(req, mkRes())
+    const context = authenticate.mock.calls[0]?.[0] as { headers: Record<string, string> }
+    expect(context.headers['x-multi']).toBe('part-a,part-b')
+  })
+
+  it('sets transport to "sse" in the auth context passed to authenticate', async () => {
+    // Kills StringLiteral mutation that blanks out the transport field.
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const transport = mkTransport({ authenticate })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    await handler.handle(mkReq(), mkRes())
+    const context = authenticate.mock.calls[0]?.[0] as { transport: string }
+    expect(context.transport).toBe('sse')
+  })
 })

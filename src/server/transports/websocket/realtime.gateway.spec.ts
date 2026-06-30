@@ -305,4 +305,17 @@ describe('RealtimeGateway', () => {
     await expect(gateway.handleConnection(socket as never)).resolves.toBeUndefined()
     expect(socket.disconnect).toHaveBeenCalledWith(true)
   })
+
+  it('does not add a ticket key when ticket is absent from both query and auth', async () => {
+    // Kills ConditionalExpression true mutation: with "if (true)", query.ticket=undefined is set
+    // explicitly, making the key appear even when no ticket was present.
+    authenticator.authenticate.mockResolvedValue(null)
+    const socket = makeSocket({ auth: {}, query: {} })
+    await gateway.handleConnection(socket as never)
+    const ctx = (authenticator.authenticate as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
+    expect(Object.keys(ctx['query'] as object)).not.toContain('ticket')
+  })
 })

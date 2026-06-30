@@ -118,4 +118,12 @@ describe('ConnectionRegistry', () => {
     expect(() => registry.unregister('c1')).not.toThrow()
     expect(registry.get('c1')).toBeUndefined()
   })
+
+  // Tenant index map entry is removed after unregistering the last connection for that tenant.
+  it('cleans up the byTenantId map entry after unregistering the last connection', () => {
+    registry.register(mkRecord({ connectionId: 'c1', userId: 'u1', tenantId: 't1' }))
+    registry.unregister('c1')
+    const byTenantId = (registry as unknown as { byTenantId: Map<string, Set<string>> }).byTenantId
+    expect(byTenantId.has('t1')).toBe(false)
+  })
 })

@@ -14,6 +14,8 @@ import { CompositeTransport } from './transports/composite/composite.transport'
 import { InMemoryPubSub } from './pubsub/in-memory-pubsub'
 import {
   REALTIME_HOOKS_TOKEN,
+  REALTIME_OFFLINE_QUEUE_TOKEN,
+  REALTIME_PRESENCE_TOKEN,
   REALTIME_PUBSUB_TOKEN,
   REALTIME_TRANSPORT_TOKEN,
 } from './constants/injection-tokens.constants'
@@ -194,6 +196,28 @@ describe('BymaxRealtimeModule.forRoot', () => {
     } finally {
       logSpy.mockRestore()
     }
+  })
+
+  // No warning is emitted in non-production environments even when pubsub is absent.
+  it('does not warn in development when pubsub is absent', () => {
+    // Kills ConditionalExpression/StringLiteral mutation that ignores NODE_ENV and always warns.
+    const original = process.env['NODE_ENV']
+    process.env['NODE_ENV'] = 'development'
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator })
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+    } finally {
+      process.env['NODE_ENV'] = original
+      warnSpy.mockRestore()
+    }
+  })
+
+  // forRoot exports include RealtimeService so consumers can inject it.
+  it('forRoot exports contain RealtimeService', () => {
+    // Kills ArrayDeclaration/BlockStatement mutation that empties the exports array.
+    const dynamic = BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator })
+    expect(dynamic.exports).toContain(RealtimeService)
   })
 })
 
@@ -599,6 +623,75 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     } finally {
       logSpy.mockRestore()
     }
+  })
+  // No warning is emitted in non-production environments even when pubsub is absent.
+  it('does not warn in development when forRootAsync pubsub is absent', async () => {
+    // Kills ConditionalExpression/StringLiteral mutation that ignores NODE_ENV and always warns.
+    const original = process.env['NODE_ENV']
+    process.env['NODE_ENV'] = 'development'
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const mod = await Test.createTestingModule({
+        imports: [
+          BymaxRealtimeModule.forRootAsync({
+            useFactory: async () => ({ transport: 'sse', authenticator }),
+          }),
+        ],
+      }).compile()
+      await mod.init()
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+      await mod.close()
+    } finally {
+      process.env['NODE_ENV'] = original
+      warnSpy.mockRestore()
+    }
+  })
+
+  // forRootAsync offline queue provider wires opts.offlineQueue through.
+  it('wires opts.offlineQueue to REALTIME_OFFLINE_QUEUE_TOKEN via forRootAsync', async () => {
+    // Kills ArrowFunction mutation: (opts) => opts.offlineQueue → () => undefined.
+    const offlineQueue = { enqueue: async () => undefined } as unknown
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useFactory: async () => ({
+            transport: 'sse',
+            authenticator,
+            offlineQueue: offlineQueue as never,
+          }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_OFFLINE_QUEUE_TOKEN, { strict: false })).toBe(offlineQueue)
+    await mod.close()
+  })
+
+  // forRootAsync presence provider wires opts.presence through.
+  it('wires opts.presence to REALTIME_PRESENCE_TOKEN via forRootAsync', async () => {
+    // Kills ArrowFunction mutation: (opts) => opts.presence → () => undefined.
+    const presence = { trackPresence: async () => undefined } as unknown
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          useFactory: async () => ({
+            transport: 'sse',
+            authenticator,
+            presence: presence as never,
+          }),
+        }),
+      ],
+    }).compile()
+    expect(mod.get(REALTIME_PRESENCE_TOKEN, { strict: false })).toBe(presence)
+    await mod.close()
+  })
+
+  // forRootAsync exports include RealtimeService so consumers can inject it.
+  it('forRootAsync exports contain RealtimeService', () => {
+    // Kills ArrayDeclaration/BlockStatement mutation that empties the exports array.
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+    })
+    expect(dynamic.exports).toContain(RealtimeService)
   })
 })
 

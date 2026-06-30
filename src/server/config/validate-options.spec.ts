@@ -149,4 +149,16 @@ describe('validateOptions', () => {
     expect(warnSpy).not.toHaveBeenCalled()
     warnSpy.mockRestore()
   })
+  // cacheTtlMs=1 with intervalSeconds=60 must NOT warn — 1 < 60*1000=60000.
+  // With the mutation intervalSeconds/1000 = 0.06, 1 > 0.06 → warns (wrong).
+  it('does not warn when cacheTtlMs is well below intervalSeconds*1000', () => {
+    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
+    validateOptions({
+      transport: 'sse',
+      authenticator,
+      reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 1 },
+    })
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
 })

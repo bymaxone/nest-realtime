@@ -80,4 +80,13 @@ describe('RoomRegistry', () => {
   it('is a no-op when leaveAll targets an unknown connection', () => {
     expect(() => rooms.leaveAll('ghost')).not.toThrow()
   })
+  // Leaving one room must preserve membership in remaining rooms — the connection entry
+  // is only deleted from connectionRooms when ALL rooms are left.
+  it('preserves membership in other rooms after leaving one room', () => {
+    rooms.join('c1', 'room:a')
+    rooms.join('c1', 'room:b')
+    rooms.leave('c1', 'room:a')
+    expect(rooms.members('room:b')).toContain('c1')
+    expect(rooms.roomsOf('c1')).toContain('room:b')
+  })
 })

@@ -157,4 +157,11 @@ describe('CompositeTransport', () => {
     await composite.emitToUser('u-1', 'evt', {})
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToUser'))
   })
+
+  it('fanOut warn contains the raw rejection reason when the reason has no .message', async () => {
+    // Kills ?? → && mutation: without ??, undefined && reason = undefined, not the reason string.
+    sseMock.emitToUser.mockRejectedValue('sentinel-reason-value')
+    await composite.emitToUser('u-1', 'evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('sentinel-reason-value'))
+  })
 })

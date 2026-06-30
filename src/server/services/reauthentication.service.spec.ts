@@ -412,4 +412,33 @@ describe('ReauthenticationService', () => {
       REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
     )
   })
+
+  // revalidate receives the tenantId from originalAuth when it is defined.
+  it('passes tenantId to revalidate when originalAuth.tenantId is set', async () => {
+    // Kills ObjectLiteral mutation { tenantId: conn.originalAuth.tenantId } → {}.
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const connections = mkConnections([mkRecord()]) // mkRecord sets tenantId: 't1'
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
+    await svc.runCycle()
+    expect(revalidate).toHaveBeenCalledWith('c1', expect.objectContaining({ tenantId: 't1' }))
+  })
+
+  // The warn message for a throwing revalidate includes the connectionId.
+  it('includes the connectionId in the warn when revalidate throws', async () => {
+    // Kills StringLiteral mutation that blanks the warn template prefix.
+    const revalidate = jest.fn().mockRejectedValue(new Error('auth error'))
+    const connections = mkConnections([mkRecord('conn-xy', 'u1')])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await svc.runCycle()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('conn-xy'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
 })

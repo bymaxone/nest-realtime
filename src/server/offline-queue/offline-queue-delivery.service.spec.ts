@@ -139,4 +139,18 @@ describe('OfflineQueueDeliveryService', () => {
       }
     })
   })
+  describe('retrieve limit warning', () => {
+    // When fewer than 200 events are returned, the retrieve-limit warning must NOT fire.
+    it('does not warn when fewer than the retrieve limit events are returned', async () => {
+      const storage = mkStorage([{ id: '1-0', event: 'foo', data: {}, emittedAt: new Date() }])
+      const service = new OfflineQueueDeliveryService(storage)
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      try {
+        await service.retrieve('u1', '0-0', new Set())
+        expect(warnSpy).not.toHaveBeenCalled()
+      } finally {
+        warnSpy.mockRestore()
+      }
+    })
+  })
 })

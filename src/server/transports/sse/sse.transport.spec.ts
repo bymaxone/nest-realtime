@@ -110,7 +110,11 @@ describe('SseTransport', () => {
     expect(replay.size('u1')).toBe(1)
     expect(publish).toHaveBeenCalledTimes(1)
     expect(publish).toHaveBeenCalledWith(
-      expect.objectContaining({ op: 'emitToUser', origin: 'inst-1' }),
+      expect.objectContaining({
+        op: 'emitToUser',
+        origin: 'inst-1',
+        args: expect.objectContaining({ userId: 'u1', event: 'foo', data: { x: 1 } }),
+      }),
     )
   })
 
@@ -132,20 +136,31 @@ describe('SseTransport', () => {
     await transport.emitToTenant('t1', 'foo', {})
     expect(a.received).toHaveLength(1)
     expect(b.received).toHaveLength(0)
-    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ op: 'emitToTenant' }))
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'emitToTenant',
+        args: expect.objectContaining({ tenantId: 't1', event: 'foo' }),
+      }),
+    )
   })
 
   // emitToRoom delivers to SSE members only, skipping ws and unknown members.
   it('emits to room members, skipping non-sse and unknown members', async () => {
-    const { transport, connections, rooms } = build()
+    const { transport, connections, rooms, publish } = build()
     const sse = addConn(connections, { connectionId: 'c_sse', userId: 'u1' })
     const ws = addConn(connections, { connectionId: 'c_ws', userId: 'u2', transport: 'websocket' })
     rooms.join('c_sse', 'room:a')
     rooms.join('c_ws', 'room:a')
     rooms.join('c_ghost', 'room:a')
-    await transport.emitToRoom('room:a', 'foo', {})
+    await transport.emitToRoom('room:a', 'foo', { val: 1 })
     expect(sse.received).toHaveLength(1)
     expect(ws.received).toHaveLength(0)
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'emitToRoom',
+        args: expect.objectContaining({ roomId: 'room:a', event: 'foo', data: { val: 1 } }),
+      }),
+    )
   })
 
   // broadcast reaches every SSE connection.
@@ -158,7 +173,12 @@ describe('SseTransport', () => {
     expect(a.received).toHaveLength(1)
     expect(b.received).toHaveLength(1)
     expect(ws.received).toHaveLength(0)
-    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ op: 'broadcast' }))
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'broadcast',
+        args: expect.objectContaining({ event: 'foo', data: {} }),
+      }),
+    )
   })
 
   // A failing connection is isolated so other connections still receive events.
@@ -215,7 +235,12 @@ describe('SseTransport', () => {
     await transport.disconnect('missing')
     await transport.disconnect('ws1')
     expect(publish).toHaveBeenCalledTimes(2)
-    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ op: 'disconnect' }))
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'disconnect',
+        args: expect.objectContaining({ connectionId: expect.any(String) }),
+      }),
+    )
   })
 
   // disconnectLocal on an unknown/non-sse connection is a no-op.
@@ -602,5 +627,38 @@ describe('SseTransport', () => {
     } finally {
       warnSpy.mockRestore()
     }
+  })
+
+  // durationMs must be the difference between now and connectedAt, not their sum.
+  it('durationMs in onDisconnect hook is a small elapsed value, not a timestamp sum', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    const past = new Date(Date.now() - 50)
+    connections.register({
+      connectionId: 'c1',
+      userId: 'u1',
+      tenantId: undefined,
+      transport: 'sse',
+      ip: '127.0.0.1',
+      userAgent: undefined,
+      connectedAt: past,
+      subject: new Subject<MessageEvent>(),
+      close$: new Subject<void>(),
+      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+    })
+    await transport.unregisterConnection('c1')
+    const meta = (onDisconnect as jest.Mock).mock.calls[0]?.[0] as { durationMs: number }
+    expect(meta.durationMs).toBeGreaterThanOrEqual(50)
+    expect(meta.durationMs).toBeLessThan(60000)
+  })
+
+  // disconnectLocal must be a no-op for WebSocket connections — only SSE connections are torn down here.
+  it('disconnectLocal is a no-op for a WebSocket connection', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'ws1', userId: 'u1', transport: 'websocket' })
+    await transport.disconnectLocal('ws1')
+    expect(onDisconnect).not.toHaveBeenCalled()
+    expect(connections.get('ws1')).toBeDefined()
   })
 })

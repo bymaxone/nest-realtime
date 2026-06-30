@@ -187,4 +187,26 @@ describe('RedisRealtimePubSub', () => {
     await pubsub.subscribe(jest.fn())
     expect(fakePub.duplicate).toHaveBeenCalledTimes(2)
   })
+  // The default channel must be the 'bymax:realtime' string, not an empty string.
+  it('publishes to the bymax:realtime channel when no channel option is provided', async () => {
+    const client = new RedisMock() as unknown as Redis
+    const publishSpy = jest.spyOn(client as unknown as { publish: jest.Mock }, 'publish')
+    const pubsub = new RedisRealtimePubSub({ client })
+    await pubsub.publish(msg)
+    expect(publishSpy).toHaveBeenCalledWith('bymax:realtime', expect.any(String))
+    publishSpy.mockRestore()
+  })
+
+  // The second handler must still receive messages after the first handler unsubscribes.
+  it('second handler receives messages after first handler is removed', async () => {
+    const { pubsub } = build()
+    const a = jest.fn()
+    const b = jest.fn()
+    const unsub1 = await pubsub.subscribe(a)
+    await pubsub.subscribe(b)
+    await unsub1()
+    await pubsub.publish(msg)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(b).toHaveBeenCalledTimes(1)
+  })
 })
