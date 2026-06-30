@@ -10,10 +10,7 @@ import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import type { IConnectionAuthenticator } from '../../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
-import type {
-  IRealtimePubSub,
-  RealtimePubSubMessage,
-} from '../../interfaces/realtime-pubsub.interface'
+import type { IRealtimePubSub } from '../../interfaces/realtime-pubsub.interface'
 import type {
   BymaxRealtimeModuleOptions,
   SseOptions,
@@ -21,8 +18,6 @@ import type {
 import { HeartbeatService } from './heartbeat.service'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { SseTransport } from './sse.transport'
-
-type RemoteHandler = (message: RealtimePubSubMessage) => void
 
 function makeOptions(sse?: SseOptions): BymaxRealtimeModuleOptions {
   return {
@@ -195,59 +190,6 @@ describe('SseTransport', () => {
     await expect(transport.emitToUser('u1', 'foo', {})).resolves.toBeUndefined()
   })
 
-  // Remote bus messages are delivered locally without being re-published.
-  it('dispatches a remote message to *Local without re-publishing', async () => {
-    const { transport, connections, publish, subscribe } = build()
-    const { received } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
-    await transport.onModuleInit()
-    const handler = subscribe.mock.calls[0]?.[0] as RemoteHandler
-    handler({
-      op: 'emitToUser',
-      args: { userId: 'u1', event: 'foo', data: {}, id: 'x-1' },
-      origin: 'other',
-    })
-    expect(received).toHaveLength(1)
-    expect(publish).not.toHaveBeenCalled()
-  })
-
-  // Self-originated remote messages are filtered out (no double delivery).
-  it('ignores remote messages from its own origin', async () => {
-    const { transport, connections, subscribe } = build()
-    const { received } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
-    await transport.onModuleInit()
-    const handler = subscribe.mock.calls[0]?.[0] as RemoteHandler
-    handler({
-      op: 'emitToUser',
-      args: { userId: 'u1', event: 'foo', data: {}, id: 'x' },
-      origin: 'inst-1',
-    })
-    expect(received).toHaveLength(0)
-  })
-
-  // Every remote op routes to the matching local handler.
-  it('routes every remote op to its local handler', async () => {
-    const { transport, connections, rooms, publish, subscribe } = build()
-    const user = addConn(connections, { connectionId: 'cu', userId: 'u1', tenantId: 't1' })
-    rooms.join('cu', 'room:a')
-    await transport.onModuleInit()
-    const handler = subscribe.mock.calls[0]?.[0] as RemoteHandler
-    handler({
-      op: 'emitToTenant',
-      args: { tenantId: 't1', event: 'e', data: {}, id: '1' },
-      origin: 'o',
-    })
-    handler({
-      op: 'emitToRoom',
-      args: { roomId: 'room:a', event: 'e', data: {}, id: '2' },
-      origin: 'o',
-    })
-    handler({ op: 'broadcast', args: { event: 'e', data: {}, id: '3' }, origin: 'o' })
-    expect(user.received).toHaveLength(3)
-    handler({ op: 'disconnect', args: { connectionId: 'cu', reason: 'x' }, origin: 'o' })
-    expect(connections.get('cu')).toBeUndefined()
-    expect(publish).not.toHaveBeenCalled()
-  })
-
   // A local disconnect completes close$ and unregisters the connection.
   it('disconnects a local connection via close$', async () => {
     const onDisconnect = jest.fn()
@@ -395,23 +337,14 @@ describe('SseTransport', () => {
     expect(all).toEqual([])
   })
 
-  // onModuleInit subscribes and onApplicationShutdown unsubscribes and tears down.
-  it('wires and tears down the bus subscription', async () => {
-    const { transport, connections, subscribe, unsubscribe } = build()
+  // shutdown tears down all SSE connections and stops the heartbeat.
+  it('tears down all SSE connections on shutdown', async () => {
+    const { transport, connections } = build()
     const { close$ } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
     let completed = false
     close$.subscribe({ complete: () => (completed = true) })
-    await transport.onModuleInit()
-    expect(subscribe).toHaveBeenCalledTimes(1)
     await transport.onApplicationShutdown()
-    expect(unsubscribe).toHaveBeenCalledTimes(1)
     expect(completed).toBe(true)
-  })
-
-  // onApplicationShutdown without a prior subscription does not throw.
-  it('shuts down cleanly without a subscription', async () => {
-    const { transport } = build()
-    await expect(transport.onApplicationShutdown()).resolves.toBeUndefined()
   })
 
   // The heartbeat interval getter honors config and falls back to the default.

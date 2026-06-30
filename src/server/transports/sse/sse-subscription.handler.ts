@@ -9,6 +9,8 @@ import type { Request, Response } from 'express'
 import { EMPTY, merge, of, Subject } from 'rxjs'
 import type { Observable } from 'rxjs'
 import { catchError, finalize, takeUntil } from 'rxjs/operators'
+import { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
+import type { OfflineQueuedEvent } from '../../interfaces/offline-queue-storage.interface'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
 import {
@@ -120,6 +122,9 @@ export class SseSubscriptionHandler {
     @Inject(HeartbeatService) private readonly heartbeat: HeartbeatService,
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
     @Optional() @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks?: IConnectionLifecycleHooks,
+    @Optional()
+    @Inject(OfflineQueueDeliveryService)
+    private readonly offlineDelivery?: OfflineQueueDeliveryService,
   ) {}
 
   /**
@@ -180,12 +185,27 @@ export class SseSubscriptionHandler {
       : []
     const replay$ = replayEvents.length > 0 ? of(...replayEvents) : EMPTY
 
+    // Fetch gap events from the durable offline queue (de-duped against the ring buffer).
+    const ringBufferIds = new Set(replayEvents.map((e) => e.id ?? ''))
+    const queueEvents: OfflineQueuedEvent[] =
+      lastEventId && this.offlineDelivery
+        ? await this.offlineDelivery.deliver(resolvedAuth.userId, lastEventId, ringBufferIds)
+        : []
+    const queueReplay$: Observable<MessageEvent> =
+      queueEvents.length > 0
+        ? of(
+            ...queueEvents.map(
+              (e): MessageEvent => ({ id: e.id, type: e.event, data: e.data as object }),
+            ),
+          )
+        : EMPTY
+
     // Emit `connection:established` first unless disabled in options.
     const established$ = this.transport.emitConnectionEvent
       ? of(buildEstablishedEvent(connectionId, resolvedAuth))
       : EMPTY
 
-    return merge(established$, replay$, subject.asObservable()).pipe(
+    return merge(established$, replay$, queueReplay$, subject.asObservable()).pipe(
       takeUntil(close$),
       catchError((error: unknown) => {
         // Fire onError best-effort before letting finalize clean up.

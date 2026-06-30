@@ -34,34 +34,6 @@ import { composeRoomId } from '../../utils/compose-room-id'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
 
-interface EmitUserArgs {
-  userId: string
-  event: string
-  data: unknown
-  id: string
-}
-interface EmitTenantArgs {
-  tenantId: string
-  event: string
-  data: unknown
-  id: string
-}
-interface EmitRoomArgs {
-  roomId: string
-  event: string
-  data: unknown
-  id: string
-}
-interface BroadcastArgs {
-  event: string
-  data: unknown
-  id: string
-}
-interface DisconnectArgs {
-  connectionId: string
-  reason: string | undefined
-}
-
 /** Parameters required to register a freshly authenticated SSE connection. */
 export interface RegisterSseConnectionParams {
   connectionId: string
@@ -77,9 +49,10 @@ export interface RegisterSseConnectionParams {
  *
  * Each public `emitTo*`/`broadcast` performs local delivery via the matching
  * `*Local` method and then publishes exactly once to `IRealtimePubSub`. Remote
- * messages received from the bus are dispatched to the `*Local` methods only
- * (never re-published), and self-originated messages are filtered out — so a
- * single instance never double-delivers and multiple instances never ping-pong.
+ * messages received from the bus are dispatched by `RealtimePubSubSubscriber`
+ * (not this class) to the `*Local` methods only (never re-published), and
+ * self-originated messages are filtered there — so a single instance never
+ * double-delivers and multiple instances never ping-pong.
  *
  * Teardown of an SSE stream is driven by the per-connection `close$` subject:
  * `disconnectLocal` completes it (which ends the `@Sse` Observable via
@@ -89,7 +62,6 @@ export interface RegisterSseConnectionParams {
 export class SseTransport implements ITransport {
   readonly kind = 'sse' as const
   private readonly logger = new Logger(SseTransport.name)
-  private unsubscribe: (() => Promise<void>) | undefined
 
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
@@ -104,17 +76,8 @@ export class SseTransport implements ITransport {
     @Inject(REALTIME_INSTANCE_ID_TOKEN) private readonly instanceId: string,
   ) {}
 
-  /** Subscribe to the cross-instance bus and route remote messages to `*Local`. */
-  async onModuleInit(): Promise<void> {
-    this.unsubscribe = await this.pubsub.subscribe((message) => this.dispatchRemote(message))
-  }
-
-  /** Unsubscribe from the bus and tear down every SSE connection. */
+  /** Tear down every SSE connection and stop heartbeat on process shutdown. */
   async onApplicationShutdown(): Promise<void> {
-    if (this.unsubscribe) {
-      await this.unsubscribe()
-      this.unsubscribe = undefined
-    }
     this.heartbeat.stopAll()
     // Await each teardown so onDisconnect hooks complete within the shutdown window
     // (RxJS finalize cannot await an async callback). disconnectLocal removes the
@@ -308,38 +271,6 @@ export class SseTransport implements ITransport {
       conn.subject?.next(message)
     } catch (error) {
       this.logger.warn(`SSE delivery failed for ${conn.connectionId}: ${(error as Error).message}`)
-    }
-  }
-
-  /** Route a remote bus message to the matching `*Local` method (never re-publish). */
-  private dispatchRemote(message: RealtimePubSubMessage): void {
-    if (message.origin === this.instanceId) return
-    switch (message.op) {
-      case 'emitToUser': {
-        const a = message.args as EmitUserArgs
-        this.emitToUserLocal(a.userId, a.event, a.data, a.id)
-        return
-      }
-      case 'emitToTenant': {
-        const a = message.args as EmitTenantArgs
-        this.emitToTenantLocal(a.tenantId, a.event, a.data, a.id)
-        return
-      }
-      case 'emitToRoom': {
-        const a = message.args as EmitRoomArgs
-        this.emitToRoomLocal(a.roomId, a.event, a.data, a.id)
-        return
-      }
-      case 'broadcast': {
-        const a = message.args as BroadcastArgs
-        this.broadcastLocal(a.event, a.data, a.id)
-        return
-      }
-      case 'disconnect': {
-        const a = message.args as DisconnectArgs
-        void this.disconnectLocal(a.connectionId, a.reason)
-        return
-      }
     }
   }
 
