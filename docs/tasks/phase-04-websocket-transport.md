@@ -1,6 +1,6 @@
 # Phase 4 — WebSocket Transport
 
-> **Status**: 📋 ToDo · **Progress**: 0 / 12 tasks · **Last updated**: 2026-06-23
+> **Status**: 🔄 In Progress · **Progress**: 0 / 12 tasks · **Last updated**: 2026-06-29
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 5
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 6
 
