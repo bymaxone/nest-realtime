@@ -871,4 +871,23 @@ describe('SseSubscriptionHandler', () => {
     const context = authenticate.mock.calls[0]?.[0] as { transport: string }
     expect(context.transport).toBe('sse')
   })
+
+  // Kills L75 StringLiteral mutation ('' → "Stryker was here!").
+  // When no cookie header is present singleHeader(undefined) returns undefined and
+  // the ?? operator must fall back to '' — not the Stryker sentinel.
+  // parseCookieHeader("Stryker was here!") and parseCookieHeader('') both yield {}
+  // so the cookies field alone cannot distinguish them; we spy on the module export
+  // to observe the exact argument the handler passes.
+  it('calls parseCookieHeader with empty string when no cookie header is present', async () => {
+    const cookieMod = require('../../utils/parse-cookie-header') as {
+      parseCookieHeader: (cookieHeader: string) => Record<string, string>
+    }
+    const spy = jest.spyOn(cookieMod, 'parseCookieHeader')
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const transport = mkTransport({ authenticate, emitConnectionEvent: false })
+    const req = mkReq({ headers: {} }) // no cookie header — singleHeader returns undefined
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    await handler.handle(req, mkRes())
+    expect(spy).toHaveBeenCalledWith('')
+  })
 })

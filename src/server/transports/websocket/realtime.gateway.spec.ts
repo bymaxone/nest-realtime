@@ -318,4 +318,29 @@ describe('RealtimeGateway', () => {
     >
     expect(Object.keys(ctx['query'] as object)).not.toContain('ticket')
   })
+
+  // Kills L94 StringLiteral mutation ('' → "Stryker was here!").
+  // When handshake.headers.cookie is absent (undefined), the ?? operator must fall back
+  // to '' so parseCookieHeader receives an empty string, not the Stryker sentinel.
+  // Both inputs yield {} from parseCookieHeader (no '=' in sentinel), so we spy on
+  // the module export to observe the exact argument passed by the gateway.
+  it('calls parseCookieHeader with empty string when handshake has no cookie header', async () => {
+    const cookieMod = require('../../utils/parse-cookie-header') as {
+      parseCookieHeader: (cookieHeader: string) => Record<string, string>
+    }
+    const spy = jest.spyOn(cookieMod, 'parseCookieHeader')
+    authenticator.authenticate.mockResolvedValue(null)
+    // Socket handshake with no cookie key — handshake.headers.cookie is undefined.
+    const socket = {
+      ...makeSocket(),
+      handshake: {
+        address: '1.2.3.4',
+        auth: {},
+        headers: { 'user-agent': 'jest' }, // cookie key intentionally absent
+        query: {},
+      },
+    }
+    await gateway.handleConnection(socket as never)
+    expect(spy).toHaveBeenCalledWith('')
+  })
 })

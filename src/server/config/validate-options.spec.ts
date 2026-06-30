@@ -161,4 +161,19 @@ describe('validateOptions', () => {
     expect(warnSpy).not.toHaveBeenCalled()
     warnSpy.mockRestore()
   })
+
+  // Kills L48 ArithmeticOperator mutation (* 1000 → / 1000 | + 1000 | - 1000) in message.
+  // The condition guard uses intervalSeconds*1000 correctly (separate expression), but the
+  // warning MESSAGE template must also embed the product — not quotient/sum/difference.
+  // With intervalSeconds=60: original → "60000"; / → "0.06"; + → "1060"; - → "-940".
+  it('includes intervalSeconds*1000 (not a different arithmetic) in the warning message', () => {
+    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
+    validateOptions({
+      transport: 'sse',
+      authenticator,
+      reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 120_000 },
+    })
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('60000'), 'BymaxRealtimeModule')
+    warnSpy.mockRestore()
+  })
 })
