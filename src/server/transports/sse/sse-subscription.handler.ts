@@ -7,6 +7,7 @@ import { Inject, Injectable, Logger, Optional, UnauthorizedException } from '@ne
 import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import { EMPTY, merge, Observable, of, Subject } from 'rxjs'
+import type { Subscriber, Subscription } from 'rxjs'
 import { catchError, finalize, takeUntil } from 'rxjs/operators'
 import { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
 import type { OfflineQueuedEvent } from '../../interfaces/offline-queue-storage.interface'
@@ -91,6 +92,11 @@ function buildEstablishedEvent(connectionId: string, auth: AuthenticationResult)
   }
 }
 
+/** Map a durable offline-queue event to the SSE `MessageEvent` wire shape. */
+function toMessageEvent(event: OfflineQueuedEvent): MessageEvent {
+  return { id: event.id, type: event.event, data: event.data as object }
+}
+
 /** Build `ConnectionEventMeta` from a registered connection record. */
 function buildMeta(record: ConnectionRecord) {
   return {
@@ -115,7 +121,8 @@ interface StreamParams {
   close$: Subject<void>
   established$: Observable<MessageEvent>
   replay$: Observable<MessageEvent>
-  queueReplay$: Observable<MessageEvent>
+  /** Raw offline-queue gap events: mapped into the stream and acknowledged after emission. */
+  queueEvents: OfflineQueuedEvent[]
 }
 
 /**
@@ -185,18 +192,12 @@ export class SseSubscriptionHandler {
     const replay$ = replayEvents.length > 0 ? of(...replayEvents) : EMPTY
 
     const ringBufferIds = new Set(replayEvents.map((e) => e.id ?? ''))
+    // Retrieve the offline-gap WITHOUT acknowledging — acknowledgment is deferred until
+    // the events have actually been emitted to an open subscriber (at-least-once).
     const queueEvents: OfflineQueuedEvent[] =
       lastEventId && this.offlineDelivery
-        ? await this.offlineDelivery.deliver(resolvedAuth.userId, lastEventId, ringBufferIds)
+        ? await this.offlineDelivery.retrieve(resolvedAuth.userId, lastEventId, ringBufferIds)
         : []
-    const queueReplay$: Observable<MessageEvent> =
-      queueEvents.length > 0
-        ? of(
-            ...queueEvents.map(
-              (e): MessageEvent => ({ id: e.id, type: e.event, data: e.data as object }),
-            ),
-          )
-        : EMPTY
 
     // Emit `connection:established` first unless disabled in options.
     const established$ = this.transport.emitConnectionEvent
@@ -213,7 +214,7 @@ export class SseSubscriptionHandler {
       close$,
       established$,
       replay$,
-      queueReplay$,
+      queueEvents,
     })
   }
 
@@ -227,57 +228,88 @@ export class SseSubscriptionHandler {
    * queue → live) is preserved.
    */
   private buildStream(p: StreamParams): Observable<MessageEvent> {
-    const {
-      connectionId,
-      resolvedAuth,
-      ip,
-      userAgent,
-      res,
-      subject,
-      close$,
-      established$,
-      replay$,
-      queueReplay$,
-    } = p
     return new Observable<MessageEvent>((subscriber) => {
       // Subscribe the pipeline first: subject has a listener before registration can emit.
-      const inner = merge(established$, replay$, queueReplay$, subject)
-        .pipe(
-          takeUntil(close$),
-          catchError((error: unknown) => {
-            this.fireHook(() =>
-              this.hooks?.onError?.({ connectionId, error: error as Error, transport: 'sse' }),
-            )
-            return EMPTY
-          }),
-          finalize(() => {
-            // Stop keepalive synchronously to avoid a write-after-close race.
-            this.heartbeat.stop(connectionId)
-            void this.transport.unregisterConnection(connectionId)
-          }),
-        )
-        .subscribe(subscriber)
-
-      // Register only after the subscriber is wired; fire onConnect + heartbeat on resolution.
-      this.transport
-        .registerConnection({ connectionId, auth: resolvedAuth, subject, close$, ip, userAgent })
-        .then(() => {
-          const record = this.transport.getConnection(connectionId)
-          if (record) {
-            this.fireHook(() => this.hooks?.onConnect?.(buildMeta(record)))
-          }
-          const heartbeatMs = this.options.sse?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
-          this.heartbeat.start(connectionId, res, heartbeatMs)
-        })
-        .catch((err: unknown) => {
-          this.fireHook(() =>
-            this.hooks?.onError?.({ connectionId, error: err as Error, transport: 'sse' }),
-          )
-          subscriber.error(err)
-        })
-
+      const inner = this.subscribePipeline(p, subscriber)
+      // The offline-queue events were pushed synchronously during the subscribe above.
+      // Acknowledge them (prune durable storage) only when the subscriber is still open;
+      // a client that disconnected first keeps them durable for redelivery (at-least-once).
+      if (!subscriber.closed && p.queueEvents.length > 0) {
+        void this.offlineDelivery?.acknowledge(p.resolvedAuth.userId, p.queueEvents)
+      }
+      this.activateConnection(p, subscriber)
       return () => inner.unsubscribe()
     })
+  }
+
+  /**
+   * Wire the merged pipeline to the downstream subscriber with teardown.
+   *
+   * Subscribing first guarantees `subject` has a listener before registration can emit,
+   * so a plain `Subject` suffices and ordering (established → replay → queue → live) holds.
+   */
+  private subscribePipeline(p: StreamParams, subscriber: Subscriber<MessageEvent>): Subscription {
+    const { connectionId, subject, close$, established$, replay$, queueEvents } = p
+    const queueReplay$ = queueEvents.length > 0 ? of(...queueEvents.map(toMessageEvent)) : EMPTY
+    return merge(established$, replay$, queueReplay$, subject)
+      .pipe(
+        takeUntil(close$),
+        catchError((error: unknown) => {
+          this.fireHook(() =>
+            this.hooks?.onError?.({ connectionId, error: error as Error, transport: 'sse' }),
+          )
+          return EMPTY
+        }),
+        finalize(() => {
+          // Stop keepalive synchronously to avoid a write-after-close race.
+          this.heartbeat.stop(connectionId)
+          void this.transport.unregisterConnection(connectionId)
+        }),
+      )
+      .subscribe(subscriber)
+  }
+
+  /**
+   * Register the connection (after the subscriber is wired) and activate it on resolution.
+   *
+   * A registration failure routes to `onError` and errors the stream; a failure that
+   * arrives after teardown is a no-op since `subscriber.error` is ignored once closed.
+   */
+  private activateConnection(p: StreamParams, subscriber: Subscriber<MessageEvent>): void {
+    const { connectionId, resolvedAuth, ip, userAgent, subject, close$ } = p
+    this.transport
+      .registerConnection({ connectionId, auth: resolvedAuth, subject, close$, ip, userAgent })
+      .then(() => this.onRegistered(p, subscriber))
+      .catch((err: unknown) => {
+        this.fireHook(() =>
+          this.hooks?.onError?.({ connectionId, error: err as Error, transport: 'sse' }),
+        )
+        subscriber.error(err)
+      })
+  }
+
+  /**
+   * Complete the connection handshake once registration resolves.
+   *
+   * Registration is async and can resolve AFTER the downstream subscriber has already
+   * torn down (client disconnected mid-handshake). When that happens `finalize` has
+   * already stopped the heartbeat and unregistered, so re-firing onConnect or starting
+   * a fresh heartbeat would leak the connection and write after close. Guard on
+   * `subscriber.closed`: if closed, undo the late registration idempotently and return.
+   */
+  private onRegistered(p: StreamParams, subscriber: Subscriber<MessageEvent>): void {
+    const { connectionId, res } = p
+    if (subscriber.closed) {
+      this.heartbeat.stop(connectionId)
+      void this.transport.unregisterConnection(connectionId)
+      return
+    }
+    const record = this.transport.getConnection(connectionId)
+    if (record) {
+      this.fireHook(() => this.hooks?.onConnect?.(buildMeta(record)))
+    }
+    const heartbeatMs = this.options.sse?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
+    this.heartbeat.start(connectionId, res, heartbeatMs)
   }
 
   /**

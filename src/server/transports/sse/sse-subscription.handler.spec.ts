@@ -6,7 +6,8 @@ import { UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import type { Observable } from 'rxjs'
-import { Subject } from 'rxjs'
+import { firstValueFrom, Subject } from 'rxjs'
+import { take } from 'rxjs/operators'
 import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
@@ -451,9 +452,10 @@ describe('SseSubscriptionHandler', () => {
   it('emits offline queue events as MessageEvents when Last-Event-ID is set', async () => {
     const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
     const offlineDelivery = {
-      deliver: jest
+      retrieve: jest
         .fn()
         .mockResolvedValue([{ id: 'q1', event: 'queued', data: { x: 1 }, emittedAt: new Date() }]),
+      acknowledge: jest.fn().mockResolvedValue(undefined),
     } as unknown as OfflineQueueDeliveryService
     const handler = new SseSubscriptionHandler(
       transport,
@@ -510,11 +512,12 @@ describe('SseSubscriptionHandler', () => {
       getReplayEvents: jest.fn().mockReturnValue([]),
     })
     const offlineDelivery = {
-      deliver: jest
+      retrieve: jest
         .fn()
         .mockResolvedValue([
           { id: 'off-1', event: 'offline', data: { q: 1 }, emittedAt: new Date() },
         ]),
+      acknowledge: jest.fn().mockResolvedValue(undefined),
     } as unknown as OfflineQueueDeliveryService
     const handler = new SseSubscriptionHandler(
       transport,
@@ -574,5 +577,115 @@ describe('SseSubscriptionHandler', () => {
     expect(errors).toHaveLength(1)
     expect(errors[0]).toBe(regError)
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ error: regError }))
+  })
+
+  // FINDING A: registration is async and can resolve AFTER the downstream subscriber has
+  // already torn down. The late .then() must NOT fire onConnect or start a fresh heartbeat
+  // (that would leak the connection + write after close); it must instead perform idempotent
+  // late cleanup (heartbeat stop + unregister) so no registered connection is left behind.
+  it('does not activate when registration resolves after unsubscribe (late cleanup only)', async () => {
+    let resolveRegistration: () => void = () => undefined
+    const registerConnection = jest.fn().mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRegistration = resolve
+      }),
+    )
+    const onConnect = jest.fn()
+    const heartbeat = mkHeartbeat()
+    const transport = mkTransport({ registerConnection, emitConnectionEvent: false })
+    const handler = build(transport, heartbeat, mkOptions(), { onConnect })
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    // Client disconnects before registration completes: finalize() runs once.
+    sub.unsubscribe()
+    expect(heartbeat.stop).toHaveBeenCalledTimes(1)
+    expect(transport.unregisterConnection).toHaveBeenCalledTimes(1)
+    // Registration now resolves LATE — the .then() observes a closed subscriber.
+    resolveRegistration()
+    await Promise.resolve()
+    await Promise.resolve()
+    // No re-activation: onConnect never fires and no heartbeat is started.
+    expect(onConnect).not.toHaveBeenCalled()
+    expect(heartbeat.start).not.toHaveBeenCalled()
+    // Late cleanup ran idempotently: stop + unregister fired a second time, nothing leaked.
+    expect(heartbeat.stop).toHaveBeenCalledTimes(2)
+    expect(transport.unregisterConnection).toHaveBeenCalledTimes(2)
+  })
+
+  // FINDING B: the offline queue is acknowledged exactly once, AFTER the gap events have
+  // been emitted to an open subscriber — retrieve no longer prunes the durable queue.
+  it('acknowledges the offline queue exactly once after emission to an open subscriber', async () => {
+    const queued = { id: 'q1', event: 'queued', data: { x: 1 }, emittedAt: new Date() }
+    const acknowledge = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
+    const offlineDelivery = {
+      retrieve: jest.fn().mockResolvedValue([queued]),
+      acknowledge,
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const events: MessageEvent[] = []
+    const sub = stream.subscribe((e) => events.push(e))
+    // The queue event emitted synchronously on subscribe — ack must follow that emission.
+    expect(events.map((e) => e.id)).toContain('q1')
+    expect(acknowledge).toHaveBeenCalledTimes(1)
+    expect(acknowledge).toHaveBeenCalledWith('u1', [queued])
+    sub.unsubscribe()
+  })
+
+  // FINDING B: when the stream is never subscribed (client disconnects before subscribing),
+  // the durable queue must NOT be acknowledged — the events stay durable for redelivery.
+  it('does not acknowledge the offline queue when the stream is never subscribed', async () => {
+    const acknowledge = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
+    const offlineDelivery = {
+      retrieve: jest
+        .fn()
+        .mockResolvedValue([{ id: 'q1', event: 'queued', data: {}, emittedAt: new Date() }]),
+      acknowledge,
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    expect(acknowledge).not.toHaveBeenCalled()
+  })
+
+  // FINDING B: a subscriber that closes DURING emission (take(1)) leaves the subscriber
+  // closed at the ack check, so the queue is left durable rather than acknowledged.
+  it('does not acknowledge when the subscriber closes during emission', async () => {
+    const acknowledge = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({
+      getReplayEvents: jest.fn().mockReturnValue([]),
+      emitConnectionEvent: false,
+    })
+    const offlineDelivery = {
+      retrieve: jest
+        .fn()
+        .mockResolvedValue([{ id: 'q1', event: 'queued', data: {}, emittedAt: new Date() }]),
+      acknowledge,
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    // take(1) completes and closes the subscriber the instant the first event is emitted.
+    const first = await firstValueFrom(stream.pipe(take(1)))
+    expect(first.id).toBe('q1')
+    expect(acknowledge).not.toHaveBeenCalled()
   })
 })
