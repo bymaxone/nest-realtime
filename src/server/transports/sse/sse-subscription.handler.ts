@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { Inject, Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
-import { EMPTY, merge, of, Subject } from 'rxjs'
+import { EMPTY, merge, of, ReplaySubject, Subject } from 'rxjs'
 import type { Observable } from 'rxjs'
 import { catchError, finalize, takeUntil } from 'rxjs/operators'
 import { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
@@ -157,8 +157,35 @@ export class SseSubscriptionHandler {
       resolvedTenantId !== undefined ? { ...auth, tenantId: resolvedTenantId } : auth
 
     const connectionId = randomUUID()
-    const subject = new Subject<MessageEvent>()
+    // ReplaySubject buffers any events emitted between registerConnection() and the
+    // moment NestJS subscribes to the returned Observable, so no live event is lost
+    // during the registration→subscription gap.
+    const subject = new ReplaySubject<MessageEvent>()
     const close$ = new Subject<void>()
+
+    // Resolve the ring-buffer and offline-queue gaps BEFORE registering the connection.
+    // This captures the offline window atomically: no concurrent emitter can reach
+    // subject.next() before we know what "offline" means, so offline events always
+    // precede live events in the merged stream.
+    const lastEventId = singleHeader(req.headers['last-event-id'])
+    const replayEvents = lastEventId
+      ? this.transport.getReplayEvents(resolvedAuth.userId, lastEventId)
+      : []
+    const replay$ = replayEvents.length > 0 ? of(...replayEvents) : EMPTY
+
+    const ringBufferIds = new Set(replayEvents.map((e) => e.id ?? ''))
+    const queueEvents: OfflineQueuedEvent[] =
+      lastEventId && this.offlineDelivery
+        ? await this.offlineDelivery.deliver(resolvedAuth.userId, lastEventId, ringBufferIds)
+        : []
+    const queueReplay$: Observable<MessageEvent> =
+      queueEvents.length > 0
+        ? of(
+            ...queueEvents.map(
+              (e): MessageEvent => ({ id: e.id, type: e.event, data: e.data as object }),
+            ),
+          )
+        : EMPTY
 
     await this.transport.registerConnection({
       connectionId,
@@ -178,28 +205,6 @@ export class SseSubscriptionHandler {
     // Write raw `: keepalive\n\n` comments to the response on the configured interval.
     const heartbeatMs = this.options.sse?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
     this.heartbeat.start(connectionId, res, heartbeatMs)
-
-    // Replay events missed during reconnect when the client sends Last-Event-ID.
-    const lastEventId = singleHeader(req.headers['last-event-id'])
-    const replayEvents = lastEventId
-      ? this.transport.getReplayEvents(resolvedAuth.userId, lastEventId)
-      : []
-    const replay$ = replayEvents.length > 0 ? of(...replayEvents) : EMPTY
-
-    // Fetch gap events from the durable offline queue (de-duped against the ring buffer).
-    const ringBufferIds = new Set(replayEvents.map((e) => e.id ?? ''))
-    const queueEvents: OfflineQueuedEvent[] =
-      lastEventId && this.offlineDelivery
-        ? await this.offlineDelivery.deliver(resolvedAuth.userId, lastEventId, ringBufferIds)
-        : []
-    const queueReplay$: Observable<MessageEvent> =
-      queueEvents.length > 0
-        ? of(
-            ...queueEvents.map(
-              (e): MessageEvent => ({ id: e.id, type: e.event, data: e.data as object }),
-            ),
-          )
-        : EMPTY
 
     // Emit `connection:established` first unless disabled in options.
     const established$ = this.transport.emitConnectionEvent

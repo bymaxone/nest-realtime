@@ -443,6 +443,65 @@ describe('SseSubscriptionHandler', () => {
     expect(queued[0]?.data).toEqual({ x: 1 })
   })
 
+  // A live event emitted into the subject between registerConnection() completing and
+  // NestJS subscribing to the returned Observable must NOT be dropped. The ReplaySubject
+  // buffers it and replays it on subscribe, closing the registration→subscription gap.
+  it('does not drop a live event emitted after registerConnection but before subscription (race guard)', async () => {
+    const liveEvent: MessageEvent = { id: 'live-1', type: 'live', data: { v: 1 } }
+    const transport = mkTransport({
+      registerConnection: jest
+        .fn()
+        .mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+          // Simulate a concurrent emit arriving the instant registration completes,
+          // before the caller has subscribed to the returned Observable.
+          params.subject.next(liveEvent)
+        }),
+      emitConnectionEvent: false,
+      getReplayEvents: jest.fn().mockReturnValue([]),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const stream = await handler.handle(mkReq(), mkRes())
+    // Subscribe AFTER handle() resolves — the live event was emitted before this point.
+    const events = collect(stream)
+    expect(events).toContainEqual(liveEvent)
+  })
+
+  // Offline queue events must appear before live events in the stream regardless of
+  // when the concurrent live emit arrives (ordering invariant from the Copilot finding).
+  it('delivers offline queue events before live events that race registration (ordering invariant)', async () => {
+    const liveEvent: MessageEvent = { id: 'live-1', type: 'live', data: { v: 1 } }
+    const transport = mkTransport({
+      registerConnection: jest
+        .fn()
+        .mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+          // Racing live event arrives the moment registration completes.
+          params.subject.next(liveEvent)
+        }),
+      emitConnectionEvent: false,
+      getReplayEvents: jest.fn().mockReturnValue([]),
+    })
+    const offlineDelivery = {
+      deliver: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'off-1', event: 'offline', data: { q: 1 }, emittedAt: new Date() },
+        ]),
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const events = collect(stream)
+    expect(events).toHaveLength(2)
+    // Offline (queue) event must precede the racing live event.
+    expect(events[0]?.type).toBe('offline')
+    expect(events[1]?.type).toBe('live')
+  })
+
   // A replay event with no id falls back to '' in the ringBufferIds set (id ?? '' branch).
   it('handles replay events with undefined id when building ringBufferIds', async () => {
     // A MessageEvent without id covers the `e.id ?? ''` fallback branch.
