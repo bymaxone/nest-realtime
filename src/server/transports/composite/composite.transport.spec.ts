@@ -158,6 +158,14 @@ describe('CompositeTransport', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToUser'))
   })
 
+  // Kills L89 StringLiteral: `'broadcast'` → `""`.
+  // Existing test error contains 'broadcast' so passes mutation; this one uses neutral error msg.
+  it('fanOut warn for broadcast names the operation even when the error message does not contain broadcast', async () => {
+    sseMock.broadcast.mockRejectedValue(new Error('transport-down'))
+    await composite.broadcast('evt', {})
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('broadcast'))
+  })
+
   it('fanOut warn contains the raw rejection reason when the reason has no .message', async () => {
     // Kills ?? → && mutation: without ??, undefined && reason = undefined, not the reason string.
     sseMock.emitToUser.mockRejectedValue('sentinel-reason-value')

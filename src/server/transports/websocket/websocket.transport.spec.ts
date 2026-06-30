@@ -502,6 +502,41 @@ describe('WebSocketTransport', () => {
       expect(sockA.disconnect).not.toHaveBeenCalled()
     })
 
+    // Kills L266 EqualityOperator: `a.connectedAt <= b.connectedAt` → `<`.
+    // When timestamps are equal, `<=` picks index-0 (first-registered) to evict; `<` picks index-1 instead.
+    it('evicts the first-registered connection when two connections share the same connectedAt', async () => {
+      jest.useFakeTimers()
+      try {
+        const sockFirst = makeSocket('s-first')
+        const sockSecond = makeSocket('s-second')
+        const sockTrigger = makeSocket('s-trigger')
+        const server = makeServer(
+          new Map([
+            ['s-first', sockFirst],
+            ['s-second', sockSecond],
+            ['s-trigger', sockTrigger],
+          ]),
+        )
+        const module = await buildModule({ websocket: { maxConnectionsPerUser: 2 } })
+        const t = module.get(WebSocketTransport)
+        t.setServer(server as never)
+
+        // Both register at the same frozen timestamp → identical connectedAt.
+        await t.registerSocket(sockFirst as never, { userId: 'u-tie', tenantId: 't-1' })
+        await t.registerSocket(sockSecond as never, { userId: 'u-tie', tenantId: 't-1' })
+
+        // Trigger eviction: 3 connections > limit 2.
+        await t.registerSocket(sockTrigger as never, { userId: 'u-tie', tenantId: 't-1' })
+
+        // With `<=`, equal timestamps → first (index 0) is "oldest" and gets evicted.
+        // With mutation `<`, T < T = false → second (index 1) is picked instead.
+        expect(sockFirst.disconnect).toHaveBeenCalledWith(true)
+        expect(sockSecond.disconnect).not.toHaveBeenCalled()
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
     it('does not evict when limit is zero or negative (disabled)', async () => {
       // A zero or negative limit is treated as disabled.
       const socket1 = makeSocket('s-1')

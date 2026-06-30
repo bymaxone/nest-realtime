@@ -661,4 +661,35 @@ describe('SseTransport', () => {
     expect(onDisconnect).not.toHaveBeenCalled()
     expect(connections.get('ws1')).toBeDefined()
   })
+
+  // Kills L280 ConditionalExpression: `conn.transport === 'sse'` → `true`.
+  // emitToRoomLocal must only deliver to SSE connections; a WS conn with a real Subject must be skipped.
+  it('emitToRoomLocal does not deliver to a websocket connection in the room', async () => {
+    const { transport, connections, rooms } = build()
+    const sse = addConn(connections, { connectionId: 'c-sse', userId: 'u1', transport: 'sse' })
+
+    const wsReceived: MessageEvent[] = []
+    const wsSubject = new Subject<MessageEvent>()
+    wsSubject.subscribe((m) => wsReceived.push(m))
+    connections.register({
+      connectionId: 'c-ws',
+      userId: 'u2',
+      tenantId: undefined,
+      transport: 'websocket',
+      ip: '127.0.0.1',
+      userAgent: undefined,
+      connectedAt: new Date(),
+      subject: wsSubject,
+      close$: new Subject<void>(),
+      originalAuth: { userId: 'u2', tenantId: undefined, roles: undefined },
+    })
+
+    rooms.join('c-sse', 'room:x')
+    rooms.join('c-ws', 'room:x')
+
+    transport.emitToRoomLocal('room:x', 'ping', {}, 'id-1')
+
+    expect(sse.received).toHaveLength(1)
+    expect(wsReceived).toHaveLength(0)
+  })
 })

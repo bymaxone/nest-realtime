@@ -557,6 +557,58 @@ describe('SseSubscriptionHandler', () => {
     expect(events[0]?.type).toBe('x')
   })
 
+  // Kills L194 StringLiteral: `e.id ?? ''` → `e.id ?? "Stryker was here!"`.
+  // The ringBufferIds Set is passed as 3rd arg to retrieve; undefined ids must fall back to ''.
+  it('passes empty-string fallback in ringBufferIds when a replay event has no id', async () => {
+    const replayEvent: MessageEvent = { type: 'x', data: {} }
+    const retrieveMock = jest.fn().mockResolvedValue([])
+    const transport = mkTransport({
+      getReplayEvents: jest.fn().mockReturnValue([replayEvent]),
+      emitConnectionEvent: false,
+    })
+    const offlineDelivery = {
+      retrieve: retrieveMock,
+      acknowledge: jest.fn().mockResolvedValue(undefined),
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    collect(stream)
+    expect(retrieveMock).toHaveBeenCalledWith('u1', '0', expect.any(Set))
+    const ids = retrieveMock.mock.calls[0]?.[2] as Set<string>
+    expect(ids.has('')).toBe(true)
+  })
+
+  // Kills L237 ConditionalExpression (`true`) and L237 EqualityOperator (`>= 0`).
+  // With empty queueEvents (retrieve returns []), acknowledge must NOT be called.
+  it('does not acknowledge the offline queue when queueEvents is empty (retrieve returns [])', async () => {
+    const acknowledge = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({
+      getReplayEvents: jest.fn().mockReturnValue([]),
+      emitConnectionEvent: false,
+    })
+    const offlineDelivery = {
+      retrieve: jest.fn().mockResolvedValue([]),
+      acknowledge,
+    } as unknown as OfflineQueueDeliveryService
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions({ sse: { emitConnectionEvent: false } }),
+      undefined,
+      offlineDelivery,
+    )
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+    const sub = stream.subscribe()
+    sub.unsubscribe()
+    expect(acknowledge).not.toHaveBeenCalled()
+  })
+
   // When registerConnection rejects, onError fires best-effort and the stream errors
   // so the @Sse consumer receives a deterministic failure response.
   it('routes a registerConnection failure to onError and errors the stream', async () => {

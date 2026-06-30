@@ -181,6 +181,30 @@ describe('ReauthenticationService', () => {
     expect(revalidate).toHaveBeenCalledTimes(2)
   })
 
+  // Kills L120 EqualityOperator: `now - lastValid < cacheTtlMs` → `<=`.
+  // At tick 2 with interval=10s and ttl=10_000ms, diff=10_000=ttl. Original (<) revalidates; mutation (<=) skips.
+  it('revalidates when now-lastValid equals cacheTtlMs exactly (boundary: < not <=)', async () => {
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const connections = mkConnections([mkRecord()])
+    const realtime = mkRealtime()
+    const auth = mkAuth(revalidate)
+    const svc = build(
+      connections,
+      realtime,
+      auth,
+      mkOptions({ intervalSeconds: 10, cacheTtlMs: 10_000 }),
+    )
+    svc.onModuleInit()
+    // Tick 1 (t=10_000): revalidate runs, cache set at t=10_000.
+    jest.advanceTimersByTime(10_000)
+    await flush()
+    expect(revalidate).toHaveBeenCalledTimes(1)
+    // Tick 2 (t=20_000): diff=10_000=cacheTtlMs. Original (<) → re-run. Mutation (<=) → skip.
+    jest.advanceTimersByTime(10_000)
+    await flush()
+    expect(revalidate).toHaveBeenCalledTimes(2)
+  })
+
   // revalidate returns false + onFailure:'disconnect' → only disconnect is called.
   it('disconnects the connection when revalidate returns false (onFailure: disconnect)', async () => {
     const revalidate = jest.fn().mockResolvedValue(false)

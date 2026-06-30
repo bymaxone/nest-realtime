@@ -693,6 +693,118 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     })
     expect(dynamic.exports).toContain(RealtimeService)
   })
+
+  // Kills L181 StringLiteral: createSseController('/events') → createSseController('').
+  it('SSE controller has route path "events" when transport hint is sse', () => {
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+    })
+    const ctrl = dynamic.controllers?.[0] as (new (...args: unknown[]) => unknown) & {
+      prototype: Record<string, unknown>
+    }
+    expect(Reflect.getMetadata('path', ctrl.prototype['subscribe'] as object)).toBe('events')
+  })
+
+  // Kills L207 StringLiteral: createSseController('/events') → createSseController('') for 'both'.
+  it('SSE controller has route path "events" when transport hint is both', () => {
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'both',
+      useFactory: async () => ({ transport: 'both', authenticator }),
+    })
+    const ctrl = dynamic.controllers?.[0] as (new (...args: unknown[]) => unknown) & {
+      prototype: Record<string, unknown>
+    }
+    expect(Reflect.getMetadata('path', ctrl.prototype['subscribe'] as object)).toBe('events')
+  })
+
+  // Kills L212 StringLiteral: createSseController('/events') → createSseController('') for legacy path.
+  it('SSE controller has route path "events" when no transport hint is supplied', () => {
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+    })
+    const ctrl = dynamic.controllers?.[0] as (new (...args: unknown[]) => unknown) & {
+      prototype: Record<string, unknown>
+    }
+    expect(Reflect.getMetadata('path', ctrl.prototype['subscribe'] as object)).toBe('events')
+  })
+
+  // Kills L195:7 ConditionalExpression (false) and L195:24 BlockStatement ({}).
+  // The 'both' path must wire REALTIME_TRANSPORT_TOKEN with useExisting CompositeTransport, not useFactory.
+  it('REALTIME_TRANSPORT_TOKEN uses useExisting CompositeTransport when transport hint is both', () => {
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'both',
+      useFactory: async () => ({ transport: 'both', authenticator }),
+    })
+    const tokenProvider = (dynamic.providers ?? []).find(
+      (p): p is { provide: symbol; useExisting: unknown } =>
+        typeof p === 'object' &&
+        p !== null &&
+        'provide' in p &&
+        (p as { provide: unknown }).provide === REALTIME_TRANSPORT_TOKEN,
+    )
+    expect(tokenProvider).toBeDefined()
+    expect((tokenProvider as { useExisting?: unknown })?.useExisting).toBe(CompositeTransport)
+  })
+
+  // Kills L246 StringLiteral: error message second half → ''. Check 'does not match' is present.
+  it('transport hint mismatch error contains "does not match"', async () => {
+    const testModule = Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useFactory: async () => ({ transport: 'websocket', authenticator }),
+        }),
+      ],
+    })
+    await expect(testModule.compile()).rejects.toThrow(/does not match/)
+  })
+
+  // Kills L365 StringLiteral: 'useFactory' → '' in resolveAsyncOptions source param.
+  it('null useFactory error message identifies the source as useFactory', async () => {
+    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+      useFactory: async () => null as unknown as BymaxRealtimeModuleOptions,
+    }
+    const testModule = Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRootAsync(asyncOptions)],
+    })
+    await expect(testModule.compile()).rejects.toThrow(/useFactory/)
+  })
+
+  // Kills L367 ArrayDeclaration: inject: [...(asyncOptions.inject ?? [])] → inject: [].
+  // Checks the DynamicModule structure: the resolved options provider must carry the inject tokens.
+  it('includes custom inject tokens in the resolved options provider when useFactory is specified', () => {
+    const SENTINEL = Symbol('SENTINEL')
+    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+      inject: [SENTINEL],
+    }
+    const dynamic = BymaxRealtimeModule.forRootAsync(asyncOptions)
+    // Find the provider that wires the custom inject array (the resolved options provider).
+    const hasInjected = (dynamic.providers ?? []).some(
+      (p) =>
+        typeof p === 'object' &&
+        p !== null &&
+        'inject' in p &&
+        Array.isArray((p as { inject: unknown }).inject) &&
+        ((p as { inject: unknown[] }).inject as unknown[]).includes(SENTINEL),
+    )
+    expect(hasInjected).toBe(true)
+  })
+
+  // Kills L376 StringLiteral: 'options factory' → '' in resolveAsyncOptions source param.
+  it('null useClass factory error message identifies the source as options factory', async () => {
+    @Injectable()
+    class NullClassFactory implements BymaxRealtimeModuleOptionsFactory {
+      createRealtimeOptions(): BymaxRealtimeModuleOptions {
+        return null as unknown as BymaxRealtimeModuleOptions
+      }
+    }
+    const testModule = Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRootAsync({ useClass: NullClassFactory })],
+    })
+    await expect(testModule.compile()).rejects.toThrow(/options factory/)
+  })
 })
 
 describe('assertWsPeerDeps', () => {

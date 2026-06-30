@@ -228,4 +228,24 @@ describe('RedisRealtimePubSub', () => {
     await unsub()
     expect(quitMock).toHaveBeenCalled()
   })
+
+  // Kills L78 ConditionalExpression: `if (this.handlers.size === 0)` → `if (true)`.
+  // With two handlers, removing only the first still leaves handlers.size=1, so quit must NOT fire.
+  it('does not quit the sub client when a second handler is still registered', async () => {
+    const quitMock = jest.fn().mockResolvedValue('OK')
+    const fakeSub = {
+      subscribe: jest.fn().mockResolvedValue('OK'),
+      on: jest.fn(),
+      quit: quitMock,
+    }
+    const fakePub = {
+      publish: jest.fn().mockResolvedValue(undefined),
+      duplicate: jest.fn().mockReturnValue(fakeSub),
+    }
+    const pubsub = new RedisRealtimePubSub({ client: fakePub as unknown as Redis })
+    const unsub1 = await pubsub.subscribe(jest.fn())
+    await pubsub.subscribe(jest.fn())
+    await unsub1()
+    expect(quitMock).not.toHaveBeenCalled()
+  })
 })
