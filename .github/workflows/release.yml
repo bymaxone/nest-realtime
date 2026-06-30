@@ -1,7 +1,8 @@
-# Tag-driven release workflow. Triggered by pushing a `v*` tag.
-# Publishes @bymax-one/nest-realtime to npm with OIDC provenance (no NPM_TOKEN secret).
+# Tag-driven release workflow. Triggered only by pushing a `v*` tag.
+# Publishes @bymax-one/nest-realtime to npm with OIDC provenance attestation.
 # The publish job is gated by the `npm-publish` environment (manual approval required).
 # This workflow is INERT until a human pushes a tag — never auto-triggered on PRs or branches.
+# NODE_AUTH_TOKEN is read from the NPM_TOKEN repository secret; configure it before the first release.
 name: Release
 
 on:
