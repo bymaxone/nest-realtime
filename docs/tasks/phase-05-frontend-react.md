@@ -1,6 +1,6 @@
 # Phase 5 — Frontend (`./react`)
 
-> **Status**: 📋 ToDo · **Progress**: 0 / 12 tasks · **Last updated**: 2026-06-23
+> **Status**: 🔄 In Progress · **Progress**: 0 / 12 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 6 (Phase 5)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 12 (Frontend Integration)
 

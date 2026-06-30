@@ -68,8 +68,8 @@ The phase order respects the dependency graph (Appendix A): contracts before tra
 
 ### 1.4 Progress
 
-- **Overall progress:** 🔄 3 / 6 phases done (50%) — 51 / 73 tasks (70%)
-- **Active phase:** **Phase 4** (WebSocket Transport) — 👀 Review (PR open)
+- **Overall progress:** 🔄 4 / 6 phases done (67%) — 51 / 73 tasks (70%)
+- **Active phase:** **Phase 5** (Frontend React) — 🔄 In Progress
 - **Blocked:** none
 
 ### 1.5 Phase dashboard
@@ -81,10 +81,10 @@ Canonical phase status. Each row links to that phase's task file in [`docs/tasks
 | 1 | [Foundation + SSE Transport](./tasks/phase-01-foundation-sse.md) | ✅ Done | 16/16 | MEDIUM | 2026-06-27 |
 | 2 | [Auth + Last-Event-ID + Reauthentication](./tasks/phase-02-auth-last-event-id.md) | ✅ Done | 12/12 | MEDIUM | 2026-06-27 |
 | 3 | [Horizontal Scaling (SSE)](./tasks/phase-03-horizontal-scaling-sse.md) | ✅ Done | 11/11 | HIGH | 2026-06-29 |
-| 4 | [WebSocket Transport](./tasks/phase-04-websocket-transport.md) | 👀 Review | 12/12 | HIGH | 2026-06-30 |
-| 5 | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md) | 📋 ToDo | 0/12 | MEDIUM | 2026-06-23 |
+| 4 | [WebSocket Transport](./tasks/phase-04-websocket-transport.md) | ✅ Done | 12/12 | HIGH | 2026-06-30 |
+| 5 | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md) | 🔄 In Progress | 0/12 | MEDIUM | 2026-06-30 |
 | 6 | [Release v0.1.0](./tasks/phase-06-release.md) | 📋 ToDo | 0/10 | LOW | 2026-06-23 |
-| | **Total** | 🔄 **3 / 6 phases** | **51 / 73 tasks** | — | — |
+| | **Total** | 🔄 **4 / 6 phases** | **51 / 73 tasks** | — | — |
 
 > **No time estimate** — this plan is intended for execution by AI agents. Duration in human days does not apply. Relative complexity per phase is in the dashboard above and detailed per sub-step in the [Complexity Matrix in Appendix B](#appendix-b--complexity-matrix). Use those signals to prioritize more careful human review on HIGH complexity phases (Phase 3 and Phase 4).
 
