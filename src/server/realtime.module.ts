@@ -1,5 +1,5 @@
 /**
- * @fileoverview The dynamic NestJS module wiring the SSE transport and public API.
+ * @fileoverview The dynamic NestJS module wiring SSE, WebSocket, or both transports.
  * @layer composition
  */
 import { randomUUID } from 'node:crypto'
@@ -36,11 +36,90 @@ import { EventReplayBuffer } from './transports/sse/event-replay-buffer'
 import { HeartbeatService } from './transports/sse/heartbeat.service'
 import { SseSubscriptionHandler } from './transports/sse/sse-subscription.handler'
 import { SseTransport } from './transports/sse/sse.transport'
+import { WebSocketTransport } from './transports/websocket/websocket.transport'
+import { RealtimeGateway } from './transports/websocket/realtime.gateway'
+import { CompositeTransport } from './transports/composite/composite.transport'
 
 /**
- * Realtime module — SSE transport (default) with a unified, transport-agnostic
- * public API (`RealtimeService`). Registered globally so a single configuration
- * serves the whole application.
+ * Assert that the required WebSocket peer packages are resolvable.
+ *
+ * Called before registering WS providers so the consumer receives a clear,
+ * actionable error instead of a confusing `Cannot find module` at boot time.
+ * An optional `resolver` parameter makes this testable without touching the
+ * file system.
+ */
+export function assertWsPeerDeps(resolver: (id: string) => string = require.resolve): void {
+  try {
+    resolver('@nestjs/websockets')
+    resolver('socket.io')
+  } catch {
+    throw new Error(
+      "[BymaxRealtimeModule] transport 'websocket'|'both' requires '@nestjs/websockets' and " +
+        "'socket.io' — install them, or switch to transport: 'sse'.",
+    )
+  }
+}
+
+/** Common providers required by all transport modes. */
+function buildCommonProviders(
+  resolved: BymaxRealtimeModuleOptions,
+  instanceId: string,
+): Provider[] {
+  return [
+    { provide: REALTIME_OPTIONS_TOKEN, useValue: resolved },
+    { provide: REALTIME_INSTANCE_ID_TOKEN, useValue: instanceId },
+    { provide: REALTIME_AUTHENTICATOR_TOKEN, useValue: resolved.authenticator },
+    { provide: REALTIME_PUBSUB_TOKEN, useValue: resolved.pubsub ?? new InMemoryPubSub() },
+    { provide: REALTIME_HOOKS_TOKEN, useValue: resolved.hooks ?? {} },
+    { provide: REALTIME_OFFLINE_QUEUE_TOKEN, useValue: resolved.offlineQueue },
+    { provide: REALTIME_PRESENCE_TOKEN, useValue: resolved.presence },
+    ConnectionRegistry,
+    RoomRegistry,
+    EventIdGenerator,
+    EventReplayBuffer,
+    HeartbeatService,
+    RealtimeService,
+    ReauthenticationService,
+    RealtimePubSubSubscriber,
+    OfflineQueueDeliveryService,
+  ]
+}
+
+/** Build transport-specific providers + the REALTIME_TRANSPORT_TOKEN binding. */
+function buildTransportProviders(resolved: BymaxRealtimeModuleOptions): {
+  providers: Provider[]
+  controllers: Parameters<typeof createSseController>[0][]
+  gateways: Provider[]
+} {
+  const transport = resolved.transport
+  const providers: Provider[] = []
+  const controllers: Parameters<typeof createSseController>[0][] = []
+  const gateways: Provider[] = []
+
+  if (transport === 'sse') {
+    providers.push(SseTransport, SseSubscriptionHandler)
+    providers.push({ provide: REALTIME_TRANSPORT_TOKEN, useExisting: SseTransport })
+    controllers.push(resolved.sse?.endpoint ?? '/events')
+  } else if (transport === 'websocket') {
+    assertWsPeerDeps()
+    providers.push(WebSocketTransport)
+    providers.push({ provide: REALTIME_TRANSPORT_TOKEN, useExisting: WebSocketTransport })
+    gateways.push(RealtimeGateway)
+  } else {
+    // 'both'
+    assertWsPeerDeps()
+    providers.push(SseTransport, WebSocketTransport, CompositeTransport, SseSubscriptionHandler)
+    providers.push({ provide: REALTIME_TRANSPORT_TOKEN, useExisting: CompositeTransport })
+    controllers.push(resolved.sse?.endpoint ?? '/events')
+    gateways.push(RealtimeGateway)
+  }
+
+  return { providers, controllers, gateways }
+}
+
+/**
+ * Realtime module — supports SSE, WebSocket, or both transports. Registered
+ * globally so a single configuration serves the whole application.
  */
 @Global()
 @Module({})
@@ -61,11 +140,6 @@ export class BymaxRealtimeModule {
   static forRoot(options: BymaxRealtimeModuleOptions): DynamicModule {
     validateOptions(options)
     const resolved = applyDefaults(options)
-    if (resolved.transport !== 'sse') {
-      throw new Error(
-        `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: transport "${resolved.transport}" is not available; only 'sse' is supported`,
-      )
-    }
 
     const instanceId = randomUUID()
 
@@ -75,27 +149,8 @@ export class BymaxRealtimeModule {
       )
     }
 
-    const providers: Provider[] = [
-      { provide: REALTIME_OPTIONS_TOKEN, useValue: resolved },
-      { provide: REALTIME_INSTANCE_ID_TOKEN, useValue: instanceId },
-      { provide: REALTIME_AUTHENTICATOR_TOKEN, useValue: resolved.authenticator },
-      { provide: REALTIME_PUBSUB_TOKEN, useValue: resolved.pubsub ?? new InMemoryPubSub() },
-      { provide: REALTIME_HOOKS_TOKEN, useValue: resolved.hooks ?? {} },
-      { provide: REALTIME_OFFLINE_QUEUE_TOKEN, useValue: resolved.offlineQueue },
-      { provide: REALTIME_PRESENCE_TOKEN, useValue: resolved.presence },
-      ConnectionRegistry,
-      RoomRegistry,
-      EventIdGenerator,
-      EventReplayBuffer,
-      HeartbeatService,
-      SseTransport,
-      { provide: REALTIME_TRANSPORT_TOKEN, useExisting: SseTransport },
-      SseSubscriptionHandler,
-      RealtimeService,
-      ReauthenticationService,
-      RealtimePubSubSubscriber,
-      OfflineQueueDeliveryService,
-    ]
+    const common = buildCommonProviders(resolved, instanceId)
+    const { providers: transportProviders, controllers, gateways } = buildTransportProviders(resolved)
 
     BymaxRealtimeModule.logger.log(
       `Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`,
@@ -103,8 +158,8 @@ export class BymaxRealtimeModule {
 
     return {
       module: BymaxRealtimeModule,
-      controllers: [createSseController(resolved.sse.endpoint)],
-      providers,
+      controllers: controllers.map((ep) => createSseController(ep)),
+      providers: [...common, ...transportProviders, ...gateways],
       exports: [
         RealtimeService,
         ConnectionRegistry,
@@ -130,7 +185,7 @@ export class BymaxRealtimeModule {
    * application fails to start with a clear error.
    *
    * Controllers are registered at decoration time, so the async path binds the
-   * SSE controller to the fixed default endpoint `/events`.  Consumers that need
+   * SSE controller to the fixed default endpoint `/events`. Consumers that need
    * a non-default endpoint with async configuration should use `forRoot` and
    * pre-resolve the options before passing them.
    *
@@ -147,8 +202,6 @@ export class BymaxRealtimeModule {
    * ```
    */
   static forRootAsync(asyncOptions: BymaxRealtimeModuleAsyncOptions): DynamicModule {
-    // Exactly one async-options pattern must be provided; otherwise DI would inject
-    // `undefined` and surface a confusing Nest error instead of an actionable one.
     const patterns = [
       asyncOptions.useFactory,
       asyncOptions.useClass,
@@ -159,11 +212,10 @@ export class BymaxRealtimeModule {
         `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: forRootAsync requires exactly one of useFactory, useClass, or useExisting (received ${patterns.length})`,
       )
     }
-    // Internal token scoped to this call — avoids collisions between multiple forRootAsync calls.
-    const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
 
-    // The resolved-options provider normalises all three async patterns into a single
-    // REALTIME_OPTIONS_TOKEN provider that validates + applies defaults.
+    const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
+    const instanceId = randomUUID()
+
     const resolvedOptionsProvider: Provider = asyncOptions.useFactory
       ? {
           provide: REALTIME_OPTIONS_TOKEN,
@@ -183,7 +235,6 @@ export class BymaxRealtimeModule {
           inject: [...(asyncOptions.inject ?? [])],
         }
       : {
-          // useClass / useExisting: inject the factory service and call createRealtimeOptions().
           provide: REALTIME_OPTIONS_TOKEN,
           useFactory: async (factory: BymaxRealtimeModuleOptionsFactory) => {
             const raw = await factory.createRealtimeOptions()
@@ -201,8 +252,6 @@ export class BymaxRealtimeModule {
           inject: [asyncOptions.useClass ? FACTORY_TOKEN : asyncOptions.useExisting!],
         }
 
-    // For useClass, register the factory class under the internal token so DI can
-    // instantiate it (it may itself have injectable dependencies).
     const factoryClassProvider: Provider[] = asyncOptions.useClass
       ? [{ provide: FACTORY_TOKEN, useClass: asyncOptions.useClass }]
       : []
@@ -232,7 +281,42 @@ export class BymaxRealtimeModule {
       inject: [REALTIME_OPTIONS_TOKEN],
     }
 
-    const instanceId = randomUUID()
+    const offlineQueueProvider: Provider = {
+      provide: REALTIME_OFFLINE_QUEUE_TOKEN,
+      useFactory: (opts: BymaxRealtimeModuleOptions) => opts.offlineQueue,
+      inject: [REALTIME_OPTIONS_TOKEN],
+    }
+
+    const presenceProvider: Provider = {
+      provide: REALTIME_PRESENCE_TOKEN,
+      useFactory: (opts: BymaxRealtimeModuleOptions) => opts.presence,
+      inject: [REALTIME_OPTIONS_TOKEN],
+    }
+
+    // For async mode, we always register all possible transport providers and
+    // let the REALTIME_TRANSPORT_TOKEN factory resolve dynamically at runtime
+    // based on the resolved options. The SSE controller defaults to /events.
+    const asyncTransportProviders: Provider[] = [
+      SseTransport,
+      SseSubscriptionHandler,
+      WebSocketTransport,
+      CompositeTransport,
+      RealtimeGateway,
+      {
+        provide: REALTIME_TRANSPORT_TOKEN,
+        useFactory: (
+          opts: BymaxRealtimeModuleOptions,
+          sse: SseTransport,
+          ws: WebSocketTransport,
+          composite: CompositeTransport,
+        ) => {
+          if (opts.transport === 'sse') return sse
+          if (opts.transport === 'websocket') return ws
+          return composite
+        },
+        inject: [REALTIME_OPTIONS_TOKEN, SseTransport, WebSocketTransport, CompositeTransport],
+      },
+    ]
 
     const providers: Provider[] = [
       ...factoryClassProvider,
@@ -241,28 +325,18 @@ export class BymaxRealtimeModule {
       pubsubProvider,
       hooksProvider,
       { provide: REALTIME_INSTANCE_ID_TOKEN, useValue: instanceId },
-      {
-        provide: REALTIME_OFFLINE_QUEUE_TOKEN,
-        useFactory: (opts: BymaxRealtimeModuleOptions) => opts.offlineQueue,
-        inject: [REALTIME_OPTIONS_TOKEN],
-      },
-      {
-        provide: REALTIME_PRESENCE_TOKEN,
-        useFactory: (opts: BymaxRealtimeModuleOptions) => opts.presence,
-        inject: [REALTIME_OPTIONS_TOKEN],
-      },
+      offlineQueueProvider,
+      presenceProvider,
       ConnectionRegistry,
       RoomRegistry,
       EventIdGenerator,
-      EventReplayBuffer, // plain class — injects REALTIME_OPTIONS_TOKEN itself
+      EventReplayBuffer,
       HeartbeatService,
-      SseTransport,
-      { provide: REALTIME_TRANSPORT_TOKEN, useExisting: SseTransport },
-      SseSubscriptionHandler,
       RealtimeService,
       ReauthenticationService,
       RealtimePubSubSubscriber,
       OfflineQueueDeliveryService,
+      ...asyncTransportProviders,
       ...(asyncOptions.extraProviders ?? []),
     ]
 
@@ -270,8 +344,6 @@ export class BymaxRealtimeModule {
       module: BymaxRealtimeModule,
       imports: asyncOptions.imports ?? [],
       providers,
-      // Controllers are registered at decoration time; the async path binds the
-      // fixed default endpoint. Use forRoot when a custom endpoint is needed.
       controllers: [createSseController('/events')],
       exports: [
         RealtimeService,
