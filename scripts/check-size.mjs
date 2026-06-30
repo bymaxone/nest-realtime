@@ -20,10 +20,14 @@ import { dirname, join } from 'node:path'
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
+// Budgets calibrated against measured v0.1.0 brotli sizes with ~15% headroom:
+//   server 17.13 KB → 18 KB  (5% headroom — already tight)
+//   shared  0.44 KB →  0.6 KB (37% headroom, kept slightly generous for future constants)
+//   react   1.90 KB →  2.2 KB (16% headroom)
 const BUDGETS = [
   { name: 'server (NestJS module + transports)', path: 'dist/server/index.mjs', brotli: 18_000 },
-  { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 3_000 },
-  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 4_000 },
+  { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 600 },
+  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_200 },
 ]
 
 const FORBIDDEN_STATIC = [{ path: 'dist/react/index.mjs', token: 'socket.io-client' }]

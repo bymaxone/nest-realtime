@@ -1,6 +1,6 @@
 # Phase 6 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 10 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 6 / 10 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 7
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -44,14 +44,14 @@ Residual (non-mechanical) risk: fine-tuning the bundle budgets once the real `di
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 6.1 | `README.md` with badges + 4 Quick-Start scenarios | 📋 ToDo | P0 | M | 5.12 |
-| 6.2 | `CHANGELOG.md` (Keep a Changelog format) | 📋 ToDo | P0 | S | 1.1 |
-| 6.3 | `SECURITY.md` (auth-inversion + CORS + anti-IDOR) | 📋 ToDo | P0 | S | 1.1 |
-| 6.4 | `CLAUDE.md` + `AGENTS.md` agent quick reference | 📋 ToDo | P1 | M | 1.1 |
-| 6.5 | Finalize CI — `release.yml` + scheduled cross-instance e2e (verify the Phase-1 workflows) | 📋 ToDo | P0 | M | 1.16 |
-| 6.6 | Mutation-testing plan + results + baseline run | 📋 ToDo | P1 | M | 5.12 |
-| 6.7 | `LICENSE` (MIT) + finalized `.npmignore` | 📋 ToDo | P0 | S | 1.1 |
-| 6.8 | Final bundle-size budgets | 📋 ToDo | P1 | S | 5.12 |
+| 6.1 | `README.md` with badges + 4 Quick-Start scenarios | ✅ Done | P0 | M | 5.12 |
+| 6.2 | `CHANGELOG.md` (Keep a Changelog format) | ✅ Done | P0 | S | 1.1 |
+| 6.3 | `SECURITY.md` (auth-inversion + CORS + anti-IDOR) | ✅ Done | P0 | S | 1.1 |
+| 6.4 | `CLAUDE.md` + `AGENTS.md` agent quick reference | ✅ Done | P1 | M | 1.1 |
+| 6.5 | Finalize CI — `release.yml` + scheduled cross-instance e2e (verify the Phase-1 workflows) | ✅ Done | P0 | M | 1.16 |
+| 6.6 | Mutation-testing plan + results + baseline run | 🟡 Partial | P1 | M | 5.12 |
+| 6.7 | `LICENSE` (MIT) + finalized `.npmignore` | ✅ Done | P0 | S | 1.1 |
+| 6.8 | Final bundle-size budgets | ✅ Done | P1 | S | 5.12 |
 | 6.9 | Final pre-publish gate | 📋 ToDo | P0 | S | 6.1…6.8 |
 | 6.10 | Tag `v0.1.0` + npm publish `--provenance` | 📋 ToDo | P0 | S | 6.9 |
 
