@@ -1,6 +1,6 @@
 # Phase 6 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 6 / 10 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 8 / 10 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 7
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -52,7 +52,7 @@ Residual (non-mechanical) risk: fine-tuning the bundle budgets once the real `di
 | 6.6 | Mutation-testing plan + results + baseline run | 🟡 Partial | P1 | M | 5.12 |
 | 6.7 | `LICENSE` (MIT) + finalized `.npmignore` | ✅ Done | P0 | S | 1.1 |
 | 6.8 | Final bundle-size budgets | ✅ Done | P1 | S | 5.12 |
-| 6.9 | Final pre-publish gate | 📋 ToDo | P0 | S | 6.1…6.8 |
+| 6.9 | Final pre-publish gate | ✅ Done | P0 | S | 6.1…6.8 |
 | 6.10 | Tag `v0.1.0` + npm publish `--provenance` | 📋 ToDo | P0 | S | 6.9 |
 
 ---
@@ -977,4 +977,12 @@ Completion Protocol (after you finish):
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
-<!-- Entries are appended here as each task completes (none yet). -->
+- 6.1 ✅ 2026-06-30 — README.md with badges, 4 Quick-Start scenarios, auth-inversion section, infra notes
+- 6.2 ✅ 2026-06-30 — CHANGELOG.md with Keep a Changelog format, v0.1.0 full feature set entry
+- 6.3 ✅ 2026-06-30 — SECURITY.md: auth-inversion responsibility, CORS ownership, anti-IDOR, disclosure process
+- 6.4 ✅ 2026-06-30 — CLAUDE.md + AGENTS.md: agent quick reference + architecture docs for realtime
+- 6.5 ✅ 2026-06-30 — release.yml (OIDC, env gate, tag↔version guard) + e2e-cross-instance.yml (daily, Redis)
+- 6.6 🟡 2026-06-30 — mutation baseline run: 81.99% (below 95% threshold); plan + results documented; needs test improvement before release
+- 6.7 ✅ 2026-06-30 — LICENSE (MIT) + .npmignore finalized; pnpm pack confirms dist+README+LICENSE+CHANGELOG only
+- 6.8 ✅ 2026-06-30 — Bundle budgets tightened: shared 3KB→0.6KB, react 4KB→2.2KB; pnpm size green
+- 6.9 ✅ 2026-06-30 — Pre-publish gate green: typecheck+lint+test:cov(100%)+build+size+e2e pass; auth-inversion zero; static socket.io-client zero

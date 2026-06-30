@@ -33,8 +33,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test:cov
-      # Cross-instance tests require Redis and run on a daily schedule instead.
-      - run: pnpm test:e2e -- --testPathIgnorePatterns=cross-instance
+      # Cross-instance tests require a Redis service container; they are excluded from the
+      # per-PR path via `testPathIgnorePatterns=cross-instance` in jest.e2e.config.ts and
+      # run on a daily schedule in the e2e-cross-instance.yml workflow instead.
+      - run: pnpm test:e2e
       - run: pnpm build
       - run: pnpm size
 
