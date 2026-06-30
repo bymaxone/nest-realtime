@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-realtime",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0",
   "description": "Realtime backend → frontend communication for NestJS — dual-transport SSE (default) and WebSocket (opt-in) with a unified server-side API.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
