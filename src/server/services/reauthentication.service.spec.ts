@@ -94,9 +94,7 @@ describe('ReauthenticationService', () => {
     const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     try {
       svc.onModuleInit()
-      expect(logSpy).toHaveBeenCalledWith(
-        expect.stringContaining('reauthentication disabled'),
-      )
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('reauthentication disabled'))
     } finally {
       logSpy.mockRestore()
     }

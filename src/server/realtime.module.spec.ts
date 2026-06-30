@@ -629,7 +629,10 @@ describe('assertWsPeerDeps', () => {
   // mutations that change '@nestjs/websockets' or 'socket.io' to an empty string.
   it('calls the resolver with @nestjs/websockets and socket.io', () => {
     const resolved: string[] = []
-    const capturingResolver = (id: string) => { resolved.push(id); return '/fake/path' }
+    const capturingResolver = (id: string) => {
+      resolved.push(id)
+      return '/fake/path'
+    }
     assertWsPeerDeps(capturingResolver)
     expect(resolved).toContain('@nestjs/websockets')
     expect(resolved).toContain('socket.io')

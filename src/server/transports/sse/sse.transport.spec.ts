@@ -551,7 +551,11 @@ describe('SseTransport', () => {
     const { transport, connections } = build()
     const { close$ } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
     let nexted = false
-    close$.subscribe({ next: () => { nexted = true } })
+    close$.subscribe({
+      next: () => {
+        nexted = true
+      },
+    })
     await transport.disconnectLocal('c1')
     expect(nexted).toBe(true)
   })
@@ -583,7 +587,11 @@ describe('SseTransport', () => {
       ip: 'x',
       userAgent: undefined,
       connectedAt: new Date(),
-      subject: { next: () => { throw new Error('deliver-error') } } as unknown as Subject<MessageEvent>,
+      subject: {
+        next: () => {
+          throw new Error('deliver-error')
+        },
+      } as unknown as Subject<MessageEvent>,
       close$: new Subject<void>(),
       originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
     })
