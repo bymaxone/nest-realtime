@@ -1,54 +1,68 @@
-# Continuous integration: type-check, lint, coverage, e2e, build and size gates.
-# Every gate is incremental-safe (passWithNoTests, coverage on implemented files,
-# brotli size budgets) so it stays green as the package grows.
+# CI — thin caller of the org-wide reusable pipeline (bymaxone/.github).
+#
+# The generic library jobs (lint, typecheck, unit + coverage, mutation) run via
+# node-lib-ci.yml so every repo shares one definition. This library's build,
+# bundle-size budget, and its in-process e2e suite stay here. The Redis-dependent
+# cross-instance suite is excluded from the per-PR path and runs on a daily
+# schedule in e2e-cross-instance.yml. Mutation runs only on a push to main /
+# manual dispatch, never on PRs.
 name: CI
 
 on:
-  pull_request:
+  workflow_dispatch:
   push:
     branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
+  pull_request:
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  build:
-    name: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 11.0.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.x
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test:cov
-      # Cross-instance tests require a Redis service container; they are excluded from the
-      # per-PR path via `testPathIgnorePatterns=cross-instance` in jest.e2e.config.ts and
-      # run on a daily schedule in the e2e-cross-instance.yml workflow instead.
-      - run: pnpm test:e2e
-      - run: pnpm build
-      - run: pnpm size
+permissions:
+  contents: read
 
-  # Dependency review needs GitHub Advanced Security, which is free only on public
-  # repositories — gate on public visibility so CI stays green while the repository
-  # is private; the job activates automatically once the repository is public.
-  dependency-review:
-    name: dependency-review
-    if: ${{ github.event_name == 'pull_request' && github.event.repository.visibility == 'public' }}
+jobs:
+  ci:
+    uses: bymaxone/.github/.github/workflows/node-lib-ci.yml@v1
+    with:
+      run-format-check: false # no format:check script; prettier runs via lint/pre-commit
+      run-build: false # build + size verified in the `verify` job below
+      unit-command: pnpm test:cov # unit coverage across the server/shared/react projects
+      run-mutation: true
+      mutation-source-globs: '^(src/)'
+
+  verify:
+    name: Verify build + size
+    needs: ci
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/checkout@v6
+      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
+      - name: Build all subpaths
+        run: pnpm build
+      - name: Bundle size budget
+        run: pnpm size
+
+  e2e:
+    name: E2E (in-process)
+    # Gate behind verify so a PR that fails a fast gate (build / size) skips e2e.
+    # The Redis cross-instance suite is excluded here and runs daily via
+    # e2e-cross-instance.yml.
+    needs: [ci, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
+      - name: E2E tests (cross-instance suite excluded)
+        run: pnpm test:e2e
+
+  security:
+    # Dependency review needs the dependency graph (public repos, or private + GHAS).
+    # Gated on visibility so it starts running automatically once this repo is public.
+    if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
+    uses: bymaxone/.github/.github/workflows/security.yml@v1
+    with:
+      fail-on-severity: high
