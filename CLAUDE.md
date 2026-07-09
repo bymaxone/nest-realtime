@@ -92,13 +92,13 @@ Socket.io-client static-bundle audit:
 grep -E "^import.*socket.io-client" dist/react/index.mjs    # must return zero
 ```
 
-### Mutation testing (before tagging a release)
+### Mutation testing
 
 ```bash
 pnpm mutation
 ```
 
-Target: ≥ 95% global; ≥ 95% on critical paths. Stryker thresholds: `high: 99, low: 95, break: 95`. Running time: ~15–25 min. Run alone (do not fan out).
+Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation`. Target: ≥ 95% global; ≥ 95% on critical paths. Stryker thresholds: `high: 99, low: 95, break: 95`. Running time: ~15–25 min. Run alone (do not fan out).
 
 ---
 

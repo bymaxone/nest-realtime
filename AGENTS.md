@@ -242,7 +242,7 @@ E2E tests use the `eventsource` npm package as a Node.js polyfill for `EventSour
 
 ### Stryker mutation testing
 
-Configuration: `stryker.config.json` — thresholds `high: 99, low: 95, break: 95`. Run via `pnpm mutation` (pre-release only; ~15–25 min). Critical paths held to ≥ 95%:
+Configuration: `stryker.config.json` — thresholds `high: 99, low: 95, break: 95`. Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation` (~15–25 min). Critical paths held to ≥ 95%:
 
 - `connection-registry.service.ts`
 - `room-registry.service.ts`
