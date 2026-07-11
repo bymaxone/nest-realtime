@@ -2,11 +2,11 @@
  * @fileoverview Factory building a dynamic SSE controller bound to a configured path.
  * @layer transport
  */
-import { Controller, Req, Res, Sse } from '@nestjs/common'
+import { Controller, Inject, Req, Res, Sse } from '@nestjs/common'
 import type { MessageEvent, Type } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import type { Observable } from 'rxjs'
-import type { SseSubscriptionHandler } from '../transports/sse/sse-subscription.handler'
+import { SseSubscriptionHandler } from '../transports/sse/sse-subscription.handler'
 
 /**
  * Build a dynamic NestJS controller bound to `endpoint`.
@@ -21,7 +21,10 @@ export function createSseController(endpoint: string): Type<unknown> {
 
   @Controller()
   class DynamicSseController {
-    constructor(private readonly handler: SseSubscriptionHandler) {}
+    // Explicit @Inject: the published bundle is built by esbuild/tsup, which does
+    // not emit `design:paramtypes` decorator metadata, so constructor params must
+    // be resolved by token rather than by reflected type.
+    constructor(@Inject(SseSubscriptionHandler) private readonly handler: SseSubscriptionHandler) {}
 
     @Sse(ssePath)
     subscribe(

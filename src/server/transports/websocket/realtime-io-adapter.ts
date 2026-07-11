@@ -6,7 +6,7 @@ import { Logger } from '@nestjs/common'
 import type { INestApplicationContext } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
-import type { ServerOptions } from 'socket.io'
+import type { Server, ServerOptions } from 'socket.io'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
 
@@ -44,6 +44,29 @@ export class RealtimeIoAdapter extends IoAdapter {
   constructor(app: INestApplicationContext) {
     super(app)
     this.options = app.get<BymaxRealtimeModuleOptions>(REALTIME_OPTIONS_TOKEN)
+  }
+
+  /**
+   * Bind the gateway to `websocket.namespace` when configured.
+   *
+   * `@WebSocketGateway()` args are evaluated at class-decoration time — before
+   * the module options resolve — so the namespace cannot be declared there.
+   * Instead we build the root server via `super.create` (which routes through the
+   * overridden {@link createIOServer}, applying CORS/ping/Redis) and then return
+   * the requested namespace via `server.of(ns)`. The gateway's `@WebSocketServer()`
+   * and `WebSocketTransport` then operate on that `Namespace`. A `'/'` or unset
+   * namespace leaves the root server untouched.
+   */
+  override create(
+    port: number,
+    options?: ServerOptions & { namespace?: string; server?: unknown },
+  ): Server {
+    const server = super.create(port, options)
+    const ns = this.options.websocket?.namespace
+    if (ns && ns !== '/' && typeof (server as { of?: unknown }).of === 'function') {
+      return (server as unknown as { of: (name: string) => Server }).of(ns)
+    }
+    return server
   }
 
   /**

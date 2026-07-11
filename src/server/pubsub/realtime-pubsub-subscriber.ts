@@ -12,7 +12,7 @@ import type {
   IRealtimePubSub,
   RealtimePubSubMessage,
 } from '../interfaces/realtime-pubsub.interface'
-import type { SseTransport } from '../transports/sse/sse.transport'
+import { SseTransport } from '../transports/sse/sse.transport'
 
 interface EmitUserArgs {
   userId: string
@@ -58,7 +58,9 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
   constructor(
     @Inject(REALTIME_PUBSUB_TOKEN) private readonly pubsub: IRealtimePubSub,
     @Inject(REALTIME_INSTANCE_ID_TOKEN) private readonly instanceId: string,
-    private readonly sse: SseTransport,
+    // Explicit @Inject: esbuild/tsup emits no `design:paramtypes` metadata, so
+    // this param must be resolved by its provider token rather than reflected type.
+    @Inject(SseTransport) private readonly sse: SseTransport,
   ) {}
 
   async onModuleInit(): Promise<void> {

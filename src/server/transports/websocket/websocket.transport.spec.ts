@@ -32,7 +32,7 @@ function makeSocket(id = 'sock-1') {
   }
 }
 
-/** Minimal mocked socket.io Server. */
+/** Minimal mocked socket.io Server — `.sockets` is the root Namespace. */
 function makeServer(sockets: Map<string, ReturnType<typeof makeSocket>> = new Map()) {
   const toChain = { emit: jest.fn() }
   const inChain = { disconnectSockets: jest.fn() }
@@ -41,6 +41,24 @@ function makeServer(sockets: Map<string, ReturnType<typeof makeSocket>> = new Ma
     in: jest.fn().mockReturnValue(inChain),
     emit: jest.fn(),
     sockets: { sockets },
+    _toChain: toChain,
+    _inChain: inChain,
+  }
+}
+
+/**
+ * Minimal mocked socket.io Namespace — the shape wired when `websocket.namespace`
+ * is set. Unlike a Server, its `.sockets` IS the socket map (a `Map`), so the
+ * transport's `localSockets()` indirection must resolve it directly.
+ */
+function makeNamespaceServer(sockets: Map<string, ReturnType<typeof makeSocket>> = new Map()) {
+  const toChain = { emit: jest.fn() }
+  const inChain = { disconnectSockets: jest.fn() }
+  return {
+    to: jest.fn().mockReturnValue(toChain),
+    in: jest.fn().mockReturnValue(inChain),
+    emit: jest.fn(),
+    sockets,
     _toChain: toChain,
     _inChain: inChain,
   }
@@ -267,6 +285,12 @@ describe('WebSocketTransport', () => {
     await expect(transport.joinRoom('missing', 'room:x')).resolves.toBeUndefined()
   })
 
+  it('joinRoom is a no-op when the server is unset', async () => {
+    // Before setServer there is no socket map to resolve; it must not throw.
+    await expect(transport.joinRoom('sock-1', 'room:x')).resolves.toBeUndefined()
+    expect(roomRegistry.roomsOf('sock-1')).not.toContain('room:x')
+  })
+
   it('leaveRoom calls socket.leave + RoomRegistry.leave', async () => {
     // leaveRoom updates both Socket.IO and the internal registry.
     const socket = makeSocket()
@@ -279,6 +303,11 @@ describe('WebSocketTransport', () => {
     await transport.leaveRoom('sock-1', 'room:y')
     expect(socket.leave).toHaveBeenCalledWith('room:y')
     expect(roomRegistry.roomsOf('sock-1')).not.toContain('room:y')
+  })
+
+  it('leaveRoom is a no-op when the server is unset', async () => {
+    // Before setServer there is no socket map to resolve; it must not throw.
+    await expect(transport.leaveRoom('sock-1', 'room:y')).resolves.toBeUndefined()
   })
 
   it('disconnect closes the local socket and broadcasts adapter-aware revocation', async () => {
@@ -307,6 +336,42 @@ describe('WebSocketTransport', () => {
   it('disconnect is a safe no-op when the server is unset', async () => {
     // Without a wired server there is nothing to revoke; it must not throw.
     await expect(transport.disconnect('sock-1')).resolves.toBeUndefined()
+  })
+
+  // Under a configured websocket.namespace the gateway is wired to a Namespace,
+  // whose `.sockets` is the socket map directly (not `.sockets.sockets`).
+  describe('namespace-shaped server (websocket.namespace)', () => {
+    it('joinRoom resolves the socket from a Namespace server', async () => {
+      const socket = makeSocket()
+      const server = makeNamespaceServer(new Map([['sock-1', socket]]))
+      transport.setServer(server as never)
+
+      await transport.joinRoom('sock-1', 'room:ns')
+      expect(socket.join).toHaveBeenCalledWith('room:ns')
+      expect(roomRegistry.roomsOf('sock-1')).toContain('room:ns')
+    })
+
+    it('leaveRoom resolves the socket from a Namespace server', async () => {
+      const socket = makeSocket()
+      const server = makeNamespaceServer(new Map([['sock-1', socket]]))
+      transport.setServer(server as never)
+      await transport.joinRoom('sock-1', 'room:ns')
+      socket.leave.mockClear()
+
+      await transport.leaveRoom('sock-1', 'room:ns')
+      expect(socket.leave).toHaveBeenCalledWith('room:ns')
+      expect(roomRegistry.roomsOf('sock-1')).not.toContain('room:ns')
+    })
+
+    it('disconnect closes the local socket resolved from a Namespace server', async () => {
+      const socket = makeSocket()
+      const server = makeNamespaceServer(new Map([['sock-1', socket]]))
+      transport.setServer(server as never)
+
+      await transport.disconnect('sock-1')
+      expect(socket.disconnect).toHaveBeenCalledWith(true)
+      expect(server._inChain.disconnectSockets).toHaveBeenCalledWith(true)
+    })
   })
 
   // Socket must be indexed by the user: room so user-scoped fan-out reaches it.

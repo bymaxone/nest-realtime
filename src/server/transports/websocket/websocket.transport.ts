@@ -71,6 +71,24 @@ export class WebSocketTransport implements ITransport {
   }
 
   /**
+   * Resolve the map of locally-connected sockets, tolerating both server shapes.
+   *
+   * A root Socket.IO `Server` exposes the socket map at `.sockets.sockets` (its
+   * `.sockets` is the root `Namespace`). When `websocket.namespace` is configured,
+   * `RealtimeIoAdapter` wires the gateway to a `Namespace` instead, whose own
+   * `.sockets` IS the socket map. Per-socket lookups (join/leave/disconnect) use
+   * this indirection so they work under either shape.
+   */
+  private localSockets(): Map<string, Socket> | undefined {
+    const server = this.server
+    if (!server) return undefined
+    const sockets = (server as unknown as { sockets: unknown }).sockets
+    return sockets instanceof Map
+      ? (sockets as Map<string, Socket>)
+      : (sockets as { sockets: Map<string, Socket> }).sockets
+  }
+
+  /**
    * Expose the configured authenticator to the gateway.
    *
    * The gateway uses this to avoid a circular injection: `RealtimeGateway` →
@@ -210,7 +228,7 @@ export class WebSocketTransport implements ITransport {
    * @param roomId - The room to join.
    */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
-    const socket = this.server?.sockets.sockets.get(connectionId)
+    const socket = this.localSockets()?.get(connectionId)
     if (socket) {
       await socket.join(roomId)
       this.rooms.join(connectionId, roomId)
@@ -224,7 +242,7 @@ export class WebSocketTransport implements ITransport {
    * @param roomId - The room to leave.
    */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
-    const socket = this.server?.sockets.sockets.get(connectionId)
+    const socket = this.localSockets()?.get(connectionId)
     if (socket) {
       await socket.leave(roomId)
       this.rooms.leave(connectionId, roomId)
@@ -247,7 +265,7 @@ export class WebSocketTransport implements ITransport {
   async disconnect(connectionId: string, _reason?: string): Promise<void> {
     const server = this.server
     if (!server) return
-    const local = server.sockets.sockets.get(connectionId)
+    const local = this.localSockets()?.get(connectionId)
     if (local) local.disconnect(true)
     server.in(`${CONNECTION_ROOM_PREFIX}:${connectionId}`).disconnectSockets(true)
   }
