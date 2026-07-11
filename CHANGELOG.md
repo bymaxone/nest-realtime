@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **SSE controller DI** — the dynamic SSE controller now injects `SseSubscriptionHandler` by explicit token. The bundle is built by esbuild/tsup, which does not emit `design:paramtypes` decorator metadata, so the previous reflected-type constructor param resolved to `undefined` at runtime and broke SSE subscriptions in consumer apps.
+- **Cross-instance pub/sub DI** — `RealtimePubSubSubscriber` now injects `SseTransport` by explicit token, for the same missing-metadata reason; without it the pub/sub subscriber failed to construct and cross-instance fan-out never started.
+- **`websocket.namespace` option** — the configured namespace is now applied. `RealtimeIoAdapter` overrides `create()` to bind the gateway to `server.of(namespace)`; previously the option was documented and typed but never wired.
+- **Namespace socket lookups** — per-socket operations (`joinRoom` / `leaveRoom` / `disconnect`) now resolve the socket map from either a root `Server` (`.sockets.sockets`) or a `Namespace` (`.sockets`), so they work when `websocket.namespace` is set.
+
 ## [0.1.0] - 2026-06-30
 
 ### Added

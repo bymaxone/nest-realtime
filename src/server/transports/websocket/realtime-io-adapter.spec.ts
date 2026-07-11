@@ -189,4 +189,78 @@ describe('RealtimeIoAdapter', () => {
     adapter.createIOServer(3000)
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Falling back'))
   })
+
+  describe('create — namespace binding', () => {
+    let createSuperSpy: jest.SpyInstance
+
+    afterEach(() => {
+      createSuperSpy?.mockRestore()
+    })
+
+    /** Root server mock exposing `.of` so namespace binding can be observed. */
+    function makeRootServer(namespace: unknown) {
+      const of = jest.fn().mockReturnValue(namespace)
+      return { of }
+    }
+
+    it('returns server.of(namespace) when a non-root namespace is configured', () => {
+      // A configured namespace binds the gateway to server.of(ns).
+      const nsServer = { marker: 'ns' }
+      const root = makeRootServer(nsServer)
+      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
+
+      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
+      const result = adapter.create(3000)
+
+      expect(root.of).toHaveBeenCalledWith('/rt')
+      expect(result).toBe(nsServer)
+    })
+
+    it('returns the root server unchanged when namespace is unset', () => {
+      // No namespace → the root server is returned as-is, of() is never called.
+      const root = makeRootServer({})
+      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
+
+      const adapter = new RealtimeIoAdapter(makeApp() as never)
+      const result = adapter.create(3000)
+
+      expect(root.of).not.toHaveBeenCalled()
+      expect(result).toBe(root)
+    })
+
+    it('returns the root server unchanged when namespace is the root "/"', () => {
+      // "/" is the root and must NOT trigger a namespace split.
+      const root = makeRootServer({})
+      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
+
+      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/' } }) as never)
+      const result = adapter.create(3000)
+
+      expect(root.of).not.toHaveBeenCalled()
+      expect(result).toBe(root)
+    })
+
+    it('returns the server unchanged when it exposes no of() function', () => {
+      // Defensive: a server without .of (unexpected) is returned as-is.
+      const root = { adapter: jest.fn() }
+      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
+
+      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
+      const result = adapter.create(3000)
+
+      expect(result).toBe(root)
+    })
+
+    it('forwards port and options to super.create', () => {
+      // The override must not swallow the arguments NestJS passes through.
+      const root = makeRootServer({})
+      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
+
+      const adapter = new RealtimeIoAdapter(makeApp() as never)
+      const opts = { namespace: '/', cors: false } as never
+      adapter.create(3000, opts)
+
+      expect(createSuperSpy).toHaveBeenCalledWith(3000, opts)
+    })
+  })
 })
