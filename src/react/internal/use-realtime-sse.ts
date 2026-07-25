@@ -11,7 +11,7 @@
  * browser ONLY to listeners registered with `addEventListener(name, …)`, never to
  * `onmessage`. This hook subscribes to those names so each event's `type` is
  * preserved end-to-end (e.g. `presence:online`), matching the WebSocket branch.
- * Application-level names are opt-in through `events`, since the library cannot
+ * Application-level names are opt-in through `eventNames`, since the library cannot
  * know them.
  *
  * Note: `'use client'` at the top is required for React Server Components
