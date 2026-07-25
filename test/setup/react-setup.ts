@@ -25,9 +25,11 @@ export class EventSourceMock {
     this.withCredentials = opts?.withCredentials ?? false
     // Defer onopen to the next tick to mimic async connection establishment.
     setTimeout(() => {
-      // A closed source never opens — `close()` is final in the browser, and a mock
-      // that opened anyway would hide code that forgot to close a dead stream.
-      if (this.readyState === 2) return
+      // Fire the initial open only while the connection is still being established.
+      // A closed source never opens (`close()` is final in the browser, and a mock
+      // that opened anyway would hide code that forgot to close a dead stream), and
+      // one a test already drove open must not deliver a second, phantom `open`.
+      if (this.readyState !== 0) return
       this.readyState = 1
       this.onopen?.(new Event('open'))
     }, 0)

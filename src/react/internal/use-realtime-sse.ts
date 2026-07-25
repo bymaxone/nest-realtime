@@ -165,15 +165,24 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
     .filter((name) => name !== '' && !BROWSER_SSE_EVENT_NAMES.includes(name))
     .join('\n')
 
+  // Cancels a scheduled retry. A timer that outlives the failure it was scheduled
+  // for is destructive: it fires `connect` against a stream that has already
+  // recovered, closing a healthy `EventSource` and losing the `Last-Event-ID` state
+  // the browser keeps per object. Called before arming a new timer, on a successful
+  // open, and on teardown.
+  const clearReconnectTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+  }, [])
+
   const connect = useCallback(() => {
     if (opts.enabled === false) return
 
     // Close any existing source before opening a fresh one.
     sourceRef.current?.close()
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
+    clearReconnectTimer()
 
     // EventSource automatically sends `Last-Event-ID` based on the last event id
     // it has seen — no manual tracking needed on this end.
@@ -183,6 +192,10 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
     source.onopen = () => {
       setConnected(true)
       setError(undefined)
+      // The browser restarts a dropped stream by itself, and usually beats our own
+      // backoff to it. Drop the scheduled retry so it cannot tear down the stream
+      // that just came back.
+      clearReconnectTimer()
       // Reset backoff and the attempt counter on successful open.
       reconnectMsRef.current = opts.reconnectInitialMs ?? 1_000
       attemptsRef.current = 0
@@ -202,7 +215,10 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
         source.close()
         return
       }
-      // Exponential backoff: double each failure, capped at reconnectMaxMs.
+      // Exponential backoff: double each failure, capped at reconnectMaxMs. Replacing
+      // the pending timer rather than stacking one keeps a single retry in flight —
+      // otherwise an orphaned earlier timer survives a recovery and fires anyway.
+      clearReconnectTimer()
       const delay = Math.min(reconnectMsRef.current * 2, opts.reconnectMaxMs ?? 30_000)
       reconnectMsRef.current = delay
       timerRef.current = setTimeout(connect, delay)
@@ -248,20 +264,18 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
     opts.reconnectMaxMs,
     opts.maxAttempts,
     extraEventNames,
+    clearReconnectTimer,
   ])
 
   useEffect(() => {
     if (opts.enabled === false) return
     connect()
     return () => {
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
+      clearReconnectTimer()
       sourceRef.current?.close()
       sourceRef.current = null
     }
-  }, [connect, opts.enabled])
+  }, [connect, opts.enabled, clearReconnectTimer])
 
   const reconnect = useCallback(() => {
     reconnectMsRef.current = opts.reconnectInitialMs ?? 1_000

@@ -509,6 +509,66 @@ describe('useRealtimeSse', () => {
     jest.useRealTimers()
   })
 
+  it('cancels the scheduled retry when the browser reopens the stream first', async () => {
+    // The browser restarts a dropped EventSource by itself and usually beats our
+    // backoff. If the scheduled retry survives that recovery it closes a healthy
+    // stream and opens a fresh object, which starts without the Last-Event-ID the
+    // browser tracks per instance — so events can be missed on a stream that was fine.
+    jest.useFakeTimers()
+    const { result } = renderHook(() =>
+      useRealtimeSse({ url: '/realtime/sse', reconnectInitialMs: 1_000 }),
+    )
+    const source = lastInstance()
+    act(() => {
+      emitError(source)
+    })
+
+    // The browser recovers the same source before our 2000 ms retry is due.
+    act(() => {
+      emitNativeReconnect(source)
+    })
+    expect(result.current.connected).toBe(true)
+
+    act(() => {
+      jest.advanceTimersByTime(60_000)
+    })
+    expect(instances.length).toBe(1)
+    expect(source.readyState).not.toBe(2)
+    expect(result.current.connected).toBe(true)
+
+    jest.useRealTimers()
+  })
+
+  it('keeps a single retry in flight across repeated failures', async () => {
+    // Each failure must replace the pending timer, not stack another one. An orphaned
+    // timer from an earlier failure outlives the recovery that cancelled the latest
+    // one, and then tears down the healthy stream anyway.
+    jest.useFakeTimers()
+    const { result } = renderHook(() =>
+      useRealtimeSse({ url: '/realtime/sse', reconnectInitialMs: 1_000 }),
+    )
+    const source = lastInstance()
+    act(() => {
+      emitError(source)
+    })
+    act(() => {
+      emitError(source)
+    })
+    expect(result.current.reconnectAttempts).toBe(2)
+
+    act(() => {
+      emitNativeReconnect(source)
+    })
+    act(() => {
+      jest.advanceTimersByTime(60_000)
+    })
+
+    expect(instances.length).toBe(1)
+    expect(result.current.connected).toBe(true)
+
+    jest.useRealTimers()
+  })
+
   it('keeps the stream open while the attempt budget still has room', async () => {
     // The close is specific to giving up — an ordinary failure must leave the source
     // alive for the scheduled retry (and for the browser's own restart).
