@@ -200,7 +200,7 @@ Clients now connect to `GET /realtime/sse` (configurable via `sse.endpoint`).
 Inject `RealtimeService` into any provider or controller:
 
 ```typescript
-import { Controller, Post, Body } from '@nestjs/common'
+import { Controller, Post, Body, Param } from '@nestjs/common'
 import { RealtimeService } from '@bymax-one/nest-realtime'
 
 @Controller('invoices')
@@ -208,9 +208,9 @@ export class InvoicesController {
   constructor(private readonly realtime: RealtimeService) {}
 
   @Post(':id/pay')
-  async pay(@Body() body: { userId: string; invoiceId: string; amount: number }) {
+  async pay(@Param('id') invoiceId: string, @Body() body: { userId: string; amount: number }) {
     await this.realtime.emitToUser(body.userId, 'invoice.paid', {
-      invoiceId: body.invoiceId,
+      invoiceId,
       amount: body.amount,
     })
   }
