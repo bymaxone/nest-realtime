@@ -25,6 +25,9 @@ export class EventSourceMock {
     this.withCredentials = opts?.withCredentials ?? false
     // Defer onopen to the next tick to mimic async connection establishment.
     setTimeout(() => {
+      // A closed source never opens — `close()` is final in the browser, and a mock
+      // that opened anyway would hide code that forgot to close a dead stream.
+      if (this.readyState === 2) return
       this.readyState = 1
       this.onopen?.(new Event('open'))
     }, 0)
@@ -86,10 +89,40 @@ export function emitNamedEvent(
 }
 
 /**
+ * Simulate a named SSE event carrying a raw, already-encoded payload.
+ *
+ * Unlike {@link emitNamedEvent} the data is passed through verbatim, so a test can
+ * deliver a frame that is not valid JSON.
+ *
+ * @param source - The `EventSourceMock` instance to fire the event on.
+ * @param type   - The named event type (the SSE `event:` field value).
+ * @param data   - Raw payload written to `event.data` without serialization.
+ */
+export function emitRawNamedEvent(source: EventSourceMock, type: string, data: string): void {
+  const ev = new MessageEvent(type, { data })
+  source.listeners.get(type)?.forEach((handler) => handler(ev))
+}
+
+/**
  * Simulate an error event on a mock `EventSource`.
  *
  * @param source - The `EventSourceMock` instance to fire the error on.
  */
 export function emitError(source: EventSourceMock): void {
   source.onerror?.(new Event('error'))
+}
+
+/**
+ * Simulate the browser restarting a dropped connection by itself.
+ *
+ * A real `EventSource` reconnects on its own after a non-fatal failure — the only
+ * way to stop it is `close()`. This models both halves of that: a source still in
+ * CONNECTING/OPEN reopens, and a CLOSED one stays shut.
+ *
+ * @param source - The `EventSourceMock` instance to restart.
+ */
+export function emitNativeReconnect(source: EventSourceMock): void {
+  if (source.readyState === 2) return
+  source.readyState = 1
+  source.onopen?.(new Event('open'))
 }

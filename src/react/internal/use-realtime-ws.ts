@@ -120,6 +120,15 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
     socketRef.current = null
   }, [])
 
+  // Depend on the credential VALUES, never on the `auth` object identity. A consumer
+  // that writes `auth={{ token }}` inline builds a new object on every render; keying
+  // `connect` on that object rebuilt it every render, and the effect below then tore
+  // the socket down and reopened it — a reconnect loop that never settles, hammering
+  // the server with hundreds of handshakes a second. Primitives make it stable no
+  // matter how the caller spells the option.
+  const authTicket = opts.auth?.ticket
+  const authToken = opts.auth?.token
+
   const connect = useCallback(async () => {
     if (opts.enabled === false) return
     // Dispose any existing socket BEFORE opening a new one so reconnect() never leaks
@@ -129,9 +138,13 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
     try {
       // DYNAMIC IMPORT — the bundler keeps socket.io-client out of the static graph.
       const { io } = await import('socket.io-client')
+      const auth: WsAuth = {
+        ...(authTicket !== undefined ? { ticket: authTicket } : {}),
+        ...(authToken !== undefined ? { token: authToken } : {}),
+      }
       const socket = io(opts.url, {
         path: opts.path ?? '/socket.io',
-        ...(opts.auth !== undefined ? { auth: opts.auth } : {}),
+        ...(authTicket !== undefined || authToken !== undefined ? { auth } : {}),
         withCredentials: true,
       })
       socketRef.current = socket
@@ -153,7 +166,7 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)))
     }
-  }, [opts.enabled, opts.url, opts.auth, opts.path, disposeSocket])
+  }, [opts.enabled, opts.url, authTicket, authToken, opts.path, disposeSocket])
 
   useEffect(() => {
     if (opts.enabled === false) return

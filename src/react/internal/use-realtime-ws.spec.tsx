@@ -31,7 +31,9 @@ const mockSocket = {
   disconnect: jest.fn<void, []>(),
 }
 
-const mockIo = jest.fn(() => mockSocket)
+// Typed with its parameters so tests can assert on the handshake options socket.io
+// was actually given, including asserting that a key is absent.
+const mockIo = jest.fn((_url?: string, _options?: Record<string, unknown>) => mockSocket)
 
 jest.mock('socket.io-client', () => ({ io: mockIo }))
 
@@ -253,5 +255,58 @@ describe('useRealtimeWs', () => {
       result.current.reconnect()
     })
     expect(mockIo.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('forwards the ticket and token as the handshake auth', async () => {
+    // The credentials must reach socket.io-client whichever of the two is supplied.
+    renderHook(() => useRealtimeWs({ url: 'ws://localhost', auth: { token: 't-1' } }))
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    expect(mockIo).toHaveBeenCalledWith(
+      'ws://localhost',
+      expect.objectContaining({ auth: { token: 't-1' } }),
+    )
+  })
+
+  it('omits auth entirely when no credential is supplied', async () => {
+    // An empty auth object would make socket.io send a credential-shaped blank.
+    renderHook(() => useRealtimeWs({ url: 'ws://localhost', auth: {} }))
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    expect(mockIo.mock.calls[0]?.[1]).not.toHaveProperty('auth')
+  })
+
+  it('does not reopen the socket when re-rendered with an equal inline auth object', async () => {
+    // Regression: keying connect() on the `auth` object identity meant a caller
+    // writing `auth={{ token }}` inline rebuilt it every render, so the effect tore
+    // the socket down and reopened it in a loop that never settled.
+    const { rerender } = renderHook(
+      ({ token }: { token: string }) => useRealtimeWs({ url: 'ws://localhost', auth: { token } }),
+      { initialProps: { token: 't-1' } },
+    )
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+
+    rerender({ token: 't-1' })
+    rerender({ token: 't-1' })
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10))
+    })
+
+    expect(mockIo).toHaveBeenCalledTimes(1)
+  })
+
+  it('reopens the socket when the credential value actually changes', async () => {
+    // A genuinely new token must reach the server, so the socket has to be replaced.
+    const { rerender } = renderHook(
+      ({ token }: { token: string }) => useRealtimeWs({ url: 'ws://localhost', auth: { token } }),
+      { initialProps: { token: 't-1' } },
+    )
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+
+    rerender({ token: 't-2' })
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(2))
+
+    expect(mockIo).toHaveBeenLastCalledWith(
+      'ws://localhost',
+      expect.objectContaining({ auth: { token: 't-2' } }),
+    )
   })
 })
