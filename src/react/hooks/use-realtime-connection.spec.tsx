@@ -1,8 +1,9 @@
 /**
  * Tests for `useRealtimeConnection` — the lite connection hook.
  *
- * Verifies that the hook returns only `{ connected, error, reconnect }` with no
- * events array, and that the returned values reflect live connection state.
+ * Verifies that the hook returns only `{ connected, error, reconnectAttempts,
+ * reconnect }` with no events array, and that the returned values reflect live
+ * connection state.
  */
 import { act, renderHook } from '@testing-library/react'
 import { EventSourceMock, emitError } from '../../../test/setup/react-setup'
@@ -30,13 +31,37 @@ describe('useRealtimeConnection', () => {
     jest.useRealTimers()
   })
 
-  it('returns only connected, error, and reconnect (no events array)', () => {
+  it('returns connected, error, reconnectAttempts, and reconnect (no events array)', () => {
     // The lite hook must not expose an events array — it is omitted intentionally.
+    // Everything a status indicator needs, including the retry count, must be there.
     const { result } = renderHook(() => useRealtimeConnection({ url: '/realtime/sse' }))
     expect('connected' in result.current).toBe(true)
     expect('error' in result.current).toBe(true)
+    expect('reconnectAttempts' in result.current).toBe(true)
     expect('reconnect' in result.current).toBe(true)
     expect('events' in result.current).toBe(false)
+  })
+
+  it('surfaces the climbing failure count from the SSE transport', () => {
+    // The count is the reason this hook exposes it at all — a status indicator has to
+    // be able to render "retrying, attempt N".
+    jest.useFakeTimers()
+    const { result } = renderHook(() => useRealtimeConnection({ url: '/realtime/sse' }))
+    expect(result.current.reconnectAttempts).toBe(0)
+
+    const source = instances[instances.length - 1]
+    if (!source) throw new Error('No EventSourceMock instance')
+    act(() => {
+      emitError(source)
+    })
+    expect(result.current.reconnectAttempts).toBe(1)
+
+    act(() => {
+      emitError(source)
+    })
+    expect(result.current.reconnectAttempts).toBe(2)
+
+    jest.useRealTimers()
   })
 
   it('reflects connected state after the EventSource opens', async () => {

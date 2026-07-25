@@ -40,6 +40,27 @@ export interface UseRealtimeOptions {
   auth?: { ticket?: string; token?: string }
   /** socket.io path (WebSocket only). Default `/socket.io`. */
   path?: string
+  /**
+   * SSE-only: extra named SSE events to subscribe to.
+   *
+   * `EventSource` never routes a named event to `onmessage`, so an
+   * application-level name such as `order.created` is invisible unless it is
+   * listed here. Names the hook already handles (`message`, `open`, `error`, and
+   * the reserved catalog) are ignored. Ignored entirely on the WebSocket branch,
+   * where `onAny` already receives every event name.
+   */
+  eventNames?: readonly string[]
+  /** SSE-only: initial reconnect backoff in ms. Default 1000. */
+  reconnectInitialMs?: number
+  /** SSE-only: maximum reconnect backoff in ms. Default 30000. */
+  reconnectMaxMs?: number
+  /**
+   * SSE-only: give up and close the stream after this many consecutive failed
+   * connection attempts (the initial connection counts, so `1` means "never
+   * retry"). Unset retries indefinitely. Ignored on WebSocket, where Socket.IO
+   * owns the policy.
+   */
+  maxAttempts?: number
 }
 
 /**
@@ -61,6 +82,11 @@ function detectTransport(url: string): 'sse' | 'websocket' {
  *
  * Both internal hooks are always invoked (Rules of Hooks compliance); only the
  * one matching the detected transport is active.
+ *
+ * The returned shape is identical across transports, but two fields are
+ * transport-specific: `emit` works only on WebSocket, and `reconnectAttempts` is
+ * always `0` on WebSocket because Socket.IO owns its own retry policy and does not
+ * report the count.
  *
  * @example
  * function MyComponent() {
@@ -85,6 +111,12 @@ export function useRealtime<TEvents extends Record<string, unknown> = Record<str
   const sseResult = useRealtimeSse<TEvents>({
     url: opts.url,
     ...(opts.withCredentials !== undefined ? { withCredentials: opts.withCredentials } : {}),
+    ...(opts.eventNames !== undefined ? { eventNames: opts.eventNames } : {}),
+    ...(opts.reconnectInitialMs !== undefined
+      ? { reconnectInitialMs: opts.reconnectInitialMs }
+      : {}),
+    ...(opts.reconnectMaxMs !== undefined ? { reconnectMaxMs: opts.reconnectMaxMs } : {}),
+    ...(opts.maxAttempts !== undefined ? { maxAttempts: opts.maxAttempts } : {}),
     enabled: !isWs,
   })
   const wsResult = useRealtimeWs<TEvents>({
@@ -95,7 +127,9 @@ export function useRealtime<TEvents extends Record<string, unknown> = Record<str
   })
 
   if (isWs) {
-    return { transport: 'websocket' as const, ...wsResult }
+    // Socket.IO owns its own retry policy, so the counter is not meaningful here;
+    // it is reported as zero to keep the return shape identical across branches.
+    return { transport: 'websocket' as const, reconnectAttempts: 0, ...wsResult }
   }
   return {
     transport: 'sse' as const,

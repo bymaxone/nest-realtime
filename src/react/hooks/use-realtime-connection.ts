@@ -17,12 +17,16 @@
 import { useRealtime, type UseRealtimeOptions } from './use-realtime'
 
 /**
- * Connection-state view — returns only `connected`, `error`, and `reconnect`.
+ * Connection-state view — returns `connected`, `error`, `reconnectAttempts`, and
+ * `reconnect`.
  *
  * Useful for status indicators, connection guards, or simple error-handling UI.
  * The shared underlying `useRealtime` connection still processes events; this
  * hook intentionally omits the `events` array from what it returns to keep the
- * surface small and focused on connection status.
+ * surface small and focused on connection status. `reconnectAttempts` is included
+ * because a status indicator is exactly where a climbing retry count belongs — but
+ * only the SSE transport reports it. On WebSocket it stays `0`, since Socket.IO
+ * owns its retry policy and exposes no count.
  *
  * @example
  * function ConnectionStatus() {
@@ -31,6 +35,7 @@ import { useRealtime, type UseRealtimeOptions } from './use-realtime'
  * }
  */
 export function useRealtimeConnection(opts: UseRealtimeOptions) {
-  const { connected, error, reconnect } = useRealtime<Record<string, never>>(opts)
-  return { connected, error, reconnect }
+  const { connected, error, reconnectAttempts, reconnect } =
+    useRealtime<Record<string, never>>(opts)
+  return { connected, error, reconnectAttempts, reconnect }
 }

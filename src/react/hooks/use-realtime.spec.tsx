@@ -122,4 +122,43 @@ describe('useRealtime — transport detection', () => {
     renderHook(() => useRealtime({ url: 'ws://localhost', path: '/custom-io' }))
     expect(mockWs).toHaveBeenCalledWith(expect.objectContaining({ path: '/custom-io' }))
   })
+
+  it('forwards the SSE-only tuning options to the SSE hook when provided', () => {
+    // Subscribing to application event names and bounding the retry policy are
+    // useless unless they survive the trip through the universal hook.
+    renderHook(() =>
+      useRealtime({
+        url: '/realtime/sse',
+        eventNames: ['order.created'],
+        reconnectInitialMs: 250,
+        reconnectMaxMs: 5_000,
+        maxAttempts: 3,
+      }),
+    )
+    expect(mockSse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventNames: ['order.created'],
+        reconnectInitialMs: 250,
+        reconnectMaxMs: 5_000,
+        maxAttempts: 3,
+      }),
+    )
+  })
+
+  it('omits the SSE-only tuning options when the caller did not set them', () => {
+    // Passing them through as explicit `undefined` would override the hook defaults.
+    renderHook(() => useRealtime({ url: '/realtime/sse' }))
+    const passed = mockSse.mock.calls[0]?.[0]
+    expect(passed).not.toHaveProperty('eventNames')
+    expect(passed).not.toHaveProperty('reconnectInitialMs')
+    expect(passed).not.toHaveProperty('reconnectMaxMs')
+    expect(passed).not.toHaveProperty('maxAttempts')
+  })
+
+  it('reports a zero reconnect count on the WebSocket branch', () => {
+    // Socket.IO owns its own retry policy, but the return shape must not change
+    // between branches or every consumer needs a transport check.
+    const { result } = renderHook(() => useRealtime({ url: 'ws://localhost' }))
+    expect(result.current.reconnectAttempts).toBe(0)
+  })
 })
