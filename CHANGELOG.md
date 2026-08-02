@@ -18,12 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already emitted `.d.cts`; only the manifest was wrong. `attw --pack` goes from
   3 failures to **16/16** on the strict profile.
 - **`ioredis` type import** — `RedisRealtimePubSubOptions.client` and
-  `RedisOfflineQueueOptions.client` were typed through `import type Redis from
-'ioredis'`. A default import of a CommonJS module resolves to the module
+  `RedisOfflineQueueOptions.client` were typed through a default import of
+  `ioredis`. A default import of a CommonJS module resolves to the module
   namespace under `node16`/`nodenext`, so a consumer compiling with
   `skipLibCheck: false` got `TS2709: Cannot use namespace 'Redis' as a type`. The
-  named import (`import type { Redis }`) is what the rest of this codebase already
-  used, and what a consumer can actually compile against.
+  named import is what the rest of this codebase already used, and what a
+  consumer can actually compile against.
 - **SSE controller DI** — the dynamic SSE controller now injects `SseSubscriptionHandler` by explicit token. The bundle is built by esbuild/tsup, which does not emit `design:paramtypes` decorator metadata, so the previous reflected-type constructor param resolved to `undefined` at runtime and broke SSE subscriptions in consumer apps.
 - **Cross-instance pub/sub DI** — `RealtimePubSubSubscriber` now injects `SseTransport` by explicit token, for the same missing-metadata reason; without it the pub/sub subscriber failed to construct and cross-instance fan-out never started.
 - **`websocket.namespace` option** — the configured namespace is now applied. `RealtimeIoAdapter` overrides `create()` to bind the gateway to `server.of(namespace)`; previously the option was documented and typed but never wired.
