@@ -2,7 +2,7 @@
  * @fileoverview Redis-backed pub/sub for cross-instance SSE fan-out.
  * @layer infrastructure
  */
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 import type {
   IRealtimePubSub,
   RealtimePubSubMessage,

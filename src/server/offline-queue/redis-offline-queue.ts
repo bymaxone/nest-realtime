@@ -2,7 +2,7 @@
  * @fileoverview Redis sorted-set offline queue for durable per-user event retention.
  * @layer infrastructure
  */
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 import type {
   IOfflineQueueStorage,
   OfflineQueuedEvent,
