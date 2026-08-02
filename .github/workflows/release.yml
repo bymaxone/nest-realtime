@@ -88,7 +88,12 @@ jobs:
         # this repository, so it resolved to an empty string — an empty token
         # offered to npm rather than no token at all. The four sibling libraries
         # that publish successfully from CI set neither.
-        run: npm publish --provenance --access public
+        # `--ignore-scripts`: npm runs `prepublishOnly` on publish, and this job
+        # already ran it as its own step. Without the flag it runs twice — and the
+        # second run starts with `clean`, deleting and rebuilding the `dist/` that
+        # `size` and `check:exports` just validated, so the tarball shipped is not
+        # the artifact the gates checked. Observed in the 1.0.1 release run.
+        run: npm publish --provenance --access public --ignore-scripts
 
       - name: Extract release notes from CHANGELOG
         # Pulls out the section for the tag being released, so the Release body is
