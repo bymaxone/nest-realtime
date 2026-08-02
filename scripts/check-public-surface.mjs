@@ -19,6 +19,13 @@
  * Updating the snapshot is the point: it turns a silent surface change into a
  * reviewable diff. Run with `--update` to rewrite it deliberately.
  *
+ * It also checks what those declarations *import*. Every module a published
+ * `.d.ts` names has to be a declared peer, or a consumer compiling with
+ * `skipLibCheck: false` hits `TS2307` on a package they were never told to
+ * install — which is what an `express` type import did, invisibly to `tsc`
+ * (it only checks what this repository references) and to `attw` (it checks that
+ * declarations resolve, not what they contain).
+ *
  * Usage: `node scripts/check-public-surface.mjs [--update]` (run after `pnpm build`).
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -38,20 +45,49 @@ const SUBPATHS = {
 }
 
 /**
+ * Declaration files checked for undeclared imports.
+ *
+ * `./internal` is not in `SUBPATHS` because it exports no public API and its
+ * names are deliberately unpinned. It is checked here because a consumer's
+ * compiler still reads it — the root's declarations re-export from it — so an
+ * undeclared import there reaches exactly the same consumer, one file further
+ * down the chain. That is where the `express` import was.
+ */
+const DECLARATIONS = { ...SUBPATHS, './internal': 'dist/internal/index.d.ts' }
+
+/**
  * Every name a declaration file exports.
  *
  * The AST rather than a regex: `export { a as b }`, `export declare const`, and a
  * modifier-carrying declaration all reach the surface differently, and a regex
  * that misses one under-reports — which for this gate reads as "nothing changed".
  */
-function exportedNames(file) {
-  const source = ts.createSourceFile(
+function parse(file) {
+  return ts.createSourceFile(
     file,
     readFileSync(file, 'utf8'),
     ts.ScriptTarget.Latest,
     true,
     ts.ScriptKind.TS,
   )
+}
+
+/** Module specifiers a declaration file imports from. */
+function importedModules(file) {
+  const specifiers = new Set()
+  for (const statement of parse(file).statements) {
+    const from = ts.isImportDeclaration(statement)
+      ? statement.moduleSpecifier
+      : ts.isExportDeclaration(statement)
+        ? statement.moduleSpecifier
+        : undefined
+    if (from && ts.isStringLiteral(from)) specifiers.add(from.text)
+  }
+  return [...specifiers].sort()
+}
+
+function exportedNames(file) {
+  const source = parse(file)
   const names = new Set()
 
   for (const statement of source.statements) {
@@ -125,6 +161,35 @@ for (const subpath of new Set([...Object.keys(expected), ...Object.keys(current)
   }
   if (!removed.length && !added.length) {
     console.log(`  ✓ ${subpath.padEnd(12)} ${after.length} export(s) unchanged`)
+  }
+}
+
+// Node builtins are satisfied by `@types/node`, which any NestJS application
+// already installs; everything else has to be a package the manifest declares.
+const manifest = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'))
+const declared = new Set([
+  ...Object.keys(manifest.dependencies ?? {}),
+  ...Object.keys(manifest.peerDependencies ?? {}),
+])
+const isAllowed = (specifier) =>
+  specifier.startsWith('node:') ||
+  declared.has(specifier) ||
+  [...declared].some((name) => specifier.startsWith(`${name}/`)) ||
+  specifier.startsWith(`${manifest.name}/`)
+
+for (const [subpath, relative] of Object.entries(DECLARATIONS)) {
+  if (!existsSync(join(rootDir, relative))) {
+    problems.push(`${subpath}: ${relative} is missing — run \`pnpm build\` first`)
+    continue
+  }
+  const undeclared = importedModules(join(rootDir, relative)).filter((s) => !isAllowed(s))
+  if (undeclared.length) {
+    problems.push(
+      `${subpath}: declarations import ${undeclared.join(', ')}, which the manifest does not declare — ` +
+        'a consumer compiling with `skipLibCheck: false` cannot resolve them',
+    )
+  } else {
+    console.log(`  ✓ ${subpath.padEnd(12)} declarations import only declared peers`)
   }
 }
 
