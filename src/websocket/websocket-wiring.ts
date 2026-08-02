@@ -2,15 +2,17 @@
  * @fileoverview Transport wiring for the WebSocket entry point.
  * @layer composition
  */
-import type { TransportWiring } from '../server/composition/transport-wiring.interface'
-import { REALTIME_TRANSPORT_TOKEN } from '../server/constants/injection-tokens.constants'
-import { createSseController } from '../server/factories/sse-controller.factory'
-import { RealtimePubSubSubscriber } from '../server/pubsub/realtime-pubsub-subscriber'
-import { CompositeTransport } from '../server/transports/composite/composite.transport'
-import { SseSubscriptionHandler } from '../server/transports/sse/sse-subscription.handler'
-import { SseTransport } from '../server/transports/sse/sse.transport'
-import { RealtimeGateway } from '../server/transports/websocket/realtime.gateway'
-import { WebSocketTransport } from '../server/transports/websocket/websocket.transport'
+import {
+  REALTIME_TRANSPORT_TOKEN,
+  createSseController,
+  RealtimePubSubSubscriber,
+  SseSubscriptionHandler,
+  SseTransport,
+} from '@bymax-one/nest-realtime/internal'
+import type { TransportWiring } from '@bymax-one/nest-realtime/internal'
+import { CompositeTransport } from './transports/composite/composite.transport'
+import { RealtimeGateway } from './transports/websocket/realtime.gateway'
+import { WebSocketTransport } from './transports/websocket/websocket.transport'
 
 /** The endpoint the async path binds to, since options resolve after decoration. */
 const DEFAULT_ASYNC_ENDPOINT = '/events'

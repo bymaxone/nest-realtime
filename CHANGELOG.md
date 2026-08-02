@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-08-02
+
+### Fixed
+
+- **`transport: 'websocket'` and `'both'` could not resolve a single provider.**
+  Registering `BymaxRealtimeWebSocketModule` and then injecting anything the
+  package root exports — `RealtimeService`, `ConnectionRegistry`, or any of the
+  eight injection tokens — failed with `UnknownElementException` at bootstrap.
+  SSE through the root module was unaffected.
+
+  Each entry point is a separate bundle, so the services and `Symbol` tokens both
+  of them reached by a relative path were copied into each. A copied class is a
+  different injection token, and the container held one set while the consumer
+  imported the other. The shared runtime now lives in one bundle that both entry
+  points import by package specifier, which gives it a single identity in
+  CommonJS as well as ESM — code splitting could not, since esbuild splits ESM
+  only.
+
+### Added
+
+- **`pnpm check:runtime`** packs the tarball, lays it out the way npm would, and
+  boots NestJS against it in ESM and in CommonJS, resolving every exported token
+  from every transport mode. It runs in `prepublishOnly` and in CI. Every other
+  gate reads the source or the type declarations, so a defect in how the entry
+  points are bundled was invisible to all of them.
+
+- **`pnpm size` now checks bundle boundaries structurally**: the root and shared
+  bundles must contain no static reference to the Socket.IO stack, and the root
+  and WebSocket bundles must _import_ the shared runtime rather than inline it.
+
 ## [1.0.2] - 2026-08-02
 
 ### Fixed
@@ -131,7 +161,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/bymaxone/nest-realtime/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/bymaxone/nest-realtime/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-realtime/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-realtime/releases/tag/v1.0.0

@@ -11,16 +11,26 @@
 **1. npm Library — Not an App**
 
 - Zero direct dependencies. Everything is a `peerDependency` (required or optional via `peerDependenciesMeta`).
-- Four subpaths: `.` (SSE server), `./websocket`, `./shared`, `./react`.
+- Four public subpaths: `.` (SSE server), `./websocket`, `./shared`, `./react`,
+  plus `./internal` — resolvable but not public API (see below).
 - **The root bundle must not reach `@nestjs/websockets`, `@nestjs/platform-socket.io`
   or `socket.io`.** They are optional peers, so an SSE application does not install
   them; a static import in the root entry fails while the module file is still
-  loading, before any guard can run — which is what made `1.0.1` unimportable for
-  every SSE consumer. The transport classes may keep living under
-  `src/server/transports/websocket/`; what matters is that only `src/websocket/`
-  re-exports them, so nothing reachable from `src/server/index.ts` pulls them in.
-  Gate, on the built artifact rather than the source tree:
-  `grep -c "@nestjs/websockets" dist/server/index.mjs` must return `0`.
+  loading, before any guard can run, and the package is unimportable for every SSE
+  consumer. Everything that touches the Socket.IO stack lives under
+  `src/websocket/`, which is the only graph the `./websocket` entry reaches.
+  Gate, on the built artifact rather than the source tree: `pnpm size` fails when
+  any of the three tokens appears in `dist/server/*` or `dist/internal/*`.
+- **The entry points share one runtime through `./internal`, never a relative path.**
+  Each entry is a separate bundle, so a module two of them reach relatively is
+  copied into each — and a copied class or `Symbol` is a different injection
+  token, so registering a module from one entry and injecting its services from
+  another fails with `UnknownElementException` while the source suite, the type
+  tests and `attw` all stay green. Anything under `src/websocket/` that needs
+  shared code imports `@bymax-one/nest-realtime/internal`. Splitting cannot
+  substitute: esbuild splits ESM only, and the package ships CommonJS too.
+  Gates: `pnpm size` (the bundles must import the specifier, not inline it) and
+  `pnpm check:runtime` (a real consumer boots NestJS against the tarball).
 - `"dependencies": {}` in `package.json` — verify before any release.
 
 **2. Auth Inversion — Mandatory**
@@ -61,7 +71,9 @@
 
 **8. Build**
 
-- `tsup` with three entries: `server/index`, `shared/index`, `react/index`.
+- `tsup` with five entries: `internal/index`, `server/index`, `websocket/index`,
+  `shared/index`, `react/index`. The package's own subpaths are `external`, which
+  is what keeps the shared runtime a single bundle.
 - `sideEffects: false`. All peer deps in `external`.
 - Output: `.mjs` + `.cjs` + `.d.ts` for each subpath under `dist/`.
 
@@ -69,18 +81,24 @@
 
 ## Subpaths
 
-| Subpath      | Entry                 | Purpose                                       | Peer Deps                                           |
-| ------------ | --------------------- | --------------------------------------------- | --------------------------------------------------- |
-| `.` (server) | `src/server/index.ts` | NestJS module — transports, services, pub/sub | `@nestjs/common`, `rxjs` (+ optional WS/Redis deps) |
-| `./shared`   | `src/shared/index.ts` | Types + constants (no Node/NestJS dep)        | _(none)_                                            |
-| `./react`    | `src/react/index.ts`  | Hooks + `RealtimeProvider`                    | `react ^19` (+ optional `socket.io-client ^4`)      |
+| Subpath       | Entry                    | Purpose                                       | Peer Deps                                                                        |
+| ------------- | ------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
+| `.` (server)  | `src/server/index.ts`    | SSE module, services, pub/sub                 | `@nestjs/common`, `@nestjs/core`, `rxjs`, `reflect-metadata`                     |
+| `./websocket` | `src/websocket/index.ts` | Socket.IO module, gateway, transports         | the root's, plus `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io` |
+| `./shared`    | `src/shared/index.ts`    | Types + constants (no Node/NestJS dep)        | _(none)_                                                                         |
+| `./react`     | `src/react/index.ts`     | Hooks + `RealtimeProvider`                    | `react ^19` (+ optional `socket.io-client ^4`)                                   |
+| `./internal`  | `src/internal/index.ts`  | The shared runtime both server entries import | the root's                                                                       |
+
+`./internal` is **not public API** and carries no compatibility promise. It is in
+the `exports` map because it has to resolve at runtime: it is what gives the
+services and `Symbol` tokens a single identity across the two server entries.
 
 ---
 
 ## Verification — Run Before Completing Any Task
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm size
+pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm size && pnpm check:runtime
 ```
 
 Full coverage gate:
@@ -99,6 +117,14 @@ Socket.io-client static-bundle audit:
 
 ```bash
 grep -E "^import.*socket.io-client" dist/react/index.mjs    # must return zero
+```
+
+Consumer runtime audit — the only gate that boots NestJS against the packed
+tarball, in ESM and CommonJS, and the only one that can see a defect in how the
+entry points are bundled:
+
+```bash
+pnpm check:runtime
 ```
 
 ### Mutation testing

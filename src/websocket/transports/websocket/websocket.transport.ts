@@ -4,22 +4,22 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import type { Server, Socket } from 'socket.io'
-import type { ITransport } from '../../interfaces/transport.interface'
-import type {
-  IConnectionAuthenticator,
-  AuthenticationResult,
-} from '../../interfaces/connection-authenticator.interface'
-import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
-import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
-import { ConnectionRegistry } from '../../services/connection-registry.service'
-import { RoomRegistry } from '../../services/room-registry.service'
 import {
+  ConnectionRegistry,
+  RoomRegistry,
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
   REALTIME_OPTIONS_TOKEN,
-} from '../../constants/injection-tokens.constants'
-import { ROOM_PREFIXES } from '../../constants/room-prefixes.constants'
-import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
+  ROOM_PREFIXES,
+  REALTIME_ERROR_CODES,
+} from '@bymax-one/nest-realtime/internal'
+import type {
+  ITransport,
+  IConnectionAuthenticator,
+  AuthenticationResult,
+  IConnectionLifecycleHooks,
+  BymaxRealtimeModuleOptions,
+} from '@bymax-one/nest-realtime/internal'
 
 /**
  * Prefix of the per-socket room each connection joins at registration. It makes

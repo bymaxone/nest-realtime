@@ -19,6 +19,7 @@ const config: Config = {
   },
   moduleNameMapper: {
     '^@bymax-one/nest-realtime$': '<rootDir>/server/index.ts',
+    '^@bymax-one/nest-realtime/internal$': '<rootDir>/internal/index.ts',
     '^@bymax-one/nest-realtime/shared$': '<rootDir>/shared/index.ts',
     '^@bymax-one/nest-realtime/react$': '<rootDir>/react/index.ts',
   },

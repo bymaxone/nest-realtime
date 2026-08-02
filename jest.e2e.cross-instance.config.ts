@@ -20,6 +20,16 @@ const config: Config = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   testMatch: ['<rootDir>/test/e2e/cross-instance/**/*.e2e-spec.ts'],
   testPathIgnorePatterns: ['/node_modules/'],
+  // The entry points import their shared runtime by package specifier so the
+  // published bundles keep one identity for the classes and `Symbol`s used as
+  // injection tokens. Under Jest that specifier has to resolve to the source, or
+  // a suite registers a module built from `src/` and injects from `dist/`.
+  moduleNameMapper: {
+    '^@bymax-one/nest-realtime$': '<rootDir>/src/server/index.ts',
+    '^@bymax-one/nest-realtime/internal$': '<rootDir>/src/internal/index.ts',
+    '^@bymax-one/nest-realtime/shared$': '<rootDir>/src/shared/index.ts',
+    '^@bymax-one/nest-realtime/react$': '<rootDir>/src/react/index.ts',
+  },
   setupFiles: ['reflect-metadata'],
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.e2e.json', isolatedModules: true }],

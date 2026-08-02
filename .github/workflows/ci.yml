@@ -55,7 +55,7 @@ jobs:
         run: pnpm build
       - name: Verify build output integrity
         run: |
-          for subpath in server shared react; do
+          for subpath in internal server websocket shared react; do
             for ext in mjs cjs d.ts d.cts; do
               if [ ! -f "dist/$subpath/index.$ext" ]; then
                 echo "Missing dist/$subpath/index.$ext"
@@ -63,7 +63,7 @@ jobs:
               fi
             done
           done
-          echo "All three subpaths produced ESM + CJS + .d.ts + .d.cts"
+          echo "Every entry point produced ESM + CJS + .d.ts + .d.cts"
       - name: Verify published type resolution
         # A source-level typecheck compiles `src`, so it cannot catch a broken
         # `exports` map: a consumer resolving through the packed tarball may still
@@ -76,8 +76,17 @@ jobs:
         # CHANGELOG section — the tags being an outside source of truth the file
         # cannot contradict about itself.
         run: pnpm check:published
-      - name: Bundle size budget
+      - name: Bundle size budget and bundle boundaries
+        # Also structural: the Socket.IO stack must not appear in the bundles an
+        # SSE application loads, and the entry points must import the shared
+        # runtime rather than inline it — a copy would give its classes and
+        # `Symbol`s a second identity, and every injection token would fail.
         run: pnpm size
+      - name: Consumer runtime
+        # The only gate that boots NestJS against the packed tarball, in ESM and
+        # in CommonJS. Every other gate reads the source or the declarations, so
+        # a defect in how the entry points are bundled is invisible to them.
+        run: pnpm check:runtime
 
   e2e:
     name: E2E (in-process)

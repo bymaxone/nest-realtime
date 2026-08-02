@@ -12,7 +12,7 @@ import type { Socket as ClientSocket } from 'socket.io-client'
 import IORedisMock from 'ioredis-mock'
 import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
 import { RealtimeService } from '../../src/server/services/realtime.service'
-import { RealtimeIoAdapter } from '../../src/server/transports/websocket/realtime-io-adapter'
+import { RealtimeIoAdapter } from '../../src/websocket/transports/websocket/realtime-io-adapter'
 import type { IConnectionAuthenticator } from '../../src/server/interfaces/connection-authenticator.interface'
 
 const authenticator: IConnectionAuthenticator = {

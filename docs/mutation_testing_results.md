@@ -54,6 +54,11 @@ The score reads 99.25% against the earlier 99.27% because the denominator moved,
 not because anything stopped being covered: the survivor set is byte-for-byte the
 same five.
 
+Re-measured after the shared runtime moved behind `./internal` and the Socket.IO
+transports moved under `src/websocket/`: **identical — 659 killed, 7 timed out,
+5 survived, 99.25%**. The change is structural, so the mutant set is the same
+one relocated, and the paths in the table below reflect where those files live.
+
 One further mutant was killed along the way, in a file this change does not
 touch. `evictBeyondLimit` picks the oldest connection with
 `reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))`, and `<=` versus `<`
@@ -96,17 +101,18 @@ Every file except `sse-subscription.handler.ts` reached a 100% effective mutatio
 | `services/realtime.service.ts`                    | 0        | — (all compile-errors, excluded from score) |
 | `services/reauthentication.service.ts`            | 0        | ✅                                          |
 | `services/room-registry.service.ts`               | 0        | ✅ CRITICAL                                 |
-| `transports/composite/composite.transport.ts`     | 0        | ✅ CRITICAL                                 |
 | `transports/sse/event-replay-buffer.ts`           | 0        | ✅ CRITICAL                                 |
 | `transports/sse/heartbeat.service.ts`             | 0        | ✅                                          |
 | `transports/sse/sse-subscription.handler.ts`      | **5**    | ✅ All equivalent (documented below)        |
 | `transports/sse/sse.transport.ts`                 | 0        | ✅ CRITICAL                                 |
-| `transports/websocket/realtime-io-adapter.ts`     | 0        | ✅                                          |
-| `transports/websocket/realtime.gateway.ts`        | 0        | ✅                                          |
-| `transports/websocket/websocket.transport.ts`     | 0        | ✅                                          |
+| `websocket/transports/websocket/realtime-io-adapter.ts`     | 0        | ✅                                          |
+| `websocket/transports/websocket/realtime.gateway.ts`        | 0        | ✅                                          |
+| `websocket/transports/websocket/websocket.transport.ts`     | 0        | ✅                                          |
 | `utils/compose-room-id.ts`                        | 0        | ✅                                          |
 | `utils/encode-sse-event.ts`                       | 0        | ✅ CRITICAL                                 |
 | `utils/parse-cookie-header.ts`                    | 0        | ✅                                          |
+| `websocket/transports/composite/composite.transport.ts` | 0  | ✅ CRITICAL                                 |
+| `websocket/websocket-wiring.ts`                   | 0        | ✅                                          |
 | `realtime.module.ts`                              | 0        | ✅                                          |
 
 ---

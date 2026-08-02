@@ -6,11 +6,15 @@ import { Inject, Logger } from '@nestjs/common'
 import type { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from '@nestjs/websockets'
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets'
 import type { Server, Socket } from 'socket.io'
-import type { ConnectionAuthContext } from '../../interfaces/connection-authenticator.interface'
-import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
-import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
-import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
-import { parseCookieHeader } from '../../utils/parse-cookie-header'
+import {
+  REALTIME_OPTIONS_TOKEN,
+  RESERVED_EVENT_NAMES,
+  parseCookieHeader,
+} from '@bymax-one/nest-realtime/internal'
+import type {
+  ConnectionAuthContext,
+  BymaxRealtimeModuleOptions,
+} from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from './websocket.transport'
 
 /** Collapse a possibly multi-valued query parameter to its first string value. */

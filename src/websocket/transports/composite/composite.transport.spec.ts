@@ -6,7 +6,7 @@ import 'reflect-metadata'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
-import { SseTransport } from '../sse/sse.transport'
+import { SseTransport } from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from '../websocket/websocket.transport'
 import { CompositeTransport } from './composite.transport'
 

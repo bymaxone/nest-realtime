@@ -6,12 +6,12 @@ import 'reflect-metadata'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
-import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
+import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
 import type {
   AuthenticationResult,
   IConnectionAuthenticator,
-} from '../../interfaces/connection-authenticator.interface'
-import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+  BymaxRealtimeModuleOptions,
+} from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from './websocket.transport'
 import { RealtimeGateway } from './realtime.gateway'
 
@@ -325,7 +325,7 @@ describe('RealtimeGateway', () => {
   // Both inputs yield {} from parseCookieHeader (no '=' in sentinel), so we spy on
   // the module export to observe the exact argument passed by the gateway.
   it('calls parseCookieHeader with empty string when handshake has no cookie header', async () => {
-    const cookieMod = require('../../utils/parse-cookie-header') as {
+    const cookieMod = require('../../../server/utils/parse-cookie-header') as {
       parseCookieHeader: (cookieHeader: string) => Record<string, string>
     }
     const spy = jest.spyOn(cookieMod, 'parseCookieHeader')

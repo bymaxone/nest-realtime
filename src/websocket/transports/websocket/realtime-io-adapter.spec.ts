@@ -5,8 +5,8 @@
 import 'reflect-metadata'
 import { Logger } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
-import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
-import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
+import type { BymaxRealtimeModuleOptions } from '@bymax-one/nest-realtime/internal'
 import { RealtimeIoAdapter } from './realtime-io-adapter'
 
 // Mock @socket.io/redis-adapter so the lazy require inside installRedisAdapter

@@ -4,15 +4,14 @@
  */
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { REALTIME_TRANSPORT_TOKEN } from '../server/constants/injection-tokens.constants'
-import { RealtimeService } from '../server/services/realtime.service'
-import { CompositeTransport } from '../server/transports/composite/composite.transport'
-import { RealtimeGateway } from '../server/transports/websocket/realtime.gateway'
-import { WebSocketTransport } from '../server/transports/websocket/websocket.transport'
+import { REALTIME_TRANSPORT_TOKEN, RealtimeService } from '@bymax-one/nest-realtime/internal'
 import type {
   WebSocketRealtimeModuleAsyncOptions,
   WebSocketRealtimeModuleOptions,
-} from '../server/interfaces'
+} from '@bymax-one/nest-realtime/internal'
+import { CompositeTransport } from './transports/composite/composite.transport'
+import { RealtimeGateway } from './transports/websocket/realtime.gateway'
+import { WebSocketTransport } from './transports/websocket/websocket.transport'
 import { BymaxRealtimeWebSocketModule } from './realtime-websocket.module'
 
 const authenticator = { authenticate: async () => null }

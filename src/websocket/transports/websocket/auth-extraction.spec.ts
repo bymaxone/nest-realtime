@@ -5,12 +5,12 @@
 import 'reflect-metadata'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
-import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
+import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
 import type {
   ConnectionAuthContext,
   IConnectionAuthenticator,
-} from '../../interfaces/connection-authenticator.interface'
-import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+  BymaxRealtimeModuleOptions,
+} from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from './websocket.transport'
 import { RealtimeGateway } from './realtime.gateway'
 

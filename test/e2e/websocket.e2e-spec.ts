@@ -11,7 +11,7 @@ import type { Socket as ClientSocket } from 'socket.io-client'
 import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
 import { RealtimeService } from '../../src/server/services/realtime.service'
 import { ConnectionRegistry } from '../../src/server/services/connection-registry.service'
-import { RealtimeIoAdapter } from '../../src/server/transports/websocket/realtime-io-adapter'
+import { RealtimeIoAdapter } from '../../src/websocket/transports/websocket/realtime-io-adapter'
 import type {
   IConnectionAuthenticator,
   ConnectionAuthContext,
