@@ -168,10 +168,11 @@ BymaxRealtimeModule.forRoot({
 
 // Asynchronous (recommended for projects with ConfigService)
 BymaxRealtimeModule.forRootAsync({
+  transport: 'sse', // declared, not resolved: providers are fixed at decoration time
   imports: [ConfigModule, AuthModule, CacheModule],
   inject: [ConfigService, JwtService, REDIS_CLIENT],
   useFactory: (config, jwt, redis) => ({
-    transport: config.get('REALTIME_TRANSPORT') ?? 'sse',
+    transport: 'sse' as const,
     authenticator: new NestAuthBridge(jwt),
     sse: { endpoint: '/events', heartbeatMs: 30_000 },
     pubsub: new RedisPubSub(redis), // enables SSE horizontal scaling
@@ -728,6 +729,7 @@ export class AppModule {}
 @Module({
   imports: [
     BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       imports: [ConfigModule, AuthModule, CacheModule],
       inject: [ConfigService, JwtService, REDIS_CLIENT],
       useFactory: (config: ConfigService, jwt: JwtService, redis: Redis) => ({
@@ -763,7 +765,8 @@ export class AppModule {}
 // Use case: the app already has SSE running; new features (chat) need WS.
 // Runs both simultaneously; emits made via the API go to both transports.
 
-BymaxRealtimeModule.forRoot({
+// 'both' is served by the websocket entry point, which is what pulls Socket.IO in
+BymaxRealtimeWebSocketModule.forRoot({
   transport: 'both',
   authenticator: new NestAuthRealtimeBridge(),
   pubsub: new RedisRealtimePubSub(redis),
@@ -1985,11 +1988,12 @@ You need **both** for a scaled WebSocket deployment with polling fallback. The a
 The lib does NOT import `@bymax-one/nest-cache` directly. But the recommended standard is for the consumer to reuse the same Redis client:
 
 ```typescript
-BymaxRealtimeModule.forRootAsync({
+BymaxRealtimeWebSocketModule.forRootAsync({
+  transport: 'both',
   imports: [CacheModule], // @bymax-one/nest-cache
   inject: [CACHE_REDIS_CLIENT_TOKEN],
   useFactory: (redis: Redis) => ({
-    transport: 'both',
+    transport: 'both' as const,
     authenticator: new MyAuthenticator(),
     pubsub: new RedisRealtimePubSub(redis),
     websocket: { redisAdapter: { pubClient: redis } },
@@ -2513,6 +2517,7 @@ When the WebSocket transport runs on ≥ 2 nodes **and** the HTTP long-polling f
 @Module({
   imports: [
     BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       imports: [ConfigModule, CacheModule, AuthModule],
       inject: [ConfigService, JwtService, CACHE_REDIS_CLIENT_TOKEN],
       useFactory: (config: ConfigService, jwt: JwtService, redis: Redis) => ({
@@ -2596,7 +2601,8 @@ export function RealtimeListener() {
 
 ```typescript
 // apps/backend/src/app.module.ts
-BymaxRealtimeModule.forRoot({
+// import { BymaxRealtimeWebSocketModule } from '@bymax-one/nest-realtime/websocket'
+BymaxRealtimeWebSocketModule.forRoot({
   transport: 'websocket',
   authenticator: new MyWsAuthBridge(),
   websocket: {
@@ -2624,7 +2630,8 @@ export class TrainingSessionService {
 
 ```typescript
 // Scenario: the app already has SSE for notifications; a new chat feature requires WS.
-BymaxRealtimeModule.forRoot({
+// import { BymaxRealtimeWebSocketModule } from '@bymax-one/nest-realtime/websocket'
+BymaxRealtimeWebSocketModule.forRoot({
   transport: 'both',
   authenticator: new MyAuthenticator(),
   pubsub: new RedisRealtimePubSub(redis),
