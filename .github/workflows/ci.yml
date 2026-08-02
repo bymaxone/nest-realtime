@@ -82,6 +82,11 @@ jobs:
         # runtime rather than inline it — a copy would give its classes and
         # `Symbol`s a second identity, and every injection token would fail.
         run: pnpm size
+      - name: Public surface
+        # A type exported for consumers and referenced nowhere internally can
+        # disappear from a barrel with `tsc`, `attw` and the README snippets all
+        # still green. The snapshot turns that into a reviewable diff.
+        run: pnpm check:surface
       - name: Consumer runtime
         # The only gate that boots NestJS against the packed tarball, in ESM and
         # in CommonJS. Every other gate reads the source or the declarations, so

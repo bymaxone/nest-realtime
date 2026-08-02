@@ -13,11 +13,9 @@
  */
 export {
   BymaxRealtimeModule,
+  composeRoomId,
   ConnectionRegistry,
   InMemoryPubSub,
-  RealtimeService,
-  RedisOfflineQueue,
-  RedisRealtimePubSub,
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_ERROR_CODES,
   REALTIME_HOOKS_TOKEN,
@@ -27,9 +25,11 @@ export {
   REALTIME_PRESENCE_TOKEN,
   REALTIME_PUBSUB_TOKEN,
   REALTIME_TRANSPORT_TOKEN,
+  RealtimeService,
+  RedisOfflineQueue,
+  RedisRealtimePubSub,
   RESERVED_EVENT_NAMES,
   ROOM_PREFIXES,
-  composeRoomId,
 } from '@bymax-one/nest-realtime/internal'
 
 export type {
@@ -38,6 +38,7 @@ export type {
   BymaxRealtimeModuleOptions,
   BymaxRealtimeModuleOptionsFactory,
   ConnectionAuthContext,
+  ConnectionEventMeta,
   CorsConfig,
   IConnectionAuthenticator,
   IConnectionLifecycleHooks,
@@ -47,12 +48,17 @@ export type {
   ITransport,
   OfflineQueuedEvent,
   PublicConnectionMeta,
+  RealtimeErrorCode,
+  RealtimeEvent,
+  RealtimePubSubMessage,
   ReauthenticationPolicy,
   RedisOfflineQueueOptions,
   RedisRealtimePubSubOptions,
-  RealtimePubSubMessage,
+  ReservedEventName,
+  RoomPrefix,
   SseOptions,
   SseRealtimeModuleAsyncOptions,
   SseRealtimeModuleOptions,
+  TransportMode,
   WebSocketOptions,
 } from '@bymax-one/nest-realtime/internal'

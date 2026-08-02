@@ -70,4 +70,11 @@ export { composeRoomId } from '../server/utils/compose-room-id'
 export { parseCookieHeader } from '../server/utils/parse-cookie-header'
 export * from '../server/interfaces'
 export { ROOM_PREFIXES, RESERVED_EVENT_NAMES, REALTIME_ERROR_CODES } from '../shared'
-export type { PublicConnectionMeta } from '../shared'
+export type {
+  PublicConnectionMeta,
+  RealtimeErrorCode,
+  RealtimeEvent,
+  ReservedEventName,
+  RoomPrefix,
+  TransportMode,
+} from '../shared'

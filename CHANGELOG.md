@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`pnpm check:surface`** compares every name each subpath exports, read from the
+  built `.d.ts`, against a checked-in snapshot, and fails on additions as well as
+  removals. A type exported for consumers and referenced nowhere internally is
+  invisible to `tsc`, to `attw` and to the README snippets, so it can vanish from
+  a barrel with every other gate green.
+
 - **`pnpm check:runtime`** packs the tarball, lays it out the way npm would, and
   boots NestJS against it in ESM and in CommonJS, resolving every exported token
   from every transport mode. It runs in `prepublishOnly` and in CI. Every other

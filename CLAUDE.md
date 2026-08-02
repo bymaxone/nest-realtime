@@ -98,7 +98,8 @@ services and `Symbol` tokens a single identity across the two server entries.
 ## Verification — Run Before Completing Any Task
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm size && pnpm check:runtime
+pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm size && \
+  pnpm check:surface && pnpm check:runtime
 ```
 
 Full coverage gate:
@@ -117,6 +118,16 @@ Socket.io-client static-bundle audit:
 
 ```bash
 grep -E "^import.*socket.io-client" dist/react/index.mjs    # must return zero
+```
+
+Public-surface audit — every exported name per subpath against a checked-in
+snapshot, failing on additions as well as removals. A type exported for consumers
+and referenced nowhere internally is invisible to `tsc`, to `attw` and to the
+README snippets, so it can vanish from a barrel with every other gate green:
+
+```bash
+pnpm check:surface            # verify
+pnpm check:surface --update   # accept a deliberate change, then commit the diff
 ```
 
 Consumer runtime audit — the only gate that boots NestJS against the packed
