@@ -6,16 +6,18 @@ import 'reflect-metadata'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
-import { ConnectionRegistry } from '../../services/connection-registry.service'
-import { RoomRegistry } from '../../services/room-registry.service'
 import {
+  ConnectionRegistry,
+  RoomRegistry,
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
   REALTIME_OPTIONS_TOKEN,
-} from '../../constants/injection-tokens.constants'
-import type { AuthenticationResult } from '../../interfaces/connection-authenticator.interface'
-import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
-import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+} from '@bymax-one/nest-realtime/internal'
+import type {
+  AuthenticationResult,
+  IConnectionLifecycleHooks,
+  BymaxRealtimeModuleOptions,
+} from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from './websocket.transport'
 
 /** Minimal mocked socket.io Socket. */

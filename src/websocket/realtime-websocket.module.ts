@@ -4,11 +4,11 @@
  */
 import { Global, Logger, Module } from '@nestjs/common'
 import type { DynamicModule } from '@nestjs/common'
-import { composeForRoot, composeForRootAsync } from '../server/composition/realtime-module.factory'
+import { composeForRoot, composeForRootAsync } from '@bymax-one/nest-realtime/internal'
 import type {
   WebSocketRealtimeModuleAsyncOptions,
   WebSocketRealtimeModuleOptions,
-} from '../server/interfaces/realtime-module-options.interface'
+} from '@bymax-one/nest-realtime/internal'
 import { webSocketWiring } from './websocket-wiring'
 
 /**

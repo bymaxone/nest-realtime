@@ -325,17 +325,11 @@ src/
 │   │   └── event-id-generator.service.ts    # Monotonic for Last-Event-ID
 │   │
 │   ├── transports/
-│   │   ├── sse/
-│   │   │   ├── sse.transport.ts             # ITransport impl
-│   │   │   ├── sse.controller.ts            # @Sse() endpoint
-│   │   │   ├── event-replay-buffer.ts       # Ring buffer for Last-Event-ID
-│   │   │   └── heartbeat.service.ts         # ping :keepalive
-│   │   ├── websocket/
-│   │   │   ├── websocket.transport.ts       # ITransport impl
-│   │   │   ├── realtime.gateway.ts          # @WebSocketGateway()
-│   │   │   └── socket-io-redis-adapter.ts   # Wrapper around @socket.io/redis-adapter
-│   │   └── composite/
-│   │       └── composite.transport.ts       # Fan-out SSE + WS
+│   │   └── sse/
+│   │       ├── sse.transport.ts             # ITransport impl
+│   │       ├── sse.controller.ts            # @Sse() endpoint
+│   │       ├── event-replay-buffer.ts       # Ring buffer for Last-Event-ID
+│   │       └── heartbeat.service.ts         # ping :keepalive
 │   │
 │   ├── interfaces/
 │   │   ├── transport.interface.ts           # ITransport
@@ -382,9 +376,19 @@ src/
 │       └── sse-wiring.ts
 │   └── index.ts
 │
+├── internal/                                # `./internal` — NOT public API
+│   └── index.ts                             # the one bundle `.` and `./websocket` share
+│
 ├── websocket/                               # `./websocket` subpath
 │   ├── realtime-websocket.module.ts         # BymaxRealtimeWebSocketModule ('websocket' | 'both')
 │   ├── websocket-wiring.ts                  # the TransportWiring it supplies
+│   ├── transports/
+│   │   ├── websocket/
+│   │   │   ├── websocket.transport.ts       # ITransport impl
+│   │   │   ├── realtime.gateway.ts          # @WebSocketGateway()
+│   │   │   └── realtime-io-adapter.ts       # Wrapper around @socket.io/redis-adapter
+│   │   └── composite/
+│   │       └── composite.transport.ts       # Fan-out SSE + WS
 │   └── index.ts                             # the ONLY graph that reaches Socket.IO
 │
 ├── shared/
@@ -454,6 +458,16 @@ src/
       "default": "./dist/websocket/index.cjs"
     }
   },
+  "./internal": {
+    "import": {
+      "types": "./dist/internal/index.d.ts",
+      "default": "./dist/internal/index.mjs"
+    },
+    "require": {
+      "types": "./dist/internal/index.d.cts",
+      "default": "./dist/internal/index.cjs"
+    }
+  },
   "./package.json": "./package.json"
 }
 ```
@@ -461,7 +475,10 @@ src/
 The `types` condition is declared **per condition** rather than shared: a
 CommonJS consumer resolving `require` must land on `.d.cts`, and the top-level
 `main`/`types`/`typesVersions` exist for resolvers that do not read this map at
-all. `attw --profile strict` covers all four entry points.
+all. `attw --profile strict` covers every entry point.
+
+`./internal` is not public API and carries no compatibility promise. It is in the
+map because it has to resolve at runtime — §3.3.1.
 
 ### 3.3 The WebSocket entry point boundary
 
@@ -471,12 +488,12 @@ Anything the root entry imports statically therefore has to resolve without them
 and a static import of an absent package fails while the module file is still
 loading: before any runtime guard can produce a better message.
 
-`1.0.1` imported them from the root and was consequently unimportable for every
-SSE consumer, in ESM and CommonJS alike. From `1.0.2` the Socket.IO stack is
-reachable only through `@bymax-one/nest-realtime/websocket`, which exports
+The Socket.IO stack is therefore reachable only through
+`@bymax-one/nest-realtime/websocket`, which exports
 `BymaxRealtimeWebSocketModule` (`transport: 'websocket' | 'both'`) along with
 `WebSocketTransport`, `RealtimeGateway`, `RealtimeIoAdapter` and
-`CompositeTransport`.
+`CompositeTransport`. Everything that imports those peers lives under
+`src/websocket/`, so the boundary is structural rather than conventional.
 
 The root module serves `'sse'` only. `transport` is narrowed per module, so asking
 the root for `'websocket'` does not compile; asking through a cast is refused at
@@ -485,6 +502,33 @@ registration with an error naming the entry point that serves it.
 Composition is shared through a `TransportWiring` seam (`src/server/composition/`)
 which never names a transport class — that is what keeps the root's import graph
 free of Socket.IO while both modules reuse the same sync and async wiring.
+
+#### 3.3.1 One runtime behind two entry points
+
+Splitting the entry points introduces a second constraint, opposite in direction
+to the first. Each entry is a separate bundle, so a module both of them reach by a
+relative path is *copied* into each — and a copied class or `Symbol` is a
+different injection token. The container would then hold one set of identities
+while the consumer imported the other, and every provider the WebSocket module
+registers would fail to resolve with `UnknownElementException`.
+
+The shared graph therefore lives in one bundle, `src/internal/index.ts`, which
+both entry points import by package specifier (`@bymax-one/nest-realtime/internal`,
+kept `external` in `tsup.config.ts`). Nothing under `src/websocket/` reaches
+`src/server/` by a relative path. Code splitting is not an alternative: esbuild
+splits ESM only, and the package ships CommonJS as well.
+
+The same boundary rule applies in reverse — nothing in `src/internal/` may touch
+the Socket.IO peers, since it is reachable from the root.
+
+Two gates hold this in place, one cheap and one conclusive. `pnpm size` asserts
+statically that the root and WebSocket bundles *import* the specifier instead of
+inlining it, and that neither the root nor the internal bundle references the
+Socket.IO stack. `pnpm check:runtime` packs the tarball, lays it out the way npm
+would, and boots NestJS against it in ESM and in CommonJS, registering each
+transport mode and resolving every exported token through the package root. It is
+the only gate that exercises the built artifact from outside, which is why it is
+the only one that can see this class of defect at all.
 
 ### 3.4 Exports per subpath
 

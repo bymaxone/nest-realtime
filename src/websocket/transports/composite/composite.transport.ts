@@ -3,8 +3,8 @@
  * @layer transport
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import type { ITransport } from '../../interfaces/transport.interface'
-import { SseTransport } from '../sse/sse.transport'
+import { SseTransport } from '@bymax-one/nest-realtime/internal'
+import type { ITransport } from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from '../websocket/websocket.transport'
 
 /**

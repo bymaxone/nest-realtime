@@ -7,8 +7,8 @@ import type { INestApplicationContext } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
 import type { Server, ServerOptions } from 'socket.io'
-import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
-import { REALTIME_OPTIONS_TOKEN } from '../../constants/injection-tokens.constants'
+import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
+import type { BymaxRealtimeModuleOptions } from '@bymax-one/nest-realtime/internal'
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
 type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }

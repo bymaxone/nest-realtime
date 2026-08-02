@@ -7,11 +7,11 @@
  * them, so an application on SSE never installs the Socket.IO stack.
  */
 export { BymaxRealtimeWebSocketModule } from './realtime-websocket.module'
-export { WebSocketTransport } from '../server/transports/websocket/websocket.transport'
-export { RealtimeGateway } from '../server/transports/websocket/realtime.gateway'
-export { RealtimeIoAdapter } from '../server/transports/websocket/realtime-io-adapter'
-export { CompositeTransport } from '../server/transports/composite/composite.transport'
+export { WebSocketTransport } from './transports/websocket/websocket.transport'
+export { RealtimeGateway } from './transports/websocket/realtime.gateway'
+export { RealtimeIoAdapter } from './transports/websocket/realtime-io-adapter'
+export { CompositeTransport } from './transports/composite/composite.transport'
 export type {
   WebSocketRealtimeModuleAsyncOptions,
   WebSocketRealtimeModuleOptions,
-} from '../server/interfaces/realtime-module-options.interface'
+} from '@bymax-one/nest-realtime/internal'

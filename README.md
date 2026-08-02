@@ -107,6 +107,8 @@ The `shared` subpath carries no Node or NestJS import, so the same event names a
 
 **The `websocket` subpath exists so the server one costs nothing extra.** Everything that touches `@nestjs/websockets`, `@nestjs/platform-socket.io` and `socket.io` is reachable only through it, so an application on SSE — the default transport — never installs the Socket.IO stack. Importing it is what opts in, in the install as much as in the configuration.
 
+The package also exposes `@bymax-one/nest-realtime/internal`. It is **not public API** and carries no compatibility promise — it is the shared runtime the two server subpaths import so that a service registered through one and injected through the other is the same class. Import the four above; nothing you need is only there.
+
 ---
 
 > [!TIP]

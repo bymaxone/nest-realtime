@@ -57,6 +57,7 @@ const config: Config = {
       },
       moduleNameMapper: {
         '^@bymax-one/nest-realtime$': '<rootDir>/src/server/index.ts',
+        '^@bymax-one/nest-realtime/internal$': '<rootDir>/src/internal/index.ts',
         '^@bymax-one/nest-realtime/shared$': '<rootDir>/src/shared/index.ts',
         '^@bymax-one/nest-realtime/react$': '<rootDir>/src/react/index.ts',
       },
@@ -75,6 +76,7 @@ const config: Config = {
       },
       moduleNameMapper: {
         '^@bymax-one/nest-realtime$': '<rootDir>/src/server/index.ts',
+        '^@bymax-one/nest-realtime/internal$': '<rootDir>/src/internal/index.ts',
         '^@bymax-one/nest-realtime/shared$': '<rootDir>/src/shared/index.ts',
         '^@bymax-one/nest-realtime/react$': '<rootDir>/src/react/index.ts',
       },

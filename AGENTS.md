@@ -8,9 +8,12 @@
 
 ```
 src/
-├── server/         → `.` subpath — NestJS module + all server-side implementation
+├── internal/       → `./internal` — NOT public API. The one bundle the `.` and
+│                     `./websocket` entries both import by package specifier, so
+│                     their shared classes and `Symbol` tokens keep one identity.
+├── server/         → `.` subpath — the SSE module and everything transport-agnostic
 │   ├── config/     → option validation (validate-options.ts)
-│   ├── constants/  → injection tokens, phase constants
+│   ├── constants/  → injection tokens, reserved event names, room prefixes
 │   ├── composition/ → TransportWiring seam + the composition both modules share
 │   ├── interfaces/ → ALL contracts: ITransport, IConnectionAuthenticator, IRealtimePubSub, ...
 │   ├── offline-queue/ → RedisOfflineQueue (reference impl; requires ioredis peer)
@@ -19,15 +22,15 @@ src/
 │   │                  AuthenticationCache, ReauthenticationService, HeartbeatService,
 │   │                  OfflineQueueManager, PresenceManager
 │   ├── transports/
-│   │   ├── sse/    → SseTransport, SseController, SseSubscriptionHandler, EventReplayBuffer, encodeSseEvent
-│   │   ├── websocket/ → WebSocketTransport, RealtimeGateway, RealtimeIoAdapter
-│   │   │              (implementation only — exported from the ./websocket subpath)
-│   │   └── composite/ → CompositeTransport (same)
-│   ├── utils/      → composeRoomId
+│   │   └── sse/    → SseTransport, SseController, SseSubscriptionHandler, EventReplayBuffer, encodeSseEvent
+│   ├── utils/      → composeRoomId, parseCookieHeader
 │   └── realtime.module.ts → BymaxRealtimeModule (SSE only; forRoot + forRootAsync)
 ├── websocket/      → `./websocket` subpath — the only graph that imports Socket.IO
 │   ├── realtime-websocket.module.ts → BymaxRealtimeWebSocketModule ('websocket' | 'both')
-│   └── websocket-wiring.ts → the TransportWiring the module supplies
+│   ├── websocket-wiring.ts → the TransportWiring the module supplies
+│   └── transports/
+│       ├── websocket/ → WebSocketTransport, RealtimeGateway, RealtimeIoAdapter
+│       └── composite/ → CompositeTransport ('both')
 ├── shared/         → `./shared` subpath — zero-dep types + constants
 │   ├── constants/  → ROOM_PREFIXES, RESERVED_EVENT_NAMES, REALTIME_ERROR_CODES
 │   └── types/      → TransportMode, RealtimeEvent, PublicConnectionMeta
@@ -287,7 +290,11 @@ Before marking any change complete:
 - [ ] `grep -E "^import.*socket.io-client" dist/react/index.mjs` → zero (after `pnpm build`)
 - [ ] `pnpm typecheck && pnpm lint` → clean
 - [ ] `pnpm test:cov` → 100% line/branch on every modified file
-- [ ] `pnpm build && pnpm size` → all budgets green
+- [ ] `pnpm build && pnpm size` → all budgets and bundle boundaries green
+- [ ] `pnpm check:surface` → no export added or removed without updating the snapshot
+- [ ] `pnpm check:runtime` → a consumer boots NestJS against the tarball in ESM and CJS
+- [ ] Nothing under `src/websocket/` imports `src/server/` relatively — shared code
+      comes from `@bymax-one/nest-realtime/internal`, or the bundles duplicate it
 - [ ] `package.json` `"dependencies": {}` — no direct deps added
 - [ ] No `.gitkeep` / placeholder files
 - [ ] All comments and identifiers in English; no Phase/Task references in committed files
