@@ -10,9 +10,11 @@
  * satisfy it. It would also be the wrong type for an application on Fastify,
  * which NestJS supports equally.
  *
- * The endpoint reads four things from the request and sets two response headers.
- * An `express.Request` satisfies these interfaces without being named by them,
- * and so does a Fastify request, because assignability is structural.
+ * The endpoint reads three fields from the request — `headers`, `ip`, `query` —
+ * and does two things to the response: sets the anti-buffering headers, and
+ * writes the keepalive comment. An `express.Request` satisfies these interfaces
+ * without being named by them, and so does a Fastify request, because
+ * assignability is structural.
  */
 
 /** A header value as an HTTP server exposes it, before normalization. */
@@ -20,7 +22,13 @@ export type SseHeaderValue = string | string[] | undefined
 
 /** The request fields the SSE endpoint reads. */
 export interface SseRequest {
-  /** Raw request headers, in whatever casing the client sent. */
+  /**
+   * Request headers, keyed as the HTTP framework delivers them. Node lowercases
+   * incoming header names, and the endpoint looks them up lowercase — `cookie`,
+   * `user-agent`, `x-forwarded-for` and `last-event-id` — so an adapter that
+   * preserves the client's casing has to lowercase the keys before it gets here,
+   * or those lookups miss.
+   */
   readonly headers: Readonly<Record<string, SseHeaderValue>>
   /** Remote address as the HTTP framework resolved it, when it resolves one. */
   readonly ip?: string | undefined

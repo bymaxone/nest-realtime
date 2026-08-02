@@ -18,10 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `express` is not a dependency, nor a peer, nor an optional peer, so there was no
   supported way to satisfy it.
 
-  The SSE endpoint reads four things from the request — `headers`, `ip`, `query` —
-  and sets two response headers plus the keepalive write. Those are now described
-  by `SseRequest` and `SseResponse`, structural contracts an `express.Request`
-  satisfies without being named by it. The same shape is what a Fastify request
+  The SSE endpoint reads three fields from the request — `headers`, `ip`, `query` —
+  and does two things to the response: sets the anti-buffering headers, and writes
+  the keepalive comment. Those are now described by `SseRequest` and
+  `SseResponse`, structural contracts an `express.Request` satisfies without being
+  named by it. The same shape is what a Fastify request
   provides, so the endpoint no longer assumes a platform it never required.
 
   Runtime is unaffected: no bundle ever imported `express`, and the only change to
