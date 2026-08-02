@@ -40,9 +40,12 @@ describe('BearerAuthenticator', () => {
     expect(result).toBeNull()
   })
 
-  // Header without the "Bearer " prefix → null.
+  // Header without the "Bearer " prefix → null. What follows the scheme is
+  // never parsed, so it must not be shaped like a real credential: base64 of
+  // `user:pass` is exactly what an HTTP Basic header carries, and a scanner
+  // reading this file cannot tell a fixture from a leak.
   it('returns null when the header lacks the "Bearer " prefix', async () => {
-    const result = await auth.authenticate(mkCtx('Basic dXNlcjpwYXNz'))
+    const result = await auth.authenticate(mkCtx('Basic not-a-credential'))
     expect(result).toBeNull()
   })
 
