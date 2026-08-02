@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-02
+
+### Fixed
+
+- **The npm package page showed no documentation.** `1.0.0` reached the registry
+  with an empty `readme` field, so the page rendered nothing — even though
+  `README.md` was present in the tarball all along. Every package here published
+  under pnpm 11 has an empty `readme`; every one published under pnpm 10, which
+  delegated to the npm CLI, carries it. The same split appears in `_npmVersion`,
+  present only on the publishes the npm CLI performed. The release workflow now
+  calls `npm publish` directly, and this release is what carries the README to
+  the registry.
+- **`keywords` were missing from the manifest**, so the package was
+  undiscoverable by search on npm. Fourteen added, covering the transports,
+  the pub/sub and presence concepts, and the React subpath.
+
+### Removed
+
+- **The Roadmap section of the README.** It described work that is not shipping
+  and dates the moment it is written; the issues board is where direction
+  belongs. `README.md` ships in the package, so the section was on the npm page
+  too.
+
 ## [1.0.0] - 2026-08-02
 
 First published release.
@@ -60,5 +83,6 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/bymaxone/nest-realtime/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-realtime/releases/tag/v1.0.0

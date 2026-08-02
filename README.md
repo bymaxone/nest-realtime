@@ -607,23 +607,6 @@ Platform-specific configuration is in [docs/proxies-cheat-sheet.md](./docs/proxi
 
 ---
 
-## 🗺️ Roadmap
-
-The items below are directional — none are shipping today. The list exists so contributors can see where the library is headed and where help is most useful. Open an issue to discuss priorities or propose a design.
-
-| Area                    | Item                                                                                         | Status    |
-| ----------------------- | -------------------------------------------------------------------------------------------- | --------- |
-| Presence                | Redis reference implementation of `IPresenceStorage` — today the interface ships without one | Planned   |
-| Pub/sub adapters        | Reference implementations beyond Redis (NATS, Redis Streams) for `IRealtimePubSub`           | Exploring |
-| Observability           | Built-in metrics for connection counts, emit latency, and replay-buffer misses               | Planned   |
-| Backpressure            | Per-connection send queues with a configurable policy for slow consumers                     | Exploring |
-| Client acknowledgements | Optional delivery receipts on the WebSocket transport                                        | Exploring |
-| Framework adapters      | Vue and Svelte subpaths built on the same shared contracts                                   | Exploring |
-
-> Track progress and discuss proposals on the [issues board](https://github.com/bymaxone/nest-realtime/issues).
-
----
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please open an issue to discuss substantial changes before submitting a pull request.

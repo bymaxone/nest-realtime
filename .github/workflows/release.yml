@@ -72,7 +72,14 @@ jobs:
         run: pnpm check:exports
 
       - name: Publish to npm (with provenance)
-        run: pnpm publish --provenance --no-git-checks --access public
+        # `npm publish`, not `pnpm publish`. The registry's `readme` field is
+        # populated from the publish request, and it is empty for every package
+        # here published under pnpm 11 while every one published under pnpm 10
+        # — which delegated to the npm CLI — carries it. The same split shows in
+        # `_npmVersion`, present only on the publishes the npm CLI performed. An
+        # empty `readme` means the npm package page renders no documentation at
+        # all, which is where people actually read it.
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
