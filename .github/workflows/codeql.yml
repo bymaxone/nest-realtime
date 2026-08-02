@@ -1,7 +1,14 @@
-# Static security analysis (CodeQL) for JavaScript/TypeScript on every PR and weekly.
+# Static security analysis (CodeQL) for JavaScript/TypeScript.
+#
+# `push` on the default branch matters beyond redundancy with `pull_request`:
+# Scorecard's SAST check scores the ratio of commits that were scanned, and a
+# PR-only trigger leaves every squashed merge commit unscanned. That showed up
+# as `SAST tool detected but not run on all commits`.
 name: CodeQL
 
 on:
+  push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: '0 6 * * 1'
