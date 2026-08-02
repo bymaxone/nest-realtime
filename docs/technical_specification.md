@@ -2176,8 +2176,8 @@ In WebSocket, client → server reserved events:
 
 ```json
 "peerDependencies": {
-  "@nestjs/common": "^11.0.0",
-  "@nestjs/core": "^11.0.0",
+  "@nestjs/common": "^11.0.16",
+  "@nestjs/core": "^11.1.18",
   "rxjs": "^7.8.0",
   "reflect-metadata": "^0.2.0"
 }
@@ -2189,7 +2189,7 @@ In WebSocket, client → server reserved events:
 "peerDependencies": {
   "@nestjs/websockets": "^11.0.0",
   "@nestjs/platform-socket.io": "^11.0.0",
-  "socket.io": "^4.0.0",
+  "socket.io": "^4.6.2",
   "@socket.io/redis-adapter": "^8.0.0",
   "ioredis": "^5.0.0",
   "react": "^19.0.0",
