@@ -90,12 +90,12 @@ pnpm add @bymax-one/nest-realtime
 
 One package, four entry points — import only what your app needs:
 
-| Subpath       | Import                               | Purpose                                        |            Dependencies             |
-| ------------- | ------------------------------------ | ---------------------------------------------- | :---------------------------------: |
-| **Server**    | `@bymax-one/nest-realtime`           | NestJS module for SSE, services, contracts     |           NestJS 11, rxjs           |
-| **WebSocket** | `@bymax-one/nest-realtime/websocket` | NestJS module for `'websocket'` and `'both'`   | + `@nestjs/websockets`, `socket.io` |
-| **Shared**    | `@bymax-one/nest-realtime/shared`    | Types, room prefixes, event names, error codes |                None                 |
-| **React**     | `@bymax-one/nest-realtime/react`     | Hooks & `RealtimeProvider`                     |              React 19               |
+| Subpath       | Import                               | Purpose                                        |                           Dependencies                            |
+| ------------- | ------------------------------------ | ---------------------------------------------- | :---------------------------------------------------------------: |
+| **Server**    | `@bymax-one/nest-realtime`           | NestJS module for SSE, services, contracts     |                          NestJS 11, rxjs                          |
+| **WebSocket** | `@bymax-one/nest-realtime/websocket` | NestJS module for `'websocket'` and `'both'`   | + `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io` |
+| **Shared**    | `@bymax-one/nest-realtime/shared`    | Types, room prefixes, event names, error codes |                               None                                |
+| **React**     | `@bymax-one/nest-realtime/react`     | Hooks & `RealtimeProvider`                     |                             React 19                              |
 
 ```
        shared (zero deps)

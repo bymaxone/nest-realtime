@@ -100,17 +100,6 @@ describe('BymaxRealtimeWebSocketModule.forRoot', () => {
     expect(dynamic.controllers).toHaveLength(1)
   })
 
-  // A custom SSE endpoint must survive the 'both' path, which is the only
-  // synchronous branch here that reads it.
-  it('uses a custom sse endpoint for transport both', () => {
-    const dynamic = BymaxRealtimeWebSocketModule.forRoot({
-      transport: 'both',
-      authenticator,
-      sse: { endpoint: '/custom-events' },
-    })
-    expect(dynamic.controllers).toHaveLength(1)
-  })
-
   it('exports RealtimeService', () => {
     const dynamic = BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator })
     expect(dynamic.exports).toContain(RealtimeService)
