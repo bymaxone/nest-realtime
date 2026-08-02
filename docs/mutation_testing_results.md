@@ -40,8 +40,8 @@ The final score was reached across multiple rounds of targeted kill-test authors
 
 | Metric                        | Value                  |
 | ----------------------------- | ---------------------- |
-| **Global mutation score**     | **99.25% — 663 / 668** |
-| Killed                        | 656                    |
+| **Global mutation score**     | **99.25% — 666 / 671** |
+| Killed                        | 659                    |
 | Timed out (counted as killed) | 7                      |
 | Survived                      | 5                      |
 | No coverage                   | 0                      |
@@ -53,6 +53,15 @@ The five survivors are the same documented equivalent mutants in
 The score reads 99.25% against the earlier 99.27% because the denominator moved,
 not because anything stopped being covered: the survivor set is byte-for-byte the
 same five.
+
+One further mutant was killed along the way, in a file this change does not
+touch. `evictBeyondLimit` picks the oldest connection with
+`reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))`, and `<=` versus `<`
+differs **only** when two connections share a timestamp — the tie the documented
+FIFO eviction resolves by registration order. No test forced a tie, so the mutant
+lived or died according to whether the clock happened to tie during the run, which
+is why it surfaced intermittently rather than at the baseline. A test now opens two
+connections at the same instant and asserts the first-registered is evicted.
 
 The split itself was mutation-tested. Three mutants survived the first run, all
 in the new `realtime-module.factory.ts` — the list of transports a module serves,
