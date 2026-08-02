@@ -11,7 +11,16 @@
 **1. npm Library — Not an App**
 
 - Zero direct dependencies. Everything is a `peerDependency` (required or optional via `peerDependenciesMeta`).
-- Three subpaths: `.` (server), `./shared`, `./react`.
+- Four subpaths: `.` (SSE server), `./websocket`, `./shared`, `./react`.
+- **The root bundle must not reach `@nestjs/websockets`, `@nestjs/platform-socket.io`
+  or `socket.io`.** They are optional peers, so an SSE application does not install
+  them; a static import in the root entry fails while the module file is still
+  loading, before any guard can run — which is what made `1.0.1` unimportable for
+  every SSE consumer. The transport classes may keep living under
+  `src/server/transports/websocket/`; what matters is that only `src/websocket/`
+  re-exports them, so nothing reachable from `src/server/index.ts` pulls them in.
+  Gate, on the built artifact rather than the source tree:
+  `grep -c "@nestjs/websockets" dist/server/index.mjs` must return `0`.
 - `"dependencies": {}` in `package.json` — verify before any release.
 
 **2. Auth Inversion — Mandatory**
@@ -60,11 +69,11 @@
 
 ## Subpaths
 
-| Subpath | Entry | Purpose | Peer Deps |
-|---|---|---|---|
+| Subpath      | Entry                 | Purpose                                       | Peer Deps                                           |
+| ------------ | --------------------- | --------------------------------------------- | --------------------------------------------------- |
 | `.` (server) | `src/server/index.ts` | NestJS module — transports, services, pub/sub | `@nestjs/common`, `rxjs` (+ optional WS/Redis deps) |
-| `./shared` | `src/shared/index.ts` | Types + constants (no Node/NestJS dep) | _(none)_ |
-| `./react` | `src/react/index.ts` | Hooks + `RealtimeProvider` | `react ^19` (+ optional `socket.io-client ^4`) |
+| `./shared`   | `src/shared/index.ts` | Types + constants (no Node/NestJS dep)        | _(none)_                                            |
+| `./react`    | `src/react/index.ts`  | Hooks + `RealtimeProvider`                    | `react ^19` (+ optional `socket.io-client ^4`)      |
 
 ---
 
@@ -104,13 +113,13 @@ Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.gith
 
 ## Guidelines — Load Only What You Need
 
-| Domain | File / Command | Load when... |
-|---|---|---|
-| NestJS | `docs/guidelines/NESTJS-GUIDELINES.md` | Modifying `src/server/` |
-| RxJS | `docs/guidelines/RXJS-GUIDELINES.md` | Working on SSE Observable streams |
-| Socket.IO | `docs/guidelines/SOCKET-IO-GUIDELINES.md` | Working on WebSocket transport |
-| React | `docs/guidelines/REACT-GUIDELINES.md` | Working on `src/react/` |
-| Testing | `docs/guidelines/JEST-TESTING-GUIDELINES.md` | Writing or fixing tests |
-| Infra | `docs/architecture/infra-considerations.md` | Deployment configs (proxies, CDN) |
+| Domain    | File / Command                               | Load when...                      |
+| --------- | -------------------------------------------- | --------------------------------- |
+| NestJS    | `docs/guidelines/NESTJS-GUIDELINES.md`       | Modifying `src/server/`           |
+| RxJS      | `docs/guidelines/RXJS-GUIDELINES.md`         | Working on SSE Observable streams |
+| Socket.IO | `docs/guidelines/SOCKET-IO-GUIDELINES.md`    | Working on WebSocket transport    |
+| React     | `docs/guidelines/REACT-GUIDELINES.md`        | Working on `src/react/`           |
+| Testing   | `docs/guidelines/JEST-TESTING-GUIDELINES.md` | Writing or fixing tests           |
+| Infra     | `docs/architecture/infra-considerations.md`  | Deployment configs (proxies, CDN) |
 
 For full architecture, cross-instance emit shape, and testing patterns, see **[AGENTS.md](./AGENTS.md)**.

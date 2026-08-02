@@ -11,7 +11,7 @@ src/
 ├── server/         → `.` subpath — NestJS module + all server-side implementation
 │   ├── config/     → option validation (validate-options.ts)
 │   ├── constants/  → injection tokens, phase constants
-│   ├── factories/  → transport factory (creates SseTransport / WebSocketTransport / CompositeTransport)
+│   ├── composition/ → TransportWiring seam + the composition both modules share
 │   ├── interfaces/ → ALL contracts: ITransport, IConnectionAuthenticator, IRealtimePubSub, ...
 │   ├── offline-queue/ → RedisOfflineQueue (reference impl; requires ioredis peer)
 │   ├── pubsub/     → InMemoryPubSub, RedisRealtimePubSub, PubSubSubscriber
@@ -21,9 +21,13 @@ src/
 │   ├── transports/
 │   │   ├── sse/    → SseTransport, SseController, SseSubscriptionHandler, EventReplayBuffer, encodeSseEvent
 │   │   ├── websocket/ → WebSocketTransport, RealtimeGateway, RealtimeIoAdapter
-│   │   └── composite/ → CompositeTransport
+│   │   │              (implementation only — exported from the ./websocket subpath)
+│   │   └── composite/ → CompositeTransport (same)
 │   ├── utils/      → composeRoomId
-│   └── realtime.module.ts → BymaxRealtimeModule (forRoot + forRootAsync)
+│   └── realtime.module.ts → BymaxRealtimeModule (SSE only; forRoot + forRootAsync)
+├── websocket/      → `./websocket` subpath — the only graph that imports Socket.IO
+│   ├── realtime-websocket.module.ts → BymaxRealtimeWebSocketModule ('websocket' | 'both')
+│   └── websocket-wiring.ts → the TransportWiring the module supplies
 ├── shared/         → `./shared` subpath — zero-dep types + constants
 │   ├── constants/  → ROOM_PREFIXES, RESERVED_EVENT_NAMES, REALTIME_ERROR_CODES
 │   └── types/      → TransportMode, RealtimeEvent, PublicConnectionMeta
@@ -41,7 +45,7 @@ src/
 
 ```typescript
 interface ITransport {
-  kind: 'sse' | 'websocket'   // never 'both'
+  kind: 'sse' | 'websocket' // never 'both'
   emit(connectionId: string, event: RealtimeEvent): Promise<void>
   emitToRoom(roomId: string, event: RealtimeEvent): Promise<void>
   disconnect(connectionId: string): Promise<void>
@@ -51,11 +55,11 @@ interface ITransport {
 
 Three concrete implementations:
 
-| Class | `kind` | When active |
-|---|---|---|
-| `SseTransport` | `'sse'` | `transport: 'sse'` |
-| `WebSocketTransport` | `'websocket'` | `transport: 'websocket'` |
-| `CompositeTransport` | **`'sse'`** | `transport: 'both'` |
+| Class                | `kind`        | When active                                  |
+| -------------------- | ------------- | -------------------------------------------- |
+| `SseTransport`       | `'sse'`       | `transport: 'sse'`                           |
+| `WebSocketTransport` | `'websocket'` | `transport: 'websocket'` — via `./websocket` |
+| `CompositeTransport` | **`'sse'`**   | `transport: 'both'` — via `./websocket`      |
 
 `CompositeTransport.kind === 'sse'` — the composite transport reports itself as SSE because SSE is the dominant transport. The WebSocket half is the opt-in addition.
 
@@ -127,6 +131,7 @@ FIFO eviction: when `maxConnectionsPerUser` is reached, the **oldest** connectio
 ### `RoomRegistry`
 
 Maps `roomId → Set<connectionId>`. Auto-membership:
+
 - `user:{userId}` — joined on every connect.
 - `tenant:{tenantId}` — joined when `tenantId` is present in `AuthenticationResult`.
 
@@ -170,6 +175,7 @@ On reconnect: `OfflineQueueManager` flushes queued events to the new connection 
 ### Last-Event-ID replay (SSE)
 
 `EventReplayBuffer` stores the last `N` events per user (ring buffer). On SSE reconnect with `Last-Event-ID` header:
+
 1. `SseSubscriptionHandler` reads the `Last-Event-ID`.
 2. `EventReplayBuffer.getEventsAfter(userId, lastId)` returns missed events.
 3. They are emitted before the live stream.
@@ -260,16 +266,16 @@ Document surviving equivalent mutants with `// Stryker disable next-line <Mutato
 
 ## Error Code Catalog (§14)
 
-| Code | Constant | When emitted |
-|---|---|---|
-| `REALTIME_INVALID_OPTIONS` | `REALTIME_ERROR_CODES.INVALID_OPTIONS` | Bad `forRoot` options at bootstrap |
-| `REALTIME_AUTH_FAILED` | `REALTIME_ERROR_CODES.AUTH_FAILED` | `authenticate()` returned `null` |
-| `REALTIME_REAUTHENTICATION_FAILED` | `REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED` | `revalidate()` returned `false` |
-| `REALTIME_TOO_MANY_CONNECTIONS` | `REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS` | FIFO eviction of oldest connection |
-| `REALTIME_INVALID_TICKET` | `REALTIME_ERROR_CODES.INVALID_TICKET` | Ticket not found / expired |
-| `REALTIME_PUBSUB_UNAVAILABLE` | `REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE` | Pub/sub backend unreachable (degrades gracefully) |
-| `REALTIME_PAYLOAD_TOO_LARGE` | `REALTIME_ERROR_CODES.PAYLOAD_TOO_LARGE` | Event data exceeds configured limit |
-| `REALTIME_REPLAY_BUFFER_MISS` | `REALTIME_ERROR_CODES.REPLAY_BUFFER_MISS` | `Last-Event-ID` outside the replay window |
+| Code                               | Constant                                       | When emitted                                      |
+| ---------------------------------- | ---------------------------------------------- | ------------------------------------------------- |
+| `REALTIME_INVALID_OPTIONS`         | `REALTIME_ERROR_CODES.INVALID_OPTIONS`         | Bad `forRoot` options at bootstrap                |
+| `REALTIME_AUTH_FAILED`             | `REALTIME_ERROR_CODES.AUTH_FAILED`             | `authenticate()` returned `null`                  |
+| `REALTIME_REAUTHENTICATION_FAILED` | `REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED` | `revalidate()` returned `false`                   |
+| `REALTIME_TOO_MANY_CONNECTIONS`    | `REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS`    | FIFO eviction of oldest connection                |
+| `REALTIME_INVALID_TICKET`          | `REALTIME_ERROR_CODES.INVALID_TICKET`          | Ticket not found / expired                        |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | `REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE`      | Pub/sub backend unreachable (degrades gracefully) |
+| `REALTIME_PAYLOAD_TOO_LARGE`       | `REALTIME_ERROR_CODES.PAYLOAD_TOO_LARGE`       | Event data exceeds configured limit               |
+| `REALTIME_REPLAY_BUFFER_MISS`      | `REALTIME_ERROR_CODES.REPLAY_BUFFER_MISS`      | `Last-Event-ID` outside the replay window         |
 
 ---
 

@@ -37,13 +37,18 @@ describe('BymaxRealtimeWebSocketModule.forRoot', () => {
   })
 
   // When sse.endpoint is explicitly set on both transport, it is used instead of default.
-  it('uses a custom sse endpoint for transport both', () => {
+  // Counting controllers proves one was built, not that it was built for the
+  // configured endpoint — the route metadata is what shows the option was read.
+  it('binds the both-mode SSE controller to the configured endpoint', () => {
     const dynamic = BymaxRealtimeWebSocketModule.forRoot({
       transport: 'both',
       authenticator,
       sse: { endpoint: '/custom-events' },
     })
-    expect(dynamic.controllers).toHaveLength(1)
+    const ctrl = dynamic.controllers?.[0] as (new (...args: unknown[]) => unknown) & {
+      prototype: Record<string, unknown>
+    }
+    expect(Reflect.getMetadata('path', ctrl.prototype['subscribe'] as object)).toBe('custom-events')
   })
 
   // REALTIME_TRANSPORT_TOKEN must resolve to WebSocketTransport for transport='websocket'.
