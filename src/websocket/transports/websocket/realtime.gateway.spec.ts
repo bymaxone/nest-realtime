@@ -323,9 +323,11 @@ describe('RealtimeGateway', () => {
   // When handshake.headers.cookie is absent (undefined), the ?? operator must fall back
   // to '' so parseCookieHeader receives an empty string, not the Stryker sentinel.
   // Both inputs yield {} from parseCookieHeader (no '=' in sentinel), so we spy on
-  // the module export to observe the exact argument passed by the gateway.
+  // the export to observe the exact argument passed by the gateway. The spy goes
+  // through the same shared-runtime entry the gateway imports, so it intercepts
+  // the binding the gateway actually calls.
   it('calls parseCookieHeader with empty string when handshake has no cookie header', async () => {
-    const cookieMod = require('../../../server/utils/parse-cookie-header') as {
+    const cookieMod = require('@bymax-one/nest-realtime/internal') as {
       parseCookieHeader: (cookieHeader: string) => Record<string, string>
     }
     const spy = jest.spyOn(cookieMod, 'parseCookieHeader')
