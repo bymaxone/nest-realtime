@@ -139,7 +139,7 @@
     "socket.io": "^4.0.0",
     "socket.io-client": "^4.0.0",
     "supertest": "^7.0.0",
-    "ts-jest": "^29.0.0",
+    "ts-jest": "^29.4.12",
     "ts-node": "^10.9.0",
     "tslib": "^2.6.0",
     "tsup": "^8.0.0",
