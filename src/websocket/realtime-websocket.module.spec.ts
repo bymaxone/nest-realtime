@@ -76,6 +76,14 @@ describe('BymaxRealtimeWebSocketModule.forRoot', () => {
     ).toThrow(/'@bymax-one\/nest-realtime'/)
   })
 
+  // Two modes, so the rejection also proves the separator: a list joined without
+  // it reads as a single unknown mode.
+  it('lists both transports it serves in the rejection', () => {
+    expect(() =>
+      BymaxRealtimeWebSocketModule.forRoot(asOptions({ transport: 'sse', authenticator })),
+    ).toThrow(/it serves 'websocket', 'both'/)
+  })
+
   // The gateway is what pulls Socket.IO in, so 'websocket' must register it and
   // no SSE controller alongside.
   it('registers the gateway and no controller for websocket', () => {

@@ -199,6 +199,14 @@ describe('BymaxRealtimeModule.forRoot', () => {
     ).toThrow(/transport 'both' is not served/)
   })
 
+  // The rejection lists what this module DOES serve, so the reader can tell a
+  // wrong import from a wrong mode without opening the source.
+  it('lists the transport it serves in the rejection', () => {
+    expect(() =>
+      BymaxRealtimeModule.forRoot(asOptions({ transport: 'websocket', authenticator })),
+    ).toThrow(/it serves 'sse'/)
+  })
+
   // Nothing this module registers may reach the Socket.IO stack: that split is the
   // reason an SSE application never installs it.
   it('registers no provider whose name mentions WebSocket', () => {
