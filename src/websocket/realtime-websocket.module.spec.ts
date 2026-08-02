@@ -81,6 +81,37 @@ describe('BymaxRealtimeWebSocketModule.forRoot', () => {
     ).toThrow(/'@bymax-one\/nest-realtime'/)
   })
 
+  // IRealtimePubSub is read by the SSE transport and its subscriber and by nothing
+  // else, so a WebSocket-only app scaling through websocket.redisAdapter must not be
+  // told to provide one — that names the wrong mechanism.
+  it('does not warn about pubsub for websocket in production', () => {
+    const original = process.env['NODE_ENV']
+    process.env['NODE_ENV'] = 'production'
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator })
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+    } finally {
+      process.env['NODE_ENV'] = original
+      warnSpy.mockRestore()
+    }
+  })
+
+  // 'both' does carry SSE, so the warning stays — this is what pins the gate to
+  // the transport rather than to the module.
+  it('does warn about pubsub for both in production', () => {
+    const original = process.env['NODE_ENV']
+    process.env['NODE_ENV'] = 'production'
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      BymaxRealtimeWebSocketModule.forRoot({ transport: 'both', authenticator })
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+    } finally {
+      process.env['NODE_ENV'] = original
+      warnSpy.mockRestore()
+    }
+  })
+
   // Two modes, so the rejection also proves the separator: a list joined without
   // it reads as a single unknown mode.
   it('lists both transports it serves in the rejection', () => {

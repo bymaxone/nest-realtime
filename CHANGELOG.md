@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cast, or from JavaScript — is refused with an error naming the entry point that
   serves it.
 
+- **The single-instance warning no longer fires for `transport: 'websocket'`.**
+  `IRealtimePubSub` is read by the SSE transport and its subscriber and by nothing
+  else, so telling a WebSocket-only application to provide one named the wrong
+  mechanism — it scales horizontally through `websocket.redisAdapter`. `'sse'` and
+  `'both'` still warn.
+
 - **`transport` is required on `forRootAsync`.** It was an optional hint, and
   omitting it took a path that registered every transport and resolved the active
   one at runtime, which booted Socket.IO regardless of the configured mode. That

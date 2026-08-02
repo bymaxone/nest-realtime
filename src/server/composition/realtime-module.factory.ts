@@ -84,8 +84,20 @@ function assertModeSupported(
   )
 }
 
-/** Warn once when a production process would be limited to a single instance. */
-function warnIfSingleInstance(pubsub: unknown, logger: Logger): void {
+/**
+ * Warn once when a production process would be limited to a single instance.
+ *
+ * Only for transports that carry SSE. `IRealtimePubSub` is read by the SSE
+ * transport and its subscriber and by nothing else — a WebSocket-only
+ * application scales horizontally through `websocket.redisAdapter`, so telling
+ * it to provide a pub/sub would point at the wrong mechanism entirely.
+ */
+function warnIfSingleInstance(
+  pubsub: unknown,
+  transport: BymaxRealtimeModuleOptions['transport'],
+  logger: Logger,
+): void {
+  if (transport === 'websocket') return
   if (!pubsub && process.env['NODE_ENV'] === 'production') {
     logger.warn(
       'No IRealtimePubSub provided in production — single-instance only. Provide a Redis-backed IRealtimePubSub for horizontal scaling.',
@@ -127,7 +139,7 @@ export function composeForRoot(
   const resolved: ResolvedRealtimeOptions = applyDefaults(options)
   const instanceId = randomUUID()
 
-  warnIfSingleInstance(resolved.pubsub, logger)
+  warnIfSingleInstance(resolved.pubsub, resolved.transport, logger)
 
   const { providers, endpoints, gateways } = wiring.build(resolved)
   logger.log(`Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`)
@@ -244,7 +256,7 @@ export function composeForRootAsync(
       resolvedOptionsProvider,
       fromOptions(REALTIME_AUTHENTICATOR_TOKEN, (opts) => opts.authenticator),
       fromOptions(REALTIME_PUBSUB_TOKEN, (opts) => {
-        warnIfSingleInstance(opts.pubsub, logger)
+        warnIfSingleInstance(opts.pubsub, opts.transport, logger)
         return opts.pubsub ?? new InMemoryPubSub()
       }),
       fromOptions(REALTIME_HOOKS_TOKEN, (opts) => opts.hooks ?? {}),
