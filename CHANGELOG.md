@@ -24,15 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-> **Released as a patch, deliberately, though the API change is breaking.**
-> Semantic versioning would call this a major. It ships as `1.0.2` because the
-> package has no consumer to break, which was checked rather than assumed: the
-> registry reports no download data (`1.0.0` and `1.0.1` were both published on
-> 2026-08-02), no repository in the organisation declares it as a dependency, and
-> the reference app pins a local pre-release tarball instead of the published
-> package. The one project that plans to adopt it does so for SSE — the path this
-> release fixes. A major would have signalled a migration that nobody has to make.
-
 - **WebSocket moved to its own entry point, `@bymax-one/nest-realtime/websocket`.**
   It exports `BymaxRealtimeWebSocketModule`, which serves `transport: 'websocket'`
   and `'both'`, together with `WebSocketTransport`, `RealtimeGateway`,
