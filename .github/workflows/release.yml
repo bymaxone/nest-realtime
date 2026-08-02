@@ -24,8 +24,8 @@ jobs:
       name: npm-publish
       url: https://www.npmjs.com/package/@bymax-one/nest-realtime
     permissions:
-      id-token: write   # required for OIDC trusted publishing (provenance)
-      contents: write   # required to create the GitHub Release
+      id-token: write # required for OIDC trusted publishing (provenance)
+      contents: write # required to create the GitHub Release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -59,6 +59,17 @@ jobs:
 
       - name: Run bundle-size gate
         run: pnpm size
+
+      - name: Verify published type resolution
+        # Runs after the build inside prepublishOnly and before the publish, so a
+        # tag cannot ship a tarball whose `exports` map resolves to declarations
+        # for the wrong module format. It cannot live in prepublishOnly itself:
+        # attw packs the tarball, and the nested pack inside `pnpm publish`
+        # resolves to a path that does not exist.
+        #
+        # `check:published` needs no step here — it packs nothing, so it lives in
+        # prepublishOnly and already ran in the step above.
+        run: pnpm check:exports
 
       - name: Publish to npm (with provenance)
         run: pnpm publish --provenance --no-git-checks --access public

@@ -33,15 +33,44 @@ jobs:
       mutation-source-globs: '^(src/)'
 
   verify:
-    name: Verify build + size
+    name: Verify build + size + published surface
     needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # `check:published` cross-checks every release tag against a CHANGELOG
+          # section. The default checkout is shallow and carries no tags, so the
+          # check would find nothing and pass — the silent no-op it exists to
+          # prevent.
+          fetch-depth: 0
       - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
       - name: Build all subpaths
         run: pnpm build
+      - name: Verify build output integrity
+        run: |
+          for subpath in server shared react; do
+            for ext in mjs cjs d.ts d.cts; do
+              if [ ! -f "dist/$subpath/index.$ext" ]; then
+                echo "Missing dist/$subpath/index.$ext"
+                exit 1
+              fi
+            done
+          done
+          echo "All three subpaths produced ESM + CJS + .d.ts + .d.cts"
+      - name: Verify published type resolution
+        # A source-level typecheck compiles `src`, so it cannot catch a broken
+        # `exports` map: a consumer resolving through the packed tarball may still
+        # land on declarations for the wrong module format. `attw` packs the
+        # tarball and resolves every entrypoint the way each resolution mode would.
+        run: pnpm check:exports
+      - name: Verify the published surface matches the documentation
+        # The README's links resolve and its TypeScript snippets compile against
+        # `dist/` resolved through the `exports` map, and every `v*.*.*` tag has a
+        # CHANGELOG section — the tags being an outside source of truth the file
+        # cannot contradict about itself.
+        run: pnpm check:published
       - name: Bundle size budget
         run: pnpm size
 
