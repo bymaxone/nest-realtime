@@ -2,7 +2,8 @@
 # Publishes @bymax-one/nest-realtime to npm with OIDC provenance attestation.
 # The publish job is gated by the `npm-publish` environment (manual approval required).
 # This workflow is INERT until a human pushes a tag — never auto-triggered on PRs or branches.
-# NODE_AUTH_TOKEN is read from the NPM_TOKEN repository secret; configure it before the first release.
+# Authentication is npm OIDC trusted publishing — there is no NPM_TOKEN secret
+# to configure. It must be set up once for the package on npmjs.com.
 name: Release
 
 on:
@@ -79,9 +80,15 @@ jobs:
         # `_npmVersion`, present only on the publishes the npm CLI performed. An
         # empty `readme` means the npm package page renders no documentation at
         # all, which is where people actually read it.
+        #
+        # No `NODE_AUTH_TOKEN` and no `NPM_TOKEN` secret: authentication is OIDC
+        # trusted publishing, where the npm CLI exchanges the GitHub OIDC token
+        # (`id-token: write` above) for a short-lived publish credential. This
+        # step used to set `NODE_AUTH_TOKEN` from a secret that does not exist in
+        # this repository, so it resolved to an empty string — an empty token
+        # offered to npm rather than no token at all. The four sibling libraries
+        # that publish successfully from CI set neither.
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Extract release notes from CHANGELOG
         # Pulls out the section for the tag being released, so the Release body is
