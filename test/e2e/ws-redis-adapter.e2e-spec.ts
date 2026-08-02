@@ -10,7 +10,7 @@ import type { AddressInfo } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import IORedisMock from 'ioredis-mock'
-import { BymaxRealtimeModule } from '../../src/server/realtime.module'
+import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
 import { RealtimeService } from '../../src/server/services/realtime.service'
 import { RealtimeIoAdapter } from '../../src/server/transports/websocket/realtime-io-adapter'
 import type { IConnectionAuthenticator } from '../../src/server/interfaces/connection-authenticator.interface'
@@ -22,7 +22,10 @@ const authenticator: IConnectionAuthenticator = {
 async function waitForEvent<T>(socket: ClientSocket, event: string, timeoutMs = 5_000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${event}`)), timeoutMs)
-    socket.once(event, (data: T) => { clearTimeout(timer); resolve(data) })
+    socket.once(event, (data: T) => {
+      clearTimeout(timer)
+      resolve(data)
+    })
   })
 }
 
@@ -48,10 +51,12 @@ describe('RealtimeIoAdapter + Redis adapter smoke', () => {
     logSpy.mockRestore()
   })
 
-  async function buildApp(pubClient: IORedisMock): Promise<{ app: INestApplication; port: number; service: RealtimeService }> {
+  async function buildApp(
+    pubClient: IORedisMock,
+  ): Promise<{ app: INestApplication; port: number; service: RealtimeService }> {
     const module = await Test.createTestingModule({
       imports: [
-        BymaxRealtimeModule.forRoot({
+        BymaxRealtimeWebSocketModule.forRoot({
           transport: 'websocket',
           authenticator,
           websocket: { redisAdapter: { pubClient } },

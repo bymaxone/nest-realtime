@@ -75,8 +75,7 @@ export function mockSocketIoClient(): SocketIoClientMockResult {
   return {
     socket,
     io,
-    trigger: (event: string, ...args: unknown[]) =>
-      handlers.get(event)?.forEach((h) => h(...args)),
+    trigger: (event: string, ...args: unknown[]) => handlers.get(event)?.forEach((h) => h(...args)),
     triggerAny: (event: string, payload: unknown) => anyHandler?.(event, payload),
   }
 }

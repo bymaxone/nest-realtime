@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-02
+
+### Fixed
+
+- **The package could not be imported by an SSE application at all.** The root
+  entry statically imported `@nestjs/websockets` and `@nestjs/platform-socket.io`,
+  both declared **optional** peers. A consumer who installed only the required
+  peers — which is what the manifest asks for, and what an application on SSE, the
+  default transport, would do — got `ERR_MODULE_NOT_FOUND` on
+  `import '@bymax-one/nest-realtime'`, in ESM and CommonJS alike.
+
+  The library already carried an `assertWsPeerDeps()` guard written to produce a
+  clear message for exactly this case. It was unreachable: the static import
+  failed while the module file was still loading, before any function ran.
+
+### Changed
+
+- **WebSocket moved to its own entry point, `@bymax-one/nest-realtime/websocket`.**
+  It exports `BymaxRealtimeWebSocketModule`, which serves `transport: 'websocket'`
+  and `'both'`, together with `WebSocketTransport`, `RealtimeGateway`,
+  `RealtimeIoAdapter` and `CompositeTransport` — all removed from the package root.
+
+  `BymaxRealtimeModule` at the root now serves `'sse'` only, and nothing reachable
+  from it imports the Socket.IO stack. That is what makes "opt-in" true of the
+  install and not only of the configuration: an SSE application resolves 22
+  packages where it previously needed 45.
+
+  `transport` is narrowed per module rather than validated at runtime, so asking
+  the root module for `'websocket'` does not compile. Asking anyway — through a
+  cast, or from JavaScript — is refused with an error naming the entry point that
+  serves it.
+
+- **`transport` is required on `forRootAsync`.** It was an optional hint, and
+  omitting it took a path that registered every transport and resolved the active
+  one at runtime, which booted Socket.IO regardless of the configured mode. That
+  path is gone. Providers and controllers are fixed at decoration time, long
+  before a factory runs, so the transport has to be declared for the module to
+  register the right ones.
+
+- The error raised when an async factory returns nothing now names the method it
+  called (`createRealtimeOptions`) instead of describing it.
+
 ## [1.0.1] - 2026-08-02
 
 ### Fixed
@@ -83,6 +125,7 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/bymaxone/nest-realtime/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-realtime/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-realtime/releases/tag/v1.0.0

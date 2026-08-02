@@ -16,11 +16,15 @@ export type { IRealtimePubSub, RealtimePubSubMessage } from './realtime-pubsub.i
 export type { IOfflineQueueStorage, OfflineQueuedEvent } from './offline-queue-storage.interface'
 export type { IPresenceStorage } from './presence-storage.interface'
 export type {
-  BymaxRealtimeModuleOptions,
   BymaxRealtimeModuleAsyncOptions,
+  BymaxRealtimeModuleOptions,
   BymaxRealtimeModuleOptionsFactory,
-  SseOptions,
-  WebSocketOptions,
   CorsConfig,
   ReauthenticationPolicy,
+  SseOptions,
+  SseRealtimeModuleAsyncOptions,
+  SseRealtimeModuleOptions,
+  WebSocketOptions,
+  WebSocketRealtimeModuleAsyncOptions,
+  WebSocketRealtimeModuleOptions,
 } from './realtime-module-options.interface'

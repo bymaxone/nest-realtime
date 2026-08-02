@@ -1,16 +1,13 @@
 /**
- * @fileoverview Integration tests for the dynamic module wiring.
+ * @fileoverview Integration tests for the SSE dynamic module wiring.
  * @layer composition
  */
 import { Injectable, Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { assertWsPeerDeps, BymaxRealtimeModule } from './realtime.module'
+import { BymaxRealtimeModule } from './realtime.module'
 import { RealtimeService } from './services/realtime.service'
 import { ConnectionRegistry } from './services/connection-registry.service'
 import { SseTransport } from './transports/sse/sse.transport'
-import { WebSocketTransport } from './transports/websocket/websocket.transport'
-import { RealtimeGateway } from './transports/websocket/realtime.gateway'
-import { CompositeTransport } from './transports/composite/composite.transport'
 import { InMemoryPubSub } from './pubsub/in-memory-pubsub'
 import {
   REALTIME_HOOKS_TOKEN,
@@ -21,16 +18,17 @@ import {
 } from './constants/injection-tokens.constants'
 import type {
   BymaxRealtimeModuleOptions,
-  BymaxRealtimeModuleAsyncOptions,
   BymaxRealtimeModuleOptionsFactory,
   IConnectionLifecycleHooks,
   IRealtimePubSub,
+  SseRealtimeModuleAsyncOptions,
+  SseRealtimeModuleOptions,
 } from './interfaces'
 
 const authenticator = { authenticate: async () => null }
 
-function asOptions(value: unknown): BymaxRealtimeModuleOptions {
-  return value as BymaxRealtimeModuleOptions
+function asOptions(value: unknown): SseRealtimeModuleOptions {
+  return value as SseRealtimeModuleOptions
 }
 
 describe('BymaxRealtimeModule.forRoot', () => {
@@ -57,34 +55,10 @@ describe('BymaxRealtimeModule.forRoot', () => {
     )
   })
 
-  // WebSocket transport is now supported — forRoot does not throw for 'websocket'.
-  it('produces a dynamic module for the websocket transport', () => {
-    const dynamic = BymaxRealtimeModule.forRoot({ transport: 'websocket', authenticator })
-    expect(dynamic.module).toBe(BymaxRealtimeModule)
-    expect(dynamic.controllers).toHaveLength(0)
-  })
-
-  // Both transports are now supported — forRoot does not throw for 'both'.
-  it('produces a dynamic module for the both transport', () => {
-    const dynamic = BymaxRealtimeModule.forRoot({ transport: 'both', authenticator })
-    expect(dynamic.module).toBe(BymaxRealtimeModule)
-    expect(dynamic.controllers).toHaveLength(1)
-  })
-
   // When sse.endpoint is explicitly set, it is used instead of the default '/events'.
   it('uses a custom sse endpoint for transport sse', () => {
     const dynamic = BymaxRealtimeModule.forRoot({
       transport: 'sse',
-      authenticator,
-      sse: { endpoint: '/custom-events' },
-    })
-    expect(dynamic.controllers).toHaveLength(1)
-  })
-
-  // When sse.endpoint is explicitly set on both transport, it is used instead of default.
-  it('uses a custom sse endpoint for transport both', () => {
-    const dynamic = BymaxRealtimeModule.forRoot({
-      transport: 'both',
       authenticator,
       sse: { endpoint: '/custom-events' },
     })
@@ -151,22 +125,6 @@ describe('BymaxRealtimeModule.forRoot', () => {
     expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(SseTransport)
   })
 
-  // REALTIME_TRANSPORT_TOKEN must resolve to WebSocketTransport for transport='websocket'.
-  it('binds REALTIME_TRANSPORT_TOKEN to WebSocketTransport for transport websocket', async () => {
-    const mod = await Test.createTestingModule({
-      imports: [BymaxRealtimeModule.forRoot({ transport: 'websocket', authenticator })],
-    }).compile()
-    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(WebSocketTransport)
-  })
-
-  // REALTIME_TRANSPORT_TOKEN must resolve to CompositeTransport for transport='both'.
-  it('binds REALTIME_TRANSPORT_TOKEN to CompositeTransport for transport both', async () => {
-    const mod = await Test.createTestingModule({
-      imports: [BymaxRealtimeModule.forRoot({ transport: 'both', authenticator })],
-    }).compile()
-    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(CompositeTransport)
-  })
-
   // When pubsub IS provided in production the single-instance warning must NOT fire.
   // Kills the && → || mutation that would warn even when pubsub is present.
   it('does not warn in production when pubsub is provided', () => {
@@ -219,12 +177,44 @@ describe('BymaxRealtimeModule.forRoot', () => {
     const dynamic = BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator })
     expect(dynamic.exports).toContain(RealtimeService)
   })
+
+  // A transport this module does not serve is a wrong-import mistake, not a typo,
+  // so the error has to name the entry point that does serve it.
+  it('rejects the websocket transport and names the WebSocket module', () => {
+    expect(() =>
+      BymaxRealtimeModule.forRoot(asOptions({ transport: 'websocket', authenticator })),
+    ).toThrow(/BymaxRealtimeWebSocketModule/)
+  })
+
+  it('rejects the both transport and names the websocket entry point', () => {
+    expect(() =>
+      BymaxRealtimeModule.forRoot(asOptions({ transport: 'both', authenticator })),
+    ).toThrow(/@bymax-one\/nest-realtime\/websocket/)
+  })
+
+  // The rejection names the mode it refused, so the message identifies the call.
+  it('names the refused transport in the rejection', () => {
+    expect(() =>
+      BymaxRealtimeModule.forRoot(asOptions({ transport: 'both', authenticator })),
+    ).toThrow(/transport 'both' is not served/)
+  })
+
+  // Nothing this module registers may reach the Socket.IO stack: that split is the
+  // reason an SSE application never installs it.
+  it('registers no provider whose name mentions WebSocket', () => {
+    const dynamic = BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator })
+    const names = (dynamic.providers ?? []).map((p) =>
+      typeof p === 'function' ? p.name : String((p as { provide?: unknown }).provide ?? ''),
+    )
+    expect(names.some((n) => /WebSocket|Gateway|Composite/.test(n))).toBe(false)
+  })
 })
 
 describe('BymaxRealtimeModule.forRootAsync', () => {
   // Basic wiring: useFactory returning valid options wires all services.
   it('wires RealtimeService when useFactory returns valid options', async () => {
-    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+    const asyncOptions: SseRealtimeModuleAsyncOptions = {
+      transport: 'sse',
       useFactory: async () => ({ transport: 'sse', authenticator }),
     }
     const mod = await Test.createTestingModule({
@@ -237,6 +227,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
   // A DynamicModule with exactly one SSE controller is produced.
   it('produces a dynamic module with one controller', () => {
     const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       useFactory: async () => ({ transport: 'sse', authenticator }),
     })
     expect(dynamic.module).toBe(BymaxRealtimeModule)
@@ -245,7 +236,8 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
 
   // When useFactory is absent or returns nothing, compilation throws.
   it('throws during module compilation when useFactory returns null', async () => {
-    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+    const asyncOptions: SseRealtimeModuleAsyncOptions = {
+      transport: 'sse',
       useFactory: async () => null as unknown as BymaxRealtimeModuleOptions,
     }
     const testModule = Test.createTestingModule({
@@ -259,6 +251,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
           useFactory: async () => ({ transport: 'sse', authenticator }),
         }),
       ],
@@ -275,6 +268,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
       const mod = await Test.createTestingModule({
         imports: [
           BymaxRealtimeModule.forRootAsync({
+            transport: 'sse',
             useFactory: async () => ({ transport: 'sse', authenticator }),
           }),
         ],
@@ -297,6 +291,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
           useFactory: async () => ({ transport: 'sse', authenticator, pubsub }),
         }),
       ],
@@ -309,6 +304,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
           useFactory: async () => ({ transport: 'sse', authenticator }),
         }),
       ],
@@ -322,6 +318,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
           useFactory: async () => ({ transport: 'sse', authenticator, hooks }),
         }),
       ],
@@ -332,7 +329,8 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
   // extraProviders are registered alongside the default providers.
   it('registers extraProviders when provided', async () => {
     const EXTRA_TOKEN = Symbol('EXTRA')
-    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+    const asyncOptions: SseRealtimeModuleAsyncOptions = {
+      transport: 'sse',
       useFactory: async () => ({ transport: 'sse', authenticator }),
       extraProviders: [{ provide: EXTRA_TOKEN, useValue: 'extra' }],
     }
@@ -345,6 +343,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
   // imports and inject are passed through correctly.
   it('passes through empty imports when not provided', () => {
     const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       useFactory: async () => ({ transport: 'sse', authenticator }),
     })
     expect(dynamic.imports).toEqual([])
@@ -359,7 +358,12 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
       }
     }
     const mod = await Test.createTestingModule({
-      imports: [BymaxRealtimeModule.forRootAsync({ useClass: TestOptionsFactory })],
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useClass: TestOptionsFactory,
+        }),
+      ],
     }).compile()
     expect(mod.get(RealtimeService)).toBeInstanceOf(RealtimeService)
   })
@@ -375,6 +379,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
           useExisting: ExistingFactory,
           extraProviders: [ExistingFactory],
         }),
@@ -392,16 +397,23 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
       }
     }
     const testModule = Test.createTestingModule({
-      imports: [BymaxRealtimeModule.forRootAsync({ useClass: NullFactory })],
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useClass: NullFactory,
+        }),
+      ],
     })
     await expect(testModule.compile()).rejects.toThrow(/REALTIME_INVALID_OPTIONS/)
   })
 
   // No async-options pattern is an actionable INVALID_OPTIONS error (not a DI failure).
   it('throws when no async-options pattern is provided', () => {
-    expect(() => BymaxRealtimeModule.forRootAsync({})).toThrow(
-      /forRootAsync requires exactly one of useFactory, useClass, or useExisting/,
-    )
+    expect(() =>
+      BymaxRealtimeModule.forRootAsync({
+        transport: 'sse',
+      }),
+    ).toThrow(/forRootAsync requires exactly one of useFactory, useClass, or useExisting/)
   })
 
   // Providing more than one pattern is rejected up front.
@@ -413,47 +425,11 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     }
     expect(() =>
       BymaxRealtimeModule.forRootAsync({
+        transport: 'sse',
         useFactory: () => ({ transport: 'sse', authenticator }),
         useClass: DummyFactory,
       }),
     ).toThrow(/forRootAsync requires exactly one/)
-  })
-
-  // forRootAsync resolves the websocket transport token when transport === 'websocket'.
-  it('resolves WebSocketTransport for transport websocket via forRootAsync', async () => {
-    const mod = await Test.createTestingModule({
-      imports: [
-        BymaxRealtimeModule.forRootAsync({
-          useFactory: async () => ({ transport: 'websocket', authenticator }),
-        }),
-      ],
-    }).compile()
-    const service = mod.get(RealtimeService)
-    expect(service).toBeInstanceOf(RealtimeService)
-  })
-
-  // forRootAsync resolves the composite transport token when transport === 'both'.
-  it('resolves CompositeTransport for transport both via forRootAsync', async () => {
-    const mod = await Test.createTestingModule({
-      imports: [
-        BymaxRealtimeModule.forRootAsync({
-          useFactory: async () => ({ transport: 'both', authenticator }),
-        }),
-      ],
-    }).compile()
-    const service = mod.get(RealtimeService)
-    expect(service).toBeInstanceOf(RealtimeService)
-  })
-
-  // A synchronous 'sse' hint gates WS wiring: no gateway, no WS transport, one controller.
-  it('does not register WebSocket providers when the transport hint is sse', () => {
-    const dynamic = BymaxRealtimeModule.forRootAsync({
-      transport: 'sse',
-      useFactory: async () => ({ transport: 'sse', authenticator }),
-    })
-    expect(dynamic.providers).not.toContain(RealtimeGateway)
-    expect(dynamic.providers).not.toContain(WebSocketTransport)
-    expect(dynamic.controllers).toHaveLength(1)
   })
 
   // An SSE-only async module with the hint compiles without any WebSocket provider.
@@ -469,41 +445,6 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     expect(mod.get(RealtimeService)).toBeInstanceOf(RealtimeService)
   })
 
-  // A synchronous 'websocket' hint registers the gateway + WS transport and no SSE controller.
-  it('registers the gateway and no SSE controller when the transport hint is websocket', () => {
-    const dynamic = BymaxRealtimeModule.forRootAsync({
-      transport: 'websocket',
-      useFactory: async () => ({ transport: 'websocket', authenticator }),
-    })
-    expect(dynamic.providers).toContain(RealtimeGateway)
-    expect(dynamic.providers).toContain(WebSocketTransport)
-    expect(dynamic.controllers).toHaveLength(0)
-  })
-
-  // A synchronous 'both' hint registers every transport and the SSE controller.
-  it('registers all transports and the SSE controller when the transport hint is both', () => {
-    const dynamic = BymaxRealtimeModule.forRootAsync({
-      transport: 'both',
-      useFactory: async () => ({ transport: 'both', authenticator }),
-    })
-    expect(dynamic.providers).toContain(RealtimeGateway)
-    expect(dynamic.providers).toContain(CompositeTransport)
-    expect(dynamic.controllers).toHaveLength(1)
-  })
-
-  // A transport hint that disagrees with the factory result fails fast at bootstrap.
-  it('rejects when the transport hint does not match the resolved transport', async () => {
-    const testModule = Test.createTestingModule({
-      imports: [
-        BymaxRealtimeModule.forRootAsync({
-          transport: 'sse',
-          useFactory: async () => ({ transport: 'websocket', authenticator }),
-        }),
-      ],
-    })
-    await expect(testModule.compile()).rejects.toThrow(/transport hint/)
-  })
-
   // When no transport hint is provided, the legacy path is used and REALTIME_TRANSPORT_TOKEN
   // must resolve at runtime to the correct transport.  These tests kill the string mutations
   // in buildLegacyAsyncTransportProviders' inner if-chain ('sse' → '', 'websocket' → '').
@@ -511,33 +452,12 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
           useFactory: async () => ({ transport: 'sse', authenticator }),
         }),
       ],
     }).compile()
     expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(SseTransport)
-  })
-
-  it('resolves WebSocketTransport via legacy async path when transport is websocket', async () => {
-    const mod = await Test.createTestingModule({
-      imports: [
-        BymaxRealtimeModule.forRootAsync({
-          useFactory: async () => ({ transport: 'websocket', authenticator }),
-        }),
-      ],
-    }).compile()
-    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(WebSocketTransport)
-  })
-
-  it('resolves CompositeTransport via legacy async path when transport is both', async () => {
-    const mod = await Test.createTestingModule({
-      imports: [
-        BymaxRealtimeModule.forRootAsync({
-          useFactory: async () => ({ transport: 'both', authenticator }),
-        }),
-      ],
-    }).compile()
-    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(CompositeTransport)
   })
 
   // With a transport hint, the async path uses buildAsyncTransportProviders.
@@ -554,30 +474,6 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(SseTransport)
   })
 
-  it('binds REALTIME_TRANSPORT_TOKEN to WebSocketTransport when transport hint is websocket', async () => {
-    const mod = await Test.createTestingModule({
-      imports: [
-        BymaxRealtimeModule.forRootAsync({
-          transport: 'websocket',
-          useFactory: async () => ({ transport: 'websocket', authenticator }),
-        }),
-      ],
-    }).compile()
-    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(WebSocketTransport)
-  })
-
-  it('binds REALTIME_TRANSPORT_TOKEN to CompositeTransport when transport hint is both', async () => {
-    const mod = await Test.createTestingModule({
-      imports: [
-        BymaxRealtimeModule.forRootAsync({
-          transport: 'both',
-          useFactory: async () => ({ transport: 'both', authenticator }),
-        }),
-      ],
-    }).compile()
-    expect(mod.get(REALTIME_TRANSPORT_TOKEN)).toBeInstanceOf(CompositeTransport)
-  })
-
   // When pubsub IS provided in production, the single-instance warning must NOT fire.
   // Kills the && → || mutation in the pubsubProvider factory.
   it('does not warn in production when pubsub is provided via factory', async () => {
@@ -592,6 +488,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
       const mod = await Test.createTestingModule({
         imports: [
           BymaxRealtimeModule.forRootAsync({
+            transport: 'sse',
             useFactory: async () => ({ transport: 'sse', authenticator, pubsub }),
           }),
         ],
@@ -613,6 +510,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
       const mod = await Test.createTestingModule({
         imports: [
           BymaxRealtimeModule.forRootAsync({
+            transport: 'sse',
             useFactory: async () => ({ transport: 'sse', authenticator }),
           }),
         ],
@@ -634,6 +532,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
       const mod = await Test.createTestingModule({
         imports: [
           BymaxRealtimeModule.forRootAsync({
+            transport: 'sse',
             useFactory: async () => ({ transport: 'sse', authenticator }),
           }),
         ],
@@ -654,6 +553,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
           useFactory: async () => ({
             transport: 'sse',
             authenticator,
@@ -673,6 +573,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
           useFactory: async () => ({
             transport: 'sse',
             authenticator,
@@ -689,6 +590,7 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
   it('forRootAsync exports contain RealtimeService', () => {
     // Kills ArrayDeclaration/BlockStatement mutation that empties the exports array.
     const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       useFactory: async () => ({ transport: 'sse', authenticator }),
     })
     expect(dynamic.exports).toContain(RealtimeService)
@@ -706,21 +608,10 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     expect(Reflect.getMetadata('path', ctrl.prototype['subscribe'] as object)).toBe('events')
   })
 
-  // Kills L207 StringLiteral: createSseController('/events') → createSseController('') for 'both'.
-  it('SSE controller has route path "events" when transport hint is both', () => {
-    const dynamic = BymaxRealtimeModule.forRootAsync({
-      transport: 'both',
-      useFactory: async () => ({ transport: 'both', authenticator }),
-    })
-    const ctrl = dynamic.controllers?.[0] as (new (...args: unknown[]) => unknown) & {
-      prototype: Record<string, unknown>
-    }
-    expect(Reflect.getMetadata('path', ctrl.prototype['subscribe'] as object)).toBe('events')
-  })
-
   // Kills L212 StringLiteral: createSseController('/events') → createSseController('') for legacy path.
   it('SSE controller has route path "events" when no transport hint is supplied', () => {
     const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       useFactory: async () => ({ transport: 'sse', authenticator }),
     })
     const ctrl = dynamic.controllers?.[0] as (new (...args: unknown[]) => unknown) & {
@@ -729,40 +620,10 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     expect(Reflect.getMetadata('path', ctrl.prototype['subscribe'] as object)).toBe('events')
   })
 
-  // Kills L195:7 ConditionalExpression (false) and L195:24 BlockStatement ({}).
-  // The 'both' path must wire REALTIME_TRANSPORT_TOKEN with useExisting CompositeTransport, not useFactory.
-  it('REALTIME_TRANSPORT_TOKEN uses useExisting CompositeTransport when transport hint is both', () => {
-    const dynamic = BymaxRealtimeModule.forRootAsync({
-      transport: 'both',
-      useFactory: async () => ({ transport: 'both', authenticator }),
-    })
-    const tokenProvider = (dynamic.providers ?? []).find(
-      (p): p is { provide: symbol; useExisting: unknown } =>
-        typeof p === 'object' &&
-        p !== null &&
-        'provide' in p &&
-        (p as { provide: unknown }).provide === REALTIME_TRANSPORT_TOKEN,
-    )
-    expect(tokenProvider).toBeDefined()
-    expect((tokenProvider as { useExisting?: unknown })?.useExisting).toBe(CompositeTransport)
-  })
-
-  // Kills L246 StringLiteral: error message second half → ''. Check 'does not match' is present.
-  it('transport hint mismatch error contains "does not match"', async () => {
-    const testModule = Test.createTestingModule({
-      imports: [
-        BymaxRealtimeModule.forRootAsync({
-          transport: 'sse',
-          useFactory: async () => ({ transport: 'websocket', authenticator }),
-        }),
-      ],
-    })
-    await expect(testModule.compile()).rejects.toThrow(/does not match/)
-  })
-
   // Kills L365 StringLiteral: 'useFactory' → '' in resolveAsyncOptions source param.
   it('null useFactory error message identifies the source as useFactory', async () => {
-    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+    const asyncOptions: SseRealtimeModuleAsyncOptions = {
+      transport: 'sse',
       useFactory: async () => null as unknown as BymaxRealtimeModuleOptions,
     }
     const testModule = Test.createTestingModule({
@@ -775,7 +636,8 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
   // Checks the DynamicModule structure: the resolved options provider must carry the inject tokens.
   it('includes custom inject tokens in the resolved options provider when useFactory is specified', () => {
     const SENTINEL = Symbol('SENTINEL')
-    const asyncOptions: BymaxRealtimeModuleAsyncOptions = {
+    const asyncOptions: SseRealtimeModuleAsyncOptions = {
+      transport: 'sse',
       useFactory: async () => ({ transport: 'sse', authenticator }),
       inject: [SENTINEL],
     }
@@ -792,8 +654,9 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     expect(hasInjected).toBe(true)
   })
 
-  // Kills L376 StringLiteral: 'options factory' → '' in resolveAsyncOptions source param.
-  it('null useClass factory error message identifies the source as options factory', async () => {
+  // The error names the method that returned nothing, so the reader knows which
+  // of the three async patterns failed without reading the stack.
+  it('null useClass factory error message names createRealtimeOptions', async () => {
     @Injectable()
     class NullClassFactory implements BymaxRealtimeModuleOptionsFactory {
       createRealtimeOptions(): BymaxRealtimeModuleOptions {
@@ -801,45 +664,52 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
       }
     }
     const testModule = Test.createTestingModule({
-      imports: [BymaxRealtimeModule.forRootAsync({ useClass: NullClassFactory })],
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useClass: NullClassFactory,
+        }),
+      ],
     })
-    await expect(testModule.compile()).rejects.toThrow(/options factory/)
-  })
-})
-
-describe('assertWsPeerDeps', () => {
-  it('does not throw when all peer deps resolve successfully', () => {
-    // A resolver that always succeeds simulates all deps being installed.
-    const okResolver = (_id: string) => '/fake/path'
-    expect(() => assertWsPeerDeps(okResolver)).not.toThrow()
+    await expect(testModule.compile()).rejects.toThrow(/createRealtimeOptions/)
   })
 
-  it('throws an actionable error when @nestjs/websockets is missing', () => {
-    // A resolver that throws simulates a missing peer dep.
-    const failingResolver = (_id: string): string => {
-      throw new Error('Cannot find module')
-    }
-    expect(() => assertWsPeerDeps(failingResolver)).toThrow(/@nestjs\/websockets/)
+  // forRootAsync declares its transport, so a mode this module cannot serve is
+  // refused at registration rather than at bootstrap.
+  it('rejects a websocket registration up front', () => {
+    expect(() =>
+      BymaxRealtimeModule.forRootAsync({
+        transport: 'websocket',
+        useFactory: async () => ({ transport: 'websocket', authenticator }),
+      } as unknown as SseRealtimeModuleAsyncOptions),
+    ).toThrow(/BymaxRealtimeWebSocketModule/)
   })
 
-  it('error message mentions socket.io', () => {
-    // Both peer package names appear in the error for clear attribution.
-    const failingResolver = (_id: string): string => {
-      throw new Error('Cannot find module')
-    }
-    expect(() => assertWsPeerDeps(failingResolver)).toThrow(/socket\.io/)
+  // The declared transport must equal what the factory resolves; a disagreement
+  // would otherwise register providers for one mode and run another.
+  it('rejects when the factory resolves a transport other than the declared one', async () => {
+    const testModule = Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useFactory: async () =>
+            ({ transport: 'websocket', authenticator }) as unknown as BymaxRealtimeModuleOptions,
+        }),
+      ],
+    })
+    await expect(testModule.compile()).rejects.toThrow(/was registered for transport 'sse'/)
   })
 
-  // The resolver must be called with the EXACT package names — kills StringLiteral
-  // mutations that change '@nestjs/websockets' or 'socket.io' to an empty string.
-  it('calls the resolver with @nestjs/websockets and socket.io', () => {
-    const resolved: string[] = []
-    const capturingResolver = (id: string) => {
-      resolved.push(id)
-      return '/fake/path'
-    }
-    assertWsPeerDeps(capturingResolver)
-    expect(resolved).toContain('@nestjs/websockets')
-    expect(resolved).toContain('socket.io')
+  it('names the resolved transport in the mismatch error', async () => {
+    const testModule = Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useFactory: async () =>
+            ({ transport: 'both', authenticator }) as unknown as BymaxRealtimeModuleOptions,
+        }),
+      ],
+    })
+    await expect(testModule.compile()).rejects.toThrow(/resolved 'both'/)
   })
 })

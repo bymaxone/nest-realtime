@@ -8,29 +8,35 @@ import { Test } from '@nestjs/testing'
 import type { AddressInfo } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
-import { BymaxRealtimeModule } from '../../src/server/realtime.module'
+import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
 import { RealtimeService } from '../../src/server/services/realtime.service'
 import { ConnectionRegistry } from '../../src/server/services/connection-registry.service'
 import { RealtimeIoAdapter } from '../../src/server/transports/websocket/realtime-io-adapter'
-import type { IConnectionAuthenticator, ConnectionAuthContext, AuthenticationResult } from '../../src/server/interfaces/connection-authenticator.interface'
+import type {
+  IConnectionAuthenticator,
+  ConnectionAuthContext,
+  AuthenticationResult,
+} from '../../src/server/interfaces/connection-authenticator.interface'
 
 /** Build a mock authenticator that accepts any connection as the given auth result. */
 function makeAuthenticator(result: AuthenticationResult | null = null): IConnectionAuthenticator {
   return {
-    authenticate: jest.fn(async (ctx: ConnectionAuthContext): Promise<AuthenticationResult | null> => {
-      // Validate ticket pattern if provided
-      if (ctx.query['ticket'] === 'valid-ticket') {
-        return { userId: 'ticket-user', tenantId: 'tenant-1' }
-      }
-      // Validate bearer token
-      const authHeader = ctx.headers['authorization']
-      if (authHeader?.startsWith('Bearer ')) {
-        const token = authHeader.slice(7)
-        if (token === 'valid-token') return { userId: 'token-user', tenantId: 'tenant-1' }
-        return null
-      }
-      return result
-    }),
+    authenticate: jest.fn(
+      async (ctx: ConnectionAuthContext): Promise<AuthenticationResult | null> => {
+        // Validate ticket pattern if provided
+        if (ctx.query['ticket'] === 'valid-ticket') {
+          return { userId: 'ticket-user', tenantId: 'tenant-1' }
+        }
+        // Validate bearer token
+        const authHeader = ctx.headers['authorization']
+        if (authHeader?.startsWith('Bearer ')) {
+          const token = authHeader.slice(7)
+          if (token === 'valid-token') return { userId: 'token-user', tenantId: 'tenant-1' }
+          return null
+        }
+        return result
+      },
+    ),
   }
 }
 
@@ -47,7 +53,10 @@ async function waitForEvent<T>(socket: ClientSocket, event: string, timeoutMs = 
 async function waitForDisconnect(socket: ClientSocket, timeoutMs = 5_000): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Timed out waiting for disconnect')), timeoutMs)
-    socket.once('disconnect', () => { clearTimeout(timer); resolve() })
+    socket.once('disconnect', () => {
+      clearTimeout(timer)
+      resolve()
+    })
   })
 }
 
@@ -64,7 +73,7 @@ describe('WebSocket transport (e2e)', () => {
 
     const module = await Test.createTestingModule({
       imports: [
-        BymaxRealtimeModule.forRoot({
+        BymaxRealtimeWebSocketModule.forRoot({
           transport: 'websocket',
           authenticator,
         }),
@@ -118,7 +127,10 @@ describe('WebSocket transport (e2e)', () => {
   it('emitToUser reaches a connected client', async () => {
     // RealtimeService.emitToUser delivers the event to the connected user.
     const socket = connect({ auth: { token: 'valid-token' } })
-    const established = await waitForEvent<{ connectionId: string }>(socket, 'connection:established')
+    const established = await waitForEvent<{ connectionId: string }>(
+      socket,
+      'connection:established',
+    )
     expect(established.connectionId).toBeDefined()
 
     const received = waitForEvent<unknown>(socket, 'test-event')
@@ -149,7 +161,10 @@ describe('WebSocket transport (e2e)', () => {
   it('client disconnect → registry is cleared', async () => {
     // After the client closes, the ConnectionRegistry entry is removed.
     const socket = connect({ auth: { token: 'valid-token' } })
-    const established = await waitForEvent<{ connectionId: string }>(socket, 'connection:established')
+    const established = await waitForEvent<{ connectionId: string }>(
+      socket,
+      'connection:established',
+    )
     const connId = established.connectionId
 
     expect(registry.get(connId)).toBeDefined()

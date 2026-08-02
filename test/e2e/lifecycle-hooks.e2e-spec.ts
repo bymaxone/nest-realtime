@@ -46,10 +46,12 @@ function mkTransport(auth: AuthenticationResult | null, record: ConnectionRecord
 
   const transport = {
     authenticate: jest.fn().mockResolvedValue(auth),
-    registerConnection: jest.fn().mockImplementation(async (params: RegisterSseConnectionParams) => {
-      capturedSubject = params.subject as Subject<MessageEvent>
-      capturedClose$ = params.close$ as Subject<void>
-    }),
+    registerConnection: jest
+      .fn()
+      .mockImplementation(async (params: RegisterSseConnectionParams) => {
+        capturedSubject = params.subject as Subject<MessageEvent>
+        capturedClose$ = params.close$ as Subject<void>
+      }),
     unregisterConnection: jest.fn().mockResolvedValue(undefined),
     disconnect: jest.fn().mockResolvedValue(undefined),
     getReplayEvents: jest.fn().mockReturnValue([]),
@@ -61,9 +63,13 @@ function mkTransport(auth: AuthenticationResult | null, record: ConnectionRecord
   return {
     transport,
     /** Returns the subject after handle() resolves. */
-    get subject(): Subject<MessageEvent> { return capturedSubject! },
+    get subject(): Subject<MessageEvent> {
+      return capturedSubject!
+    },
     /** Returns the close$ after handle() resolves. */
-    get close$(): Subject<void> { return capturedClose$! },
+    get close$(): Subject<void> {
+      return capturedClose$!
+    },
   }
 }
 
@@ -133,7 +139,11 @@ describe('Connection lifecycle hooks — integration', () => {
     const handler = new SseSubscriptionHandler(ref.transport, mkHeartbeat(), mkOptions(), hooks)
     const stream$ = await handler.handle(mkReq(), mkRes())
     let completed = false
-    stream$.subscribe({ complete: () => { completed = true } })
+    stream$.subscribe({
+      complete: () => {
+        completed = true
+      },
+    })
     // Error the subject created inside handle (captured via registerConnection mock).
     ref.subject.error(new Error('upstream-error'))
     // The catchError turns the error into EMPTY, completing the stream synchronously.

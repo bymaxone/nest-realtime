@@ -54,7 +54,13 @@ function mkHeartbeat(): HeartbeatService {
   return { start: jest.fn(), stop: jest.fn() } as unknown as HeartbeatService
 }
 
-function mkReq(overrides: Partial<{ cookies: Record<string, string>; query: Record<string, string>; headers: Record<string, string> }> = {}): Request {
+function mkReq(
+  overrides: Partial<{
+    cookies: Record<string, string>
+    query: Record<string, string>
+    headers: Record<string, string>
+  }> = {},
+): Request {
   return {
     headers: overrides.headers ?? {},
     query: overrides.query ?? {},
@@ -66,7 +72,9 @@ function mkRes(): Response {
   return { setHeader: jest.fn(), write: jest.fn() } as unknown as Response
 }
 
-function mkOptions(authenticator: BymaxRealtimeModuleOptions['authenticator']): BymaxRealtimeModuleOptions {
+function mkOptions(
+  authenticator: BymaxRealtimeModuleOptions['authenticator'],
+): BymaxRealtimeModuleOptions {
   return { transport: 'sse', authenticator }
 }
 
@@ -191,7 +199,12 @@ describe('SseSubscriptionHandler — integration with auth fixtures', () => {
       const req = mkReq({ headers: { cookie: `access_token=${token}` } })
       const hooks: IConnectionLifecycleHooks = { onConnect: jest.fn() }
       const transport = mkTransport(cookieAuth)
-      const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), mkOptions(cookieAuth), hooks)
+      const handler = new SseSubscriptionHandler(
+        transport,
+        mkHeartbeat(),
+        mkOptions(cookieAuth),
+        hooks,
+      )
       const stream = await handler.handle(req, mkRes())
       // Subscribe so the Observable's subscriber callback wires registration.
       const sub = stream.subscribe()

@@ -36,6 +36,22 @@ export default defineConfig([
     treeshake: true,
     sourcemap: false,
   },
+  // WebSocket entry — the Socket.IO stack, kept out of the server entry so an
+  // SSE application never loads `@nestjs/websockets` or `socket.io`.
+  {
+    entry: { 'websocket/index': 'src/websocket/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
+    external: externalAll,
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false,
+  },
   // Shared entry — zero-dependency types + constants (no NestJS externals).
   {
     entry: { 'shared/index': 'src/shared/index.ts' },
