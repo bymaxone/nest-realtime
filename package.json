@@ -84,6 +84,7 @@
     "test:cov": "jest --config jest.coverage.config.ts --coverage",
     "test:cov:all": "jest --config jest.coverage.config.ts --coverage",
     "test:e2e": "jest --config jest.e2e.config.ts",
+    "test:e2e:cross-instance": "jest --config jest.e2e.cross-instance.config.ts --runInBand",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
