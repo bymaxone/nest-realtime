@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-realtime",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Realtime backend → frontend communication for NestJS — dual-transport SSE (default) and WebSocket (opt-in) with a unified server-side API.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
@@ -54,6 +54,16 @@
         "default": "./dist/react/index.cjs"
       }
     },
+    "./websocket": {
+      "import": {
+        "types": "./dist/websocket/index.d.ts",
+        "default": "./dist/websocket/index.mjs"
+      },
+      "require": {
+        "types": "./dist/websocket/index.d.cts",
+        "default": "./dist/websocket/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -63,6 +73,9 @@
       ],
       "react": [
         "./dist/react/index.d.cts"
+      ],
+      "websocket": [
+        "./dist/websocket/index.d.cts"
       ]
     }
   },

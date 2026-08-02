@@ -4,37 +4,72 @@
 
 ### Run summary
 
-| Attribute | Value |
-|---|---|
-| Run date | 2026-06-30 |
-| Tool | Stryker Mutator 8.x |
-| Thresholds | high: 99, low: 95, **break: 95** |
-| **Global mutation score** | **99.27% — 678 / 683** |
-| Exit code | **0 (PASS — well above break threshold of 95%)** |
-| Report | `reports/mutation/mutation.html` |
+| Attribute                 | Value                                            |
+| ------------------------- | ------------------------------------------------ |
+| Run date                  | 2026-06-30                                       |
+| Tool                      | Stryker Mutator 8.x                              |
+| Thresholds                | high: 99, low: 95, **break: 95**                 |
+| **Global mutation score** | **99.27% — 678 / 683**                           |
+| Exit code                 | **0 (PASS — well above break threshold of 95%)** |
+| Report                    | `reports/mutation/mutation.html`                 |
 
 ### Overall counts
 
-| Status | Count |
-|---|---|
-| Total mutants | 1150 |
-| Killed | 671 |
-| Timed out (counted as killed) | 7 |
-| **Survived** | **5** |
-| Compiler/runtime errors (excluded from score) | 467 |
-| **Effective mutation score** | **(671 + 7) / (671 + 7 + 5) = 678 / 683 ≈ 99.27%** |
+| Status                                        | Count                                              |
+| --------------------------------------------- | -------------------------------------------------- |
+| Total mutants                                 | 1150                                               |
+| Killed                                        | 671                                                |
+| Timed out (counted as killed)                 | 7                                                  |
+| **Survived**                                  | **5**                                              |
+| Compiler/runtime errors (excluded from score) | 467                                                |
+| **Effective mutation score**                  | **(671 + 7) / (671 + 7 + 5) = 678 / 683 ≈ 99.27%** |
 
 ### Score journey
 
 The final score was reached across multiple rounds of targeted kill-test authorship, each verified by an orchestrator-owned Stryker run:
 
-| Round | Score |
-|---|---|
-| Baseline | 81.99% |
-| Round 1 | 90.19% |
-| Round 2 | 95.75% |
-| Round 3 | 98.39% |
+| Round     | Score      |
+| --------- | ---------- |
+| Baseline  | 81.99%     |
+| Round 1   | 90.19%     |
+| Round 2   | 95.75%     |
+| Round 3   | 98.39%     |
 | **Final** | **99.27%** |
+
+### Run of 2026-08-02 — after the WebSocket entry-point split
+
+| Metric                        | Value                  |
+| ----------------------------- | ---------------------- |
+| **Global mutation score**     | **99.25% — 666 / 671** |
+| Killed                        | 659                    |
+| Timed out (counted as killed) | 7                      |
+| Survived                      | 5                      |
+| No coverage                   | 0                      |
+
+The five survivors are the same documented equivalent mutants in
+`sse-subscription.handler.ts` listed below — a file this change does not touch.
+**Every killable mutant is killed**, as in the previous run.
+
+The score reads 99.25% against the earlier 99.27% because the denominator moved,
+not because anything stopped being covered: the survivor set is byte-for-byte the
+same five.
+
+One further mutant was killed along the way, in a file this change does not
+touch. `evictBeyondLimit` picks the oldest connection with
+`reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))`, and `<=` versus `<`
+differs **only** when two connections share a timestamp — the tie the documented
+FIFO eviction resolves by registration order. No test forced a tie, so the mutant
+lived or died according to whether the clock happened to tie during the run, which
+is why it surfaced intermittently rather than at the baseline. A test now opens two
+connections at the same instant and asserts the first-registered is evicted.
+
+The split itself was mutation-tested. Three mutants survived the first run, all
+in the new `realtime-module.factory.ts` — the list of transports a module serves,
+inside the message that rejects a transport it does not. Two kill tests now assert
+that list, one per module: the root's names a single mode, the WebSocket module's
+names two and so pins the separator, which a `join('')` mutant would drop.
+
+---
 
 ### Methodology
 
@@ -44,51 +79,51 @@ Stryker runs were orchestrator-owned and authoritative. Kill tests were written 
 
 ### Per-file results
 
-Every file except `sse-subscription.handler.ts` reached a 100% effective mutation score in the final run. That file's 5 surviving mutants are all genuine equivalent mutants (documented in the next section), so 100% of *killable* mutants are covered.
+Every file except `sse-subscription.handler.ts` reached a 100% effective mutation score in the final run. That file's 5 surviving mutants are all genuine equivalent mutants (documented in the next section), so 100% of _killable_ mutants are covered.
 
-| File | Survived | Status |
-|---|---|---|
-| `config/default-options.ts` | 0 | ✅ |
-| `config/validate-options.ts` | 0 | ✅ CRITICAL |
-| `factories/sse-controller.factory.ts` | 0 | ✅ |
-| `offline-queue/offline-queue-delivery.service.ts` | 0 | ✅ |
-| `offline-queue/redis-offline-queue.ts` | 0 | ✅ |
-| `pubsub/in-memory-pubsub.ts` | 0 | ✅ |
-| `pubsub/realtime-pubsub-subscriber.ts` | 0 | ✅ CRITICAL |
-| `pubsub/redis-realtime-pubsub.ts` | 0 | ✅ |
-| `services/connection-registry.service.ts` | 0 | ✅ CRITICAL |
-| `services/event-id-generator.service.ts` | 0 | ✅ CRITICAL |
-| `services/realtime.service.ts` | 0 | — (all compile-errors, excluded from score) |
-| `services/reauthentication.service.ts` | 0 | ✅ |
-| `services/room-registry.service.ts` | 0 | ✅ CRITICAL |
-| `transports/composite/composite.transport.ts` | 0 | ✅ CRITICAL |
-| `transports/sse/event-replay-buffer.ts` | 0 | ✅ CRITICAL |
-| `transports/sse/heartbeat.service.ts` | 0 | ✅ |
-| `transports/sse/sse-subscription.handler.ts` | **5** | ✅ All equivalent (documented below) |
-| `transports/sse/sse.transport.ts` | 0 | ✅ CRITICAL |
-| `transports/websocket/realtime-io-adapter.ts` | 0 | ✅ |
-| `transports/websocket/realtime.gateway.ts` | 0 | ✅ |
-| `transports/websocket/websocket.transport.ts` | 0 | ✅ |
-| `utils/compose-room-id.ts` | 0 | ✅ |
-| `utils/encode-sse-event.ts` | 0 | ✅ CRITICAL |
-| `utils/parse-cookie-header.ts` | 0 | ✅ |
-| `realtime.module.ts` | 0 | ✅ |
+| File                                              | Survived | Status                                      |
+| ------------------------------------------------- | -------- | ------------------------------------------- |
+| `config/default-options.ts`                       | 0        | ✅                                          |
+| `config/validate-options.ts`                      | 0        | ✅ CRITICAL                                 |
+| `factories/sse-controller.factory.ts`             | 0        | ✅                                          |
+| `offline-queue/offline-queue-delivery.service.ts` | 0        | ✅                                          |
+| `offline-queue/redis-offline-queue.ts`            | 0        | ✅                                          |
+| `pubsub/in-memory-pubsub.ts`                      | 0        | ✅                                          |
+| `pubsub/realtime-pubsub-subscriber.ts`            | 0        | ✅ CRITICAL                                 |
+| `pubsub/redis-realtime-pubsub.ts`                 | 0        | ✅                                          |
+| `services/connection-registry.service.ts`         | 0        | ✅ CRITICAL                                 |
+| `services/event-id-generator.service.ts`          | 0        | ✅ CRITICAL                                 |
+| `services/realtime.service.ts`                    | 0        | — (all compile-errors, excluded from score) |
+| `services/reauthentication.service.ts`            | 0        | ✅                                          |
+| `services/room-registry.service.ts`               | 0        | ✅ CRITICAL                                 |
+| `transports/composite/composite.transport.ts`     | 0        | ✅ CRITICAL                                 |
+| `transports/sse/event-replay-buffer.ts`           | 0        | ✅ CRITICAL                                 |
+| `transports/sse/heartbeat.service.ts`             | 0        | ✅                                          |
+| `transports/sse/sse-subscription.handler.ts`      | **5**    | ✅ All equivalent (documented below)        |
+| `transports/sse/sse.transport.ts`                 | 0        | ✅ CRITICAL                                 |
+| `transports/websocket/realtime-io-adapter.ts`     | 0        | ✅                                          |
+| `transports/websocket/realtime.gateway.ts`        | 0        | ✅                                          |
+| `transports/websocket/websocket.transport.ts`     | 0        | ✅                                          |
+| `utils/compose-room-id.ts`                        | 0        | ✅                                          |
+| `utils/encode-sse-event.ts`                       | 0        | ✅ CRITICAL                                 |
+| `utils/parse-cookie-header.ts`                    | 0        | ✅                                          |
+| `realtime.module.ts`                              | 0        | ✅                                          |
 
 ---
 
 ### Critical path summary
 
-| Critical file | Score | Target | Result |
-|---|---|---|---|
-| `connection-registry.service.ts` | 100% | ≥ 95% | ✅ |
-| `room-registry.service.ts` | 100% | ≥ 95% | ✅ |
-| `sse.transport.ts` | 100% | ≥ 95% | ✅ |
-| `event-replay-buffer.ts` | 100% | ≥ 95% | ✅ |
-| `event-id-generator.service.ts` | 100% | ≥ 95% | ✅ |
-| `encode-sse-event.ts` | 100% | ≥ 95% | ✅ |
-| `realtime-pubsub-subscriber.ts` | 100% | ≥ 95% | ✅ |
-| `composite.transport.ts` | 100% | ≥ 95% | ✅ |
-| `validate-options.ts` | 100% | ≥ 95% | ✅ |
+| Critical file                    | Score | Target | Result |
+| -------------------------------- | ----- | ------ | ------ |
+| `connection-registry.service.ts` | 100%  | ≥ 95%  | ✅     |
+| `room-registry.service.ts`       | 100%  | ≥ 95%  | ✅     |
+| `sse.transport.ts`               | 100%  | ≥ 95%  | ✅     |
+| `event-replay-buffer.ts`         | 100%  | ≥ 95%  | ✅     |
+| `event-id-generator.service.ts`  | 100%  | ≥ 95%  | ✅     |
+| `encode-sse-event.ts`            | 100%  | ≥ 95%  | ✅     |
+| `realtime-pubsub-subscriber.ts`  | 100%  | ≥ 95%  | ✅     |
+| `composite.transport.ts`         | 100%  | ≥ 95%  | ✅     |
+| `validate-options.ts`            | 100%  | ≥ 95%  | ✅     |
 
 ---
 

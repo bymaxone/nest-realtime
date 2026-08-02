@@ -84,7 +84,14 @@ describe('TicketAuthenticator', () => {
 
   // Empty query object (no key at all) → null.
   it('returns null when the query object is empty', async () => {
-    const result = await auth.authenticate({ cookies: {}, headers: {}, query: {}, ip: '', userAgent: undefined, transport: 'sse' })
+    const result = await auth.authenticate({
+      cookies: {},
+      headers: {},
+      query: {},
+      ip: '',
+      userAgent: undefined,
+      transport: 'sse',
+    })
     expect(result).toBeNull()
   })
 })

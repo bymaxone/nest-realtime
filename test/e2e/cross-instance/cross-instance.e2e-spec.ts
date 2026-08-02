@@ -20,7 +20,7 @@ describe('Cross-instance fan-out', () => {
   // An emit on instance A reaches a connection registered on instance B.
   it('delivers emitToUser from instance A to a connection on instance B', async () => {
     const { instances } = createTestInstances(2)
-    const [a, b] = instances as [typeof instances[0], typeof instances[0]]
+    const [a, b] = instances as [(typeof instances)[0], (typeof instances)[0]]
     await a.subscriber.onModuleInit()
     await b.subscriber.onModuleInit()
 
@@ -37,7 +37,7 @@ describe('Cross-instance fan-out', () => {
   // broadcast from instance A reaches connections on both instances.
   it('broadcast from A reaches connections on both A and B', async () => {
     const { instances } = createTestInstances(2)
-    const [a, b] = instances as [typeof instances[0], typeof instances[0]]
+    const [a, b] = instances as [(typeof instances)[0], (typeof instances)[0]]
     await a.subscriber.onModuleInit()
     await b.subscriber.onModuleInit()
 
@@ -57,7 +57,7 @@ describe('Cross-instance fan-out', () => {
   // Echo prevention: messages originating from instance B are not re-delivered on B.
   it('does not echo messages back to the originating instance', async () => {
     const { instances } = createTestInstances(2)
-    const [a, b] = instances as [typeof instances[0], typeof instances[0]]
+    const [a, b] = instances as [(typeof instances)[0], (typeof instances)[0]]
     await a.subscriber.onModuleInit()
     await b.subscriber.onModuleInit()
 
@@ -76,7 +76,7 @@ describe('Cross-instance fan-out', () => {
   // A cross-instance disconnect closes the remote connection.
   it('disconnect from A closes a connection registered on B', async () => {
     const { instances } = createTestInstances(2)
-    const [a, b] = instances as [typeof instances[0], typeof instances[0]]
+    const [a, b] = instances as [(typeof instances)[0], (typeof instances)[0]]
     await a.subscriber.onModuleInit()
     await b.subscriber.onModuleInit()
 

@@ -437,6 +437,43 @@ describe('SseTransport', () => {
     expect(connections.get('newest')).toBeDefined()
   })
 
+  // Two connections opened within the same millisecond carry the same timestamp,
+  // and the documented behaviour is FIFO: registration order breaks the tie. The
+  // reduce keeps the accumulator on equality to get that, so `<=` is load-bearing —
+  // with `<` the later of two equally-old connections would be evicted instead.
+  // Without a forced tie the two comparisons behave identically and nothing pins it.
+  it('evicts the first-registered when two connections share a timestamp', async () => {
+    const { transport, connections } = build({ sse: { maxConnectionsPerUser: 2 } })
+    const sameInstant = new Date('2026-01-01T00:00:00.000Z')
+    const registerAt = (connectionId: string): void => {
+      connections.register({
+        connectionId,
+        userId: 'u1',
+        tenantId: undefined,
+        transport: 'sse',
+        ip: 'x',
+        userAgent: undefined,
+        connectedAt: sameInstant,
+        subject: new Subject<MessageEvent>(),
+        close$: new Subject<void>(),
+        originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+      })
+    }
+    registerAt('first')
+    registerAt('second')
+    await transport.registerConnection({
+      connectionId: 'newest',
+      auth: { userId: 'u1' },
+      subject: new Subject<MessageEvent>(),
+      close$: new Subject<void>(),
+      ip: 'x',
+      userAgent: undefined,
+    })
+    expect(connections.get('first')).toBeUndefined()
+    expect(connections.get('second')).toBeDefined()
+    expect(connections.get('newest')).toBeDefined()
+  })
+
   // connectionsForUser exposes a user's SSE connections without accessing private fields.
   it('connectionsForUser returns the SSE connections for a user', () => {
     const { transport, connections } = build()

@@ -11,7 +11,10 @@ import { SseSubscriptionHandler } from '../../src/server/transports/sse/sse-subs
 import type { SseTransport } from '../../src/server/transports/sse/sse.transport'
 import type { HeartbeatService } from '../../src/server/transports/sse/heartbeat.service'
 import type { BymaxRealtimeModuleOptions } from '../../src/server/interfaces/realtime-module-options.interface'
-import type { AuthenticationResult, IConnectionAuthenticator } from '../../src/server/interfaces/connection-authenticator.interface'
+import type {
+  AuthenticationResult,
+  IConnectionAuthenticator,
+} from '../../src/server/interfaces/connection-authenticator.interface'
 import type { ConnectionRecord } from '../../src/server/services/connection-registry.service'
 import type { RegisterSseConnectionParams } from '../../src/server/transports/sse/sse.transport'
 
@@ -68,7 +71,11 @@ function mkRes(): Response {
 }
 
 function mkOptions(): BymaxRealtimeModuleOptions {
-  return { transport: 'sse', authenticator: {} as IConnectionAuthenticator, sse: { emitConnectionEvent: false } }
+  return {
+    transport: 'sse',
+    authenticator: {} as IConnectionAuthenticator,
+    sse: { emitConnectionEvent: false },
+  }
 }
 
 /** Collect synchronous emissions from a stream (unsubscribes immediately after). */

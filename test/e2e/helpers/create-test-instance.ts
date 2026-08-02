@@ -33,7 +33,10 @@ export interface TestInstance {
  * Use this in cross-instance e2e specs to verify that emits on one instance
  * fan-out to connections on the other.
  */
-export function createTestInstances(count: number): { instances: TestInstance[]; pubsub: InMemoryPubSub } {
+export function createTestInstances(count: number): {
+  instances: TestInstance[]
+  pubsub: InMemoryPubSub
+} {
   const pubsub = new InMemoryPubSub()
 
   const instances: TestInstance[] = Array.from({ length: count }, () => {
@@ -64,7 +67,11 @@ export function createTestInstances(count: number): { instances: TestInstance[];
 
     const subscriber = new RealtimePubSubSubscriber(pubsub, instanceId, transport)
 
-    function addConnection(connectionId: string, userId: string, tenantId?: string): MessageEvent[] {
+    function addConnection(
+      connectionId: string,
+      userId: string,
+      tenantId?: string,
+    ): MessageEvent[] {
       const received: MessageEvent[] = []
       const subject = new Subject<MessageEvent>()
       const close$ = new Subject<void>()

@@ -20,6 +20,7 @@ const config: Config = {
   collectCoverageFrom: [
     'src/server/**/*.ts',
     'src/shared/**/*.ts',
+    'src/websocket/**/*.ts',
     'src/react/**/*.ts',
     'src/react/**/*.tsx',
     '!**/index.ts',
@@ -41,6 +42,7 @@ const config: Config = {
       testMatch: [
         '<rootDir>/src/server/**/*.spec.ts',
         '<rootDir>/src/shared/**/*.spec.ts',
+        '<rootDir>/src/websocket/**/*.spec.ts',
         '<rootDir>/test/fixtures/**/*.spec.ts',
         '<rootDir>/test/integration/**/*.spec.ts',
       ],
@@ -61,10 +63,7 @@ const config: Config = {
     },
     {
       displayName: 'react',
-      testMatch: [
-        '<rootDir>/src/react/**/*.spec.tsx',
-        '<rootDir>/src/react/**/*.spec.ts',
-      ],
+      testMatch: ['<rootDir>/src/react/**/*.spec.tsx', '<rootDir>/src/react/**/*.spec.ts'],
       testEnvironment: 'jsdom',
       moduleFileExtensions: ['tsx', 'ts', 'js', 'json'],
       setupFilesAfterEnv: ['<rootDir>/test/setup/react-setup.ts'],

@@ -50,11 +50,13 @@ The server-side API is **unified**: `realtimeService.emitToUser(userId, event, d
 ### 1.2 Why it exists — and why dual-transport
 
 In multi-tenant SaaS architectures, you commonly need:
+
 - Server-push notifications (payment received, invoice paid, webhook arrived) → **SSE is ideal**
 - Live indicators on dashboards (job status, live metrics) → **SSE is ideal**
 - Chat / collaboration / gaming → **WebSocket required** (bi-directional)
 
 Without dual-transport, projects have to:
+
 - Choose an SSE-only or WS-only lib
 - Rewrite the server-side API when migrating between transports
 - Keep two event/room conventions if they need both
@@ -63,16 +65,16 @@ Without dual-transport, projects have to:
 
 ### 1.3 Why SSE as the default
 
-| Criterion | SSE | WebSocket |
-|---|---|---|
-| Coverage of **server-push** use cases | 100% | 100% (with overhead) |
-| HttpOnly cookie auth | ✅ Native (standard HTTP) | ⚠️ Cumbersome (custom handshake) |
-| Corporate proxies/firewalls | ✅ Passes through (standard HTTP) | ⚠️ Frequently blocked |
-| Automatic reconnection | ✅ Browser via `EventSource` | ⚠️ Library (socket.io-client) |
-| Frontend bundle | 0 KB (native `EventSource`) | ~80 KB (socket.io-client) |
-| HTTP/2 multiplexing | ✅ Multiple streams per connection | ❌ N/A |
-| Replay of missed events | ✅ `Last-Event-ID` builtin | ❌ Manual via offline queue |
-| Native NestJS support | ✅ `@Sse()` decorator + RxJS | ✅ `@WebSocketGateway()` |
+| Criterion                             | SSE                                | WebSocket                        |
+| ------------------------------------- | ---------------------------------- | -------------------------------- |
+| Coverage of **server-push** use cases | 100%                               | 100% (with overhead)             |
+| HttpOnly cookie auth                  | ✅ Native (standard HTTP)          | ⚠️ Cumbersome (custom handshake) |
+| Corporate proxies/firewalls           | ✅ Passes through (standard HTTP)  | ⚠️ Frequently blocked            |
+| Automatic reconnection                | ✅ Browser via `EventSource`       | ⚠️ Library (socket.io-client)    |
+| Frontend bundle                       | 0 KB (native `EventSource`)        | ~80 KB (socket.io-client)        |
+| HTTP/2 multiplexing                   | ✅ Multiple streams per connection | ❌ N/A                           |
+| Replay of missed events               | ✅ `Last-Event-ID` builtin         | ❌ Manual via offline queue      |
+| Native NestJS support                 | ✅ `@Sse()` decorator + RxJS       | ✅ `@WebSocketGateway()`         |
 
 For the predominant SaaS use cases (server-push notifications, live dashboards, status updates), **SSE is simpler, lighter, and more robust**. WebSocket is reserved for real bi-directional needs (chat, collaborative editing, remote control).
 
@@ -86,15 +88,15 @@ For the predominant SaaS use cases (server-push notifications, live dashboards, 
 
 ### 1.5 Distribution model
 
-| Aspect | Detail |
-|---|---|
-| Registry | Public npm (`@bymax-one/nest-realtime`) |
-| Cost | Zero — open source package |
-| License | MIT |
-| Runtime | Node.js 24+ |
-| Backend framework | NestJS 11+ |
-| Frontend framework | React 19+ via subpath `./react` (optional) |
-| Subpaths | `.` (server), `./shared`, `./react` |
+| Aspect             | Detail                                                 |
+| ------------------ | ------------------------------------------------------ |
+| Registry           | Public npm (`@bymax-one/nest-realtime`)                |
+| Cost               | Zero — open source package                             |
+| License            | MIT                                                    |
+| Runtime            | Node.js 24+                                            |
+| Backend framework  | NestJS 11+                                             |
+| Frontend framework | React 19+ via subpath `./react` (optional)             |
+| Subpaths           | `.` (SSE server), `./websocket`, `./shared`, `./react` |
 
 ### 1.6 Design principles
 
@@ -111,45 +113,45 @@ For the predominant SaaS use cases (server-push notifications, live dashboards, 
 
 #### Core (always active)
 
-| Component | Responsibility |
-|---|---|
-| `RealtimeService` | Unified API (`emitToUser`, `emitToTenant`, `emitToRoom`, `broadcast`, `joinRoom`, `leaveRoom`, `disconnect`) |
-| `RoomRegistry` | Internal tracking of `Map<roomId, Set<connectionId>>` |
-| `ConnectionRegistry` | Internal tracking of active connections with metadata (userId, tenantId, transport) |
-| `IConnectionAuthenticator` | Required interface — consumer implements |
-| `EventIdGenerator` | Generates monotonic IDs for `Last-Event-ID` and correlation |
+| Component                  | Responsibility                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `RealtimeService`          | Unified API (`emitToUser`, `emitToTenant`, `emitToRoom`, `broadcast`, `joinRoom`, `leaveRoom`, `disconnect`) |
+| `RoomRegistry`             | Internal tracking of `Map<roomId, Set<connectionId>>`                                                        |
+| `ConnectionRegistry`       | Internal tracking of active connections with metadata (userId, tenantId, transport)                          |
+| `IConnectionAuthenticator` | Required interface — consumer implements                                                                     |
+| `EventIdGenerator`         | Generates monotonic IDs for `Last-Event-ID` and correlation                                                  |
 
 #### SSE Transport (default — opt-out via `transport: 'websocket'`)
 
-| Component | Responsibility |
-|---|---|
-| `SseTransport` | Implements `ITransport` over `@Sse()` + RxJS Subjects |
-| `SseController` | Exposes HTTP endpoint (`GET /events` or configured path) |
-| `EventReplayBuffer` | Keeps in-memory ring buffer for `Last-Event-ID` support |
-| `HeartbeatService` | Periodically sends ping (`: keepalive\n\n`) to avoid proxy timeout |
+| Component           | Responsibility                                                     |
+| ------------------- | ------------------------------------------------------------------ |
+| `SseTransport`      | Implements `ITransport` over `@Sse()` + RxJS Subjects              |
+| `SseController`     | Exposes HTTP endpoint (`GET /events` or configured path)           |
+| `EventReplayBuffer` | Keeps in-memory ring buffer for `Last-Event-ID` support            |
+| `HeartbeatService`  | Periodically sends ping (`: keepalive\n\n`) to avoid proxy timeout |
 
 #### WebSocket Transport (opt-in via `transport: 'websocket' | 'both'`)
 
-| Component | Responsibility |
-|---|---|
-| `WebSocketTransport` | Implements `ITransport` over `@WebSocketGateway()` |
-| `RealtimeGateway` | NestJS gateway with multi-tenant namespaces |
+| Component              | Responsibility                                                            |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `WebSocketTransport`   | Implements `ITransport` over `@WebSocketGateway()`                        |
+| `RealtimeGateway`      | NestJS gateway with multi-tenant namespaces                               |
 | `SocketIoRedisAdapter` | Auto-registers `@socket.io/redis-adapter` when a Redis client is provided |
 
 #### Composite Transport (opt-in via `transport: 'both'`)
 
-| Component | Responsibility |
-|---|---|
+| Component            | Responsibility                                                    |
+| -------------------- | ----------------------------------------------------------------- |
 | `CompositeTransport` | Fan-out emits to SSE and WS simultaneously — useful in migrations |
 
 #### Frontend (`./react`)
 
-| Component | Responsibility |
-|---|---|
-| `useRealtime` | Universal hook — detects SSE vs WS via URL scheme |
-| `useRealtimeConnection` | Connection status (connected, reconnecting, error) |
-| `usePresence` | Who is online (optional — requires `IPresenceStorage`) |
-| `RealtimeProvider` | Context provider for multiple hooks to share a connection |
+| Component               | Responsibility                                            |
+| ----------------------- | --------------------------------------------------------- |
+| `useRealtime`           | Universal hook — detects SSE vs WS via URL scheme         |
+| `useRealtimeConnection` | Connection status (connected, reconnecting, error)        |
+| `usePresence`           | Who is online (optional — requires `IPresenceStorage`)    |
+| `RealtimeProvider`      | Context provider for multiple hooks to share a connection |
 
 ---
 
@@ -166,13 +168,14 @@ BymaxRealtimeModule.forRoot({
 
 // Asynchronous (recommended for projects with ConfigService)
 BymaxRealtimeModule.forRootAsync({
+  transport: 'sse', // declared, not resolved: providers are fixed at decoration time
   imports: [ConfigModule, AuthModule, CacheModule],
   inject: [ConfigService, JwtService, REDIS_CLIENT],
   useFactory: (config, jwt, redis) => ({
-    transport: config.get('REALTIME_TRANSPORT') ?? 'sse',
+    transport: 'sse' as const,
     authenticator: new NestAuthBridge(jwt),
     sse: { endpoint: '/events', heartbeatMs: 30_000 },
-    pubsub: new RedisPubSub(redis),  // enables SSE horizontal scaling
+    pubsub: new RedisPubSub(redis), // enables SSE horizontal scaling
   }),
 })
 ```
@@ -371,8 +374,18 @@ src/
 │   │   ├── parse-cookie-header.ts
 │   │   └── compose-room-id.ts
 │   │
-│   ├── realtime.module.ts                   # BymaxRealtimeModule
+│   ├── realtime.module.ts                   # BymaxRealtimeModule (SSE only)
+│   │
+│   └── composition/                          # TransportWiring seam, shared by both modules
+│       ├── transport-wiring.interface.ts
+│       ├── realtime-module.factory.ts        # sync + async composition, transport-agnostic
+│       └── sse-wiring.ts
 │   └── index.ts
+│
+├── websocket/                               # `./websocket` subpath
+│   ├── realtime-websocket.module.ts         # BymaxRealtimeWebSocketModule ('websocket' | 'both')
+│   ├── websocket-wiring.ts                  # the TransportWiring it supplies
+│   └── index.ts                             # the ONLY graph that reaches Socket.IO
 │
 ├── shared/
 │   ├── types/
@@ -402,24 +415,78 @@ src/
 ```json
 "exports": {
   ".": {
-    "types": "./dist/server/index.d.ts",
-    "import": "./dist/server/index.mjs",
-    "require": "./dist/server/index.cjs"
+    "import": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.mjs"
+    },
+    "require": {
+      "types": "./dist/server/index.d.cts",
+      "default": "./dist/server/index.cjs"
+    }
   },
   "./shared": {
-    "types": "./dist/shared/index.d.ts",
-    "import": "./dist/shared/index.mjs",
-    "require": "./dist/shared/index.cjs"
+    "import": {
+      "types": "./dist/shared/index.d.ts",
+      "default": "./dist/shared/index.mjs"
+    },
+    "require": {
+      "types": "./dist/shared/index.d.cts",
+      "default": "./dist/shared/index.cjs"
+    }
   },
   "./react": {
-    "types": "./dist/react/index.d.ts",
-    "import": "./dist/react/index.mjs",
-    "require": "./dist/react/index.cjs"
-  }
+    "import": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.mjs"
+    },
+    "require": {
+      "types": "./dist/react/index.d.cts",
+      "default": "./dist/react/index.cjs"
+    }
+  },
+  "./websocket": {
+    "import": {
+      "types": "./dist/websocket/index.d.ts",
+      "default": "./dist/websocket/index.mjs"
+    },
+    "require": {
+      "types": "./dist/websocket/index.d.cts",
+      "default": "./dist/websocket/index.cjs"
+    }
+  },
+  "./package.json": "./package.json"
 }
 ```
 
-### 3.3 Exports per subpath
+The `types` condition is declared **per condition** rather than shared: a
+CommonJS consumer resolving `require` must land on `.d.cts`, and the top-level
+`main`/`types`/`typesVersions` exist for resolvers that do not read this map at
+all. `attw --profile strict` covers all four entry points.
+
+### 3.3 The WebSocket entry point boundary
+
+`@nestjs/websockets`, `@nestjs/platform-socket.io` and `socket.io` are **optional**
+peers, so an application on SSE — the default transport — does not install them.
+Anything the root entry imports statically therefore has to resolve without them,
+and a static import of an absent package fails while the module file is still
+loading: before any runtime guard can produce a better message.
+
+`1.0.1` imported them from the root and was consequently unimportable for every
+SSE consumer, in ESM and CommonJS alike. From `1.0.2` the Socket.IO stack is
+reachable only through `@bymax-one/nest-realtime/websocket`, which exports
+`BymaxRealtimeWebSocketModule` (`transport: 'websocket' | 'both'`) along with
+`WebSocketTransport`, `RealtimeGateway`, `RealtimeIoAdapter` and
+`CompositeTransport`.
+
+The root module serves `'sse'` only. `transport` is narrowed per module, so asking
+the root for `'websocket'` does not compile; asking through a cast is refused at
+registration with an error naming the entry point that serves it.
+
+Composition is shared through a `TransportWiring` seam (`src/server/composition/`)
+which never names a transport class — that is what keeps the root's import graph
+free of Socket.IO while both modules reuse the same sync and async wiring.
+
+### 3.4 Exports per subpath
 
 **`@bymax-one/nest-realtime`** (server):
 
@@ -440,11 +507,11 @@ export type {
   IOfflineQueueStorage,
   IPresenceStorage,
   // Supporting types referenced by the public API + reference implementations:
-  AuthenticationResult,        // returned by IConnectionAuthenticator.authenticate / used by tenantResolver
-  ConnectionAuthContext,       // received by IConnectionAuthenticator.authenticate
-  ConnectionEventMeta,         // received by IConnectionLifecycleHooks
-  RealtimePubSubMessage,       // used by IRealtimePubSub reference impl
-  OfflineQueuedEvent,          // used by IOfflineQueueStorage reference impl
+  AuthenticationResult, // returned by IConnectionAuthenticator.authenticate / used by tenantResolver
+  ConnectionAuthContext, // received by IConnectionAuthenticator.authenticate
+  ConnectionEventMeta, // received by IConnectionLifecycleHooks
+  RealtimePubSubMessage, // used by IRealtimePubSub reference impl
+  OfflineQueuedEvent, // used by IOfflineQueueStorage reference impl
   BymaxRealtimeModuleOptions,
   BymaxRealtimeModuleAsyncOptions,
 } from './interfaces'
@@ -606,32 +673,32 @@ export interface BymaxRealtimeModuleOptions {
 
 ### 4.2 Options table and defaults
 
-| Option | Type | Default | Notes |
-|---|---|---|---|
-| `transport` | `'sse' \| 'websocket' \| 'both'` | **required** | Defines which stack initializes |
-| `authenticator` | `IConnectionAuthenticator` | **required** | The lib does not work without auth — security guard rail |
-| `tenantResolver` | `(auth) => string \| undefined` | direct `auth.tenantId` | Custom for apps with their own mapping |
-| `hooks` | `IConnectionLifecycleHooks` | `NoOpHooks` | Useful for audit log, metrics |
-| `pubsub` | `IRealtimePubSub` | `InMemoryPubSub` | Without it = single-instance; with it = horizontal scaling |
-| `offlineQueue` | `IOfflineQueueStorage` | `undefined` | Without it, events for offline users are lost |
-| `presence` | `IPresenceStorage` | `undefined` | Enables the `usePresence` frontend hook |
-| `sse.endpoint` | `string` | `'/events'` | HTTP path |
-| `sse.heartbeatMs` | `number` | `30000` | Keeps the connection alive behind proxies |
-| `sse.replayBufferSize` | `number` | `100` | Events retained in memory for Last-Event-ID |
-| `sse.maxConnectionsPerUser` | `number` | `5` | **FIFO eviction**: admits the new connection, evicts the user's oldest with `REALTIME_TOO_MANY_CONNECTIONS` (never rejects with 429) |
-| `sse.cors` | `CorsConfig` | `undefined` | CORS for the SSE HTTP endpoint (passed to NestJS) |
-| `sse.emitConnectionEvent` | `boolean` | `true` | Client receives `connection:established` on connect |
-| `service` | `{ name; version }` | `undefined` | Service metadata propagated to logs + connection metadata |
-| `websocket.namespace` | `string` | `'/'` | Root Socket.IO namespace |
-| `websocket.cors` | `CorsConfig` | `undefined` | **Socket.IO's own** CORS option (configured separately from HTTP CORS) |
-| `websocket.pingIntervalMs` | `number` | `25000` | Socket.IO default |
-| `websocket.pingTimeoutMs` | `number` | `20000` | Socket.IO default |
-| `websocket.maxHttpBufferSize` | `number` | `1_000_000` | 1 MB — protects against abuse |
-| `websocket.maxConnectionsPerUser` | `number` | `5` | FIFO eviction (same policy as SSE) |
-| `websocket.redisAdapter` | `{ pubClient }` | `undefined` | ioredis client for `@socket.io/redis-adapter` (lib calls `.duplicate()` for the subscriber) |
-| `reauthenticationPolicy.onFailure` | `'disconnect' \| 'event'` | `'disconnect'` | Action when periodic re-auth fails |
-| `reauthenticationPolicy.intervalSeconds` | `number` | `300` (5 min) | Re-check creds on long connections |
-| `reauthenticationPolicy.cacheTtlMs` | `number` | `60000` (60s) | Caches positive auth |
+| Option                                   | Type                             | Default                | Notes                                                                                                                                |
+| ---------------------------------------- | -------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `transport`                              | `'sse' \| 'websocket' \| 'both'` | **required**           | Defines which stack initializes                                                                                                      |
+| `authenticator`                          | `IConnectionAuthenticator`       | **required**           | The lib does not work without auth — security guard rail                                                                             |
+| `tenantResolver`                         | `(auth) => string \| undefined`  | direct `auth.tenantId` | Custom for apps with their own mapping                                                                                               |
+| `hooks`                                  | `IConnectionLifecycleHooks`      | `NoOpHooks`            | Useful for audit log, metrics                                                                                                        |
+| `pubsub`                                 | `IRealtimePubSub`                | `InMemoryPubSub`       | Without it = single-instance; with it = horizontal scaling                                                                           |
+| `offlineQueue`                           | `IOfflineQueueStorage`           | `undefined`            | Without it, events for offline users are lost                                                                                        |
+| `presence`                               | `IPresenceStorage`               | `undefined`            | Enables the `usePresence` frontend hook                                                                                              |
+| `sse.endpoint`                           | `string`                         | `'/events'`            | HTTP path                                                                                                                            |
+| `sse.heartbeatMs`                        | `number`                         | `30000`                | Keeps the connection alive behind proxies                                                                                            |
+| `sse.replayBufferSize`                   | `number`                         | `100`                  | Events retained in memory for Last-Event-ID                                                                                          |
+| `sse.maxConnectionsPerUser`              | `number`                         | `5`                    | **FIFO eviction**: admits the new connection, evicts the user's oldest with `REALTIME_TOO_MANY_CONNECTIONS` (never rejects with 429) |
+| `sse.cors`                               | `CorsConfig`                     | `undefined`            | CORS for the SSE HTTP endpoint (passed to NestJS)                                                                                    |
+| `sse.emitConnectionEvent`                | `boolean`                        | `true`                 | Client receives `connection:established` on connect                                                                                  |
+| `service`                                | `{ name; version }`              | `undefined`            | Service metadata propagated to logs + connection metadata                                                                            |
+| `websocket.namespace`                    | `string`                         | `'/'`                  | Root Socket.IO namespace                                                                                                             |
+| `websocket.cors`                         | `CorsConfig`                     | `undefined`            | **Socket.IO's own** CORS option (configured separately from HTTP CORS)                                                               |
+| `websocket.pingIntervalMs`               | `number`                         | `25000`                | Socket.IO default                                                                                                                    |
+| `websocket.pingTimeoutMs`                | `number`                         | `20000`                | Socket.IO default                                                                                                                    |
+| `websocket.maxHttpBufferSize`            | `number`                         | `1_000_000`            | 1 MB — protects against abuse                                                                                                        |
+| `websocket.maxConnectionsPerUser`        | `number`                         | `5`                    | FIFO eviction (same policy as SSE)                                                                                                   |
+| `websocket.redisAdapter`                 | `{ pubClient }`                  | `undefined`            | ioredis client for `@socket.io/redis-adapter` (lib calls `.duplicate()` for the subscriber)                                          |
+| `reauthenticationPolicy.onFailure`       | `'disconnect' \| 'event'`        | `'disconnect'`         | Action when periodic re-auth fails                                                                                                   |
+| `reauthenticationPolicy.intervalSeconds` | `number`                         | `300` (5 min)          | Re-check creds on long connections                                                                                                   |
+| `reauthenticationPolicy.cacheTtlMs`      | `number`                         | `60000` (60s)          | Caches positive auth                                                                                                                 |
 
 ### 4.3 Example `forRoot` — simple SSE
 
@@ -645,7 +712,7 @@ import { NestAuthRealtimeBridge } from './realtime/nest-auth-realtime-bridge'
     BymaxRealtimeModule.forRoot({
       transport: 'sse',
       service: { name: 'my-app', version: process.env.RELEASE_SHA ?? 'dev' },
-      authenticator: new NestAuthRealtimeBridge(),  // read JWT cookie, decode
+      authenticator: new NestAuthRealtimeBridge(), // read JWT cookie, decode
       sse: {
         endpoint: '/events',
         heartbeatMs: 30_000,
@@ -662,6 +729,7 @@ export class AppModule {}
 @Module({
   imports: [
     BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       imports: [ConfigModule, AuthModule, CacheModule],
       inject: [ConfigService, JwtService, REDIS_CLIENT],
       useFactory: (config: ConfigService, jwt: JwtService, redis: Redis) => ({
@@ -697,7 +765,8 @@ export class AppModule {}
 // Use case: the app already has SSE running; new features (chat) need WS.
 // Runs both simultaneously; emits made via the API go to both transports.
 
-BymaxRealtimeModule.forRoot({
+// 'both' is served by the websocket entry point, which is what pulls Socket.IO in
+BymaxRealtimeWebSocketModule.forRoot({
   transport: 'both',
   authenticator: new NestAuthRealtimeBridge(),
   pubsub: new RedisRealtimePubSub(redis),
@@ -831,7 +900,11 @@ export interface ConnectionAuthContext {
 ```typescript
 import { Injectable } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
-import { IConnectionAuthenticator, ConnectionAuthContext, AuthenticationResult } from '@bymax-one/nest-realtime'
+import {
+  IConnectionAuthenticator,
+  ConnectionAuthContext,
+  AuthenticationResult,
+} from '@bymax-one/nest-realtime'
 
 @Injectable()
 export class NestAuthRealtimeBridge implements IConnectionAuthenticator {
@@ -843,7 +916,9 @@ export class NestAuthRealtimeBridge implements IConnectionAuthenticator {
     if (!token) return null
 
     try {
-      const payload = await this.jwt.verifyAsync<{ sub: string; tid?: string; roles?: string[] }>(token)
+      const payload = await this.jwt.verifyAsync<{ sub: string; tid?: string; roles?: string[] }>(
+        token,
+      )
       return {
         userId: payload.sub,
         tenantId: payload.tid,
@@ -903,10 +978,16 @@ export interface IConnectionLifecycleHooks {
   onConnect?(meta: ConnectionEventMeta): void | Promise<void>
 
   /** Called when connection closes (any reason). */
-  onDisconnect?(meta: ConnectionEventMeta & { reason?: string; durationMs: number }): void | Promise<void>
+  onDisconnect?(
+    meta: ConnectionEventMeta & { reason?: string; durationMs: number },
+  ): void | Promise<void>
 
   /** Called on transport error. */
-  onError?(meta: { connectionId?: string; error: Error; transport: 'sse' | 'websocket' }): void | Promise<void>
+  onError?(meta: {
+    connectionId?: string
+    error: Error
+    transport: 'sse' | 'websocket'
+  }): void | Promise<void>
 
   /** Called on re-authentication failure. */
   onReauthenticationFailed?(meta: ConnectionEventMeta): void | Promise<void>
@@ -960,7 +1041,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   private readonly sub: Redis
   private handlers: Set<(m: RealtimePubSubMessage) => void> = new Set()
 
-  constructor(redisClient: Redis, private readonly opts: { channel?: string } = {}) {
+  constructor(
+    redisClient: Redis,
+    private readonly opts: { channel?: string } = {},
+  ) {
     this.pub = redisClient
     this.sub = redisClient.duplicate()
     const channel = opts.channel ?? 'realtime:bus'
@@ -968,7 +1052,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     void this.sub.subscribe(channel)
     this.sub.on('message', (_ch, raw) => {
       const msg = JSON.parse(raw) as RealtimePubSubMessage
-      if (msg.origin === this.instanceId) return  // ignore self
+      if (msg.origin === this.instanceId) return // ignore self
       for (const h of this.handlers) h(msg)
     })
   }
@@ -980,7 +1064,9 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
 
   async subscribe(handler: (m: RealtimePubSubMessage) => void): Promise<() => Promise<void>> {
     this.handlers.add(handler)
-    return async () => { this.handlers.delete(handler) }
+    return async () => {
+      this.handlers.delete(handler)
+    }
   }
 }
 ```
@@ -989,7 +1075,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
 
 ```typescript
 export interface OfflineQueuedEvent {
-  id: string          // monotonic — used as Last-Event-ID
+  id: string // monotonic — used as Last-Event-ID
   event: string
   data: unknown
   emittedAt: Date
@@ -1056,7 +1142,10 @@ export class SseController {
   // `passthrough: true` keeps NestJS in control of the SSE response while still
   // giving HeartbeatService a handle to write raw `: keepalive` comments to it.
   @Sse('events')
-  async subscribe(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<Observable<MessageEvent>> {
+  async subscribe(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Observable<MessageEvent>> {
     // 1. Authenticate
     const auth = await this.transport.authenticate(req)
     if (!auth) {
@@ -1069,7 +1158,7 @@ export class SseController {
     // 3. Create per-connection Subject + a close subject, then register the connection
     const connectionId = randomUUID()
     const subject = new Subject<MessageEvent>()
-    const close$ = new Subject<void>()   // server-initiated teardown (disconnect/revocation)
+    const close$ = new Subject<void>() // server-initiated teardown (disconnect/revocation)
     await this.transport.registerConnection({
       connectionId,
       userId: auth.userId,
@@ -1124,11 +1213,31 @@ export class SseTransport implements ITransport {
   async onModuleInit(): Promise<void> {
     this.unsubscribe = await this.pubsub.subscribe((m: RealtimePubSubMessage) => {
       switch (m.op) {
-        case 'emitToUser':   { const a = m.args as EmitArgs; this.emitToUserLocal(a.userId, a.event, a.data, a.id); break }
-        case 'emitToTenant': { const a = m.args as EmitArgs; this.emitToTenantLocal(a.tenantId!, a.event, a.data, a.id); break }
-        case 'emitToRoom':   { const a = m.args as EmitArgs; this.emitToRoomLocal(a.roomId!, a.event, a.data, a.id); break }
-        case 'broadcast':    { const a = m.args as EmitArgs; this.broadcastLocal(a.event, a.data, a.id); break }
-        case 'disconnect':   { const a = m.args as { connectionId: string; reason?: string }; this.disconnectLocal(a.connectionId, a.reason); break }
+        case 'emitToUser': {
+          const a = m.args as EmitArgs
+          this.emitToUserLocal(a.userId, a.event, a.data, a.id)
+          break
+        }
+        case 'emitToTenant': {
+          const a = m.args as EmitArgs
+          this.emitToTenantLocal(a.tenantId!, a.event, a.data, a.id)
+          break
+        }
+        case 'emitToRoom': {
+          const a = m.args as EmitArgs
+          this.emitToRoomLocal(a.roomId!, a.event, a.data, a.id)
+          break
+        }
+        case 'broadcast': {
+          const a = m.args as EmitArgs
+          this.broadcastLocal(a.event, a.data, a.id)
+          break
+        }
+        case 'disconnect': {
+          const a = m.args as { connectionId: string; reason?: string }
+          this.disconnectLocal(a.connectionId, a.reason)
+          break
+        }
       }
     })
   }
@@ -1182,7 +1291,7 @@ export class SseTransport implements ITransport {
   disconnectLocal(connectionId: string, reason?: string): void {
     const conn = this.connections.get(connectionId)
     if (!conn || conn.transport !== 'sse') return
-    conn.close$.next()       // tears down the @Sse stream via takeUntil
+    conn.close$.next() // tears down the @Sse stream via takeUntil
     conn.close$.complete()
     this.connections.unregister(connectionId)
   }
@@ -1227,7 +1336,12 @@ A blank line separates events. `:` at the start is a comment (the heartbeat) —
 Canonical implementation uses Socket.IO via `@nestjs/platform-socket.io`.
 
 ```typescript
-import { WebSocketGateway, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets'
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+} from '@nestjs/websockets'
 import { Server, Socket } from 'socket.io'
 
 // NOTE: `@WebSocketGateway()` is evaluated at class-definition time, so a
@@ -1282,7 +1396,9 @@ export class WebSocketTransport implements ITransport {
   readonly kind = 'websocket' as const
   private server!: Server
 
-  setServer(server: Server) { this.server = server }
+  setServer(server: Server) {
+    this.server = server
+  }
 
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
     this.server.to(`user:${userId}`).emit(event, data)
@@ -1482,7 +1598,7 @@ export class RoomRegistry {
 ```typescript
 @Injectable()
 export class EventReplayBuffer {
-  private buffers = new Map<string, MessageEvent[]>()  // userId → ring buffer
+  private buffers = new Map<string, MessageEvent[]>() // userId → ring buffer
 
   // The options token MUST be injected, otherwise `this.opts` is undefined and
   // the first append() throws a TypeError reading `this.opts.sse`.
@@ -1513,11 +1629,11 @@ export class EventReplayBuffer {
 
 These are an ergonomic, **method-level** alternative to the config-based `IConnectionLifecycleHooks`:
 
-| Decorator | Sets metadata consumed by | Purpose |
-|---|---|---|
-| `@OnConnect()` | the module's connection dispatcher | Marks a provider method to run after a connection authenticates (same timing as `hooks.onConnect`). |
-| `@OnDisconnect()` | the module's connection dispatcher | Marks a method to run on disconnect (same timing as `hooks.onDisconnect`). |
-| `@Subscribe('event')` | `RealtimeGateway` (**WebSocket only**) | Registers a handler for a client→server event. No-op under SSE (SSE is server→client only). |
+| Decorator             | Sets metadata consumed by              | Purpose                                                                                             |
+| --------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `@OnConnect()`        | the module's connection dispatcher     | Marks a provider method to run after a connection authenticates (same timing as `hooks.onConnect`). |
+| `@OnDisconnect()`     | the module's connection dispatcher     | Marks a method to run on disconnect (same timing as `hooks.onDisconnect`).                          |
+| `@Subscribe('event')` | `RealtimeGateway` (**WebSocket only**) | Registers a handler for a client→server event. No-op under SSE (SSE is server→client only).         |
 
 Both mechanisms can coexist; the config hooks fire first. Prefer the config hooks for cross-cutting concerns (audit, metrics) and the decorators for feature-local handlers. `@Subscribe` has no effect when `transport: 'sse'`.
 
@@ -1539,7 +1655,7 @@ The HttpOnly `access_token` cookie set by nest-auth during normal login automati
 
 ```typescript
 // Frontend
-const { ticket } = await fetch('/events/ticket', { credentials: 'include' }).then(r => r.json())
+const { ticket } = await fetch('/events/ticket', { credentials: 'include' }).then((r) => r.json())
 const eventSource = new EventSource(`/events?ticket=${ticket}`)
 ```
 
@@ -1547,16 +1663,20 @@ const eventSource = new EventSource(`/events?ticket=${ticket}`)
 // Backend
 @Controller()
 export class EventsTicketController {
-  constructor(private readonly redis: Redis, private readonly jwt: JwtService) {}
+  constructor(
+    private readonly redis: Redis,
+    private readonly jwt: JwtService,
+  ) {}
 
   @Post('events/ticket')
-  @UseGuards(JwtAuthGuard)  // requires normal login
+  @UseGuards(JwtAuthGuard) // requires normal login
   async issueTicket(@Req() req: AuthenticatedRequest): Promise<{ ticket: string }> {
     const ticket = randomUUID()
     await this.redis.set(
       `realtime:ticket:${ticket}`,
       JSON.stringify({ userId: req.user.id, tenantId: req.user.tenantId }),
-      'EX', 60,  // 60s to use
+      'EX',
+      60, // 60s to use
     )
     return { ticket }
   }
@@ -1573,11 +1693,11 @@ The authenticator extracts from `socket.handshake.auth.token` instead of cookie.
 
 ### 8.2 Pattern comparison
 
-| Pattern | Use case | Pros | Cons |
-|---|---|---|---|
-| A — HttpOnly Cookie | Web app on same domain or subdomain | Zero frontend code | Strict cross-origin without CORS + credentials |
-| B — Ticket | Strict cross-origin, native mobile | Works in any client | Requires extra endpoint to issue the ticket |
-| C — Bearer header | WS only, headless clients | API standard | Does not work in SSE (browser strips headers) |
+| Pattern             | Use case                            | Pros                | Cons                                           |
+| ------------------- | ----------------------------------- | ------------------- | ---------------------------------------------- |
+| A — HttpOnly Cookie | Web app on same domain or subdomain | Zero frontend code  | Strict cross-origin without CORS + credentials |
+| B — Ticket          | Strict cross-origin, native mobile  | Works in any client | Requires extra endpoint to issue the ticket    |
+| C — Bearer header   | WS only, headless clients           | API standard        | Does not work in SSE (browser strips headers)  |
 
 ### 8.3 Periodic re-authentication
 
@@ -1589,7 +1709,7 @@ SSE/WS connections are long-lived. The token may expire/be revoked during the se
 // `IConnectionLifecycleHooks` injected via `REALTIME_HOOKS_TOKEN`.
 setInterval(async () => {
   for (const conn of this.connections.allByTransport(this.kind)) {
-    const stillValid = await this.auth.revalidate?.(conn.connectionId, conn.originalAuth) ?? true
+    const stillValid = (await this.auth.revalidate?.(conn.connectionId, conn.originalAuth)) ?? true
     if (!stillValid) {
       if (policy.onFailure === 'event') {
         await this.emitToUser(conn.userId, 'connection:reauthentication-failed', {})
@@ -1611,6 +1731,7 @@ await realtimeService.disconnect(connectionId, 'USER_LOGGED_OUT')
 ```
 
 In a multi-instance environment, if the connection is not owned by the instance handling the call, the close is fanned out cross-instance:
+
 - **SSE:** `disconnect()` publishes `{ op: 'disconnect', args: { connectionId, reason } }` on `IRealtimePubSub`; the owning instance's subscriber invokes `disconnectLocal()` (a non-publishing close — see §6.1). This `op:'disconnect'` producer/consumer is what makes this guarantee real.
 - **WebSocket:** `disconnect()` calls `this.server.in(connectionId).disconnectSockets(true)`, which `@socket.io/redis-adapter` broadcasts to all nodes (no separate pub/sub op needed).
 
@@ -1642,12 +1763,13 @@ export function composeRoomId(prefix: keyof typeof ROOM_PREFIXES, ...parts: stri
 }
 
 // Usage:
-composeRoomId('RESOURCE', 'invoice', 'inv_123')  // → 'resource:invoice:inv_123'
+composeRoomId('RESOURCE', 'invoice', 'inv_123') // → 'resource:invoice:inv_123'
 ```
 
 ### 9.2 Automatic rooms
 
 On connect (any transport), the lib auto-adds the connection to:
+
 - `user:{userId}` — always
 - `tenant:{tenantId}` — if `auth.tenantId` resolved
 
@@ -1656,6 +1778,7 @@ Custom rooms must be explicitly `joinRoom`-ed.
 ### 9.3 Multi-tenant in SSE
 
 SSE has no native "namespaces" (as Socket.IO does). The lib simulates them via:
+
 - Every SSE connection joins `tenant:{tenantId}` on connect
 - `emitToTenant(tenantId, ...)` iterates the connections in that room
 - Cross-tenant isolation is enforced **server-side** by the authenticator (each connection has a validated, fixed `tenantId` in metadata)
@@ -1663,6 +1786,7 @@ SSE has no native "namespaces" (as Socket.IO does). The lib simulates them via:
 ### 9.4 Multi-tenant in WebSocket
 
 Socket.IO offers two mechanisms:
+
 - **Namespaces** (recommended): different URL per tenant (`/tenant-{id}`) — total isolation, separate event handlers
 - **Rooms**: within a single namespace, logical segregation via `socket.join('tenant:{id}')`
 
@@ -1735,7 +1859,7 @@ On the next connect, without `Last-Event-ID`, the lib consults the offline queue
 ```typescript
 // SseController.subscribe — after auth, before subscription:
 if (!lastEventId && this.offlineQueue) {
-  const pendingSince = req.headers['x-offline-since'] as string | undefined  // app-level convention
+  const pendingSince = req.headers['x-offline-since'] as string | undefined // app-level convention
   if (pendingSince) {
     const pending = await this.offlineQueue.retrieveSince(auth.userId, pendingSince, 100)
     replayStream = of(...pending.map(toMessageEvent))
@@ -1765,7 +1889,11 @@ export class RedisOfflineQueue implements IOfflineQueueStorage {
     }
   }
 
-  async retrieveSince(userId: string, sinceId: string, limit: number): Promise<OfflineQueuedEvent[]> {
+  async retrieveSince(
+    userId: string,
+    sinceId: string,
+    limit: number,
+  ): Promise<OfflineQueuedEvent[]> {
     const key = `realtime:offline:${userId}`
     const raws = await this.redis.zrange(key, 0, -1)
     return raws
@@ -1848,10 +1976,10 @@ if (opts.websocket?.redisAdapter) {
 
 ### 11.5 Sticky sessions vs the Redis adapter — what each one does
 
-| Concern | `@socket.io/redis-adapter` | Sticky sessions (load balancer) |
-|---|---|---|
-| Cross-node message fan-out (emit on node A reaches a client on node B) | ✅ Provides this | ❌ Does not address |
-| Polling-handshake affinity (multi-round-trip handshake hits one node) | ❌ Does **not** provide this | ✅ Required for this |
+| Concern                                                                | `@socket.io/redis-adapter`   | Sticky sessions (load balancer) |
+| ---------------------------------------------------------------------- | ---------------------------- | ------------------------------- |
+| Cross-node message fan-out (emit on node A reaches a client on node B) | ✅ Provides this             | ❌ Does not address             |
+| Polling-handshake affinity (multi-round-trip handshake hits one node)  | ❌ Does **not** provide this | ✅ Required for this            |
 
 You need **both** for a scaled WebSocket deployment with polling fallback. The adapter is not a substitute for affinity, and affinity is not a substitute for the adapter.
 
@@ -1860,11 +1988,12 @@ You need **both** for a scaled WebSocket deployment with polling fallback. The a
 The lib does NOT import `@bymax-one/nest-cache` directly. But the recommended standard is for the consumer to reuse the same Redis client:
 
 ```typescript
-BymaxRealtimeModule.forRootAsync({
-  imports: [CacheModule],          // @bymax-one/nest-cache
+BymaxRealtimeWebSocketModule.forRootAsync({
+  transport: 'both',
+  imports: [CacheModule], // @bymax-one/nest-cache
   inject: [CACHE_REDIS_CLIENT_TOKEN],
   useFactory: (redis: Redis) => ({
-    transport: 'both',
+    transport: 'both' as const,
     authenticator: new MyAuthenticator(),
     pubsub: new RedisRealtimePubSub(redis),
     websocket: { redisAdapter: { pubClient: redis } },
@@ -2018,7 +2147,7 @@ function useSseInternal(opts: ResolvedSseOptions): UseRealtimeReturn {
 }
 ```
 
-> **Replay across reconnects.** The native `EventSource` auto-reconnects on *transient* drops and automatically resends the `Last-Event-ID` header — that is what drives server-side replay (§10.1). The manual `es.close()` + recreate path above should run **only for fatal errors** (e.g. a 401 that the browser will not retry); for transient errors, let the browser reconnect natively so the `Last-Event-ID` header is preserved. If you do close and recreate, track `e.lastEventId` and pass it back (e.g. as a query param the `SseController` also honors), or replay is lost.
+> **Replay across reconnects.** The native `EventSource` auto-reconnects on _transient_ drops and automatically resends the `Last-Event-ID` header — that is what drives server-side replay (§10.1). The manual `es.close()` + recreate path above should run **only for fatal errors** (e.g. a 401 that the browser will not retry); for transient errors, let the browser reconnect natively so the `Last-Event-ID` header is preserved. If you do close and recreate, track `e.lastEventId` and pass it back (e.g. as a query param the `SseController` also honors), or replay is lost.
 
 ### 12.3 Internal implementation — WebSocket (dynamic import)
 
@@ -2027,11 +2156,11 @@ async function useWebSocketInternal(opts: ResolvedWsOptions): UseRealtimeReturn 
   const [status, setStatus] = useState<Status>('idle')
 
   useEffect(() => {
-    let socket: any  // socket.io-client type — imported dynamically
+    let socket: any // socket.io-client type — imported dynamically
     let cancelled = false
 
     const setup = async () => {
-      const { io } = await import('socket.io-client')  // dynamic — bundle loads only here
+      const { io } = await import('socket.io-client') // dynamic — bundle loads only here
       socket = io(opts.url, {
         withCredentials: true,
         // Polling fallback for WS-hostile networks. NOTE: if the server is
@@ -2121,18 +2250,19 @@ function App() {
 
 Canonical events reserved by the lib (do not use these names for custom events):
 
-| Event | When | Payload | Direction |
-|---|---|---|---|
-| `connection:established` | After successful auth | `{ connectionId: string, traits: AuthenticationResult }` | server → client |
-| `connection:reauthentication-failed` | Periodic re-auth failed | `{ reason: string }` | server → client (before disconnect) |
-| `connection:credential-expiring` | _Reserved (not emitted in v0.1 — no expiry-detection mechanism yet)_ | `{ expiresAt: string }` | server → client |
-| `room:joined` | _Reserved (not emitted in v0.1 — `joinRoom` does not yet emit it)_ | `{ roomId: string }` | server → client |
-| `room:left` | _Reserved (not emitted in v0.1 — `leaveRoom` does not yet emit it)_ | `{ roomId: string }` | server → client |
-| `error` | Transport error | `{ code: string, message: string }` | server → client |
+| Event                                | When                                                                 | Payload                                                  | Direction                           |
+| ------------------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------- |
+| `connection:established`             | After successful auth                                                | `{ connectionId: string, traits: AuthenticationResult }` | server → client                     |
+| `connection:reauthentication-failed` | Periodic re-auth failed                                              | `{ reason: string }`                                     | server → client (before disconnect) |
+| `connection:credential-expiring`     | _Reserved (not emitted in v0.1 — no expiry-detection mechanism yet)_ | `{ expiresAt: string }`                                  | server → client                     |
+| `room:joined`                        | _Reserved (not emitted in v0.1 — `joinRoom` does not yet emit it)_   | `{ roomId: string }`                                     | server → client                     |
+| `room:left`                          | _Reserved (not emitted in v0.1 — `leaveRoom` does not yet emit it)_  | `{ roomId: string }`                                     | server → client                     |
+| `error`                              | Transport error                                                      | `{ code: string, message: string }`                      | server → client                     |
 
 > The SSE **heartbeat** is a `: keepalive` comment (§6.1), **not** a named event — it never reaches `addEventListener` and so is not listed here. Events marked _Reserved_ are names the lib owns (so consumers must not reuse them) but does not yet emit in v0.1; emitting `room:joined`/`room:left` from `joinRoom`/`leaveRoom` is a candidate for a later minor version. The `connection:reauthentication-failed` payload is `{ reason: string }` consistently in §8.3 and here.
 
 In WebSocket, client → server reserved events:
+
 - `ping` / `pong` — Socket.IO internal
 - `disconnect` — Socket.IO internal
 
@@ -2140,17 +2270,17 @@ In WebSocket, client → server reserved events:
 
 ## 14. Error Code Catalog
 
-| Code | When | HTTP / WS code |
-|---|---|---|
-| `REALTIME_INVALID_OPTIONS` | Malformed config at initialization | Throws |
-| `REALTIME_NO_AUTHENTICATOR` | `authenticator` not provided | Throws |
-| `REALTIME_AUTH_FAILED` | `authenticator.authenticate` returned null | 401 (SSE) / disconnect (WS) |
-| `REALTIME_REAUTHENTICATION_FAILED` | Periodic re-check failed | Disconnect with reason |
-| `REALTIME_TOO_MANY_CONNECTIONS` | User exceeded `maxConnectionsPerUser` → **oldest connection evicted (FIFO)** | Oldest SSE stream closed / WS socket disconnected with this reason (the **new** connection is admitted, never 429'd) |
-| `REALTIME_INVALID_TICKET` | Ticket expired/used/non-existent | 401 — surfaced only if the authenticator distinguishes it; the §5.2 ticket example returns `null`, which maps to `REALTIME_AUTH_FAILED` |
-| `REALTIME_PUBSUB_UNAVAILABLE` | Pub/sub configured but failed to connect | Warn log; lib degrades to single-instance |
-| `REALTIME_PAYLOAD_TOO_LARGE` | Event exceeds `maxHttpBufferSize` | Dropped + log |
-| `REALTIME_REPLAY_BUFFER_MISS` | `Last-Event-ID` not in the buffer (gap) | Replay via `IOfflineQueueStorage` if configured; otherwise the gap is unrecoverable and events before the buffer window are lost |
+| Code                               | When                                                                         | HTTP / WS code                                                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `REALTIME_INVALID_OPTIONS`         | Malformed config at initialization                                           | Throws                                                                                                                                  |
+| `REALTIME_NO_AUTHENTICATOR`        | `authenticator` not provided                                                 | Throws                                                                                                                                  |
+| `REALTIME_AUTH_FAILED`             | `authenticator.authenticate` returned null                                   | 401 (SSE) / disconnect (WS)                                                                                                             |
+| `REALTIME_REAUTHENTICATION_FAILED` | Periodic re-check failed                                                     | Disconnect with reason                                                                                                                  |
+| `REALTIME_TOO_MANY_CONNECTIONS`    | User exceeded `maxConnectionsPerUser` → **oldest connection evicted (FIFO)** | Oldest SSE stream closed / WS socket disconnected with this reason (the **new** connection is admitted, never 429'd)                    |
+| `REALTIME_INVALID_TICKET`          | Ticket expired/used/non-existent                                             | 401 — surfaced only if the authenticator distinguishes it; the §5.2 ticket example returns `null`, which maps to `REALTIME_AUTH_FAILED` |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | Pub/sub configured but failed to connect                                     | Warn log; lib degrades to single-instance                                                                                               |
+| `REALTIME_PAYLOAD_TOO_LARGE`       | Event exceeds `maxHttpBufferSize`                                            | Dropped + log                                                                                                                           |
+| `REALTIME_REPLAY_BUFFER_MISS`      | `Last-Event-ID` not in the buffer (gap)                                      | Replay via `IOfflineQueueStorage` if configured; otherwise the gap is unrecoverable and events before the buffer window are lost        |
 
 ---
 
@@ -2208,13 +2338,13 @@ In WebSocket, client → server reserved events:
 }
 ```
 
-| Package | When to install |
-|---|---|
-| `@nestjs/websockets` + `@nestjs/platform-socket.io` + `socket.io` | If `transport: 'websocket' \| 'both'` |
-| `@socket.io/redis-adapter` + `ioredis` | For horizontal WS scaling |
-| `ioredis` | When implementing Redis-backed `IRealtimePubSub` or `IOfflineQueueStorage` |
-| `react`, `react-dom` | When using the `./react` subpath |
-| `socket.io-client` | Frontend using WS transport |
+| Package                                                           | When to install                                                            |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `@nestjs/websockets` + `@nestjs/platform-socket.io` + `socket.io` | If `transport: 'websocket' \| 'both'`                                      |
+| `@socket.io/redis-adapter` + `ioredis`                            | For horizontal WS scaling                                                  |
+| `ioredis`                                                         | When implementing Redis-backed `IRealtimePubSub` or `IOfflineQueueStorage` |
+| `react`, `react-dom`                                              | When using the `./react` subpath                                           |
+| `socket.io-client`                                                | Frontend using WS transport                                                |
 
 ### 16.3 `"dependencies": {}`
 
@@ -2233,6 +2363,7 @@ The canonical `@bymax-one/*` devDependencies set, identical to the sibling libs 
 **Goal:** The lib exposes `RealtimeService` working with SSE single-instance.
 
 Deliverables:
+
 - [ ] Project scaffold (tsconfig, tsup, eslint, jest)
 - [ ] Types in `src/shared/` (TransportMode, RealtimeEvent, ConnectionMeta)
 - [ ] Interfaces (`ITransport`, `IConnectionAuthenticator`, `IConnectionLifecycleHooks`)
@@ -2243,6 +2374,7 @@ Deliverables:
 - [ ] Unit tests at **100% line/branch per implemented file** (Bymax library standard); ≥ 95% mutation on critical paths at the pre-release gate
 
 Validation:
+
 - NestJS fixture backend
 - curl client simulating `EventSource` (long-poll with `Accept: text/event-stream`)
 - Emit via `RealtimeService.emitToUser` reaches the client in <100ms
@@ -2252,6 +2384,7 @@ Validation:
 **Goal:** SSE production-ready single-instance. (Heartbeat ships in Phase 1.)
 
 Deliverables:
+
 - [ ] Auth patterns A (cookie) and B (ticket) working — example nest-auth bridge
 - [ ] `EventReplayBuffer` with ring buffer
 - [ ] `Last-Event-ID` handling in SseController
@@ -2261,6 +2394,7 @@ Deliverables:
 - [ ] E2E tests with `EventSource` polyfill (Node `eventsource` package)
 
 Validation:
+
 - Automatic reconnection after a drop delivers missed events
 - Periodic re-auth disconnects when the token has expired
 - Heartbeat keeps the connection behind default nginx timeout (60s)
@@ -2270,6 +2404,7 @@ Validation:
 **Goal:** SSE multi-instance via pub/sub.
 
 Deliverables:
+
 - [ ] `IRealtimePubSub` interface + default `InMemoryPubSub`
 - [ ] `RedisRealtimePubSub` as an example impl
 - [ ] `IOfflineQueueStorage` interface + `RedisOfflineQueue` example
@@ -2277,6 +2412,7 @@ Deliverables:
 - [ ] Tests with 2 simulated instances (worker_threads)
 
 Validation:
+
 - Emit from instance #1 reaches a connection on instance #2 within <200ms
 - Offline queue retains events for an offline user
 
@@ -2285,6 +2421,7 @@ Validation:
 **Goal:** Lib supports `transport: 'websocket'`.
 
 Deliverables:
+
 - [ ] `WebSocketTransport` + `RealtimeGateway`
 - [ ] `@socket.io/redis-adapter` integration
 - [ ] Periodic re-auth on WS (vs SSE — differences)
@@ -2292,6 +2429,7 @@ Deliverables:
 - [ ] `CompositeTransport` for `'both'` mode
 
 Validation:
+
 - WS client receives emits identical to an SSE client
 - Switching `transport: 'sse' → 'websocket'` in config does not change service code
 
@@ -2300,6 +2438,7 @@ Validation:
 **Goal:** Universal `useRealtime` hook with auto-detect.
 
 Deliverables:
+
 - [ ] SSE-only `useRealtime`
 - [ ] `useRealtime` WS via dynamic socket.io-client import
 - [ ] `useRealtimeConnection`, `RealtimeProvider`
@@ -2308,6 +2447,7 @@ Deliverables:
 - [ ] Bundle size check — SSE-only React build ≤ 4 KB brotli
 
 Validation:
+
 - React app connects via SSE with 0 socket.io-client dependencies
 - React app connects via WS, socket.io-client loads dynamically
 - Automatic reconnection + replay work end-to-end
@@ -2337,6 +2477,7 @@ The browser strips headers in GET `EventSource`. Header-based auth only works wi
 ### 18.3 HTTP/1.1 limits 6 connections per origin
 
 For apps with many tabs, consider:
+
 - HTTP/2 (multiplexing — no practical limit)
 - Dedicated subdomain (e.g., `events.bymax.finance`)
 - `RealtimeProvider` to multiplex via a single `EventSource` + client-side dispatching
@@ -2376,6 +2517,7 @@ When the WebSocket transport runs on ≥ 2 nodes **and** the HTTP long-polling f
 @Module({
   imports: [
     BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       imports: [ConfigModule, CacheModule, AuthModule],
       inject: [ConfigService, JwtService, CACHE_REDIS_CLIENT_TOKEN],
       useFactory: (config: ConfigService, jwt: JwtService, redis: Redis) => ({
@@ -2392,8 +2534,10 @@ When the WebSocket transport runs on ≥ 2 nodes **and** the HTTP long-polling f
           cors: { origin: config.getOrThrow('FRONTEND_URL'), credentials: true },
         },
         hooks: {
-          onConnect: (meta) => logger.info('REALTIME_CONNECT', 'Connection opened', meta.userId, meta),
-          onDisconnect: (meta) => logger.info('REALTIME_DISCONNECT', 'Connection closed', meta.userId, meta),
+          onConnect: (meta) =>
+            logger.info('REALTIME_CONNECT', 'Connection opened', meta.userId, meta),
+          onDisconnect: (meta) =>
+            logger.info('REALTIME_DISCONNECT', 'Connection closed', meta.userId, meta),
         },
       }),
     }),
@@ -2449,7 +2593,7 @@ export function RealtimeListener() {
     },
   })
 
-  return null  // headless
+  return null // headless
 }
 ```
 
@@ -2457,7 +2601,8 @@ export function RealtimeListener() {
 
 ```typescript
 // apps/backend/src/app.module.ts
-BymaxRealtimeModule.forRoot({
+// import { BymaxRealtimeWebSocketModule } from '@bymax-one/nest-realtime/websocket'
+BymaxRealtimeWebSocketModule.forRoot({
   transport: 'websocket',
   authenticator: new MyWsAuthBridge(),
   websocket: {
@@ -2476,11 +2621,7 @@ export class TrainingSessionService {
   constructor(private readonly realtime: RealtimeService) {}
 
   async broadcastSetTarget(sessionId: string, target: { reps: number; weight: number }) {
-    await this.realtime.emitToRoom(
-      `resource:training-session:${sessionId}`,
-      'set.target',
-      target,
-    )
+    await this.realtime.emitToRoom(`resource:training-session:${sessionId}`, 'set.target', target)
   }
 }
 ```
@@ -2489,7 +2630,8 @@ export class TrainingSessionService {
 
 ```typescript
 // Scenario: the app already has SSE for notifications; a new chat feature requires WS.
-BymaxRealtimeModule.forRoot({
+// import { BymaxRealtimeWebSocketModule } from '@bymax-one/nest-realtime/websocket'
+BymaxRealtimeWebSocketModule.forRoot({
   transport: 'both',
   authenticator: new MyAuthenticator(),
   pubsub: new RedisRealtimePubSub(redis),
@@ -2515,42 +2657,42 @@ useRealtime({ url: 'wss://api/chat', events: { ... } })  // WS
 
 ## Appendix A — Glossary
 
-| Term | Meaning |
-|---|---|
-| **SSE** | Server-Sent Events — HTTP one-way push protocol (`text/event-stream`) |
-| **WS** | WebSocket — full-duplex bi-directional protocol |
-| **EventSource** | Native browser API for consuming SSE |
-| **Socket.IO** | WS library with rooms, namespaces, reconnect, fallbacks |
-| **Last-Event-ID** | HTTP header sent by the browser when reconnecting SSE; used for replay |
-| **Heartbeat / keepalive** | Periodic empty message to avoid proxy timeout |
-| **Pub/sub** | Messaging mechanism between instances for event fan-out |
-| **Room** | Logical grouping of connections (user, tenant, resource) |
-| **Namespace (Socket.IO)** | Isolated sub-channel within the same Socket.IO server |
-| **Backpressure** | When the producer emits faster than the consumer can process |
-| **IDOR** | Insecure Direct Object Reference — cross-tenant access vulnerability |
-| **Ticket pattern** | Temporary auth for clients without cookies: issue ticket via POST, use in query string |
+| Term                      | Meaning                                                                                |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| **SSE**                   | Server-Sent Events — HTTP one-way push protocol (`text/event-stream`)                  |
+| **WS**                    | WebSocket — full-duplex bi-directional protocol                                        |
+| **EventSource**           | Native browser API for consuming SSE                                                   |
+| **Socket.IO**             | WS library with rooms, namespaces, reconnect, fallbacks                                |
+| **Last-Event-ID**         | HTTP header sent by the browser when reconnecting SSE; used for replay                 |
+| **Heartbeat / keepalive** | Periodic empty message to avoid proxy timeout                                          |
+| **Pub/sub**               | Messaging mechanism between instances for event fan-out                                |
+| **Room**                  | Logical grouping of connections (user, tenant, resource)                               |
+| **Namespace (Socket.IO)** | Isolated sub-channel within the same Socket.IO server                                  |
+| **Backpressure**          | When the producer emits faster than the consumer can process                           |
+| **IDOR**                  | Insecure Direct Object Reference — cross-tenant access vulnerability                   |
+| **Ticket pattern**        | Temporary auth for clients without cookies: issue ticket via POST, use in query string |
 
 ---
 
 ## Appendix B — SSE vs WebSocket — when to pick each one
 
-| Situation | Choice |
-|---|---|
-| Push notifications (payment, status, alert) | **SSE** |
-| Live dashboards | **SSE** |
-| Live log tail | **SSE** |
-| Progressive streaming (LLM output, file processing) | **SSE** |
-| Chat / messaging | **WS** |
-| Collaborative editor (Google Docs–like) | **WS** |
-| Gaming / remote control | **WS** |
-| Client sends frequent small updates to the server | **WS** |
-| "Is typing..." indicator | **WS** |
-| You are on a corporate network hostile to WS | **SSE** |
-| You need it to work behind weird proxies | **SSE** |
-| Ultra-minimal frontend bundle | **SSE** |
-| You want to start simple and migrate later if needed | **SSE** (default) |
-| You already have Socket.IO in production and want to keep it | **WS** |
-| Bi-directional use case from day 1 | **WS** |
+| Situation                                                    | Choice            |
+| ------------------------------------------------------------ | ----------------- |
+| Push notifications (payment, status, alert)                  | **SSE**           |
+| Live dashboards                                              | **SSE**           |
+| Live log tail                                                | **SSE**           |
+| Progressive streaming (LLM output, file processing)          | **SSE**           |
+| Chat / messaging                                             | **WS**            |
+| Collaborative editor (Google Docs–like)                      | **WS**            |
+| Gaming / remote control                                      | **WS**            |
+| Client sends frequent small updates to the server            | **WS**            |
+| "Is typing..." indicator                                     | **WS**            |
+| You are on a corporate network hostile to WS                 | **SSE**           |
+| You need it to work behind weird proxies                     | **SSE**           |
+| Ultra-minimal frontend bundle                                | **SSE**           |
+| You want to start simple and migrate later if needed         | **SSE** (default) |
+| You already have Socket.IO in production and want to keep it | **WS**            |
+| Bi-directional use case from day 1                           | **WS**            |
 
 ### Quick rule
 
@@ -2615,9 +2757,8 @@ In containers, configure `ulimits` in the compose/docker.
 ---
 
 > **Next steps (after this spec):**
+>
 > 1. Generate `development_plan.md` (Layer 2) with detailed phases + the phase dashboard
 > 2. Generate `docs/tasks/phase-NN-<slug>.md` (Layer 3) — one file per phase — with executable tasks
 > 3. Code bootstrap following the plan
 > 4. Release `v0.1.0` on npm
-</content>
-</invoke>

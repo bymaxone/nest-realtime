@@ -83,6 +83,25 @@ export interface BymaxRealtimeModuleOptions {
   reauthenticationPolicy?: ReauthenticationPolicy
 }
 
+/**
+ * Synchronous configuration for `BymaxRealtimeModule`, which serves SSE only.
+ *
+ * `transport` is narrowed rather than validated at runtime: WebSocket lives
+ * behind `@bymax-one/nest-realtime/websocket`, so asking this module for it is
+ * a mistake the compiler can catch.
+ */
+export type SseRealtimeModuleOptions = Omit<BymaxRealtimeModuleOptions, 'transport'> & {
+  transport: 'sse'
+}
+
+/**
+ * Synchronous configuration for `BymaxRealtimeWebSocketModule`, which serves
+ * `'websocket'` and `'both'`. An SSE-only application wants the root module.
+ */
+export type WebSocketRealtimeModuleOptions = Omit<BymaxRealtimeModuleOptions, 'transport'> & {
+  transport: 'websocket' | 'both'
+}
+
 /** A factory that builds module options (async dynamic-module pattern). */
 export interface BymaxRealtimeModuleOptionsFactory {
   createRealtimeOptions(): BymaxRealtimeModuleOptions | Promise<BymaxRealtimeModuleOptions>
@@ -91,18 +110,12 @@ export interface BymaxRealtimeModuleOptionsFactory {
 /** Asynchronous module configuration — the standard NestJS dynamic-module pattern. */
 export interface BymaxRealtimeModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
   /**
-   * Optional synchronous transport mode. When provided, it gates WebSocket
-   * provider registration at module-definition time — exactly as `forRoot` does —
-   * so an SSE-only application never registers the gateway, never boots a
-   * Socket.IO server, and never requires the optional WebSocket peer dependencies.
-   *
-   * It MUST equal the `transport` returned by the async factory; a mismatch fails
-   * fast at bootstrap. When omitted, every transport provider is registered and
-   * the active transport is resolved at runtime from the factory result (which
-   * boots Socket.IO and requires the WS peer deps regardless of the configured
-   * mode).
+   * The transport this registration wires. Required, not a hint: providers and
+   * controllers are fixed at decoration time, long before a factory runs, so the
+   * module cannot discover its own transport later. It MUST equal the
+   * `transport` the factory resolves; a mismatch fails fast at bootstrap.
    */
-  transport?: TransportMode
+  transport: TransportMode
   useFactory?: (
     ...args: unknown[]
   ) => BymaxRealtimeModuleOptions | Promise<BymaxRealtimeModuleOptions>
@@ -115,3 +128,14 @@ export interface BymaxRealtimeModuleAsyncOptions extends Pick<ModuleMetadata, 'i
    */
   extraProviders?: Provider[]
 }
+
+/** Asynchronous configuration for `BymaxRealtimeModule` (SSE only). */
+export type SseRealtimeModuleAsyncOptions = Omit<BymaxRealtimeModuleAsyncOptions, 'transport'> & {
+  transport: 'sse'
+}
+
+/** Asynchronous configuration for `BymaxRealtimeWebSocketModule`. */
+export type WebSocketRealtimeModuleAsyncOptions = Omit<
+  BymaxRealtimeModuleAsyncOptions,
+  'transport'
+> & { transport: 'websocket' | 'both' }

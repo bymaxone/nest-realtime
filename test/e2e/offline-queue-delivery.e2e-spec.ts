@@ -12,10 +12,16 @@ import { SseSubscriptionHandler } from '../../src/server/transports/sse/sse-subs
 import type { SseTransport } from '../../src/server/transports/sse/sse.transport'
 import type { HeartbeatService } from '../../src/server/transports/sse/heartbeat.service'
 import type { BymaxRealtimeModuleOptions } from '../../src/server/interfaces/realtime-module-options.interface'
-import type { AuthenticationResult, IConnectionAuthenticator } from '../../src/server/interfaces/connection-authenticator.interface'
+import type {
+  AuthenticationResult,
+  IConnectionAuthenticator,
+} from '../../src/server/interfaces/connection-authenticator.interface'
 import type { ConnectionRecord } from '../../src/server/services/connection-registry.service'
 import { OfflineQueueDeliveryService } from '../../src/server/offline-queue/offline-queue-delivery.service'
-import type { IOfflineQueueStorage, OfflineQueuedEvent } from '../../src/server/interfaces/offline-queue-storage.interface'
+import type {
+  IOfflineQueueStorage,
+  OfflineQueuedEvent,
+} from '../../src/server/interfaces/offline-queue-storage.interface'
 
 const FIXED_AUTH: AuthenticationResult = { userId: 'oq-u1', tenantId: 't1', roles: [] }
 
@@ -94,7 +100,13 @@ describe('Offline queue delivery — integration', () => {
     const delivery = new OfflineQueueDeliveryService(storage)
     const record = mkRecord()
     const transport = mkTransport(FIXED_AUTH, record, [])
-    const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), mkOptions(), undefined, delivery)
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions(),
+      undefined,
+      delivery,
+    )
     const stream$ = await handler.handle(mkReq('9'), mkRes())
     const events = await firstValueFrom(stream$.pipe(take(2), toArray()))
     expect(events).toHaveLength(2)
@@ -113,7 +125,13 @@ describe('Offline queue delivery — integration', () => {
     const delivery = new OfflineQueueDeliveryService(storage)
     const record = mkRecord()
     const transport = mkTransport(FIXED_AUTH, record, replayEvents)
-    const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), mkOptions(), undefined, delivery)
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions(),
+      undefined,
+      delivery,
+    )
     const stream$ = await handler.handle(mkReq('9'), mkRes())
     const events = await firstValueFrom(stream$.pipe(take(2), toArray()))
     const queueOnlyEvents = events.filter((e) => e.id === '11')
@@ -125,13 +143,17 @@ describe('Offline queue delivery — integration', () => {
 
   // No queue events are injected when Last-Event-ID is absent.
   it('skips the offline queue when Last-Event-ID is absent', async () => {
-    const storage = mkStorage([
-      { id: '5', event: 'x', data: {}, emittedAt: new Date() },
-    ])
+    const storage = mkStorage([{ id: '5', event: 'x', data: {}, emittedAt: new Date() }])
     const delivery = new OfflineQueueDeliveryService(storage)
     const record = mkRecord()
     const transport = mkTransport(FIXED_AUTH, record, [])
-    const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), mkOptions(), undefined, delivery)
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions(),
+      undefined,
+      delivery,
+    )
     // No Last-Event-ID header — request without it.
     const stream$ = await handler.handle(mkReq(undefined), mkRes())
     const events: MessageEvent[] = []

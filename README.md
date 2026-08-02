@@ -33,7 +33,7 @@
 
 ## ✨ Overview
 
-`@bymax-one/nest-realtime` is a **transport-agnostic realtime channel** shipped as a single npm package with **3 subpath exports** — covering the NestJS server module, the shared type contracts, and the React hooks that consume them.
+`@bymax-one/nest-realtime` is a **transport-agnostic realtime channel** shipped as a single npm package with **4 subpath exports** — covering the SSE server module, the WebSocket module, the shared type contracts, and the React hooks that consume them.
 
 The default transport is **Server-Sent Events**: browser-native, plain HTTP, no client library to ship. WebSocket via Socket.IO is one config flag away, and `'both'` runs them side by side. Your application code calls the same `RealtimeService` either way — the transport is a deployment decision, not an architectural one.
 
@@ -56,8 +56,8 @@ pnpm add @bymax-one/nest-realtime
 ### 📡 Transports
 
 - ✅ **SSE (default)** — native browser reconnect, `Last-Event-ID` replay, `: keepalive` heartbeat tuned for real proxies
-- ✅ **WebSocket (opt-in)** — Socket.IO gateway behind `transport: 'websocket'`, with full-duplex `emit`
-- ✅ **Composite mode** — `transport: 'both'` fans a single emit out to clients on either transport
+- ✅ **WebSocket (opt-in)** — Socket.IO gateway behind the `/websocket` subpath, with full-duplex `emit`; an SSE app never installs it
+- ✅ **Composite mode** — `transport: 'both'`, also on the `/websocket` subpath, fans a single emit out to clients on either transport
 - ✅ **Unified contract** — every transport implements `ITransport`, so `RealtimeService` never branches
 
 ### 🔐 Security & Auth
@@ -78,7 +78,7 @@ pnpm add @bymax-one/nest-realtime
 
 ### 🧩 Developer Experience
 
-- ✅ **3 subpath exports** — server, shared types, and React; tree-shakeable, ESM + CJS dual output
+- ✅ **4 subpath exports** — server, WebSocket, shared types, and React; tree-shakeable, ESM + CJS dual output
 - ✅ **Dynamic module** — `forRoot()` and `forRootAsync()` with `useFactory` / `useClass` / `useExisting`
 - ✅ **Strict TypeScript, zero `any`** — `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` on
 - ✅ **Horizontal scaling** — `IRealtimePubSub` for SSE fan-out, `@socket.io/redis-adapter` for WebSocket
@@ -88,21 +88,24 @@ pnpm add @bymax-one/nest-realtime
 
 ## 📦 Subpath Exports
 
-One package, three entry points — import only what your app needs:
+One package, four entry points — import only what your app needs:
 
-| Subpath    | Import                            | Purpose                                        |  Dependencies   |
-| ---------- | --------------------------------- | ---------------------------------------------- | :-------------: |
-| **Server** | `@bymax-one/nest-realtime`        | NestJS module, transports, services, contracts | NestJS 11, rxjs |
-| **Shared** | `@bymax-one/nest-realtime/shared` | Types, room prefixes, event names, error codes |      None       |
-| **React**  | `@bymax-one/nest-realtime/react`  | Hooks & `RealtimeProvider`                     |    React 19     |
+| Subpath       | Import                               | Purpose                                        |                           Dependencies                            |
+| ------------- | ------------------------------------ | ---------------------------------------------- | :---------------------------------------------------------------: |
+| **Server**    | `@bymax-one/nest-realtime`           | NestJS module for SSE, services, contracts     |                          NestJS 11, rxjs                          |
+| **WebSocket** | `@bymax-one/nest-realtime/websocket` | NestJS module for `'websocket'` and `'both'`   | + `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io` |
+| **Shared**    | `@bymax-one/nest-realtime/shared`    | Types, room prefixes, event names, error codes |                               None                                |
+| **React**     | `@bymax-one/nest-realtime/react`     | Hooks & `RealtimeProvider`                     |                             React 19                              |
 
 ```
-shared (zero deps)
-  ↗            ↖
-server         react
+       shared (zero deps)
+      ↗        ↑        ↖
+ server    websocket    react
 ```
 
 The `shared` subpath carries no Node or NestJS import, so the same event names and error codes are used on both sides of the wire without duplicating a constant.
+
+**The `websocket` subpath exists so the server one costs nothing extra.** Everything that touches `@nestjs/websockets`, `@nestjs/platform-socket.io` and `socket.io` is reachable only through it, so an application on SSE — the default transport — never installs the Socket.IO stack. Importing it is what opts in, in the install as much as in the configuration.
 
 ---
 
@@ -131,7 +134,7 @@ yarn add @bymax-one/nest-realtime
 # Server subpath (required)
 pnpm add @nestjs/common @nestjs/core rxjs reflect-metadata
 
-# WebSocket transport (optional — only for transport: 'websocket' | 'both')
+# WebSocket subpath (optional — only when you import @bymax-one/nest-realtime/websocket)
 pnpm add @nestjs/websockets @nestjs/platform-socket.io socket.io
 
 # Horizontal scaling (optional)
