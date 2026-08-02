@@ -68,7 +68,7 @@
   },
   "scripts": {
     "build": "pnpm clean && tsup",
-    "check:exports": "attw --pack .",
+    "check:exports": "attw --pack . --profile strict",
     "check:published": "node scripts/check-published-surface.mjs",
     "clean": "rm -rf dist coverage",
     "lint": "eslint src",
