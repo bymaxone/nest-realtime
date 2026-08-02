@@ -1,11 +1,20 @@
 # OpenSSF Scorecard supply-chain health checks; results published to the
-# code-scanning dashboard. Runs weekly and whenever branch protection changes.
+# code-scanning dashboard and to the public Scorecard API that backs the README
+# badge.
+#
+# `push` on the default branch matters as much as the schedule: the API only
+# knows a repository once a run has published for it, so a weekly-only trigger
+# leaves the badge reporting `invalid repo path` for up to a week after the
+# repository becomes public — which is exactly what happened here.
 name: Scorecard
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '0 7 * * 1'
   branch_protection_rule:
+  workflow_dispatch:
 
 permissions:
   contents: read
