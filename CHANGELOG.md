@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-08-02
+
+### Fixed
+
+- **The published declarations required `@types/express`, which the package does
+  not depend on.** `dist/internal/index.d.ts` imported `Request` and `Response`
+  from `express`, so a consumer compiling with `skipLibCheck: false` failed with
+  `TS2307: Cannot find module 'express'` on the root and `./websocket` subpaths.
+  `express` is not a dependency, nor a peer, nor an optional peer, so there was no
+  supported way to satisfy it.
+
+  The SSE endpoint reads three fields from the request — `headers`, `ip`, `query` —
+  and does two things to the response: sets the anti-buffering headers, and writes
+  the keepalive comment. Those are now described by `SseRequest` and
+  `SseResponse`, structural contracts an `express.Request` satisfies without being
+  named by it. The same shape is what a Fastify request
+  provides, so the endpoint no longer assumes a platform it never required.
+
+  Runtime is unaffected: no bundle ever imported `express`, and the only change to
+  the built JavaScript is two JSDoc lines.
+
+### Changed
+
+- **`pnpm check:surface` now also checks what the published declarations import.**
+  Every module a `.d.ts` names has to be a declared peer, `./internal` included —
+  the root's declarations re-export from it, so an undeclared import there reaches
+  the consumer's compiler just the same. `tsc` could not see this (it only checks
+  what this repository references) and neither could `attw` (it checks that
+  declarations resolve, not what they contain).
+
 ## [1.0.3] - 2026-08-02
 
 ### Fixed
@@ -167,7 +197,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/bymaxone/nest-realtime/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-realtime/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/bymaxone/nest-realtime/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-realtime/compare/v1.0.0...v1.0.1

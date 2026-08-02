@@ -4,8 +4,8 @@
  */
 import { Controller, Inject, Req, Res, Sse } from '@nestjs/common'
 import type { MessageEvent, Type } from '@nestjs/common'
-import type { Request, Response } from 'express'
 import type { Observable } from 'rxjs'
+import type { SseRequest, SseResponse } from '../interfaces/sse-http.interface'
 import { SseSubscriptionHandler } from '../transports/sse/sse-subscription.handler'
 
 /**
@@ -28,8 +28,8 @@ export function createSseController(endpoint: string): Type<unknown> {
 
     @Sse(ssePath)
     subscribe(
-      @Req() req: Request,
-      @Res({ passthrough: true }) res: Response,
+      @Req() req: SseRequest,
+      @Res({ passthrough: true }) res: SseResponse,
     ): Promise<Observable<MessageEvent>> {
       // Anti-buffering headers are set by SseSubscriptionHandler.handle — no duplication here.
       return this.handler.handle(req, res)

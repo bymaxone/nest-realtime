@@ -5,7 +5,6 @@
 import { randomUUID } from 'node:crypto'
 import { Inject, Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
-import type { Request, Response } from 'express'
 import { EMPTY, merge, Observable, of, Subject } from 'rxjs'
 import type { Subscriber, Subscription } from 'rxjs'
 import { catchError, finalize, takeUntil } from 'rxjs/operators'
@@ -24,6 +23,7 @@ import type {
 } from '../../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
+import type { SseRequest, SseResponse } from '../../interfaces/sse-http.interface'
 import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { SseTransport } from './sse.transport'
@@ -41,14 +41,14 @@ function singleHeader(value: string | string[] | undefined): string | undefined 
  * proxy sets it. Do not use the resolved IP for security decisions without validating
  * the proxy chain.
  */
-function resolveIp(req: Request): string {
+function resolveIp(req: SseRequest): string {
   const forwarded = req.headers['x-forwarded-for']
   const candidate = (typeof forwarded === 'string' ? forwarded.split(',')[0] : undefined) ?? ''
   return candidate.trim() || req.ip || 'unknown'
 }
 
 /** Normalize header names to lowercase and flatten array values. */
-function normalizeHeaders(headers: Request['headers']): Record<string, string | undefined> {
+function normalizeHeaders(headers: SseRequest['headers']): Record<string, string | undefined> {
   const out = Object.create(null) as Record<string, string | undefined>
   for (const [key, value] of Object.entries(headers)) {
     out[key.toLowerCase()] = Array.isArray(value) ? value.join(',') : value
@@ -56,8 +56,8 @@ function normalizeHeaders(headers: Request['headers']): Record<string, string | 
   return out
 }
 
-/** Coerce Express's `ParsedQs` to flat string values (arrays/objects become undefined). */
-function sanitizeQuery(query: Request['query']): Record<string, string | undefined> {
+/** Coerce parsed query values to flat strings (arrays/objects become undefined). */
+function sanitizeQuery(query: SseRequest['query']): Record<string, string | undefined> {
   const out = Object.create(null) as Record<string, string | undefined>
   for (const [key, value] of Object.entries(query)) {
     out[key] = typeof value === 'string' ? value : undefined
@@ -66,7 +66,7 @@ function sanitizeQuery(query: Request['query']): Record<string, string | undefin
 }
 
 /** Build the transport-agnostic auth context from the HTTP request. */
-function buildAuthContext(req: Request): ConnectionAuthContext {
+function buildAuthContext(req: SseRequest): ConnectionAuthContext {
   const headers = normalizeHeaders(req.headers)
   // EventSource cannot send custom headers — `authorization` is never a valid SSE
   // auth channel. Strip it so a non-browser client cannot smuggle a bearer token.
@@ -116,7 +116,7 @@ interface StreamParams {
   resolvedAuth: AuthenticationResult
   ip: string
   userAgent: string | undefined
-  res: Response
+  res: SseResponse
   subject: Subject<MessageEvent>
   close$: Subject<void>
   established$: Observable<MessageEvent>
@@ -156,12 +156,12 @@ export class SseSubscriptionHandler {
    * wires the downstream listener BEFORE calling `registerConnection` — so a plain
    * `Subject` suffices and the replay buffer cannot grow unboundedly.
    *
-   * @param req - The Express request (SSE GET).
-   * @param res - The Express response (passthrough for header mutations and heartbeat writes).
+   * @param req - The incoming request (SSE GET).
+   * @param res - The response (passthrough for header mutations and heartbeat writes).
    * @returns An Observable of `MessageEvent` values for NestJS `@Sse` to stream.
    * @throws UnauthorizedException when authentication returns null.
    */
-  async handle(req: Request, res: Response): Promise<Observable<MessageEvent>> {
+  async handle(req: SseRequest, res: SseResponse): Promise<Observable<MessageEvent>> {
     // Anti-buffering headers must be sent before the first byte.
     res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('X-Accel-Buffering', 'no')

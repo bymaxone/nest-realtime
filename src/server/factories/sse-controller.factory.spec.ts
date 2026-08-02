@@ -6,6 +6,7 @@ import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import type { Observable } from 'rxjs'
 import { Subject } from 'rxjs'
+import type { SseRequest, SseResponse } from '../interfaces/sse-http.interface'
 import type { SseSubscriptionHandler } from '../transports/sse/sse-subscription.handler'
 import { createSseController } from './sse-controller.factory'
 
@@ -85,6 +86,19 @@ describe('createSseController', () => {
     const cls = createSseController('realtime/sse')
     const path = Reflect.getMetadata('path', cls.prototype.subscribe) as string
     expect(path).toBe('realtime/sse')
+  })
+
+  // The endpoint is mounted on Express by default, so an `express.Request` has to
+  // stay assignable to the structural contract the controller declares. Naming
+  // Express in that contract would publish `@types/express` into the declarations
+  // of every consumer, so the compatibility is checked here rather than assumed.
+  it('accepts an express request and response through the structural contract', () => {
+    const asSseRequest: (value: Request) => SseRequest = (value) => value
+    const asSseResponse: (value: Response) => SseResponse = (value) => value
+    const req = mkReq()
+    const res = mkRes()
+    expect(asSseRequest(req)).toBe(req)
+    expect(asSseResponse(res)).toBe(res)
   })
 
   it('registers a different path for each factory call (no shared state)', () => {

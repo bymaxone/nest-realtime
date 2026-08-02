@@ -121,9 +121,13 @@ grep -E "^import.*socket.io-client" dist/react/index.mjs    # must return zero
 ```
 
 Public-surface audit — every exported name per subpath against a checked-in
-snapshot, failing on additions as well as removals. A type exported for consumers
+snapshot, failing on additions as well as removals, plus every module the
+declarations import, which must be a declared peer. A type exported for consumers
 and referenced nowhere internally is invisible to `tsc`, to `attw` and to the
-README snippets, so it can vanish from a barrel with every other gate green:
+README snippets, so it can vanish from a barrel with every other gate green; and a
+declaration that imports an undeclared package breaks every consumer compiling
+with `skipLibCheck: false`, which is how `@types/express` became a hidden
+requirement:
 
 ```bash
 pnpm check:surface            # verify

@@ -291,7 +291,8 @@ Before marking any change complete:
 - [ ] `pnpm typecheck && pnpm lint` → clean
 - [ ] `pnpm test:cov` → 100% line/branch on every modified file
 - [ ] `pnpm build && pnpm size` → all budgets and bundle boundaries green
-- [ ] `pnpm check:surface` → no export added or removed without updating the snapshot
+- [ ] `pnpm check:surface` → no export added or removed without updating the snapshot,
+      and no declaration imports a package the manifest does not declare
 - [ ] `pnpm check:runtime` → a consumer boots NestJS against the tarball in ESM and CJS
 - [ ] Nothing under `src/websocket/` imports `src/server/` relatively — shared code
       comes from `@bymax-one/nest-realtime/internal`, or the bundles duplicate it
