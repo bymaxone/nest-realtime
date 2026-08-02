@@ -2755,6 +2755,3 @@ In containers, configure `ulimits` in the compose/docker.
 > 2. Generate `docs/tasks/phase-NN-<slug>.md` (Layer 3) — one file per phase — with executable tasks
 > 3. Code bootstrap following the plan
 > 4. Release `v0.1.0` on npm
-> </content>
-
-</invoke>
