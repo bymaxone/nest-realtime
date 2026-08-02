@@ -116,3 +116,16 @@ updates:
     commit-message:
       prefix: ci
       include: scope
+    groups:
+      # init, analyze and upload-sarif are one product shipped as three actions
+      # and they refuse to work across versions: analyze fails with "Loaded a
+      # configuration file for version 'X', but running version 'Y'". Bumped
+      # separately, the first PR to land breaks the CodeQL job until the rest
+      # follow — observed on #58.
+      codeql-action:
+        patterns:
+          - 'github/codeql-action*'
+        update-types:
+          - major
+          - minor
+          - patch

@@ -42,6 +42,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run cross-instance E2E tests
-        run: pnpm test:e2e -- --testPathPattern=cross-instance
+        # Its own config, not a CLI filter on the per-PR one: a path filter
+        # cannot re-include what `testPathIgnorePatterns` excluded, so this step
+        # reported success while running no tests. That config also sets
+        # `passWithNoTests: false`, so the same breakage now fails loudly.
+        run: pnpm test:e2e:cross-instance
         env:
           REDIS_URL: redis://localhost:6379
