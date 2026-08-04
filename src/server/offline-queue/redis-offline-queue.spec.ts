@@ -2,6 +2,7 @@
  * @fileoverview Unit tests for RedisOfflineQueue using ioredis-mock.
  * @layer infrastructure
  */
+import { inspect } from 'node:util'
 import RedisMock from 'ioredis-mock'
 import type { Redis } from 'ioredis'
 import type { OfflineQueuedEvent } from '../interfaces/offline-queue-storage.interface'
@@ -241,5 +242,17 @@ describe('RedisOfflineQueue', () => {
     await queue.acknowledge('u1', '999-999999')
     expect(zremSpy).not.toHaveBeenCalled()
     zremSpy.mockRestore()
+  })
+  it('keeps the Redis client out of every serialization path', () => {
+    // An ioredis instance carries `options.password` as a plain field, and this
+    // queue is referenced from the module options, so exposing the client leads
+    // a structured logger or an error reporter straight to the credentials.
+    const password = 'r3d1s-canary'
+    const client = { options: { password } } as unknown as Redis
+    const queue = new RedisOfflineQueue({ client })
+
+    expect(JSON.stringify(queue)).not.toContain(password)
+    expect(JSON.stringify({ ...queue })).not.toContain(password)
+    expect(inspect(queue, { depth: null, showHidden: true })).not.toContain(password)
   })
 })

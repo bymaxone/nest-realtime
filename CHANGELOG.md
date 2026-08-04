@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-08-04
+
+### Security
+
+- The Redis credentials are no longer disclosed when the adapters that hold a client are
+  serialized. `RedisOfflineQueue` and `RedisRealtimePubSub` kept their ioredis instances
+  in TypeScript `private` properties, which are erased at runtime and leave enumerable
+  own properties, and an ioredis instance carries `options.password` as a plain field.
+  `JSON.stringify`, object spread and `util.inspect` therefore reached the password —
+  and, because both adapters are referenced from the module options, so did anything that
+  serialized those. Both clients and the lazily created subscriber connection move to
+  ECMAScript private fields.
+
+Reading on purpose is unchanged and no public type or export moved.
+
 ## [1.0.4] - 2026-08-02
 
 ### Fixed
@@ -197,7 +212,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/bymaxone/nest-realtime/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-realtime/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-realtime/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/bymaxone/nest-realtime/compare/v1.0.1...v1.0.2
