@@ -36,19 +36,28 @@ export interface RedisRealtimePubSubOptions {
  * ```
  */
 export class RedisRealtimePubSub implements IRealtimePubSub {
-  private readonly pub: Redis
+  /**
+   * The publishing Redis client.
+   *
+   * An ECMAScript private field for the same reason as the subscriber below: an
+   * ioredis instance carries `options.password` as a plain field, and a
+   * TypeScript `private` one is erased at runtime, leaving it enumerable to
+   * anything that serializes this pubsub adapter.
+   */
+  readonly #pub: Redis
   private readonly channel: string
-  private subInit: Promise<Redis> | null = null
+  /** The lazily created subscriber connection, which carries the same credentials. */
+  #subInit: Promise<Redis> | null = null
   private readonly handlers = new Set<(message: RealtimePubSubMessage) => void>()
 
   constructor(options: RedisRealtimePubSubOptions) {
-    this.pub = options.client
+    this.#pub = options.client
     this.channel = options.channel ?? 'bymax:realtime'
   }
 
   /** JSON-encodes the message and PUBLISHes it to the configured channel. */
   async publish(message: RealtimePubSubMessage): Promise<void> {
-    await this.pub.publish(this.channel, JSON.stringify(message))
+    await this.#pub.publish(this.channel, JSON.stringify(message))
   }
 
   /**
@@ -70,13 +79,13 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       // Atomically undo the handler registration and clear the failed init promise
       // so the next subscribe() retries with a fresh client.
       this.handlers.delete(handler)
-      this.subInit = null
+      this.#subInit = null
       throw err
     }
     return async () => {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {
-        this.subInit = null
+        this.#subInit = null
         try {
           await sub.quit()
         } catch {
@@ -89,12 +98,12 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
 
   /** Lazily create the single shared subscribe client (idempotent under concurrent calls). */
   private ensureSubscriber(): Promise<Redis> {
-    if (!this.subInit) this.subInit = this.createSubscriber()
-    return this.subInit
+    if (!this.#subInit) this.#subInit = this.createSubscriber()
+    return this.#subInit
   }
 
   private async createSubscriber(): Promise<Redis> {
-    const sub = this.pub.duplicate()
+    const sub = this.#pub.duplicate()
     await sub.subscribe(this.channel)
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
     return sub

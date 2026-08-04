@@ -2,6 +2,7 @@
  * @fileoverview Unit tests for RedisRealtimePubSub using ioredis-mock.
  * @layer infrastructure
  */
+import { inspect } from 'node:util'
 import RedisMock from 'ioredis-mock'
 import type { Redis } from 'ioredis'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
@@ -247,5 +248,17 @@ describe('RedisRealtimePubSub', () => {
     await pubsub.subscribe(jest.fn())
     await unsub1()
     expect(quitMock).not.toHaveBeenCalled()
+  })
+  it('keeps the Redis clients out of every serialization path', () => {
+    // Both the publisher and the lazily created subscriber carry
+    // `options.password`, so neither may remain reachable by walking the
+    // adapter — which is what a logger does when it renders its arguments.
+    const password = 'r3d1s-canary'
+    const client = { options: { password } } as unknown as Redis
+    const pubsub = new RedisRealtimePubSub({ client })
+
+    expect(JSON.stringify(pubsub)).not.toContain(password)
+    expect(JSON.stringify({ ...pubsub })).not.toContain(password)
+    expect(inspect(pubsub, { depth: null, showHidden: true })).not.toContain(password)
   })
 })

@@ -39,7 +39,16 @@ export interface RedisOfflineQueueOptions {
  * ```
  */
 export class RedisOfflineQueue implements IOfflineQueueStorage {
-  private readonly client: Redis
+  /**
+   * The Redis client.
+   *
+   * An ECMAScript private field rather than a TypeScript `private` one, which
+   * is erased at runtime: an ioredis instance carries `options.password` as a
+   * plain field, so leaving this enumerable would let anything that serializes
+   * this queue — or the module options that reference it — reach the Redis
+   * credentials.
+   */
+  readonly #client: Redis
   private readonly maxPerUser: number
   private readonly ttlSeconds: number
 
@@ -50,7 +59,7 @@ export class RedisOfflineQueue implements IOfflineQueueStorage {
   private static readonly COUNTER_PAD = 6
 
   constructor(options: RedisOfflineQueueOptions) {
-    this.client = options.client
+    this.#client = options.client
     this.maxPerUser = options.maxPerUser ?? 500
     this.ttlSeconds = options.ttlSeconds ?? 3600
   }
@@ -102,7 +111,7 @@ export class RedisOfflineQueue implements IOfflineQueueStorage {
 
   async append(userId: string, event: OfflineQueuedEvent): Promise<void> {
     const key = this.key(userId)
-    const pipeline = this.client.pipeline()
+    const pipeline = this.#client.pipeline()
     // Score 0 for all entries; lexicographic member ordering provides exact sorting.
     pipeline.zadd(key, 0, this.encodeMember(event))
     // Trim oldest entries beyond the per-user cap.
@@ -122,7 +131,7 @@ export class RedisOfflineQueue implements IOfflineQueueStorage {
     // Inclusive lower bound starting at the next key after sinceId excludes the
     // sinceId event itself while correctly ordering same-millisecond events.
     const lowerBound = `[${this.lexKeyNext(sinceId)}`
-    const raw = await this.client.zrangebylex(this.key(userId), lowerBound, '+', 'LIMIT', 0, limit)
+    const raw = await this.#client.zrangebylex(this.key(userId), lowerBound, '+', 'LIMIT', 0, limit)
     return raw.map(
       (entry) =>
         JSON.parse(entry.slice(entry.indexOf('|') + 1), (k, value: unknown) =>
@@ -135,9 +144,9 @@ export class RedisOfflineQueue implements IOfflineQueueStorage {
     // Exclusive upper bound just past the last possible member with key = upToId
     // ensures the upToId event itself is included in the removal range.
     const upperBound = `(${this.lexKeyNext(upToId)}`
-    const toRemove = await this.client.zrangebylex(this.key(userId), '-', upperBound)
+    const toRemove = await this.#client.zrangebylex(this.key(userId), '-', upperBound)
     if (toRemove.length > 0) {
-      await this.client.zrem(this.key(userId), ...toRemove)
+      await this.#client.zrem(this.key(userId), ...toRemove)
     }
   }
 }
