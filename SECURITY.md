@@ -3,14 +3,14 @@
 ## Supported Versions
 
 | Version | Supported |
-|---|---|
-| `0.1.x` | ✅ |
+| ------- | --------- |
+| `0.1.x` | ✅        |
 
 ## Reporting a Vulnerability
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report security issues privately to **security@bymax.one**. Include:
+Report security issues privately to **support@bymax.one**. Include:
 
 - A description of the vulnerability
 - Steps to reproduce
@@ -40,7 +40,7 @@ interface IConnectionAuthenticator {
 
 - **This library's responsibility:** call `authenticate()` on every new connection; reject (HTTP 401 / WebSocket disconnect) when it returns `null`; call `revalidate()` periodically according to `reauthenticationPolicy`; close connections that fail revalidation.
 - **Consumer's responsibility:** implement `IConnectionAuthenticator` securely; validate credentials correctly; return `null` for invalid/expired credentials.
-- **Out of scope:** vulnerabilities in *bridge implementations* (e.g. the `@bymax-one/nest-auth` bridge for NestJS JWT) are the responsibility of those packages, not this library. Report such issues to the corresponding project.
+- **Out of scope:** vulnerabilities in _bridge implementations_ (e.g. the `@bymax-one/nest-auth` bridge for NestJS JWT) are the responsibility of those packages, not this library. Report such issues to the corresponding project.
 
 ### EventSource Auth Pattern
 
@@ -119,4 +119,4 @@ npm audit signatures @bymax-one/nest-realtime
 
 For non-security bugs and feature requests, use [GitHub Issues](https://github.com/bymaxone/nest-realtime/issues).
 
-For security issues: **security@bymax.one**
+For security issues: **support@bymax.one**
