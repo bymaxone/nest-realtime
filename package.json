@@ -1,7 +1,7 @@
 {
   "name": "@bymax-one/nest-realtime",
   "version": "1.0.5",
-  "description": "Realtime backend → frontend communication for NestJS — dual-transport SSE (default) and WebSocket (opt-in) with a unified server-side API.",
+  "description": "Realtime backend \u2192 frontend communication for NestJS \u2014 dual-transport SSE (default) and WebSocket (opt-in) with a unified server-side API.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
   "homepage": "https://github.com/bymaxone/nest-realtime#readme",
@@ -206,7 +206,7 @@
     "tsup": "^8.0.0",
     "typescript": "^5.6.0"
   },
-  "packageManager": "pnpm@11.0.0",
+  "packageManager": "pnpm@11.20.0",
   "engines": {
     "node": ">=24.0.0"
   },
