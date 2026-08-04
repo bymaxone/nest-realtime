@@ -28,7 +28,7 @@ Residual (non-mechanical) risk: fine-tuning the bundle budgets once the real `di
 8. **`CompositeTransport.kind === 'sse'`** (the dominant transport). `ITransport.kind` is `'sse' | 'websocket'` — never `'both'`.
 9. **Cross-instance emit shape** — the public `emit*` / `broadcast` / `disconnect` methods do local delivery **plus a single publish**; the pub/sub subscriber re-emits via local-only paths (`emitToUserLocal` / `emitToTenantLocal` / `emitToRoomLocal` / `broadcastLocal` / `disconnectLocal`); cross-instance revocation uses an `op: 'disconnect'` producer. Any architectural description (AGENTS.md) must match this.
 10. **Three subpaths only** — `.` (server), `./shared`, `./react`. The published tarball ships **only** `dist/` + `package.json` + `README.md` + `LICENSE` + `CHANGELOG.md`.
-11. **Tooling** — `pnpm@11.0.0`, Node.js 24+, Conventional Commits (no `Co-Authored-By` trailer), npm publish **with provenance**.
+11. **Tooling** — `pnpm@11.20.0`, Node.js 24+, Conventional Commits (no `Co-Authored-By` trailer), npm publish **with provenance**.
 
 ---
 
@@ -484,7 +484,7 @@ You are a senior CI/CD engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — public npm library; dual-transport realtime for NestJS 11.
 Bymax CI conventions: least-privilege permissions, concurrency, pinned actions, OIDC provenance
-for publishing. pnpm@11.0.0, Node.js 24.
+for publishing. pnpm@11.20.0, Node.js 24.
 
 CURRENT PHASE: 6 (Release v0.1.0) — Task 6.5 of 10.
 
