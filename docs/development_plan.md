@@ -369,7 +369,7 @@ Copy from the sibling lib `../nest-auth/` and adapt (replace `nest-auth` with `n
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },
-  "packageManager": "pnpm@11.0.0",
+  "packageManager": "pnpm@11.20.0",
   "engines": { "node": ">=24.0.0" },
   "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" }
 }
@@ -473,7 +473,7 @@ ls -la dist/react/
 
 **Risks/Notes:**
 
-- ⚠️ `pnpm@11.0.0` is a requirement; using a different major can break lockfile resolution
+- ⚠️ `pnpm@11.20.0` is a requirement; using a different major can break lockfile resolution
 - ⚠️ Node 24 LTS is the minimum for the server entry; the React entry has `platform: 'neutral'` and `target: 'es2022'` because it is browser-side code
 - ⚠️ Do not copy `tsup.config.ts` from nest-auth literally — nest-auth has 5 entries (server/shared/client/react/nextjs), nest-realtime has 3 (server/shared/react), and `external` is larger because of socket.io
 - ⚠️ `socket.io-client` appearing in the static bundle of `dist/react/index.mjs` is a failure — validate in §6.5 (Phase 5)

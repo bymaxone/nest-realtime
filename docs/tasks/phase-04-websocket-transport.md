@@ -1075,7 +1075,7 @@ Consolidated Phase 4 validation: run the full gate, confirm 100% coverage and th
 You are a senior NestJS release/QA engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push for NestJS (SSE default,
-WebSocket opt-in), framework-agnostic auth via dependency inversion. pnpm@11.0.0.
+WebSocket opt-in), framework-agnostic auth via dependency inversion. pnpm@11.20.0.
 
 CURRENT PHASE: 4 (WebSocket Transport) — Task 4.12 of 12 (LAST).
 

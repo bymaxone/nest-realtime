@@ -75,7 +75,7 @@ Update these places, then the cross-doc rows:
 - **`socket.io-client` must stay out of the SSE-only bundle** — loaded via `await import()` only. Gate: `grep socket.io-client dist/react/index.mjs` returns zero.
 - **Code-Craft Standard** — TS strict (no `any`); **100% line/branch coverage** per implemented file; mutation **Stryker break 95** (high 99 / low 95) pre-release; functions ≤ 50 lines, files ≤ 800; `@fileoverview` + `@layer` header per file; official-docs-first (context7) before using any library; English-only, **timeless** comments (no Phase/Task references in committed code).
 - **Bundle budgets (KiB-brotli)** — server `dist/server/index.mjs` ≤ 18 KB brotli; React SSE-only `dist/react/index.mjs` ≤ 4 KiB brotli.
-- **Zero `dependencies`** — `package.json` ships `"dependencies": {}`; `rxjs` + `reflect-metadata` are the only required peers; everything else is an optional peer in `peerDependenciesMeta`. `packageManager: pnpm@11.0.0`.
+- **Zero `dependencies`** — `package.json` ships `"dependencies": {}`; `rxjs` + `reflect-metadata` are the only required peers; everything else is an optional peer in `peerDependenciesMeta`. `packageManager: pnpm@11.20.0`.
 - **CI green from the first PR** — `ci`/`codeql`/`scorecard` are created in Phase 1 and pass on every PR (incremental-safe gates: `jest --passWithNoTests`, coverage on implemented files, size budgets); `release.yml` is tag-driven and exercised in Phase 6.
 - **No `.gitkeep`/placeholder dirs** — directories emerge on demand when the first real file is written.
 - **MVP scope** — v0.1 ships SSE (default) + WebSocket (opt-in) + `'both'` + React hooks; presence (`IPresenceStorage`/`usePresence`) is wired only when the consumer configures it.

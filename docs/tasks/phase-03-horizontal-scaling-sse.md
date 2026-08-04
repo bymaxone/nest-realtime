@@ -30,7 +30,7 @@ This phase makes the SSE transport **horizontal-scaling capable**. It delivers t
 10. **`maxConnectionsPerUser` is enforced by FIFO eviction**, never by a 429: evict the user's **oldest** connection (close it with `REALTIME_TOO_MANY_CONNECTIONS`) and admit the new one. This phase does not add new limit logic but must not regress it.
 11. **Event-id ordering invariant.** The in-memory `EventReplayBuffer.since()` and the Redis offline queue's `retrieveSince()` both compare ids as **strings** (`e.id > sinceId`). `EventIdGenerator` emits lexicographically-orderable, fixed-width ids — keep the comparisons identical across both code paths.
 12. **`ioredis` is an optional peer dependency** and the lib never imports it at runtime: the Redis reference classes use a **type-only** `import type Redis from 'ioredis'` so `pnpm typecheck` / `pnpm build` succeed when `ioredis` is not installed. Tests run against `ioredis-mock` (a devDependency).
-13. **Quality floor.** TypeScript strict (no `any`); **100% line/branch coverage on every file implemented in this phase** (Bymax library standard); mutation focus (Stryker — break 95, high 99 / low 95) on the critical paths at the pre-release gate; functions ≤ 50 lines, files ≤ 800; `@fileoverview` + `@layer` header and JSDoc on every export. Toolchain is **pnpm@11.0.0**. Server bundle budget: **≤ 18 KB brotli**.
+13. **Quality floor.** TypeScript strict (no `any`); **100% line/branch coverage on every file implemented in this phase** (Bymax library standard); mutation focus (Stryker — break 95, high 99 / low 95) on the critical paths at the pre-release gate; functions ≤ 50 lines, files ≤ 800; `@fileoverview` + `@layer` header and JSDoc on every export. Toolchain is **pnpm@11.20.0**. Server bundle budget: **≤ 18 KB brotli**.
 
 ---
 
@@ -94,7 +94,7 @@ You are a senior NestJS backend engineer working on @bymax-one/nest-realtime.
 PROJECT: @bymax-one/nest-realtime — a dual-transport (SSE-default, WebSocket opt-in) realtime
 library for NestJS. Backend entry `@bymax-one/nest-realtime`; frontend `@bymax-one/nest-realtime/react`.
 The library NEVER imports a concrete auth library — authentication is inverted via
-`IConnectionAuthenticator`. Toolchain pnpm@11.0.0, TypeScript strict, tsup build.
+`IConnectionAuthenticator`. Toolchain pnpm@11.20.0, TypeScript strict, tsup build.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.1 of 11 (FIRST of the phase)
 
@@ -203,7 +203,7 @@ You are a senior NestJS backend engineer (distributed-systems focus) working on 
 
 PROJECT: @bymax-one/nest-realtime — dual-transport (SSE-default, WebSocket opt-in) realtime library
 for NestJS. Backend `@bymax-one/nest-realtime`; frontend `@bymax-one/nest-realtime/react`. Auth is
-inverted via `IConnectionAuthenticator` — the lib never imports a concrete auth library. pnpm@11.0.0,
+inverted via `IConnectionAuthenticator` — the lib never imports a concrete auth library. pnpm@11.20.0,
 TypeScript strict, tsup.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.2 of 11
@@ -376,7 +376,7 @@ You are a senior NestJS backend engineer (Redis/distributed-systems focus) worki
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. Auth inverted via
 `IConnectionAuthenticator`; the lib never imports a concrete auth library and never imports `ioredis`
-at runtime. pnpm@11.0.0, TypeScript strict, tsup.
+at runtime. pnpm@11.20.0, TypeScript strict, tsup.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.3 of 11
 
@@ -515,7 +515,7 @@ Deliver the durable per-user offline queue. The `IOfflineQueueStorage` interface
 You are a senior NestJS backend engineer (Redis/durable-storage focus) working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. Auth inverted; the lib
-never imports a concrete auth library and never imports `ioredis` at runtime. pnpm@11.0.0, TS strict, tsup.
+never imports a concrete auth library and never imports `ioredis` at runtime. pnpm@11.20.0, TS strict, tsup.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.4 of 11
 
@@ -664,7 +664,7 @@ Wire `BymaxRealtimeModule.forRoot` and `forRootAsync` to provide the pub/sub and
 You are a senior NestJS module/DI engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. Auth inverted; the lib
-never imports a concrete auth library and never imports `ioredis` at runtime. pnpm@11.0.0, TS strict, tsup.
+never imports a concrete auth library and never imports `ioredis` at runtime. pnpm@11.20.0, TS strict, tsup.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.5 of 11
 
@@ -781,7 +781,7 @@ Refresh the `InMemoryPubSub` spec for the async fan-out refactor: prove async de
 ````
 You are a senior NestJS test engineer working on @bymax-one/nest-realtime.
 
-PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.0.0, Jest +
+PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.20.0, Jest +
 ts-jest, TS strict. Bymax library standard: 100% per-file coverage, every `it()` carries a comment.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.6 of 11
@@ -850,7 +850,7 @@ Cover the subscriber: lifecycle (subscribe on init, unsubscribe on shutdown), ec
 ````
 You are a senior NestJS test engineer working on @bymax-one/nest-realtime.
 
-PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.0.0, Jest +
+PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.20.0, Jest +
 ts-jest, TS strict. Bymax standard: 100% per-file coverage, every `it()` carries a comment.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.7 of 11
@@ -927,7 +927,7 @@ Cover `RedisRealtimePubSub` against `ioredis-mock` (a devDependency): JSON publi
 ````
 You are a senior NestJS test engineer (Redis focus) working on @bymax-one/nest-realtime.
 
-PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.0.0, Jest +
+PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.20.0, Jest +
 ts-jest, TS strict. The lib never imports `ioredis` at runtime; tests use `ioredis-mock` (devDep).
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.8 of 11
@@ -1007,7 +1007,7 @@ Cover the offline queue against `ioredis-mock` and the delivery wiring as an int
 ````
 You are a senior NestJS test engineer (Redis focus) working on @bymax-one/nest-realtime.
 
-PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.0.0, Jest +
+PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.20.0, Jest +
 ts-jest, TS strict. The lib never imports `ioredis` at runtime; tests use `ioredis-mock`.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.9 of 11
@@ -1091,7 +1091,7 @@ The decisive test for the phase: prove that an emit on one instance reaches a co
 ````
 You are a senior NestJS test engineer (distributed-systems focus) working on @bymax-one/nest-realtime.
 
-PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.0.0, Jest +
+PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.20.0, Jest +
 ts-jest, TS strict. The lib never imports `ioredis` at runtime; tests use `ioredis-mock`.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.10 of 11
@@ -1185,7 +1185,7 @@ Consolidated phase gate: run the full static + test + build + size pipeline, con
 ````
 You are a senior NestJS release engineer working on @bymax-one/nest-realtime.
 
-PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.0.0, TS strict,
+PROJECT: @bymax-one/nest-realtime — dual-transport realtime library for NestJS. pnpm@11.20.0, TS strict,
 tsup build, Jest. Library standard: 100% per-file coverage; server bundle ≤ 18 KB brotli.
 
 CURRENT PHASE: 3 (Horizontal Scaling — SSE) — Task 3.11 of 11 (LAST of the phase)

@@ -33,7 +33,7 @@ Tests run under a `jsdom` Jest project with a reusable `EventSource` mock and a 
 8. **100% line/branch coverage per implemented file** (Bymax library standard). Mutation focus via Stryker (`break 95`, high 99 / low 95) on the critical paths at the pre-release gate. Critical paths: `use-realtime-sse.ts`, `use-realtime-ws.ts`, `use-realtime.ts`, `realtime-provider.tsx`.
 9. **TS strict, no `any`.** The dynamically imported socket handle is typed as `unknown` and narrowed via inline casts — never `any`. Functions ≤ 50 lines, files ≤ 800; `@fileoverview` + `@layer` header per file; JSDoc with `@example` on every public export.
 10. **Public barrel hygiene.** Do **not** export internals (`useRealtimeSse`, `useRealtimeWs`) from `src/react/index.ts`; only the public hooks, provider, and convenience type re-exports.
-11. **Toolchain.** `pnpm@11.0.0`; gates are `pnpm typecheck`, `pnpm lint`, `pnpm test:cov`, `pnpm build`, `pnpm size`. The `react` Jest project runs under `jsdom`; the `server`/`shared` project stays on `node`.
+11. **Toolchain.** `pnpm@11.20.0`; gates are `pnpm typecheck`, `pnpm lint`, `pnpm test:cov`, `pnpm build`, `pnpm size`. The `react` Jest project runs under `jsdom`; the `server`/`shared` project stays on `node`.
 
 ---
 

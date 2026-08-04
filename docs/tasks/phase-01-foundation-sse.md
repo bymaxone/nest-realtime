@@ -35,7 +35,7 @@ Files that bear the highest mutation focus at the pre-release gate are `connecti
 10. **`EventReplayBuffer` injects `REALTIME_OPTIONS_TOKEN`.** The cap is parenthesized: `const cap = this.opts.sse?.replayBufferSize ?? 100; if (buf.length > cap) buf.shift()` — never `buf.length > this.opts.sse?.replayBufferSize ?? 100` (which parses as `(buf.length > x) ?? 100` and leaves the buffer unbounded).
 11. **DI tokens are `Symbol`s.** Explicit DI throughout; the eight injection tokens are unique `Symbol`s to avoid string collisions.
 12. **`REALTIME_TOO_MANY_CONNECTIONS` is FIFO eviction, not a 429.** When a user exceeds `maxConnectionsPerUser`, evict the user's **oldest** connection (close it with `REALTIME_TOO_MANY_CONNECTIONS`) and admit the new one — never reject the new connection with HTTP 429.
-13. **Toolchain & budgets.** `packageManager: "pnpm@11.0.0"`, `engines.node >= 24.0.0`. Bundle budgets are **brotli** (never gzip): server ≤ 18 KB, shared ≤ 3 KB, react ≤ 4 KiB.
+13. **Toolchain & budgets.** `packageManager: "pnpm@11.20.0"`, `engines.node >= 24.0.0`. Bundle budgets are **brotli** (never gzip): server ≤ 18 KB, shared ≤ 3 KB, react ≤ 4 KiB.
 
 ---
 
@@ -135,7 +135,7 @@ Create `package.json` with these critical fields:
   `@testing-library/react`, `supertest`, `eventsource`.
 - `"scripts"`: build (tsup), lint, test, test:cov, test:e2e, test:cov:all, mutation,
   mutation:incremental, mutation:dry-run, typecheck, size, clean, prepublishOnly, release.
-- `"packageManager": "pnpm@11.0.0"`, `"engines": { "node": ">=24.0.0" }`.
+- `"packageManager": "pnpm@11.20.0"`, `"engines": { "node": ">=24.0.0" }`.
 - `"publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" }`.
 
 After creating it, run `pnpm install` at the repo root. Confirm `pnpm-lock.yaml` is generated and

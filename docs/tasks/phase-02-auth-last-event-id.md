@@ -30,7 +30,7 @@ When this phase is done, a consumer can authenticate via cookie or ticket, recon
 8. **Emit is local delivery + a single publish.** Public `emitTo*` methods deliver locally **and** publish once; the buffer `append` happens on the local-only path (`emitToUserLocal`). The pub/sub subscriber dispatches remote messages to the **non-publishing** `*Local` methods only. `disconnect()` closes locally when the connection is owned by this instance, otherwise publishes `op:'disconnect'` so the owning instance closes it (the producer §8.4 cross-instance revocation depends on).
 9. **Reserved event names are owned by the lib.** `connection:established` and `connection:reauthentication-failed` (payload `{ reason: string }`) must not be reused for custom events.
 10. **SSE response hardening.** The SSE route sends `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`; never put HTTP body compression in front of `text/event-stream`.
-11. **TS strict, no `any`, no `eslint-disable` / `@ts-ignore`.** Functions ≤ 50 lines, files ≤ 800; `@fileoverview` + `@layer` header per file; JSDoc on every export. Conventional Commits, `pnpm@11.0.0`.
+11. **TS strict, no `any`, no `eslint-disable` / `@ts-ignore`.** Functions ≤ 50 lines, files ≤ 800; `@fileoverview` + `@layer` header per file; JSDoc on every export. Conventional Commits, `pnpm@11.20.0`.
 
 ---
 
@@ -99,7 +99,7 @@ You are a senior NestJS realtime engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — a dual-transport (SSE-default, WebSocket opt-in) realtime
 push library for NestJS 11, published to npm. SSE-first, auth-agnostic: the consumer plugs an
-`IConnectionAuthenticator`; the library NEVER imports a concrete auth library. pnpm@11.0.0,
+`IConnectionAuthenticator`; the library NEVER imports a concrete auth library. pnpm@11.20.0,
 TypeScript strict.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.1 of 12 (FIRST, structural).
@@ -263,7 +263,7 @@ You are a senior NestJS security engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport (SSE-default, WebSocket opt-in) realtime push
 library for NestJS 11. Auth-agnostic: the consumer plugs an `IConnectionAuthenticator`; the library
-NEVER imports a concrete auth library. pnpm@11.0.0, TypeScript strict.
+NEVER imports a concrete auth library. pnpm@11.20.0, TypeScript strict.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.2 of 12.
 
@@ -367,7 +367,7 @@ You are a senior NestJS security engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
 Auth-agnostic; the library NEVER imports a concrete auth library. The sibling auth library is
-`@bymax-one/nest-auth` (repo `../nest-auth`). pnpm@11.0.0, TypeScript strict.
+`@bymax-one/nest-auth` (repo `../nest-auth`). pnpm@11.20.0, TypeScript strict.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.3 of 12.
 
@@ -494,7 +494,7 @@ You are a senior NestJS realtime engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
 Auth-agnostic; the library NEVER imports a concrete auth library — it only calls the
-`IConnectionAuthenticator` contract. pnpm@11.0.0, TypeScript strict.
+`IConnectionAuthenticator` contract. pnpm@11.20.0, TypeScript strict.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.4 of 12.
 
@@ -646,7 +646,7 @@ A pure utility that encodes a NestJS `MessageEvent` into the exact SSE wire form
 You are a senior NestJS realtime engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
-pnpm@11.0.0, TypeScript strict.
+pnpm@11.20.0, TypeScript strict.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.5 of 12.
 
@@ -756,7 +756,7 @@ When `EventSource` reconnects, the browser automatically resends the `Last-Event
 You are a senior NestJS realtime engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
-pnpm@11.0.0, TypeScript strict.
+pnpm@11.20.0, TypeScript strict.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.6 of 12.
 
@@ -875,7 +875,7 @@ Phase 1 shipped a symbolic heartbeat. Harden it for real proxies: the configured
 You are a senior NestJS realtime / infra engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
-pnpm@11.0.0, TypeScript strict.
+pnpm@11.20.0, TypeScript strict.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.7 of 12.
 
@@ -968,7 +968,7 @@ Add `BymaxRealtimeModule.forRootAsync(asyncOptions)` so consumers can resolve op
 You are a senior NestJS module-architecture engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
-pnpm@11.0.0, TypeScript strict.
+pnpm@11.20.0, TypeScript strict.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.8 of 12.
 
@@ -1105,7 +1105,7 @@ Specs for the three authentication patterns using the fixtures from Task 2.2, pl
 You are a senior NestJS test engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
-pnpm@11.0.0, TypeScript strict. Tests run with Jest (ts-jest) bounded at maxWorkers 50%.
+pnpm@11.20.0, TypeScript strict. Tests run with Jest (ts-jest) bounded at maxWorkers 50%.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.9 of 12.
 
@@ -1183,7 +1183,7 @@ Specs for the periodic re-authentication cycle and the wired lifecycle hooks, us
 You are a senior NestJS test engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
-pnpm@11.0.0, TypeScript strict. Tests run with Jest (ts-jest), maxWorkers 50%.
+pnpm@11.20.0, TypeScript strict. Tests run with Jest (ts-jest), maxWorkers 50%.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.10 of 12.
 
@@ -1259,7 +1259,7 @@ Specs for the SSE encoder (a critical path — mutation focus ≥ 95%) and for t
 You are a senior NestJS test engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
-pnpm@11.0.0, TypeScript strict. Tests run with Jest (ts-jest), maxWorkers 50%.
+pnpm@11.20.0, TypeScript strict. Tests run with Jest (ts-jest), maxWorkers 50%.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.11 of 12.
 
@@ -1334,7 +1334,7 @@ Run the full gate set, an extended smoke test (cookie connect → `connection:es
 You are a senior NestJS release engineer closing Phase 2 of @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime push library for NestJS 11.
-pnpm@11.0.0, TypeScript strict.
+pnpm@11.20.0, TypeScript strict.
 
 CURRENT PHASE: 2 (Auth + Last-Event-ID + Reauthentication) — Task 2.12 of 12 (LAST).
 
