@@ -42,18 +42,18 @@ Residual (non-mechanical) risk: fine-tuning the bundle budgets once the real `di
 
 ## Task index
 
-| ID | Task | Status | Priority | Size | Depends on |
-|---|---|---|---|---|---|
-| 6.1 | `README.md` with badges + 4 Quick-Start scenarios | ✅ Done | P0 | M | 5.12 |
-| 6.2 | `CHANGELOG.md` (Keep a Changelog format) | ✅ Done | P0 | S | 1.1 |
-| 6.3 | `SECURITY.md` (auth-inversion + CORS + anti-IDOR) | ✅ Done | P0 | S | 1.1 |
-| 6.4 | `CLAUDE.md` + `AGENTS.md` agent quick reference | ✅ Done | P1 | M | 1.1 |
-| 6.5 | Finalize CI — `release.yml` + scheduled cross-instance e2e (verify the Phase-1 workflows) | ✅ Done | P0 | M | 1.16 |
-| 6.6 | Mutation-testing plan + results + baseline run | ✅ Done | P1 | M | 5.12 |
-| 6.7 | `LICENSE` (MIT) + finalized `.npmignore` | ✅ Done | P0 | S | 1.1 |
-| 6.8 | Final bundle-size budgets | ✅ Done | P1 | S | 5.12 |
-| 6.9 | Final pre-publish gate | ✅ Done | P0 | S | 6.1…6.8 |
-| 6.10 | Tag `v0.1.0` + npm publish `--provenance` | 📋 ToDo | P0 | S | 6.9 |
+| ID   | Task                                                                                      | Status  | Priority | Size | Depends on |
+| ---- | ----------------------------------------------------------------------------------------- | ------- | -------- | ---- | ---------- |
+| 6.1  | `README.md` with badges + 4 Quick-Start scenarios                                         | ✅ Done | P0       | M    | 5.12       |
+| 6.2  | `CHANGELOG.md` (Keep a Changelog format)                                                  | ✅ Done | P0       | S    | 1.1        |
+| 6.3  | `SECURITY.md` (auth-inversion + CORS + anti-IDOR)                                         | ✅ Done | P0       | S    | 1.1        |
+| 6.4  | `CLAUDE.md` + `AGENTS.md` agent quick reference                                           | ✅ Done | P1       | M    | 1.1        |
+| 6.5  | Finalize CI — `release.yml` + scheduled cross-instance e2e (verify the Phase-1 workflows) | ✅ Done | P0       | M    | 1.16       |
+| 6.6  | Mutation-testing plan + results + baseline run                                            | ✅ Done | P1       | M    | 5.12       |
+| 6.7  | `LICENSE` (MIT) + finalized `.npmignore`                                                  | ✅ Done | P0       | S    | 1.1        |
+| 6.8  | Final bundle-size budgets                                                                 | ✅ Done | P1       | S    | 5.12       |
+| 6.9  | Final pre-publish gate                                                                    | ✅ Done | P0       | S    | 6.1…6.8    |
+| 6.10 | Tag `v0.1.0` + npm publish `--provenance`                                                 | 📋 ToDo | P0       | S    | 6.9        |
 
 ---
 
@@ -285,7 +285,7 @@ Author `SECURITY.md` from the `../nest-auth/SECURITY.md` template, adapted for r
 
 #### Acceptance criteria
 
-- [ ] `SECURITY.md` present, with supported-versions and a private-disclosure process (contact `security@bymax.one`; ask reporters not to open public issues for vulnerabilities).
+- [ ] `SECURITY.md` present, with supported-versions and a private-disclosure process (contact `support@bymax.one`; ask reporters not to open public issues for vulnerabilities).
 - [ ] A section on **auth-inversion responsibility**: the lib does not verify JWTs, hash passwords, etc.; it only calls the consumer-provided `IConnectionAuthenticator`. Vulnerabilities in **bridges** (e.g. the `@bymax-one/nest-auth` bridge) must be reported to the corresponding project, not this lib.
 - [ ] A section on **CORS configuration**: the consumer is responsible; the lib exposes `CorsConfig` in `SseOptions` and `WebSocketOptions`.
 - [ ] A section on **anti-IDOR**: the lib only emits to rooms; the consumer must not emit cross-tenant improperly (server-side tenant isolation via the room registry).
@@ -296,7 +296,7 @@ Author `SECURITY.md` from the `../nest-auth/SECURITY.md` template, adapted for r
 
 #### Agent prompt
 
-````
+```
 You are a senior NestJS library maintainer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime for NestJS 11; auth inverted via
@@ -320,7 +320,7 @@ Create `SECURITY.md` adapted for nest-realtime.
 
 DELIVERABLES
 - Copy the nest-auth structure; replace every `nest-auth` reference with `nest-realtime`.
-- Supported versions + a private disclosure process. Security contact: `security@bymax.one`.
+- Supported versions + a private disclosure process. Security contact: `support@bymax.one`.
 - A section "Auth-inversion responsibility": the lib never verifies JWTs / hashes passwords / imports
   an auth library — it only calls the consumer's `IConnectionAuthenticator`. A vulnerability in a
   bridge implementation (e.g. the `@bymax-one/nest-auth` bridge) is reported to that project, not here.
@@ -344,7 +344,7 @@ Completion Protocol (after you finish):
 5. Update this phase's row in docs/development_plan.md §1.5 Phase dashboard (Status + Progress + Last updated) AND the docs/tasks/README.md folder index.
 6. Recompute Overall progress (phases + M/73 tasks, %) in docs/development_plan.md §1.4.
 7. Append a completion-log entry: - 6.3 ✅ <YYYY-MM-DD> — <one-line summary>.
-````
+```
 
 ---
 
@@ -375,7 +375,7 @@ Author `CLAUDE.md` (a concise AI-agent quick reference) and `AGENTS.md` (a deepe
 
 #### Agent prompt
 
-````
+```
 You are a senior NestJS library author documenting @bymax-one/nest-realtime for AI agents.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime for NestJS 11 (SSE default, WebSocket
@@ -448,7 +448,7 @@ Completion Protocol (after you finish):
 5. Update this phase's row in docs/development_plan.md §1.5 Phase dashboard (Status + Progress + Last updated) AND the docs/tasks/README.md folder index.
 6. Recompute Overall progress (phases + M/73 tasks, %) in docs/development_plan.md §1.4.
 7. Append a completion-log entry: - 6.4 ✅ <YYYY-MM-DD> — <one-line summary>.
-````
+```
 
 ---
 
@@ -593,7 +593,7 @@ Author `docs/mutation_testing_plan.md`, run the mutation-testing baseline, and r
 
 #### Agent prompt
 
-````
+```
 You are a senior test/quality engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — dual-transport realtime for NestJS 11. Quality floor: 100%
@@ -645,7 +645,7 @@ Completion Protocol (after you finish):
 5. Update this phase's row in docs/development_plan.md §1.5 Phase dashboard (Status + Progress + Last updated) AND the docs/tasks/README.md folder index.
 6. Recompute Overall progress (phases + M/73 tasks, %) in docs/development_plan.md §1.4.
 7. Append a completion-log entry: - 6.6 ✅ <YYYY-MM-DD> — <one-line summary>.
-````
+```
 
 ---
 
@@ -673,7 +673,7 @@ Add the MIT `LICENSE` and finalize `.npmignore` so the published tarball ships o
 
 #### Agent prompt
 
-````
+```
 You are a senior npm release engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — public npm library. The published tarball must contain only the
@@ -714,7 +714,7 @@ Completion Protocol (after you finish):
 5. Update this phase's row in docs/development_plan.md §1.5 Phase dashboard (Status + Progress + Last updated) AND the docs/tasks/README.md folder index.
 6. Recompute Overall progress (phases + M/73 tasks, %) in docs/development_plan.md §1.4.
 7. Append a completion-log entry: - 6.7 ✅ <YYYY-MM-DD> — <one-line summary>.
-````
+```
 
 ---
 
@@ -741,7 +741,7 @@ Measure the real brotli bundle sizes of all three subpaths and calibrate the bud
 
 #### Agent prompt
 
-````
+```
 You are a senior build/bundle engineer working on @bymax-one/nest-realtime.
 
 PROJECT: @bymax-one/nest-realtime — public npm library; three subpaths (`.`, `./shared`, `./react`).
@@ -787,7 +787,7 @@ Completion Protocol (after you finish):
 5. Update this phase's row in docs/development_plan.md §1.5 Phase dashboard (Status + Progress + Last updated) AND the docs/tasks/README.md folder index.
 6. Recompute Overall progress (phases + M/73 tasks, %) in docs/development_plan.md §1.4.
 7. Append a completion-log entry: - 6.8 ✅ <YYYY-MM-DD> — <one-line summary>.
-````
+```
 
 ---
 

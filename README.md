@@ -644,7 +644,7 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm size
 
 ## 🔒 Security Policy
 
-If you discover a security vulnerability, please **do not** open a public issue. Instead, email us at **security@bymax.one** with details. We take security seriously and will respond promptly. Full policy and scope: [SECURITY.md](./SECURITY.md).
+If you discover a security vulnerability, please **do not** open a public issue. Instead, email us at **support@bymax.one** with details. We take security seriously and will respond promptly. Full policy and scope: [SECURITY.md](./SECURITY.md).
 
 ---
 
