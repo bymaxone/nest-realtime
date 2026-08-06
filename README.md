@@ -461,8 +461,8 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 A realtime channel fails in ways that are hard to reproduce — dropped streams, races between reconnect and revocation, one instance not seeing another's emit. The suite is built so those failures are caught by a test, not by a user.
 
 - ✅ **100% coverage** — statements, branches, functions, and lines, enforced as a release gate
-- ✅ **100.00% mutation score** — 678 / 683 mutants killed, verified with [Stryker](https://stryker-mutator.io/) (break threshold 95)
-- ✅ **607 tests** — 574 unit and integration across 36 suites, plus 33 end-to-end across 6
+- ✅ **100.00% mutation score** — 655 killed and 7 timed out, zero survivors, verified with [Stryker](https://stryker-mutator.io/) (break threshold 95)
+- ✅ **626 tests** — 593 unit and integration across 37 suites, plus 33 end-to-end across 6
 - ✅ **Cross-instance e2e** — real Redis pub/sub fan-out between two live instances, not a mocked channel
 - ✅ **Bundle-size gate** — the SSE-only React bundle is measured on every build and fails over budget
 
