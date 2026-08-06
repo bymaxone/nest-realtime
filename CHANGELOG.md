@@ -229,6 +229,7 @@ First published release.
   asked about NestJS and never put the same question to the other ten peers.
 
 [Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.5...HEAD
+[1.0.6]: https://github.com/bymaxone/nest-realtime/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/bymaxone/nest-realtime/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-realtime/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-realtime/compare/v1.0.2...v1.0.3
