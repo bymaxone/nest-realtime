@@ -14,7 +14,7 @@
   <a href="https://www.npmjs.com/package/@bymax-one/nest-realtime"><img src="https://img.shields.io/npm/dm/@bymax-one/nest-realtime?style=flat-square&colorA=000000&colorB=000000" alt="npm downloads" /></a>
   <a href="https://github.com/bymaxone/nest-realtime/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/bymaxone/nest-realtime/ci.yml?branch=main&style=flat-square&colorA=000000&label=CI" alt="CI status" /></a>
   <a href="https://github.com/bymaxone/nest-realtime/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&colorA=000000" alt="coverage" /></a>
-  <a href="https://github.com/bymaxone/nest-realtime/blob/main/docs/mutation_testing_results.md"><img src="https://img.shields.io/badge/mutation-99.27%25-brightgreen?style=flat-square&colorA=000000" alt="mutation score" /></a>
+  <a href="https://github.com/bymaxone/nest-realtime/blob/main/docs/mutation_testing_results.md"><img src="https://img.shields.io/badge/mutation-100.00%25-brightgreen?style=flat-square&colorA=000000" alt="mutation score" /></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/bymaxone/nest-realtime"><img src="https://api.scorecard.dev/projects/github.com/bymaxone/nest-realtime/badge?style=flat-square" alt="OpenSSF Scorecard" /></a>
   <a href="https://github.com/bymaxone/nest-realtime/blob/main/LICENSE"><img src="https://img.shields.io/github/license/bymaxone/nest-realtime?style=flat-square&colorA=000000&colorB=000000" alt="license" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
@@ -461,7 +461,7 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 A realtime channel fails in ways that are hard to reproduce — dropped streams, races between reconnect and revocation, one instance not seeing another's emit. The suite is built so those failures are caught by a test, not by a user.
 
 - ✅ **100% coverage** — statements, branches, functions, and lines, enforced as a release gate
-- ✅ **99.27% mutation score** — 678 / 683 mutants killed, verified with [Stryker](https://stryker-mutator.io/) (break threshold 95)
+- ✅ **100.00% mutation score** — 678 / 683 mutants killed, verified with [Stryker](https://stryker-mutator.io/) (break threshold 95)
 - ✅ **607 tests** — 574 unit and integration across 36 suites, plus 33 end-to-end across 6
 - ✅ **Cross-instance e2e** — real Redis pub/sub fan-out between two live instances, not a mocked channel
 - ✅ **Bundle-size gate** — the SSE-only React bundle is measured on every build and fails over budget

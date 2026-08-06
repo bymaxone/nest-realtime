@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] — 2026-08-06
+
+**Runtime change.** `dist/` differs from `1.0.5`: the source carries new mutation-suppression
+comments, and this package's bundler preserves comments.
+
+### Documentation
+
+- The mutation badge said **99.27%**; the measured score is **100.00%**.
+
+### Tests
+
+- The SSE stream teardown is pinned: unsubscribing the outer stream leaves the merged subject
+  unobserved. RxJS reaches that through the subscriber linkage even without the explicit
+  `inner.unsubscribe()`, which the report records — the behaviour is worth pinning whichever way
+  it is achieved.
+
 ## [1.0.5] - 2026-08-04
 
 ### Security
