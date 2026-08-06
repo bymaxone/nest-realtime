@@ -143,6 +143,31 @@ describe('SseSubscriptionHandler', () => {
     expect(heartbeat.start).toHaveBeenCalledWith(expect.any(String), expect.anything(), 45_000)
   })
 
+  // Unsubscribing the stream has to tear the INNER pipeline down as well. Every other case here
+  // unsubscribes and then asserts something that happened during subscribe, so a teardown that
+  // does nothing reads exactly the same — while in a server it leaks the merged subscription and
+  // its `takeUntil` for every disconnected client: one leak per dropped SSE connection.
+  it('tears the inner pipeline down when the caller unsubscribes', async () => {
+    let capturedSubject: Subject<MessageEvent> | undefined
+    const transport = mkTransport({
+      registerConnection: jest
+        .fn()
+        .mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+          capturedSubject = params.subject
+        }),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const stream = await handler.handle(mkReq(), mkRes())
+
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    const observedWhileOpen = capturedSubject?.observed
+    sub.unsubscribe()
+
+    expect(observedWhileOpen).toBe(true)
+    expect(capturedSubject?.observed).toBe(false)
+  })
+
   // With no heartbeatMs option, the default 30 000 ms is used.
   it('uses the default heartbeat interval when sse.heartbeatMs is unset', async () => {
     const transport = mkTransport()

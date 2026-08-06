@@ -189,6 +189,7 @@ export class SseSubscriptionHandler {
     const replayEvents = lastEventId
       ? this.transport.getReplayEvents(resolvedAuth.userId, lastEventId)
       : []
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — `of()` with no arguments emits nothing and completes, exactly as `EMPTY` does; the guard picks the clearer expression, not a different stream
     const replay$ = replayEvents.length > 0 ? of(...replayEvents) : EMPTY
 
     const ringBufferIds = new Set(replayEvents.map((e) => e.id ?? ''))
@@ -238,6 +239,7 @@ export class SseSubscriptionHandler {
         void this.offlineDelivery?.acknowledge(p.resolvedAuth.userId, p.queueEvents)
       }
       this.activateConnection(p, subscriber)
+      // Stryker disable next-line ArrowFunction: equivalent — `subscribePipeline` ends in `.subscribe(subscriber)`, and RxJS registers that source subscription as a teardown of `subscriber` itself, so closing the outer one already unwinds the inner. Verified by removing this teardown: the merged subject loses its observer either way. It stays because the ownership should be explicit and must not depend on that linkage
       return () => inner.unsubscribe()
     })
   }
@@ -250,6 +252,7 @@ export class SseSubscriptionHandler {
    */
   private subscribePipeline(p: StreamParams, subscriber: Subscriber<MessageEvent>): Subscription {
     const { connectionId, subject, close$, established$, replay$, queueEvents } = p
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — same as the replay stream above; `of()` with no arguments is `EMPTY`
     const queueReplay$ = queueEvents.length > 0 ? of(...queueEvents.map(toMessageEvent)) : EMPTY
     return merge(established$, replay$, queueReplay$, subject)
       .pipe(
