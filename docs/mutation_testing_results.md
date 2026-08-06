@@ -9,7 +9,7 @@
 | Run date                  | 2026-06-30                                       |
 | Tool                      | Stryker Mutator 8.x                              |
 | Thresholds                | high: 99, low: 95, **break: 95**                 |
-| **Global mutation score** | **99.27% — 678 / 683**                           |
+| **Global mutation score** (superseded — see the dated re-run) | **99.27% — 678 / 683**                           |
 | Exit code                 | **0 (PASS — well above break threshold of 95%)** |
 | Report                    | `reports/mutation/mutation.html`                 |
 
@@ -186,3 +186,30 @@ Same reasoning as Mutant 2, applied to the `queueEvents.length` guard. The diver
 RxJS 7's subscription linkage automatically triggers teardown logic (including `finalize` operators) when the outer `Subscriber` closes, regardless of whether an explicit teardown function is returned from `subscribe`. The explicit `inner.unsubscribe()` call is therefore redundant: verified empirically, `finalize` fires identically in both variants during test execution. The teardown is a defensive pattern that improves clarity but does not alter observable behavior.
 
 **Proof of equivalence:** RxJS 7 `Subscriber` auto-propagates unsubscription to chained observables via `_teardown`. The explicit teardown provides no additional signal because the inner observable's completion path is already wired through `finalize`.
+
+---
+
+## Re-run — 2026-08-06
+
+| Metric              | Value            |
+| ------------------- | ---------------- |
+| **Mutation score**  | **100.00 %**  |
+| Surviving mutants   | 0               |
+| Break threshold     | 95 % -> PASS     |
+
+All five survivors were equivalent, and proving the last one took running it rather than reading
+it. `subscribePipeline` ends in `.subscribe(subscriber)`, and RxJS registers that source
+subscription as a teardown of `subscriber` itself, so closing the outer one already unwinds the
+inner — removing the explicit `inner.unsubscribe()` by hand leaves the suite green and the merged
+subject unobserved. It stays because ownership should be explicit rather than inherited from that
+linkage, and a test now pins the teardown whichever way it is achieved.
+
+The other four are `of(...events)` against `EMPTY` on an empty array. `of()` with no arguments
+emits nothing and completes, exactly as `EMPTY` does — checked, not assumed.
+
+Every equivalence claim in this section was checked by running the mutant, not by reading it.
+Where a `// Stryker disable next-line` directive was found not to apply — above a `} catch {`, a
+`.replace()` inside a method chain, a multi-line `sort(...)` argument, or anywhere inside a
+builder chain — it was replaced with the block `disable`/`restore` form, or, where that does not
+work either, with a plain comment at the line so the reasoning is visible rather than silently
+ineffective.

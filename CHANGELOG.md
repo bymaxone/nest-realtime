@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-08-06
+
+**Published-artifact change, not a behavioural one.** `dist/` differs from `1.0.5` — this
+bundler preserves comments and the source gained mutation-suppression notes — but no runtime
+path changed. Measured by building both revisions and diffing the output.
+
+### Documentation
+
+- The mutation badge said **99.27%**; the measured score is **100.00%**.
+
+### Tests
+
+- The SSE stream teardown is pinned: unsubscribing the outer stream leaves the merged subject
+  unobserved. RxJS reaches that through the subscriber linkage even without the explicit
+  `inner.unsubscribe()`, which the report records — the behaviour is worth pinning whichever way
+  it is achieved.
+
 ## [1.0.5] - 2026-08-04
 
 ### Security
@@ -213,6 +230,7 @@ First published release.
   asked about NestJS and never put the same question to the other ten peers.
 
 [Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.5...HEAD
+[1.0.6]: https://github.com/bymaxone/nest-realtime/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/bymaxone/nest-realtime/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-realtime/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-realtime/compare/v1.0.2...v1.0.3
