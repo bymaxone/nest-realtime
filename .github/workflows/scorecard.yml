@@ -62,7 +62,7 @@ jobs:
           else
             # Covers internal as well as private.
             echo "public=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipped on a $visibility repository: uploading results needs a GitHub Code Security licence, which is only free on public repositories."
+            echo "::notice::Skipped on a $visibility repository: uploading results needs a GitHub Code Security license, which is only free on public repositories."
           fi
 
   # OpenSSF Scorecard publishes SARIF to code scanning (GitHub Advanced Security),
