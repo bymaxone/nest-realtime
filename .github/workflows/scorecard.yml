@@ -32,14 +32,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
-          visibility=$(gh api "repos/$REPO" --jq .visibility)
+          set -uo pipefail
+
+          # Retried rather than trusted once: a rate limit or a blip would
+          # otherwise decide whether the repository counts as public.
+          visibility=""
+          for attempt in 1 2 3; do
+            visibility=$(gh api "repos/$REPO" --jq .visibility 2>/dev/null) && break
+            sleep $(( attempt * 5 ))
+          done
+
+          if [ -z "$visibility" ]; then
+            # Degrade to "not public" instead of failing the workflow. The scan
+            # cannot run without knowing, and a red workflow over a transient API
+            # error is noise; the warning keeps it from being silent.
+            echo "::warning::Could not determine repository visibility after 3 attempts; treating it as non-public."
+            echo "public=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           echo "visibility: $visibility"
           if [ "$visibility" = "public" ]; then
             echo "public=true" >> "$GITHUB_OUTPUT"
           else
+            # Covers internal as well as private: neither can publish results.
             echo "public=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Scorecard is skipped on a $visibility repository."
+            echo "::notice::Skipped on a $visibility repository."
           fi
 
   # OpenSSF Scorecard publishes SARIF to code scanning (GitHub Advanced Security),
@@ -47,7 +65,7 @@ jobs:
   analysis:
     name: analysis
     needs: visibility
-    if: needs.visibility.outputs.public == 'true'
+    if: ${{ needs.visibility.outputs.public == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
