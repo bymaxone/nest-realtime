@@ -20,11 +20,34 @@ permissions:
   contents: read
 
 jobs:
+  visibility:
+    name: Repository visibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      public: ${{ steps.check.outputs.public }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          visibility=$(gh api "repos/$REPO" --jq .visibility)
+          echo "visibility: $visibility"
+          if [ "$visibility" = "public" ]; then
+            echo "public=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "public=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Scorecard is skipped on a $visibility repository."
+          fi
+
   # OpenSSF Scorecard publishes SARIF to code scanning (GitHub Advanced Security),
   # free only on public repositories — gate on public visibility.
   analysis:
     name: analysis
-    if: ${{ github.event.repository.visibility == 'public' }}
+    needs: visibility
+    if: needs.visibility.outputs.public == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
