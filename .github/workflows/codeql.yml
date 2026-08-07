@@ -1,9 +1,8 @@
-# Static security analysis (CodeQL) for JavaScript/TypeScript.
+# CodeQL — thin caller of the org-wide reusable analysis (bymaxone/.github).
 #
-# `push` on the default branch matters beyond redundancy with `pull_request`:
-# Scorecard's SAST check scores the ratio of commits that were scanned, and a
-# PR-only trigger leaves every squashed merge commit unscanned. That showed up
-# as `SAST tool detected but not run on all commits`.
+# The whole definition, including the public-repository gate that decides
+# whether scanning may run at all, lives in bymaxone/.github so the licensing
+# rule exists once rather than in every repository that copies it.
 name: CodeQL
 
 on:
@@ -13,25 +12,16 @@ on:
   schedule:
     - cron: '0 6 * * 1'
 
-permissions:
-  contents: read
-
 jobs:
-  # CodeQL code scanning needs GitHub Advanced Security, free only on public
-  # repositories — gate on public visibility so it is skipped (CI green) while the
-  # repository is private and runs automatically once it is public.
-  analyze:
-    name: analyze
-    if: ${{ github.event.repository.visibility == 'public' }}
-    runs-on: ubuntu-latest
+  # Job id is the convention across the org: it prefixes the reported check,
+  # so every repo shows `codeql / Analyze (<language>)` under the same name.
+  codeql:
+    # Declared on the calling job, which is the only place that reaches the
+    # called workflow: a job that sets its own permissions replaces the
+    # workflow-level set rather than intersecting with it, and a called
+    # workflow cannot be granted more than its caller holds.
     permissions:
-      security-events: write
       contents: read
+      security-events: write
       actions: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
-        with:
-          languages: javascript-typescript
-      - uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+    uses: bymaxone/.github/.github/workflows/codeql.yml@v1
