@@ -33,13 +33,36 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          visibility=$(gh api "repos/$REPO" --jq .visibility)
+
+          # The assignment sits inside `if`, which `set -e` does not act on, so
+          # the retry works without disabling error checking for the rest of the
+          # step — a failed write to $GITHUB_OUTPUT must still fail the job.
+          visibility=""
+          for attempt in 1 2 3; do
+            if visibility=$(gh api "repos/$REPO" --jq .visibility 2>/dev/null); then
+              break
+            fi
+            visibility=""
+            if [ "$attempt" -lt 3 ]; then
+              sleep $(( attempt * 5 ))
+            fi
+          done
+
+          if [ -z "$visibility" ]; then
+            # Degraded rather than failed: a red workflow over a transient API
+            # error is noise, and the warning keeps it from being silent.
+            echo "::warning::Could not determine repository visibility after 3 attempts; treating it as non-public and skipping."
+            echo "public=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           echo "visibility: $visibility"
           if [ "$visibility" = "public" ]; then
             echo "public=true" >> "$GITHUB_OUTPUT"
           else
+            # Covers internal as well as private.
             echo "public=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Scorecard is skipped on a $visibility repository."
+            echo "::notice::Skipped on a $visibility repository: uploading results needs a GitHub Code Security licence, which is only free on public repositories."
           fi
 
   # OpenSSF Scorecard publishes SARIF to code scanning (GitHub Advanced Security),
@@ -47,7 +70,7 @@ jobs:
   analysis:
     name: analysis
     needs: visibility
-    if: needs.visibility.outputs.public == 'true'
+    if: ${{ needs.visibility.outputs.public == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
