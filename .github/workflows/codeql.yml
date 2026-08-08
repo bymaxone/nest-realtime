@@ -12,6 +12,12 @@ on:
   schedule:
     - cron: '0 6 * * 1'
 
+# Added to match the rest of the libraries: without it, repeated pushes to a
+# branch leave several analyses of the same ref running at once.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
 # Least privilege for anything that does not declare its own. The `codeql` job
 # below replaces this set rather than intersecting with it, so this floor governs
 # any job added later that forgets to think about it.
@@ -31,3 +37,11 @@ jobs:
       security-events: write
       actions: read
     uses: bymaxone/.github/.github/workflows/codeql.yml@bcd95609cd724e6d86168f3dd6e40eff4d2077ad # v1
+    with:
+      # Added to match the rest of the libraries. Audit policy: it records the
+      # job's outbound calls and blocks nothing, so it cannot fail a build that
+      # was passing, and it makes an unexpected destination visible.
+      harden-runner: true
+      # Added to match the rest of the libraries: a superset of the default
+      # suite, so this analyses strictly more than before rather than less.
+      queries: security-extended
