@@ -52,7 +52,7 @@ pnpm mutation
 Incremental mode (for iterative development after the first baseline):
 
 ```bash
-pnpm mutation:incremental
+pnpm mutation:full
 ```
 
 ### Equivalent mutant documentation
@@ -91,7 +91,7 @@ These files represent the core correctness invariants of the library. Any surviv
 After the first full baseline:
 
 1. Make code changes.
-2. Run `pnpm mutation:incremental` — Stryker re-tests only affected mutants.
+2. Run `pnpm mutation:full` — Stryker re-tests only affected mutants.
 3. If new surviving mutants appear, either fix the tests or document the equivalence.
 4. Before tagging any release, run `pnpm mutation` (full, not incremental) to confirm the final score.
 
