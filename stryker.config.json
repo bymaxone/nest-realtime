@@ -33,5 +33,7 @@
     "clear-text",
     "progress"
   ],
-  "tempDirName": ".stryker-tmp"
+  "tempDirName": ".stryker-tmp",
+  "incremental": true,
+  "incrementalFile": "reports/stryker-incremental.json"
 }
