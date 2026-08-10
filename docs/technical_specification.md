@@ -2415,7 +2415,7 @@ Deliverables:
 - [ ] `SseTransport` + `SseController` + heartbeat
 - [ ] `RealtimeService` (delegation to transport)
 - [ ] `BymaxRealtimeModule.forRoot()` + `forRootAsync()`
-- [ ] Unit tests at **100% line/branch per implemented file** (Bymax library standard); ≥ 95% mutation on critical paths at the pre-release gate
+- [ ] Unit tests at **100% line/branch per implemented file** (Bymax library standard); 100% mutation at the pre-release gate
 
 Validation:
 
