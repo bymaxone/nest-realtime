@@ -148,7 +148,7 @@ pnpm check:runtime
 pnpm mutation
 ```
 
-Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation`. Target: ≥ 95% global; ≥ 95% on critical paths. Stryker thresholds: `high: 99, low: 95, break: 95`. Running time: ~15–25 min. Run alone (do not fan out).
+Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation`. Target: 100% global. Stryker thresholds: `high: 100, low: 100, break: 100`. Running time: ~15–25 min. Run alone (do not fan out).
 
 ---
 
