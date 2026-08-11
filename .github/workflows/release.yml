@@ -15,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  release:
-    name: publish
+  publish:
+    name: Publish to npm and create GitHub Release
     runs-on: ubuntu-latest
     # The `npm-publish` environment gates the run behind a manual approval and is
     # itself restricted to `v*.*.*` tags (repo Settings → Environments). Even an
