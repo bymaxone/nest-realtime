@@ -507,7 +507,7 @@ free of Socket.IO while both modules reuse the same sync and async wiring.
 
 Splitting the entry points introduces a second constraint, opposite in direction
 to the first. Each entry is a separate bundle, so a module both of them reach by a
-relative path is *copied* into each — and a copied class or `Symbol` is a
+relative path is _copied_ into each — and a copied class or `Symbol` is a
 different injection token. The container would then hold one set of identities
 while the consumer imported the other, and every provider the WebSocket module
 registers would fail to resolve with `UnknownElementException`.
@@ -522,7 +522,7 @@ The same boundary rule applies in reverse — nothing in `src/internal/` may tou
 the Socket.IO peers, since it is reachable from the root.
 
 Two gates hold this in place, one cheap and one conclusive. `pnpm size` asserts
-statically that the root and WebSocket bundles *import* the specifier instead of
+statically that the root and WebSocket bundles _import_ the specifier instead of
 inlining it, and that neither the root nor the internal bundle references the
 Socket.IO stack. `pnpm check:runtime` packs the tarball, lays it out the way npm
 would, and boots NestJS against it in ESM and in CommonJS, registering each
@@ -2365,7 +2365,7 @@ In WebSocket, client → server reserved events:
   "@nestjs/platform-socket.io": "^11.0.0",
   "socket.io": "^4.6.2",
   "@socket.io/redis-adapter": "^8.0.0",
-  "ioredis": "^5.0.0",
+  "ioredis": "^6.0.0",
   "react": "^19.0.0",
   "react-dom": "^19.0.0",
   "socket.io-client": "^4.0.0"
@@ -2415,7 +2415,7 @@ Deliverables:
 - [ ] `SseTransport` + `SseController` + heartbeat
 - [ ] `RealtimeService` (delegation to transport)
 - [ ] `BymaxRealtimeModule.forRoot()` + `forRootAsync()`
-- [ ] Unit tests at **100% line/branch per implemented file** (Bymax library standard); ≥ 95% mutation on critical paths at the pre-release gate
+- [ ] Unit tests at **100% line/branch per implemented file** (Bymax library standard); 100% mutation at the pre-release gate
 
 Validation:
 

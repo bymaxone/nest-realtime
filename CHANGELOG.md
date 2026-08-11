@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Peer dependency `ioredis` moved to `^6.0.0`** (from `^5.0.0`). The ecosystem migrates to
+  ioredis 6 in lockstep because `@bymax-one/nest-queue` now requires it and an app installs a
+  single ioredis; ioredis 6 keeps `replyMapping: "legacy"` by default, so reply shapes are
+  unchanged and this library — which only takes an injected client — needs no runtime change.
+  `ioredis` remains an optional peer.
+
+### Internal
+
+- Stryker gate raised to 100: `thresholds.high`/`low`/`break` are now `100` (the score is already
+  100% with 0 survivors), tightening the mutation floor from 95.
+
 ## [1.0.6] - 2026-08-06
 
 **Published-artifact change, not a behavioural one.** `dist/` differs from `1.0.5` — this

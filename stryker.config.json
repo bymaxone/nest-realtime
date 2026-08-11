@@ -24,9 +24,9 @@
     "!src/**/*.interface.ts"
   ],
   "thresholds": {
-    "high": 99,
-    "low": 95,
-    "break": 95
+    "high": 100,
+    "low": 100,
+    "break": 100
   },
   "reporters": [
     "html",
