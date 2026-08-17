@@ -187,7 +187,7 @@
     "eslint-plugin-prettier": "^5.0.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-security": "^4.0.1",
-    "eventsource": "^4.1.0",
+    "eventsource": "^5.1.0",
     "ioredis": "^6.0.0",
     "ioredis-mock": "^8.0.0",
     "jest": "^30.0.0",
