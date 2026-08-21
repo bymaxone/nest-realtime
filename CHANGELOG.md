@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-08-21
+
+**Documentation-only.** `dist/` is byte-identical to `1.1.1` — verified by diffing the
+build against the published tarball, not asserted. No runtime path, exported type or
+public surface changed. The release exists because `README.md` ships inside the package
+and renders on npm, so a documentation defect there reaches consumers exactly as a code
+one does.
+
+### Documentation
+
+- **The role-scoped room snippet led a careful consumer into a wall.** It called
+  `moduleRef.get()` inside the `onConnect` hook, which is correct and runs — and which
+  means unit-testing that hook requires faking `ModuleRef`, in practice
+  `as unknown as ModuleRef`. That is a suppression many codebases block outright, so the
+  documented pattern was unusable for anyone whose policy forbids the cast. Found by a
+  consumer adopting `1.1.1`, not by us; "it works" was true and was the reason it
+  survived review.
+
+  The README now also documents the testable shape: give the hook the two capabilities
+  it uses, `RoomJoiner` and `ServiceResolver`. `ModuleRef` and `RealtimeService` satisfy
+  them structurally, so production passes the real objects and a test passes plain ones,
+  with no cast at either end. Both snippets are compiled and executed by
+  `realtime.module.documented-patterns.spec.ts` rather than left as prose.
+
+- **Role matching is exact membership.** `roles?.includes('admin')` on a
+  `readonly string[]` compares whole elements. Reaching for
+  `roles?.some((r) => r.includes('admin'))` — for case-insensitivity, say — admits
+  `administrator`, `admin-readonly` and `superadmin`. That failure is an authorization
+  leak, it fails open, and it appears only for role names nobody declared.
+
 ## [1.1.1] - 2026-08-21
 
 ### Added
@@ -20,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and absent at disconnect would be a field that lies by omission exactly when a host cleans up.
 
   **This adds a required key.** Reading the meta is unaffected, which is what a hook does; code
-  that *constructs* a `ConnectionEventMeta` (typically a test fixture) must now supply `roles`.
+  that _constructs_ a `ConnectionEventMeta` (typically a test fixture) must now supply `roles`.
   `undefined` stays meaningful for an authenticator that returns none.
 
   Roles are carried, never interpreted: there is deliberately no `emitToRole`. Indexing a
@@ -293,7 +323,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/bymaxone/nest-realtime/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/bymaxone/nest-realtime/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bymaxone/nest-realtime/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/bymaxone/nest-realtime/compare/v1.0.5...v1.0.6
