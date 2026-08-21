@@ -566,8 +566,9 @@ BymaxRealtimeModule.forRootAsync({
       onConnect: async (meta) => {
         if (!meta.roles?.includes('admin')) return
         // Resolved lazily: the hook runs per connection, long after bootstrap, so
-        // `RealtimeService` cannot be injected into the factory itself.
-        const realtime = moduleRef.get(RealtimeService, { strict: false })
+        // `RealtimeService` — provided by this very module — cannot be injected
+        // into the factory that configures it.
+        const realtime = moduleRef.get(RealtimeService)
         await realtime.joinRoom(meta.connectionId, 'role:admin')
       },
     },

@@ -2,7 +2,7 @@
  * @fileoverview Module configuration contracts (sync + async dynamic module).
  * @layer contracts
  */
-import type { ModuleMetadata, Provider, Type } from '@nestjs/common'
+import type { Abstract, ModuleMetadata, Provider, Type } from '@nestjs/common'
 import type { TransportMode } from '../../shared/types/transport-mode.type'
 import type {
   IConnectionAuthenticator,
@@ -116,10 +116,24 @@ export interface BymaxRealtimeModuleAsyncOptions extends Pick<ModuleMetadata, 'i
    * `transport` the factory resolves; a mismatch fails fast at bootstrap.
    */
   transport: TransportMode
-  useFactory?: (
-    ...args: unknown[]
-  ) => BymaxRealtimeModuleOptions | Promise<BymaxRealtimeModuleOptions>
-  inject?: readonly (string | symbol | Type<unknown>)[]
+  /**
+   * Factory producing the options, receiving whatever `inject` resolves.
+   *
+   * Declared in method shorthand on purpose: that signature is bivariant, so a
+   * consumer can annotate the parameters with the real provider types
+   * (`(cfg: ConfigService) => ...`) instead of `unknown`. An arrow-property
+   * signature would be checked contravariantly under `strictFunctionTypes` and
+   * reject every typed factory, which is the whole point of `inject`.
+   */
+  useFactory?(...args: unknown[]): BymaxRealtimeModuleOptions | Promise<BymaxRealtimeModuleOptions>
+  /**
+   * Providers to resolve and pass to `useFactory`, positionally.
+   *
+   * `Abstract<unknown>` is included because Nest's own injectable tokens are
+   * abstract classes — `ModuleRef` among them — and `Type<unknown>` alone is a
+   * non-abstract constructor type that excludes them.
+   */
+  inject?: readonly (string | symbol | Type<unknown> | Abstract<unknown>)[]
   useExisting?: Type<BymaxRealtimeModuleOptionsFactory>
   useClass?: Type<BymaxRealtimeModuleOptionsFactory>
   /**
