@@ -150,6 +150,7 @@ export class SseTransport implements ITransport {
         connectionId: record.connectionId,
         userId: record.userId,
         tenantId: record.tenantId,
+        roles: record.originalAuth.roles,
         transport: 'sse',
         ip: record.ip,
         userAgent: record.userAgent,

@@ -8,6 +8,16 @@ export interface ConnectionEventMeta {
   readonly connectionId: string
   readonly userId: string
   readonly tenantId: string | undefined
+  /**
+   * Roles the authenticator returned for this connection, as a snapshot taken at
+   * connect time — `undefined` when the authenticator returned none.
+   *
+   * The library never interprets a role; it carries the consumer's own
+   * authorization vocabulary through so `onConnect` can act on it (typically by
+   * joining the connection to a role-scoped room). A later `revalidate` that
+   * keeps the connection alive does not refresh this snapshot.
+   */
+  readonly roles: readonly string[] | undefined
   readonly transport: 'sse' | 'websocket'
   readonly ip: string
   readonly userAgent: string | undefined

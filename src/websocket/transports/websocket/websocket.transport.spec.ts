@@ -214,6 +214,23 @@ describe('WebSocketTransport', () => {
     )
   })
 
+  it('registerSocket passes the authenticated roles to onConnect', async () => {
+    // The roles the authenticator produced must reach onConnect, which is the only
+    // point that has a connectionId and knows the connection is new — so a host can
+    // join role-scoped rooms there without re-deriving what the token already proved.
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, auth)
+    expect(hooks.onConnect).toHaveBeenCalledWith(expect.objectContaining({ roles: ['user'] }))
+  })
+
+  it('registerSocket passes undefined roles to onConnect when the authenticator returns none', async () => {
+    // undefined stays meaningful: an authenticator that produces no roles is not
+    // the same as one that produces an empty list.
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, { userId: 'u-2' })
+    expect(hooks.onConnect).toHaveBeenCalledWith(expect.objectContaining({ roles: undefined }))
+  })
+
   it('registerSocket skips tenant room when tenantId is absent', async () => {
     // No tenant room is joined when auth.tenantId is undefined.
     const socket = makeSocket()
@@ -249,6 +266,15 @@ describe('WebSocketTransport', () => {
     expect(hooks.onDisconnect).toHaveBeenCalledWith(
       expect.objectContaining({ transport: 'websocket' }),
     )
+  })
+
+  it('unregisterSocket passes the authenticated roles to onDisconnect', async () => {
+    // onDisconnect reads the roles back off the stored record, so the snapshot
+    // survives for the whole connection lifetime.
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, auth)
+    await transport.unregisterSocket('sock-1', 'test-reason')
+    expect(hooks.onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ roles: ['user'] }))
   })
 
   it('unregisterSocket without reason omits reason from onDisconnect meta', async () => {

@@ -103,6 +103,7 @@ function buildMeta(record: ConnectionRecord) {
     connectionId: record.connectionId,
     userId: record.userId,
     tenantId: record.tenantId,
+    roles: record.originalAuth.roles,
     transport: 'sse' as const,
     ip: record.ip,
     userAgent: record.userAgent,

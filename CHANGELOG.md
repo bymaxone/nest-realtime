@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-08-21
+
+### Added
+
+- **`ConnectionEventMeta` now carries `roles`.** `IConnectionAuthenticator.authenticate` returns
+  `roles` and `ConnectionRecord.originalAuth` stores them, but the meta the lifecycle hooks
+  receive dropped them — so a host authenticating by role could not act on the role at
+  `onConnect`, the one point that has a `connectionId` and knows the connection is new. With no
+  role-scoped fan-out and a registry indexed by id, userId and tenantId, a room is the only
+  mechanism for "these connections and not those", and a room could not be built on a value that
+  never arrived. Threaded through all five meta construction sites — SSE and WebSocket
+  `onConnect`/`onDisconnect` plus `onReauthenticationFailed` — because roles present at connect
+  and absent at disconnect would be a field that lies by omission exactly when a host cleans up.
+
+  **This adds a required key.** Reading the meta is unaffected, which is what a hook does; code
+  that *constructs* a `ConnectionEventMeta` (typically a test fixture) must now supply `roles`.
+  `undefined` stays meaningful for an authenticator that returns none.
+
+  Roles are carried, never interpreted: there is deliberately no `emitToRole`. Indexing a
+  fan-out on a role would put the consumer's authorization vocabulary into the transport's API,
+  and `meta.roles` is a connect-time snapshot — a role-indexed emit would look authoritative
+  while reading state that can go stale. Room-plus-`onConnect` leaves that decision with the
+  host. The pattern is documented in the README and covered by an executable test.
+
+### Fixed
+
+- **`forRootAsync` rejected typed factories and abstract `inject` tokens.** `useFactory` was an
+  arrow-property signature, so `strictFunctionTypes` checked it contravariantly and rejected
+  every factory whose parameters carried real provider types — including the
+  `useFactory: (cfg: ConfigService) => ...` example in this module's own JSDoc, which had never
+  typechecked for a consumer. Method shorthand is bivariant, which is what makes `inject` usable.
+  Separately, `inject` accepted only `Type<unknown>`, a non-abstract constructor type, which
+  excluded Nest's own abstract tokens — `ModuleRef` among them, and therefore the documented
+  role-scoped room pattern. Widened with `Abstract<unknown>`.
+
+### Documentation
+
+- The README's Rooms section gains a **role-scoped delivery** subsection: how to build a
+  role room in `onConnect`, why there is no `emitToRole`, and the snapshot semantics of
+  `meta.roles` — a `revalidate` that keeps a connection alive does not refresh it.
+- The `[Unreleased]` compare link pointed at `v1.0.5`, left behind when 1.1.0 shipped, so it
+  showed the whole 1.1.0 release as unreleased.
+
+### Tests
+
+- The documented role-scoped room pattern is now an executable test rather than prose
+  (`realtime.module.documented-patterns.spec.ts`): it boots the module exactly as the README
+  shows and asserts both halves — the admin connection reaches `role:admin`, and a `viewer` and
+  a roles-`undefined` connection reach nothing. `pnpm typecheck` covers it, so reverting either
+  option-type change fails there.
+
 ## [1.1.0] - 2026-08-11
 
 ### Changed
@@ -242,7 +293,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.0.5...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/bymaxone/nest-realtime/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bymaxone/nest-realtime/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/bymaxone/nest-realtime/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/bymaxone/nest-realtime/compare/v1.0.4...v1.0.5
