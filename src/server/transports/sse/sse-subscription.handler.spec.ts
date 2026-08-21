@@ -25,7 +25,12 @@ function collect(stream: Observable<MessageEvent>): MessageEvent[] {
   return events
 }
 
-function mkRecord(id: string, userId: string, connectedAt?: Date): ConnectionRecord {
+function mkRecord(
+  id: string,
+  userId: string,
+  connectedAt?: Date,
+  roles?: readonly string[],
+): ConnectionRecord {
   return {
     connectionId: id,
     userId,
@@ -36,7 +41,7 @@ function mkRecord(id: string, userId: string, connectedAt?: Date): ConnectionRec
     connectedAt: connectedAt ?? new Date(),
     subject: new Subject(),
     close$: new Subject<void>(),
-    originalAuth: { userId, tenantId: undefined, roles: undefined },
+    originalAuth: { userId, tenantId: undefined, roles },
   }
 }
 
@@ -361,6 +366,31 @@ describe('SseSubscriptionHandler', () => {
     await Promise.resolve()
     sub.unsubscribe()
     expect(onConnect).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }))
+  })
+
+  // onConnect receives the roles the authenticator produced, read off the record.
+  it('passes the connection roles to onConnect', async () => {
+    const onConnect = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({
+      getConnection: jest.fn().mockReturnValue(mkRecord('conn-1', 'u1', undefined, ['admin'])),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+    expect(onConnect).toHaveBeenCalledWith(expect.objectContaining({ roles: ['admin'] }))
+  })
+
+  // An authenticator that returns no roles yields undefined, not an empty list.
+  it('passes undefined roles to onConnect when the connection has none', async () => {
+    const onConnect = jest.fn().mockResolvedValue(undefined)
+    const handler = build(mkTransport(), mkHeartbeat(), mkOptions(), { onConnect })
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+    expect(onConnect).toHaveBeenCalledWith(expect.objectContaining({ roles: undefined }))
   })
 
   // A throwing onConnect hook does not break the connection lifecycle.

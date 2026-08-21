@@ -71,6 +71,7 @@ function addConn(
     userId: string
     tenantId?: string
     transport?: 'sse' | 'websocket'
+    roles?: readonly string[]
   },
 ): { received: MessageEvent[]; close$: Subject<void> } {
   const received: MessageEvent[] = []
@@ -88,7 +89,7 @@ function addConn(
     connectedAt: new Date(),
     subject: transport === 'sse' ? subject : null,
     close$: transport === 'sse' ? close$ : null,
-    originalAuth: { userId: params.userId, tenantId: params.tenantId, roles: undefined },
+    originalAuth: { userId: params.userId, tenantId: params.tenantId, roles: params.roles },
   }
   connections.register(record)
   return { received, close$ }
@@ -306,6 +307,24 @@ describe('SseTransport', () => {
     expect(onDisconnect).toHaveBeenCalledWith(
       expect.not.objectContaining({ reason: expect.anything() }),
     )
+  })
+
+  // onDisconnect carries the role snapshot taken at connect time.
+  it('passes the connection roles to onDisconnect', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'c1', userId: 'u1', roles: ['admin'] })
+    await transport.unregisterConnection('c1')
+    expect(onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ roles: ['admin'] }))
+  })
+
+  // A connection authenticated without roles reports undefined, not an empty list.
+  it('passes undefined roles to onDisconnect when the connection has none', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    await transport.unregisterConnection('c1')
+    expect(onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ roles: undefined }))
   })
 
   // FIFO eviction removes the oldest connection beyond the per-user cap.

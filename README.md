@@ -544,6 +544,49 @@ composeRoomId('TENANT', tenantId) // → "tenant:t_acme"
 composeRoomId('RESOURCE', 'invoice', invoiceId) // → "resource:invoice:42"
 ```
 
+#### Role-scoped delivery
+
+There is no `emitToRole`. Roles are the consumer's authorization vocabulary, not
+the transport's — the library carries them through without interpreting them (see
+[Auth Inversion](#auth-inversion)). To deliver to a subset of connections by role,
+build a room for it in `onConnect`, where `ConnectionEventMeta.roles` carries the
+snapshot the authenticator produced:
+
+```typescript
+import { ModuleRef } from '@nestjs/core'
+import { BymaxRealtimeModule, RealtimeService } from '@bymax-one/nest-realtime'
+
+BymaxRealtimeModule.forRootAsync({
+  transport: 'sse',
+  inject: [ModuleRef],
+  useFactory: (moduleRef: ModuleRef) => ({
+    transport: 'sse' as const,
+    authenticator: new CookieAuthenticator(),
+    hooks: {
+      onConnect: async (meta) => {
+        if (!meta.roles?.includes('admin')) return
+        // Resolved lazily: the hook runs per connection, long after bootstrap, so
+        // `RealtimeService` cannot be injected into the factory itself.
+        const realtime = moduleRef.get(RealtimeService, { strict: false })
+        await realtime.joinRoom(meta.connectionId, 'role:admin')
+      },
+    },
+  }),
+})
+```
+
+Then deliver to exactly those connections from any provider that injects
+`RealtimeService`:
+
+```typescript
+await this.realtime.emitToRoom('role:admin', 'audit.log', entry)
+```
+
+`meta.roles` is a snapshot taken at connect time; a later `revalidate` that keeps
+the connection alive does not refresh it. When a role can be revoked mid-session,
+make `revalidate` return `false` so the connection is torn down and re-established
+with the new roles.
+
 ### Reserved Events
 
 Emitted by the library. Do not reuse these names for application events.

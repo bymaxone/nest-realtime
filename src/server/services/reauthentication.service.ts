@@ -161,6 +161,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         connectionId: conn.connectionId,
         userId: conn.userId,
         tenantId: conn.tenantId,
+        roles: conn.originalAuth.roles,
         transport: 'sse',
         ip: conn.ip,
         userAgent: conn.userAgent,

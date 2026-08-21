@@ -1011,6 +1011,8 @@ export interface ConnectionEventMeta {
   connectionId: string
   userId: string
   tenantId: string | undefined
+  /** Snapshot of the roles the authenticator returned at connect time. */
+  roles: readonly string[] | undefined
   transport: 'sse' | 'websocket'
   ip: string
   userAgent: string | undefined

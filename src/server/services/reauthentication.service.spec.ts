@@ -319,6 +319,38 @@ describe('ReauthenticationService', () => {
     )
   })
 
+  // The failure meta carries the role snapshot stored at connect time.
+  it('passes the connection roles to the onReauthenticationFailed hook', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const record: ConnectionRecord = {
+      ...mkRecord(),
+      originalAuth: { userId: 'u1', tenantId: 't1', roles: ['admin'] },
+    }
+    const connections = mkConnections([record])
+    const auth = mkAuth(revalidate)
+    const hooks = { onReauthenticationFailed: jest.fn().mockResolvedValue(undefined) }
+    const svc = build(connections, mkRealtime(), auth, mkOptions({ intervalSeconds: 60 }), hooks)
+    await svc.runCycle()
+    await flush()
+    expect(hooks.onReauthenticationFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ roles: ['admin'] }),
+    )
+  })
+
+  // A connection authenticated without roles reports undefined, not an empty list.
+  it('passes undefined roles to onReauthenticationFailed when the connection has none', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const connections = mkConnections([mkRecord()])
+    const auth = mkAuth(revalidate)
+    const hooks = { onReauthenticationFailed: jest.fn().mockResolvedValue(undefined) }
+    const svc = build(connections, mkRealtime(), auth, mkOptions({ intervalSeconds: 60 }), hooks)
+    await svc.runCycle()
+    await flush()
+    expect(hooks.onReauthenticationFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ roles: undefined }),
+    )
+  })
+
   // A throwing onReauthenticationFailed hook is swallowed — disconnect still fires.
   it('swallows a throwing onReauthenticationFailed hook and still disconnects', async () => {
     const revalidate = jest.fn().mockResolvedValue(false)
