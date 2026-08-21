@@ -251,7 +251,15 @@ E2E tests use the `eventsource` npm package as a Node.js polyfill for `EventSour
 
 ### Stryker mutation testing
 
-Configuration: `stryker.config.json` — thresholds `high: 100, low: 100, break: 100`. Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation` (~15–25 min). Critical paths held to 100%:
+Configuration: `stryker.config.json` — thresholds `high: 100, low: 100, break: 100`.
+
+Two scripts, and the difference matters. `pnpm mutation:full` clears `reports/stryker-incremental.json` first and measures cold (~15 min) — **use it whenever the answer matters**. `pnpm mutation` (and a bare `npx stryker run`) is incremental: it reuses stored verdicts, finishes in minutes, and can report a stale score for a mutant whose covering tests were just rewritten.
+
+Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs, and only when a changed path matches `mutation-source-globs` in `ci.yml`. When nothing matches, the job skips its steps and still reports success — a green `CI passed` is not by itself evidence the gate ran. The weekly cold run lives in `mutation-full.yml`.
+
+Moving a spec helper is not a pure refactor. The Stryker runner sets `rootDir: 'src'`, so anything a spec imports from outside `jest.stryker.config.ts`'s `roots` leaves `perTest` coverage analysis and its mutants survive, silently, with every other gate green. The `tests per mutant` figure in the report is the tell: a drop after a test-only change means attribution broke, not that the suite got smaller.
+
+Critical paths held to 100%:
 
 - `connection-registry.service.ts`
 - `room-registry.service.ts`

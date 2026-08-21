@@ -145,10 +145,15 @@ pnpm check:runtime
 ### Mutation testing
 
 ```bash
-pnpm mutation
+pnpm mutation:full   # clears the incremental baseline first — use this to verify
+pnpm mutation        # incremental, minutes; a fast signal, NOT a measurement
 ```
 
-Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation`. Target: 100% global. Stryker thresholds: `high: 100, low: 100, break: 100`. Running time: ~15–25 min. Run alone (do not fan out).
+**Use `mutation:full` when the answer matters.** `stryker.config.json` sets `incremental: true`, so `pnpm mutation` reuses stored verdicts and can report a stale score — a mutant whose covering tests you just rewrote is re-reported from cache. `mutation:full` deletes `reports/stryker-incremental.json` first. Running `npx stryker run` directly is the incremental path too.
+
+Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs, and **only when a changed path matches `mutation-source-globs` in `ci.yml`** — when nothing matches, the job skips its steps and still reports success, so a green `CI passed` does not by itself mean the gate ran. The cold run is measured weekly by `mutation-full.yml`. Target: 100% global. Stryker thresholds: `high: 100, low: 100, break: 100`. Cold running time: ~15 min. Run alone (do not fan out).
+
+Moving a spec helper is not a pure refactor: the Stryker runner sets `rootDir: 'src'`, so anything a spec imports from outside `jest.stryker.config.ts`'s `roots` falls out of `perTest` coverage analysis and its mutants survive — silently, with every other gate green. The `tests per mutant` figure in the report is the tell: if it drops after a test-only change, attribution broke.
 
 ---
 
