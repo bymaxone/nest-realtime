@@ -36,6 +36,29 @@ function mkMeta(roles: readonly string[] | undefined): ConnectionEventMeta {
 }
 
 /**
+ * The one capability the hook needs from the realtime service.
+ *
+ * `RealtimeService` satisfies this structurally, so the module passes the real
+ * service and a test passes a plain object — neither end needs a cast.
+ */
+interface RoomJoiner {
+  joinRoom(connectionId: string, roomId: string): Promise<void>
+}
+
+/** The one capability the hook needs from the injector; `ModuleRef` satisfies it. */
+interface ServiceResolver {
+  get(token: typeof RealtimeService): RoomJoiner
+}
+
+/** The README's testable role-room hook: depends on capabilities, not on the injector. */
+function joinRoleRoom(resolver: ServiceResolver, role: string, roomId: string) {
+  return async (meta: ConnectionEventMeta): Promise<void> => {
+    if (!meta.roles?.includes(role)) return
+    await resolver.get(RealtimeService).joinRoom(meta.connectionId, roomId)
+  }
+}
+
+/**
  * Registers the module exactly as the README's role-scoped rooms section shows.
  *
  * `RealtimeService` is provided BY this module, so it cannot be injected into the
@@ -99,5 +122,47 @@ describe('README — role-scoped rooms', () => {
 
     expect(joinRoom).not.toHaveBeenCalled()
     await mod.close()
+  })
+  // The narrow-capability shape the README documents for a testable hook. The point
+  // is not elegance: `moduleRef.get()` inline forces every consumer into a cast to
+  // unit-test the hook, and a cast is a CRITICAL block under this repo's policy.
+  it('accepts the real ModuleRef through the narrow resolver shape, without a cast', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          inject: [ModuleRef],
+          useFactory: (moduleRef: ModuleRef) => ({
+            transport: 'sse' as const,
+            authenticator,
+            hooks: { onConnect: joinRoleRoom(moduleRef, 'admin', 'role:admin') },
+          }),
+        }),
+      ],
+    }).compile()
+    await mod.init()
+    const joinRoom = jest
+      .spyOn(mod.get<SseTransport>(REALTIME_TRANSPORT_TOKEN), 'joinRoom')
+      .mockResolvedValue(undefined)
+
+    await mod.get<IConnectionLifecycleHooks>(REALTIME_HOOKS_TOKEN).onConnect?.(mkMeta(['admin']))
+
+    expect(joinRoom).toHaveBeenCalledWith('c1', 'role:admin')
+    await mod.close()
+  })
+
+  // The half that makes the shape worth documenting: the same hook is unit-testable
+  // against a plain object. Both the join and the two refusals are asserted here, so
+  // the role guard is covered without booting NestJS at all.
+  it('accepts a plain object through the same shape, without a cast', async () => {
+    const joinRoom = jest.fn().mockResolvedValue(undefined)
+    const onConnect = joinRoleRoom({ get: () => ({ joinRoom }) }, 'admin', 'role:admin')
+
+    await onConnect(mkMeta(['admin']))
+    await onConnect(mkMeta(['viewer']))
+    await onConnect(mkMeta(undefined))
+
+    expect(joinRoom).toHaveBeenCalledTimes(1)
+    expect(joinRoom).toHaveBeenCalledWith('c1', 'role:admin')
   })
 })

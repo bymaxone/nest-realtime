@@ -588,6 +588,59 @@ the connection alive does not refresh it. When a role can be revoked mid-session
 make `revalidate` return `false` so the connection is torn down and re-established
 with the new roles.
 
+##### Make the hook testable: depend on the capability, not the injector
+
+The snippet above works, and it still walks a careful consumer into a wall: a
+`moduleRef.get()` call inside the hook means unit-testing that hook requires
+faking `ModuleRef`, which in practice means `as unknown as ModuleRef` — a
+suppression many codebases block outright.
+
+Give the hook the two capabilities it actually uses instead. `ModuleRef` and
+`RealtimeService` satisfy these shapes **structurally**, so the module passes the
+real objects and a test passes plain ones, with no cast at either end:
+
+```typescript
+interface RoomJoiner {
+  joinRoom(connectionId: string, roomId: string): Promise<void>
+}
+
+interface ServiceResolver {
+  get(token: typeof RealtimeService): RoomJoiner
+}
+
+function joinRoleRoom(resolver: ServiceResolver, role: string, roomId: string) {
+  return async (meta: ConnectionEventMeta): Promise<void> => {
+    if (!meta.roles?.includes(role)) return
+    await resolver.get(RealtimeService).joinRoom(meta.connectionId, roomId)
+  }
+}
+```
+
+Wire it with the real injector:
+
+```typescript
+inject: [ModuleRef],
+useFactory: (moduleRef: ModuleRef) => ({
+  transport: 'sse' as const,
+  authenticator: new CookieAuthenticator(),
+  hooks: { onConnect: joinRoleRoom(moduleRef, 'admin', 'role:admin') },
+}),
+```
+
+and test it without booting NestJS:
+
+```typescript
+const joinRoom = jest.fn()
+const onConnect = joinRoleRoom({ get: () => ({ joinRoom }) }, 'admin', 'role:admin')
+```
+
+> [!NOTE]
+> Match roles by exact membership. `roles?.includes('admin')` on a `readonly string[]`
+> compares whole elements; reaching for `roles?.some((r) => r.includes('admin'))` —
+> for case-insensitivity, say — admits `administrator`, `admin-readonly` and
+> `superadmin`. That failure is an authorization leak, it fails open, and it only
+> shows up for role names nobody declared.
+
 ### Reserved Events
 
 Emitted by the library. Do not reuse these names for application events.
