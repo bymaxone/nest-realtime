@@ -5,6 +5,86 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-29
+
+**Shipped as a minor, and two entries below are strictly speaking breaking.** Both are called
+out as such rather than hidden: removing the `service` option is a compile error for anyone who
+passed it, and the new required key on `ConnectionEventMeta` is a compile error for anyone who
+*constructs* one. Neither changes runtime behaviour for any working configuration — `service`
+was never read by anything, and reading the meta (what a hook does) is unaffected. The precedent
+is 1.1.1, which added a required `roles` key to the same type and shipped as a patch. The third
+item, the new bootstrap throw on a disagreeing SSE endpoint, replaces a silent misconfiguration
+with a loud one: an application it stops was already serving a route other than the one it
+configured.
+
+### Changed
+
+- **BREAKING: `forRootAsync` binds the SSE route from the registration, and no longer ignores
+  the endpoint it was given.** `sse.endpoint` coming back from the factory could never move the
+  route — controllers are registered at decoration time, long before a factory runs — so the
+  async path bound a hardcoded `/events` and discarded the configured value in silence. The
+  README said the endpoint was "configurable via `sse.endpoint`" with no caveat, so a consumer
+  reading it would document, monitor and point a client at a path that did not exist. Found
+  while answering a consumer's question about documenting the SSE endpoint in OpenAPI, not by a
+  test: every gate was green, because nothing asserted the two agreed.
+
+  The route is now declared as `sseEndpoint` on the `forRootAsync` options, next to `transport`
+  and for the same reason. **The default is unchanged (`/events`)**, so an application that
+  never set an endpoint keeps the route it has. Two behaviours change:
+
+  - A factory that resolves an `sse.endpoint` disagreeing with the bound route now **throws at
+    bootstrap** instead of serving a different path than the one configured. Comparison is on
+    the normalized path, since `@Sse()` resolves `events` and `/events` identically.
+  - `REALTIME_OPTIONS_TOKEN` now reports the endpoint that was actually bound. It previously
+    carried the `forRoot` default (`/realtime/sse`) while the route was `/events`, so anything
+    reading the configuration back — a health check, an OpenAPI document — was told the wrong
+    path.
+
+  `sseEndpoint` on a `transport: 'websocket'` registration is rejected outright: that mode
+  registers no SSE controller, so the option could only be decorative, which is the failure
+  this option exists to remove.
+
+- **BREAKING: the `service` module option is removed.** It was accepted by the type and read
+  nowhere — no reference in `src/` outside its own declaration, and none in the built bundle.
+  The README claimed it "identifies the emitting service in event metadata", but `RealtimeEvent`
+  carries `id`, `type` and `data` and nothing else, so passing it was inert. Removed rather than
+  implemented: putting a service name on every event changes the wire shape for every client to
+  serve a need nobody has stated. Consumers passing it should delete the key; nothing else
+  changes, because nothing ever read it.
+
+### Fixed
+
+- **`AuthenticationResult.metadata` now reaches the lifecycle hooks.** The field was documented
+  as "free-form extras for downstream code" and was dropped at the boundary: `ConnectionRecord`
+  narrowed `originalAuth` to `userId`/`tenantId`/`roles`, and `ConnectionEventMeta` carried no
+  bag at all. It is now threaded through all five meta construction sites — SSE and WebSocket
+  `onConnect`/`onDisconnect` plus `onReauthenticationFailed` — and handed back to `revalidate`
+  as part of the original result.
+
+  This closes a real gap rather than a cosmetic one. `authenticate` sees the request headers but
+  has no `connectionId` yet (the connection does not exist), and the hooks have the
+  `connectionId` but never see the headers, so there was no way to correlate a connection with
+  anything read off the handshake — a `traceparent`, an `x-request-id`. `metadata` is that
+  channel, and it is the reason the field was declared in the first place.
+
+  **This adds a required key** to `ConnectionEventMeta`, exactly as `roles` did in 1.1.1.
+  Reading the meta is unaffected, which is what a hook does; code that *constructs* one
+  (typically a test fixture) must now supply `metadata`. `undefined` stays meaningful — an
+  authenticator that returns no bag is not one that returns an empty object. Like `roles`, it is
+  a connect-time snapshot that `revalidate` does not refresh, and the library never reads a key.
+
+### Documentation
+
+- The configuration table dropped the `service` row, and the `forRootAsync` endpoint rule is
+  documented where the endpoint is configured rather than left to be discovered at runtime.
+- The Contracts section gains a subsection on carrying handshake context into the hooks through
+  `metadata`, with the tracing example that motivated it.
+
+### Internal
+
+- `normalizeEndpointPath` extracted from `createSseController`, which is now one of two callers:
+  binding an endpoint and comparing two endpoints have to agree on what a path means.
+
 ## [1.1.2] - 2026-08-21
 
 **Documentation-only.** `dist/` is byte-identical to `1.1.1` — verified by diffing the
@@ -323,7 +403,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/bymaxone/nest-realtime/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bymaxone/nest-realtime/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/bymaxone/nest-realtime/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bymaxone/nest-realtime/compare/v1.0.6...v1.1.0
