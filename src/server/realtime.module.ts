@@ -50,9 +50,12 @@ export class BymaxRealtimeModule {
    * configuration rejects at bootstrap and the application fails to start with
    * a clear error.
    *
-   * Controllers are registered at decoration time, so this path binds the SSE
-   * controller to the default endpoint `/events`. A non-default endpoint needs
-   * `forRoot` with pre-resolved options.
+   * Controllers are registered at decoration time, so the SSE route comes from
+   * `sseEndpoint` on the registration rather than from the `sse.endpoint` the
+   * factory resolves — the factory has not run yet when the controller is
+   * built. It defaults to `/events`, and a factory that resolves a disagreeing
+   * `sse.endpoint` is rejected at bootstrap rather than silently served on
+   * another path.
    *
    * @throws when no factory pattern is given, more than one is, or the factory
    *   resolves a transport other than `'sse'`.
@@ -60,6 +63,7 @@ export class BymaxRealtimeModule {
    * ```ts
    * BymaxRealtimeModule.forRootAsync({
    *   transport: 'sse',
+   *   sseEndpoint: '/realtime/sse', // optional; defaults to '/events'
    *   imports: [ConfigModule],
    *   inject: [ConfigService],
    *   useFactory: (cfg: ConfigService) => ({
