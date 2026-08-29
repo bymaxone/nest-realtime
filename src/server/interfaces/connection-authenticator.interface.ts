@@ -52,8 +52,10 @@ export interface AuthenticationResult {
    * correlation id read off the handshake headers).
    *
    * Carried verbatim — the library never reads a key. It reaches
-   * `ConnectionEventMeta.metadata` in every lifecycle hook and is handed back to
-   * `revalidate` as part of the original result.
+   * `ConnectionEventMeta.metadata` in the three hooks that receive that type —
+   * `onConnect`, `onDisconnect` and `onReauthenticationFailed` — and is handed
+   * back to `revalidate` as part of the original result. `onError` takes a
+   * narrower payload and carries no `metadata`.
    */
   readonly metadata?: Record<string, unknown>
 }

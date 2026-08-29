@@ -158,7 +158,10 @@ Consumer-controlled membership: `RealtimeService.joinRoom(connectionId, roomId)`
 ```
 
 `roles` and `metadata` from the `AuthenticationResult` are stored on `ConnectionRecord.originalAuth`
-and surface on `ConnectionEventMeta` in every lifecycle hook. Both are **connect-time snapshots** —
+and surface on `ConnectionEventMeta` in the three hooks that receive that type — `onConnect`,
+`onDisconnect` and `onReauthenticationFailed`. `onError` takes a narrower payload
+(`connectionId?`, `error`, `transport`) and carries neither, because it can fire before
+authentication resolves. Both are **connect-time snapshots** —
 a `revalidate` that keeps the connection alive does not refresh either, and the library never reads
 a key of `metadata`. That bag is the only channel from the handshake into the hooks: `authenticate`
 sees the request headers but has no `connectionId` yet, and the hooks have the `connectionId` but

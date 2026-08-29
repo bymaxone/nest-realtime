@@ -382,6 +382,32 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     expect(ctx['transport']).toBe('sse')
   })
 
+  // The onError payload is exactly { connectionId, error, transport } — it is NOT
+  // ConnectionEventMeta, so it carries neither roles nor the authenticator's metadata
+  // bag. This is pinned rather than left to the JSDoc because the docs claiming a hook
+  // receives something it does not is the exact defect this release fixes: widening the
+  // payload has to fail here, so whoever widens it updates the guarantee with it.
+  it('gives onError a payload with no roles and no metadata', async () => {
+    let capturedSubject: Subject<MessageEvent> | undefined
+    const transport = mkTransport({
+      registerConnection: jest
+        .fn()
+        .mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+          capturedSubject = params.subject
+        }),
+      emitConnectionEvent: false,
+    })
+    const onError = jest.fn()
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onError })
+    const stream$ = await handler.handle(mkReq(), mkRes())
+    stream$.subscribe()
+    await Promise.resolve()
+    capturedSubject!.error(new Error('stream-error'))
+    await Promise.resolve()
+    const ctx = (onError as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(Object.keys(ctx).sort()).toEqual(['connectionId', 'error', 'transport'])
+  })
+
   // onError receives transport: 'sse' when registerConnection rejects.
   // Kills StringLiteral mutations on 'sse' in the activateConnection onError call.
   it('passes transport sse to onError when registerConnection rejects', async () => {

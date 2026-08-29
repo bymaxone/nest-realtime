@@ -549,10 +549,15 @@ Reference implementations shipped: `InMemoryPubSub` (default), `RedisRealtimePub
 #### Carrying handshake context into the hooks
 
 `AuthenticationResult.metadata` is a free-form bag the library carries verbatim: it reaches
-`ConnectionEventMeta.metadata` in every lifecycle hook and is handed back to `revalidate` as
-part of the original result. It is the only channel that crosses that boundary —
-`authenticate` sees the request headers but no `connectionId` yet, and the hooks see the
-`connectionId` but not the headers.
+`ConnectionEventMeta.metadata` in the three hooks that receive that type — `onConnect`,
+`onDisconnect` and `onReauthenticationFailed` — and is handed back to `revalidate` as part of
+the original result. It is the only channel that crosses that boundary — `authenticate` sees
+the request headers but no `connectionId` yet, and those hooks see the `connectionId` but not
+the headers.
+
+`onError` is the exception and takes a narrower payload (`connectionId?`, `error`, `transport`):
+it can fire before authentication resolves, so there may be no connection to describe, which is
+also why its `connectionId` is optional. It carries neither `roles` nor `metadata`.
 
 ```typescript
 class TracingAuthenticator implements IConnectionAuthenticator {
