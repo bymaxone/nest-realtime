@@ -21,6 +21,7 @@ function mkRecord(
       userId: over.userId,
       tenantId: over.tenantId,
       roles: undefined,
+      metadata: undefined,
     },
   }
 }

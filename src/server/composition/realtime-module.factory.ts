@@ -32,7 +32,15 @@ import { ReauthenticationService } from '../services/reauthentication.service'
 import { RoomRegistry } from '../services/room-registry.service'
 import { EventReplayBuffer } from '../transports/sse/event-replay-buffer'
 import { HeartbeatService } from '../transports/sse/heartbeat.service'
+import { normalizeEndpointPath } from '../utils/normalize-endpoint-path'
 import type { TransportWiring } from './transport-wiring.interface'
+
+/**
+ * The route the async path binds the SSE controller to when the registration
+ * names none. Deliberately not `DEFAULT_SSE.endpoint`: changing it would move
+ * the route of every application already registered through `forRootAsync`.
+ */
+const DEFAULT_ASYNC_SSE_ENDPOINT = '/events'
 
 /** The provider tokens every entry point re-exports to the consuming module. */
 const EXPORTED_TOKENS = [
@@ -153,6 +161,52 @@ export function composeForRoot(
 }
 
 /**
+ * Reject an `sseEndpoint` on a registration that serves no SSE route.
+ *
+ * A `'websocket'` registration builds no controller, so the option could only
+ * ever be decorative — which is the failure mode the option exists to remove.
+ *
+ * @throws when `sseEndpoint` is set alongside `transport: 'websocket'`.
+ */
+function assertSseEndpointApplies(
+  asyncOptions: BymaxRealtimeModuleAsyncOptions,
+  moduleName: string,
+): void {
+  if (asyncOptions.sseEndpoint === undefined || asyncOptions.transport !== 'websocket') return
+  throw new Error(
+    `[${moduleName}] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: sseEndpoint '${asyncOptions.sseEndpoint}' ` +
+      `was set but transport 'websocket' registers no SSE controller — use 'both' to serve SSE too`,
+  )
+}
+
+/**
+ * Make the resolved options name the route the controller was actually bound to.
+ *
+ * Without this the options object handed to `REALTIME_OPTIONS_TOKEN` would carry
+ * the `sse.endpoint` default while the route lived elsewhere, so anything
+ * reading the configuration back — a health check, an OpenAPI document — would
+ * be told the wrong path.
+ *
+ * @throws when the factory resolved an endpoint the async path cannot bind to.
+ */
+function bindSseEndpoint(
+  resolved: ResolvedRealtimeOptions,
+  declared: string | undefined,
+  bound: string,
+  moduleName: string,
+): ResolvedRealtimeOptions {
+  if (declared !== undefined && normalizeEndpointPath(declared) !== normalizeEndpointPath(bound)) {
+    throw new Error(
+      `[${moduleName}] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: the factory resolved sse.endpoint ` +
+        `'${declared}' but forRootAsync bound the SSE route to '${bound}' — controllers are ` +
+        `registered before the factory runs, so declare the path as 'sseEndpoint' on the ` +
+        `forRootAsync registration itself`,
+    )
+  }
+  return Object.freeze({ ...resolved, sse: { ...resolved.sse, endpoint: bound } })
+}
+
+/**
  * Validate an async factory result and enforce the declared transport.
  *
  * @throws when the factory returned nothing, the options are invalid, or the
@@ -210,14 +264,26 @@ export function composeForRootAsync(
     )
   }
   assertModeSupported(wiring, asyncOptions.transport, moduleName)
+  assertSseEndpointApplies(asyncOptions, moduleName)
 
   const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
   const instanceId = randomUUID()
+  const boundSseEndpoint = asyncOptions.sseEndpoint ?? DEFAULT_ASYNC_SSE_ENDPOINT
   const resolve = (
     raw: BymaxRealtimeModuleOptions | null | undefined,
     source: string,
-  ): ResolvedRealtimeOptions =>
-    resolveAsyncOptions(raw, asyncOptions.transport, instanceId, source, logger, moduleName)
+  ): ResolvedRealtimeOptions => {
+    const resolved = resolveAsyncOptions(
+      raw,
+      asyncOptions.transport,
+      instanceId,
+      source,
+      logger,
+      moduleName,
+    )
+    if (asyncOptions.transport === 'websocket') return resolved
+    return bindSseEndpoint(resolved, raw?.sse?.endpoint, boundSseEndpoint, moduleName)
+  }
 
   const resolvedOptionsProvider: Provider = asyncOptions.useFactory
     ? {
@@ -245,7 +311,10 @@ export function composeForRootAsync(
     read: (opts: BymaxRealtimeModuleOptions) => unknown,
   ): Provider => ({ provide: token, useFactory: read, inject: [REALTIME_OPTIONS_TOKEN] })
 
-  const { providers: transportProviders, controllers } = wiring.buildAsync(asyncOptions.transport)
+  const { providers: transportProviders, controllers } = wiring.buildAsync({
+    mode: asyncOptions.transport,
+    sseEndpoint: boundSseEndpoint,
+  })
 
   return {
     module: moduleClass,

@@ -104,6 +104,7 @@ function buildMeta(record: ConnectionRecord) {
     userId: record.userId,
     tenantId: record.tenantId,
     roles: record.originalAuth.roles,
+    metadata: record.originalAuth.metadata,
     transport: 'sse' as const,
     ip: record.ip,
     userAgent: record.userAgent,

@@ -126,7 +126,11 @@ The subscriber must NOT re-publish what it receives (infinite loop). The impleme
 Holds the in-memory map of active connections per instance:
 
 ```
-connectionId → { userId, tenantId, transport, connectedAt, subject (SSE only), socket (WS only) }
+connectionId → {
+  userId, tenantId, transport, ip, userAgent, connectedAt,
+  subject (SSE only), close$ (SSE only),
+  originalAuth: { userId, tenantId, roles, metadata },
+}
 ```
 
 FIFO eviction: when `maxConnectionsPerUser` is reached, the **oldest** connection is evicted (closed with `REALTIME_TOO_MANY_CONNECTIONS`) and the new connection is admitted. The new connection is **never rejected with HTTP 429**.
@@ -152,6 +156,13 @@ Consumer-controlled membership: `RealtimeService.joinRoom(connectionId, roomId)`
 5. AuthenticationResult → ConnectionRegistry.register() → RoomRegistry auto-join
 6. connection:established event emitted to client (if emitConnectionEvent is true)
 ```
+
+`roles` and `metadata` from the `AuthenticationResult` are stored on `ConnectionRecord.originalAuth`
+and surface on `ConnectionEventMeta` in every lifecycle hook. Both are **connect-time snapshots** —
+a `revalidate` that keeps the connection alive does not refresh either, and the library never reads
+a key of `metadata`. That bag is the only channel from the handshake into the hooks: `authenticate`
+sees the request headers but has no `connectionId` yet, and the hooks have the `connectionId` but
+never see the headers.
 
 ### Re-authentication
 

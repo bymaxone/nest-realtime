@@ -18,6 +18,20 @@ export interface ConnectionEventMeta {
    * keeps the connection alive does not refresh this snapshot.
    */
   readonly roles: readonly string[] | undefined
+  /**
+   * The free-form `metadata` bag the authenticator returned, as a snapshot taken
+   * at connect time — `undefined` when the authenticator returned none.
+   *
+   * This is the only channel that carries a value from the handshake into the
+   * lifecycle hooks. `authenticate` sees the request headers but not yet a
+   * `connectionId`, and the hooks see the `connectionId` but not the headers, so
+   * anything read off the request — a `traceparent`, an `x-request-id`, a plan
+   * tier — has to travel through here to be correlated with a connection.
+   *
+   * The library never inspects a key. Like `roles`, it is a snapshot: a later
+   * `revalidate` that keeps the connection alive does not refresh it.
+   */
+  readonly metadata: Record<string, unknown> | undefined
   readonly transport: 'sse' | 'websocket'
   readonly ip: string
   readonly userAgent: string | undefined

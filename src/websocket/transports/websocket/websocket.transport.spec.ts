@@ -231,6 +231,27 @@ describe('WebSocketTransport', () => {
     expect(hooks.onConnect).toHaveBeenCalledWith(expect.objectContaining({ roles: undefined }))
   })
 
+  it('registerSocket passes the authenticator metadata to onConnect', async () => {
+    // The bag is carried verbatim from the handshake into the hook — it is the only
+    // channel that survives the boundary, since authenticate() has no connectionId
+    // and the hook has no access to the handshake headers.
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, {
+      userId: 'u-3',
+      metadata: { traceId: 'trace-1' },
+    })
+    expect(hooks.onConnect).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { traceId: 'trace-1' } }),
+    )
+  })
+
+  it('registerSocket passes undefined metadata to onConnect when the authenticator returns none', async () => {
+    // undefined stays meaningful: no bag is not the same as an empty bag.
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, { userId: 'u-2' })
+    expect(hooks.onConnect).toHaveBeenCalledWith(expect.objectContaining({ metadata: undefined }))
+  })
+
   it('registerSocket skips tenant room when tenantId is absent', async () => {
     // No tenant room is joined when auth.tenantId is undefined.
     const socket = makeSocket()
@@ -275,6 +296,26 @@ describe('WebSocketTransport', () => {
     await transport.registerSocket(socket as never, auth)
     await transport.unregisterSocket('sock-1', 'test-reason')
     expect(hooks.onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ roles: ['user'] }))
+  })
+
+  it('unregisterSocket passes the authenticator metadata to onDisconnect', async () => {
+    // onDisconnect reads the bag back off the stored record, so the snapshot
+    // survives for the whole connection lifetime.
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, { ...auth, metadata: { traceId: 'trace-1' } })
+    await transport.unregisterSocket('sock-1', 'test-reason')
+    expect(hooks.onDisconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { traceId: 'trace-1' } }),
+    )
+  })
+
+  it('unregisterSocket passes undefined metadata to onDisconnect when there is none', async () => {
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, auth)
+    await transport.unregisterSocket('sock-1', 'test-reason')
+    expect(hooks.onDisconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: undefined }),
+    )
   })
 
   it('unregisterSocket without reason omits reason from onDisconnect meta', async () => {
@@ -542,7 +583,7 @@ describe('WebSocketTransport', () => {
           connectedAt: new Date(Date.now() + 1_000),
           subject: null,
           close$: null,
-          originalAuth: { userId: 'u-br', tenantId: 't-1', roles: [] },
+          originalAuth: { userId: 'u-br', tenantId: 't-1', roles: [], metadata: undefined },
         })
       }
 
@@ -587,7 +628,7 @@ describe('WebSocketTransport', () => {
         connectedAt: new Date(recA.connectedAt.getTime() - 2000),
         subject: null,
         close$: null,
-        originalAuth: { userId: 'u-ord2', tenantId: 't-2', roles: [] },
+        originalAuth: { userId: 'u-ord2', tenantId: 't-2', roles: [], metadata: undefined },
       })
       // Register c-trigger: 3 connections > limit 2 → evict once → b-older must be chosen.
       await t.registerSocket(sockC as never, { userId: 'u-ord2', tenantId: 't-2' })

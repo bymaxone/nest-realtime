@@ -129,6 +129,7 @@ export class SseTransport implements ITransport {
         userId: params.auth.userId,
         tenantId: params.auth.tenantId,
         roles: params.auth.roles,
+        metadata: params.auth.metadata,
       },
     }
     this.connections.register(record)
@@ -151,6 +152,7 @@ export class SseTransport implements ITransport {
         userId: record.userId,
         tenantId: record.tenantId,
         roles: record.originalAuth.roles,
+        metadata: record.originalAuth.metadata,
         transport: 'sse',
         ip: record.ip,
         userAgent: record.userAgent,

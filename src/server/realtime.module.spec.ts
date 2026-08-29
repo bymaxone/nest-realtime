@@ -55,7 +55,7 @@ describe('BymaxRealtimeModule.forRoot', () => {
     )
   })
 
-  // When sse.endpoint is explicitly set, it is used instead of the default '/events'.
+  // When sse.endpoint is explicitly set, it is used instead of the '/realtime/sse' default.
   it('uses a custom sse endpoint for transport sse', () => {
     const dynamic = BymaxRealtimeModule.forRoot({
       transport: 'sse',

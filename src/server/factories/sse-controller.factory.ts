@@ -7,6 +7,7 @@ import type { MessageEvent, Type } from '@nestjs/common'
 import type { Observable } from 'rxjs'
 import type { SseRequest, SseResponse } from '../interfaces/sse-http.interface'
 import { SseSubscriptionHandler } from '../transports/sse/sse-subscription.handler'
+import { normalizeEndpointPath } from '../utils/normalize-endpoint-path'
 
 /**
  * Build a dynamic NestJS controller bound to `endpoint`.
@@ -17,7 +18,7 @@ import { SseSubscriptionHandler } from '../transports/sse/sse-subscription.handl
  * `SseSubscriptionHandler.handle`, which owns the full subscribe lifecycle.
  */
 export function createSseController(endpoint: string): Type<unknown> {
-  const ssePath = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
+  const ssePath = normalizeEndpointPath(endpoint)
 
   @Controller()
   class DynamicSseController {

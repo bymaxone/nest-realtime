@@ -4,7 +4,11 @@
  */
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { REALTIME_TRANSPORT_TOKEN, RealtimeService } from '@bymax-one/nest-realtime/internal'
+import {
+  REALTIME_OPTIONS_TOKEN,
+  REALTIME_TRANSPORT_TOKEN,
+  RealtimeService,
+} from '@bymax-one/nest-realtime/internal'
 import type {
   WebSocketRealtimeModuleAsyncOptions,
   WebSocketRealtimeModuleOptions,
@@ -328,5 +332,60 @@ describe('BymaxRealtimeWebSocketModule.forRootAsync', () => {
       ],
     })
     await expect(testModule.compile()).rejects.toThrow(/was registered for transport 'websocket'/)
+  })
+})
+
+describe('BymaxRealtimeWebSocketModule.forRootAsync SSE endpoint', () => {
+  /** Read the route path the generated SSE controller was decorated with. */
+  function routePath(dynamic: { controllers?: unknown[] }): string {
+    const ctrl = dynamic.controllers?.[0] as { prototype: Record<string, unknown> }
+    return Reflect.getMetadata('path', ctrl.prototype['subscribe'] as object) as string
+  }
+
+  // 'both' composes SSE, so the declared endpoint has to reach its controller here too.
+  it('binds the both-mode controller to a declared sseEndpoint', () => {
+    const dynamic = BymaxRealtimeWebSocketModule.forRootAsync({
+      transport: 'both',
+      sseEndpoint: '/realtime/sse',
+      useFactory: async () => ({ transport: 'both' as const, authenticator }),
+    })
+    expect(routePath(dynamic)).toBe('realtime/sse')
+  })
+
+  // A 'websocket' registration builds no SSE controller, so an endpoint on it could
+  // only ever be decorative — which is exactly the failure the option removes.
+  it('rejects an sseEndpoint on a websocket-only registration', () => {
+    expect(
+      () =>
+        BymaxRealtimeWebSocketModule.forRootAsync({
+          transport: 'websocket',
+          sseEndpoint: '/realtime/sse',
+          useFactory: async () => ({ transport: 'websocket' as const, authenticator }),
+        }),
+      // Pinned whole: the message has to name the option, the transport, and the way
+      // out ('both'), and a mutant that drops any of those still reads plausibly.
+    ).toThrow(
+      "[BymaxRealtimeWebSocketModule] REALTIME_INVALID_OPTIONS: sseEndpoint '/realtime/sse' " +
+        "was set but transport 'websocket' registers no SSE controller — use 'both' to serve SSE too",
+    )
+  })
+
+  // A websocket-only registration is left alone: there is no route to report, so the
+  // resolved options must not be rewritten to claim one.
+  it('leaves the resolved sse options untouched for a websocket-only registration', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeWebSocketModule.forRootAsync({
+          transport: 'websocket',
+          useFactory: async () => ({
+            transport: 'websocket' as const,
+            authenticator,
+            sse: { endpoint: '/never-served' },
+          }),
+        }),
+      ],
+    }).compile()
+    const options = mod.get<WebSocketRealtimeModuleOptions>(REALTIME_OPTIONS_TOKEN)
+    expect(options.sse?.endpoint).toBe('/never-served')
   })
 })

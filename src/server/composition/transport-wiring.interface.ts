@@ -32,11 +32,19 @@ export interface TransportWiring {
   build(resolved: ResolvedRealtimeOptions): TransportRegistration
   /**
    * Wire the transports for the asynchronous path, where options are not known
-   * at decoration time. Controllers must be registered then, so the endpoint is
-   * fixed rather than read from the resolved options.
+   * at decoration time. Controllers must be registered then, so the endpoint
+   * comes from the registration itself rather than from the resolved options.
    */
-  buildAsync(mode: BymaxRealtimeModuleOptions['transport']): {
+  buildAsync(params: AsyncWiringParams): {
     readonly providers: Provider[]
     readonly controllers: Type<unknown>[]
   }
+}
+
+/** What the async path can know before any factory has run. */
+export interface AsyncWiringParams {
+  /** The transport declared on the registration. */
+  readonly mode: BymaxRealtimeModuleOptions['transport']
+  /** The path to bind the SSE controller to, already defaulted by the caller. */
+  readonly sseEndpoint: string
 }

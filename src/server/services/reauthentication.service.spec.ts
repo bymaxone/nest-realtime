@@ -24,7 +24,7 @@ function mkRecord(id = 'c1', userId = 'u1'): ConnectionRecord {
     connectedAt: new Date(),
     subject: null,
     close$: null,
-    originalAuth: { userId, tenantId: 't1', roles: undefined },
+    originalAuth: { userId, tenantId: 't1', roles: undefined, metadata: undefined },
   }
 }
 
@@ -324,7 +324,7 @@ describe('ReauthenticationService', () => {
     const revalidate = jest.fn().mockResolvedValue(false)
     const record: ConnectionRecord = {
       ...mkRecord(),
-      originalAuth: { userId: 'u1', tenantId: 't1', roles: ['admin'] },
+      originalAuth: { userId: 'u1', tenantId: 't1', roles: ['admin'], metadata: undefined },
     }
     const connections = mkConnections([record])
     const auth = mkAuth(revalidate)
@@ -348,6 +348,88 @@ describe('ReauthenticationService', () => {
     await flush()
     expect(hooks.onReauthenticationFailed).toHaveBeenCalledWith(
       expect.objectContaining({ roles: undefined }),
+    )
+  })
+
+  // The failure meta carries the authenticator's metadata snapshot too.
+  it('passes the connection metadata to the onReauthenticationFailed hook', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const record: ConnectionRecord = {
+      ...mkRecord(),
+      originalAuth: {
+        userId: 'u1',
+        tenantId: 't1',
+        roles: undefined,
+        metadata: { traceId: 'trace-1' },
+      },
+    }
+    const connections = mkConnections([record])
+    const auth = mkAuth(revalidate)
+    const hooks = { onReauthenticationFailed: jest.fn().mockResolvedValue(undefined) }
+    const svc = build(connections, mkRealtime(), auth, mkOptions({ intervalSeconds: 60 }), hooks)
+    await svc.runCycle()
+    await flush()
+    expect(hooks.onReauthenticationFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { traceId: 'trace-1' } }),
+    )
+  })
+
+  // A connection authenticated without a bag reports undefined, not an empty object.
+  it('passes undefined metadata to onReauthenticationFailed when the connection has none', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const connections = mkConnections([mkRecord()])
+    const auth = mkAuth(revalidate)
+    const hooks = { onReauthenticationFailed: jest.fn().mockResolvedValue(undefined) }
+    const svc = build(connections, mkRealtime(), auth, mkOptions({ intervalSeconds: 60 }), hooks)
+    await svc.runCycle()
+    await flush()
+    expect(hooks.onReauthenticationFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: undefined }),
+    )
+  })
+
+  // revalidate is handed back the original result, metadata included — an
+  // authenticator that stored a trace id at connect time can read it here.
+  it('passes the stored metadata back to revalidate', async () => {
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const record: ConnectionRecord = {
+      ...mkRecord(),
+      originalAuth: {
+        userId: 'u1',
+        tenantId: 't1',
+        roles: undefined,
+        metadata: { traceId: 'trace-1' },
+      },
+    }
+    const connections = mkConnections([record])
+    const svc = build(
+      connections,
+      mkRealtime(),
+      mkAuth(revalidate),
+      mkOptions({ intervalSeconds: 60 }),
+    )
+    await svc.runCycle()
+    expect(revalidate).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({ metadata: { traceId: 'trace-1' } }),
+    )
+  })
+
+  // The absent branch of the metadata spread: the key must be omitted, not set to
+  // undefined, so the reconstructed result stays valid under exactOptionalPropertyTypes.
+  it('omits metadata from the revalidate result when the connection has none', async () => {
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const connections = mkConnections([mkRecord()])
+    const svc = build(
+      connections,
+      mkRealtime(),
+      mkAuth(revalidate),
+      mkOptions({ intervalSeconds: 60 }),
+    )
+    await svc.runCycle()
+    expect(revalidate).toHaveBeenCalledWith(
+      'c1',
+      expect.not.objectContaining({ metadata: undefined }),
     )
   })
 
@@ -382,7 +464,12 @@ describe('ReauthenticationService', () => {
       connectedAt: new Date(),
       subject: null,
       close$: null,
-      originalAuth: { userId: 'u-spread', tenantId: undefined, roles: ['admin'] },
+      originalAuth: {
+        userId: 'u-spread',
+        tenantId: undefined,
+        roles: ['admin'],
+        metadata: undefined,
+      },
     }
     const connections = mkConnections([record])
     const realtime = mkRealtime()

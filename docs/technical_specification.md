@@ -169,12 +169,13 @@ BymaxRealtimeModule.forRoot({
 // Asynchronous (recommended for projects with ConfigService)
 BymaxRealtimeModule.forRootAsync({
   transport: 'sse', // declared, not resolved: providers are fixed at decoration time
+  sseEndpoint: '/events', // same reason: the controller is bound before the factory runs
   imports: [ConfigModule, AuthModule, CacheModule],
   inject: [ConfigService, JwtService, REDIS_CLIENT],
   useFactory: (config, jwt, redis) => ({
     transport: 'sse' as const,
     authenticator: new NestAuthBridge(jwt),
-    sse: { endpoint: '/events', heartbeatMs: 30_000 },
+    sse: { heartbeatMs: 30_000 },
     pubsub: new RedisPubSub(redis), // enables SSE horizontal scaling
   }),
 })
@@ -614,14 +615,6 @@ export interface BymaxRealtimeModuleOptions {
   transport: TransportMode
 
   /**
-   * Service metadata — propagated to logs and connection metadata.
-   */
-  service?: {
-    name: string
-    version: string
-  }
-
-  /**
    * Authentication — required. Consumer plugs in any strategy (nest-auth, custom JWT, ticket).
    */
   authenticator: IConnectionAuthenticator
@@ -755,7 +748,6 @@ import { NestAuthRealtimeBridge } from './realtime/nest-auth-realtime-bridge'
   imports: [
     BymaxRealtimeModule.forRoot({
       transport: 'sse',
-      service: { name: 'my-app', version: process.env.RELEASE_SHA ?? 'dev' },
       authenticator: new NestAuthRealtimeBridge(), // read JWT cookie, decode
       sse: {
         endpoint: '/events',
@@ -774,20 +766,16 @@ export class AppModule {}
   imports: [
     BymaxRealtimeModule.forRootAsync({
       transport: 'sse',
+      sseEndpoint: '/events',
       imports: [ConfigModule, AuthModule, CacheModule],
       inject: [ConfigService, JwtService, REDIS_CLIENT],
       useFactory: (config: ConfigService, jwt: JwtService, redis: Redis) => ({
         transport: 'sse',
-        service: {
-          name: config.getOrThrow('OTEL_SERVICE_NAME'),
-          version: config.getOrThrow('RELEASE_SHA'),
-        },
         authenticator: new NestAuthRealtimeBridge(jwt),
         tenantResolver: (auth) => auth.tenantId,
         pubsub: new RedisRealtimePubSub(redis, { channel: 'realtime' }),
         offlineQueue: new RedisOfflineQueue(redis, { ttlSeconds: 86_400 }),
         sse: {
-          endpoint: '/events',
           heartbeatMs: 30_000,
           replayBufferSize: 200,
           cors: { origin: config.getOrThrow('FRONTEND_URL'), credentials: true },
@@ -2564,17 +2552,16 @@ When the WebSocket transport runs on ≥ 2 nodes **and** the HTTP long-polling f
   imports: [
     BymaxRealtimeModule.forRootAsync({
       transport: 'sse',
+      sseEndpoint: '/events',
       imports: [ConfigModule, CacheModule, AuthModule],
       inject: [ConfigService, JwtService, CACHE_REDIS_CLIENT_TOKEN],
       useFactory: (config: ConfigService, jwt: JwtService, redis: Redis) => ({
         transport: 'sse',
-        service: { name: 'platform-backend', version: process.env.RELEASE_SHA! },
         authenticator: new NestAuthRealtimeBridge(jwt),
         tenantResolver: (auth) => auth.tenantId,
         pubsub: new RedisRealtimePubSub(redis, { channel: 'platform:realtime' }),
         offlineQueue: new RedisOfflineQueue(redis, { ttlSeconds: 86_400, maxPerUser: 500 }),
         sse: {
-          endpoint: '/events',
           heartbeatMs: 30_000,
           replayBufferSize: 200,
           cors: { origin: config.getOrThrow('FRONTEND_URL'), credentials: true },

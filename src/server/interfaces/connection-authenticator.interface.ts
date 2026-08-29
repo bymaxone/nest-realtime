@@ -47,7 +47,14 @@ export interface AuthenticationResult {
   readonly userId: string
   readonly tenantId?: string
   readonly roles?: readonly string[]
-  /** Free-form extras for downstream code (e.g. feature flags, plan tier). */
+  /**
+   * Free-form extras for downstream code (e.g. feature flags, plan tier, a
+   * correlation id read off the handshake headers).
+   *
+   * Carried verbatim — the library never reads a key. It reaches
+   * `ConnectionEventMeta.metadata` in every lifecycle hook and is handed back to
+   * `revalidate` as part of the original result.
+   */
   readonly metadata?: Record<string, unknown>
 }
 
