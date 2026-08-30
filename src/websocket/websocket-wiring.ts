@@ -14,9 +14,6 @@ import { CompositeTransport } from './transports/composite/composite.transport'
 import { RealtimeGateway } from './transports/websocket/realtime.gateway'
 import { WebSocketTransport } from './transports/websocket/websocket.transport'
 
-/** The endpoint the async path binds to, since options resolve after decoration. */
-const DEFAULT_ASYNC_ENDPOINT = '/events'
-
 /**
  * Wiring for Socket.IO, and for `'both'` where SSE and WebSocket are composed.
  *
@@ -52,7 +49,7 @@ export const webSocketWiring: TransportWiring = {
     }
   },
 
-  buildAsync(mode) {
+  buildAsync({ mode, sseEndpoint }) {
     if (mode === 'websocket') {
       return {
         providers: [
@@ -73,7 +70,7 @@ export const webSocketWiring: TransportWiring = {
         RealtimePubSubSubscriber,
         { provide: REALTIME_TRANSPORT_TOKEN, useExisting: CompositeTransport },
       ],
-      controllers: [createSseController(DEFAULT_ASYNC_ENDPOINT)],
+      controllers: [createSseController(sseEndpoint)],
     }
   },
 }

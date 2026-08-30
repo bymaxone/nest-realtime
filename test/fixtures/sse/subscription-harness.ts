@@ -29,12 +29,13 @@ export function collect(stream: Observable<MessageEvent>): MessageEvent[] {
   return events
 }
 
-/** Build a registered connection record, optionally carrying authenticator roles. */
+/** Build a registered connection record, optionally carrying the authenticator snapshot. */
 export function mkRecord(
   id: string,
   userId: string,
   connectedAt?: Date,
   roles?: readonly string[],
+  metadata?: Record<string, unknown>,
 ): ConnectionRecord {
   return {
     connectionId: id,
@@ -46,7 +47,7 @@ export function mkRecord(
     connectedAt: connectedAt ?? new Date(),
     subject: new Subject(),
     close$: new Subject<void>(),
-    originalAuth: { userId, tenantId: undefined, roles },
+    originalAuth: { userId, tenantId: undefined, roles, metadata },
   }
 }
 

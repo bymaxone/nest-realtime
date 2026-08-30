@@ -213,3 +213,36 @@ Where a `// Stryker disable next-line` directive was found not to apply — abov
 builder chain — it was replaced with the block `disable`/`restore` form, or, where that does not
 work either, with a plain comment at the line so the reasoning is visible rather than silently
 ineffective.
+
+---
+
+## Re-run — 2026-08-29 (v1.2.0)
+
+| Metric             | Value                     |
+| ------------------ | ------------------------- |
+| **Mutation score** | **100.00 %**              |
+| Killed             | 680                       |
+| Timed out          | 7 (counted as detected)   |
+| Surviving mutants  | 0                         |
+| Break threshold    | 100 % -> PASS             |
+| Cold running time  | 7 min 28 s                |
+
+Run cold (`pnpm mutation:full`) three times over this change, and the two intermediate runs are
+the point of recording it.
+
+**First run: 99.42 %, four survivors — all of them string literals in error messages I had just
+written.** The assertions used `toThrow(/fragment/)`, which pins the one clause the regex names
+and leaves every other segment of a concatenated template free to be blanked. The messages here
+are multi-part: the second half of the SSE-endpoint mismatch error is the half that tells the
+consumer the fix is `sseEndpoint` on the registration, and a mutant that deletes it leaves an
+error that still reads plausibly and diagnoses nothing. Fixed by pinning the whole message with
+`toThrow('<full string>')` — Jest matches a string as a substring, so one assertion covers every
+segment and any deletion fails it.
+
+**Second run followed a test-only change and had to be re-run cold for that reason alone.**
+`realtime.module.spec.ts` crossed 800 lines, so the new `describe` moved to
+`realtime.module.async-endpoint.spec.ts`. Moving a spec is not a pure refactor here: Stryker's
+`perTest` coverage attribution is computed from `jest.stryker.config.ts`'s `roots`, so a move can
+change which tests are credited with covering a mutant without changing a line of source. The new
+file sits under `src/`, which is inside `roots`, and the score held at 100 % — but that was
+verified by running it, not assumed.

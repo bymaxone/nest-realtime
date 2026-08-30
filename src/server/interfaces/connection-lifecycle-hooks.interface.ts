@@ -18,6 +18,26 @@ export interface ConnectionEventMeta {
    * keeps the connection alive does not refresh this snapshot.
    */
   readonly roles: readonly string[] | undefined
+  /**
+   * The free-form `metadata` bag the authenticator returned, as a snapshot taken
+   * at connect time — `undefined` when the authenticator returned none.
+   *
+   * This is the only channel that carries a value from the handshake into the
+   * hooks that receive this type — `onConnect`, `onDisconnect` and
+   * `onReauthenticationFailed`. `authenticate` sees the request headers but not
+   * yet a `connectionId`, and those hooks see the `connectionId` but not the
+   * headers, so anything read off the request — a `traceparent`, an
+   * `x-request-id`, a plan tier — has to travel through here to be correlated
+   * with a connection.
+   *
+   * `onError` does NOT receive this type and therefore carries no `metadata`:
+   * it can fire before authentication has resolved, which is why even its
+   * `connectionId` is optional.
+   *
+   * The library never inspects a key. Like `roles`, it is a snapshot: a later
+   * `revalidate` that keeps the connection alive does not refresh it.
+   */
+  readonly metadata: Record<string, unknown> | undefined
   readonly transport: 'sse' | 'websocket'
   readonly ip: string
   readonly userAgent: string | undefined
@@ -38,7 +58,15 @@ export interface IConnectionLifecycleHooks {
     meta: ConnectionEventMeta & { reason?: string; durationMs: number },
   ): void | Promise<void>
 
-  /** Called on a transport error. */
+  /**
+   * Called on a transport error.
+   *
+   * Deliberately NOT `ConnectionEventMeta`: this hook can fire before
+   * authentication resolves, so there may be no connection to describe. It
+   * carries no `roles` and no `metadata` — `connectionId` is optional for the
+   * same reason. Pinned by a test, so widening this shape means updating the
+   * documented guarantee with it.
+   */
   onError?(meta: {
     connectionId?: string
     error: Error

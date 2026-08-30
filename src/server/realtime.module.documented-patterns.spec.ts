@@ -28,6 +28,7 @@ function mkMeta(roles: readonly string[] | undefined): ConnectionEventMeta {
     userId: 'u1',
     tenantId: undefined,
     roles,
+    metadata: undefined,
     transport: 'sse',
     ip: '127.0.0.1',
     userAgent: undefined,

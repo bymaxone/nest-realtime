@@ -305,7 +305,6 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | **transport**              | `'sse'` \| `'websocket'` \| `'both'`                                                                                                        | — (**required**)                             |
 | **authenticator**          | `IConnectionAuthenticator`                                                                                                                  | — (**required**)                             |
-| **service**                | `name`, `version` — identifies the emitting service in event metadata                                                                       | —                                            |
 | **tenantResolver**         | `(auth) => string \| undefined` — derives `tenantId` from the auth result                                                                   | `auth.tenantId`                              |
 | **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed` (fire-and-forget)                                                        | —                                            |
 | **pubsub**                 | `IRealtimePubSub` — cross-instance fan-out for SSE                                                                                          | `InMemoryPubSub`                             |
@@ -317,6 +316,25 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 
 > [!NOTE]
 > `websocket.maxConnectionsPerUser` is **opt-in** and unlimited unless set to a positive number, while `sse.maxConnectionsPerUser` defaults to `5`. The two transports differ here on purpose: an SSE stream holds an HTTP connection open, a Socket.IO client multiplexes.
+
+> [!IMPORTANT]
+> **`forRootAsync` takes the SSE route on the registration, not from the factory.** NestJS
+> registers controllers at decoration time, before any factory has run, so `sse.endpoint`
+> cannot move the route there. Declare it as `sseEndpoint` alongside `transport`:
+>
+> ```typescript
+> BymaxRealtimeModule.forRootAsync({
+>   transport: 'sse',
+>   sseEndpoint: '/realtime/sse', // defaults to '/events'
+>   inject: [ConfigService],
+>   useFactory: (cfg: ConfigService) => ({ transport: 'sse', authenticator: ... }),
+> })
+> ```
+>
+> The async default is `'/events'`, not the `forRoot` default of `'/realtime/sse'`. A factory
+> that returns a different `sse.endpoint` is **rejected at bootstrap** rather than ignored, and
+> `REALTIME_OPTIONS_TOKEN` reports the route that was actually bound — so a health check or an
+> OpenAPI document built from the options names the path that exists.
 
 The full reference, including `forRootAsync` with `useFactory` / `useClass` / `useExisting`, is in [docs/technical_specification.md](./docs/technical_specification.md) §4.
 
@@ -527,6 +545,37 @@ Read-side view of live connections — useful for admin endpoints and metrics.
 | `ITransport`                |    —     | Implemented by the library; the seam every transport shares |
 
 Reference implementations shipped: `InMemoryPubSub` (default), `RedisRealtimePubSub`, `RedisOfflineQueue`.
+
+#### Carrying handshake context into the hooks
+
+`AuthenticationResult.metadata` is a free-form bag the library carries verbatim: it reaches
+`ConnectionEventMeta.metadata` in the three hooks that receive that type — `onConnect`,
+`onDisconnect` and `onReauthenticationFailed` — and is handed back to `revalidate` as part of
+the original result. It is the only channel that crosses that boundary — `authenticate` sees
+the request headers but no `connectionId` yet, and those hooks see the `connectionId` but not
+the headers.
+
+`onError` is the exception and takes a narrower payload (`connectionId?`, `error`, `transport`):
+it can fire before authentication resolves, so there may be no connection to describe, which is
+also why its `connectionId` is optional. It carries neither `roles` nor `metadata`.
+
+```typescript
+class TracingAuthenticator implements IConnectionAuthenticator {
+  async authenticate(ctx: ConnectionAuthContext): Promise<AuthenticationResult | null> {
+    const claims = await verify(ctx.cookies['access_token'])
+    if (!claims) return null
+    // ctx.headers keys are lowercased; this is the only place the headers are visible.
+    return { userId: claims.sub, metadata: { traceparent: ctx.headers['traceparent'] } }
+  }
+}
+
+const hooks: IConnectionLifecycleHooks = {
+  onConnect: (meta) => tracer.recordConnection(meta.connectionId, meta.metadata?.['traceparent']),
+}
+```
+
+Like `roles`, it is a **connect-time snapshot**: a `revalidate` that keeps the connection alive
+does not refresh it. The library never reads a key.
 
 ### Rooms
 

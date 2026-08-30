@@ -72,6 +72,7 @@ function addConn(
     tenantId?: string
     transport?: 'sse' | 'websocket'
     roles?: readonly string[]
+    metadata?: Record<string, unknown>
   },
 ): { received: MessageEvent[]; close$: Subject<void> } {
   const received: MessageEvent[] = []
@@ -89,7 +90,12 @@ function addConn(
     connectedAt: new Date(),
     subject: transport === 'sse' ? subject : null,
     close$: transport === 'sse' ? close$ : null,
-    originalAuth: { userId: params.userId, tenantId: params.tenantId, roles: params.roles },
+    originalAuth: {
+      userId: params.userId,
+      tenantId: params.tenantId,
+      roles: params.roles,
+      metadata: params.metadata,
+    },
   }
   connections.register(record)
   return { received, close$ }
@@ -200,7 +206,7 @@ describe('SseTransport', () => {
       connectedAt: new Date(),
       subject: throwing,
       close$: new Subject<void>(),
-      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined, metadata: undefined },
     })
     const good = addConn(connections, { connectionId: 'good', userId: 'u1' })
     await expect(transport.emitToUser('u1', 'foo', {})).resolves.toBeUndefined()
@@ -327,6 +333,35 @@ describe('SseTransport', () => {
     expect(onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ roles: undefined }))
   })
 
+  // registerConnection stores the authenticator's metadata bag, and onDisconnect
+  // reads it back — the round trip is what makes the field usable for correlating
+  // a connection with whatever the handshake carried.
+  it('passes the connection metadata to onDisconnect', async () => {
+    const onDisconnect = jest.fn()
+    const { transport } = build({ hooks: { onDisconnect } })
+    await transport.registerConnection({
+      connectionId: 'c1',
+      auth: { userId: 'u1', metadata: { traceId: 'trace-1' } },
+      subject: new Subject<MessageEvent>(),
+      close$: new Subject<void>(),
+      ip: '127.0.0.1',
+      userAgent: undefined,
+    })
+    await transport.unregisterConnection('c1')
+    expect(onDisconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { traceId: 'trace-1' } }),
+    )
+  })
+
+  // An authenticator that returns no bag reports undefined, not an empty object.
+  it('passes undefined metadata to onDisconnect when the connection has none', async () => {
+    const onDisconnect = jest.fn()
+    const { transport, connections } = build({ hooks: { onDisconnect } })
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    await transport.unregisterConnection('c1')
+    expect(onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ metadata: undefined }))
+  })
+
   // FIFO eviction removes the oldest connection beyond the per-user cap.
   it('evicts the oldest connection beyond maxConnectionsPerUser', async () => {
     const { transport, connections } = build({ sse: { maxConnectionsPerUser: 2 } })
@@ -438,7 +473,7 @@ describe('SseTransport', () => {
         connectedAt: new Date(Date.now() - ageMs),
         subject: new Subject<MessageEvent>(),
         close$: new Subject<void>(),
-        originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+        originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined, metadata: undefined },
       })
     }
     registerAged('younger', 0)
@@ -475,7 +510,7 @@ describe('SseTransport', () => {
         connectedAt: sameInstant,
         subject: new Subject<MessageEvent>(),
         close$: new Subject<void>(),
-        originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+        originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined, metadata: undefined },
       })
     }
     registerAt('first')
@@ -674,7 +709,7 @@ describe('SseTransport', () => {
         },
       } as unknown as Subject<MessageEvent>,
       close$: new Subject<void>(),
-      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined, metadata: undefined },
     })
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
@@ -700,7 +735,7 @@ describe('SseTransport', () => {
       connectedAt: past,
       subject: new Subject<MessageEvent>(),
       close$: new Subject<void>(),
-      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined },
+      originalAuth: { userId: 'u1', tenantId: undefined, roles: undefined, metadata: undefined },
     })
     await transport.unregisterConnection('c1')
     const meta = (onDisconnect as jest.Mock).mock.calls[0]?.[0] as { durationMs: number }
@@ -737,7 +772,7 @@ describe('SseTransport', () => {
       connectedAt: new Date(),
       subject: wsSubject,
       close$: new Subject<void>(),
-      originalAuth: { userId: 'u2', tenantId: undefined, roles: undefined },
+      originalAuth: { userId: 'u2', tenantId: undefined, roles: undefined, metadata: undefined },
     })
 
     rooms.join('c-sse', 'room:x')

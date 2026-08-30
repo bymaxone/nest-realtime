@@ -51,9 +51,12 @@ export class BymaxRealtimeWebSocketModule {
    * Configure the module asynchronously so options — and the authenticator —
    * can be resolved through DI.
    *
-   * Controllers are registered at decoration time, so `'both'` binds the SSE
-   * controller to the default endpoint `/events`. A non-default endpoint needs
-   * `forRoot` with pre-resolved options.
+   * Controllers are registered at decoration time, so under `'both'` the SSE
+   * route comes from `sseEndpoint` on the registration rather than from the
+   * `sse.endpoint` the factory resolves — the factory has not run yet when the
+   * controller is built. It defaults to `/events`, and a factory that resolves
+   * a disagreeing `sse.endpoint` is rejected at bootstrap. `'websocket'`
+   * registers no SSE controller, so `sseEndpoint` is rejected there outright.
    *
    * @throws when no factory pattern is given, more than one is, or the factory
    *   resolves a transport other than the one declared.
@@ -61,6 +64,7 @@ export class BymaxRealtimeWebSocketModule {
    * ```ts
    * BymaxRealtimeWebSocketModule.forRootAsync({
    *   transport: 'both',
+   *   sseEndpoint: '/realtime/sse', // optional; defaults to '/events'
    *   imports: [ConfigModule],
    *   inject: [ConfigService],
    *   useFactory: (cfg: ConfigService) => ({

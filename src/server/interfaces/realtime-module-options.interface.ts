@@ -71,7 +71,6 @@ export interface ReauthenticationPolicy {
 /** Synchronous module configuration. */
 export interface BymaxRealtimeModuleOptions {
   transport: TransportMode
-  service?: { name: string; version: string }
   authenticator: IConnectionAuthenticator
   tenantResolver?: (auth: AuthenticationResult) => string | undefined
   hooks?: IConnectionLifecycleHooks
@@ -116,6 +115,20 @@ export interface BymaxRealtimeModuleAsyncOptions extends Pick<ModuleMetadata, 'i
    * `transport` the factory resolves; a mismatch fails fast at bootstrap.
    */
   transport: TransportMode
+  /**
+   * Path to bind the SSE controller to. Defaults to `'/events'`.
+   *
+   * Declared here rather than read from `sse.endpoint` for the same reason
+   * `transport` is: controllers are registered at decoration time, and the
+   * factory has not run yet. An `sse.endpoint` coming back from the factory
+   * cannot move the route, so a registration that sets it to anything other
+   * than this value is rejected at bootstrap instead of silently serving a
+   * different path than the one configured.
+   *
+   * Rejected outright when `transport` is `'websocket'`, which registers no SSE
+   * controller for it to name.
+   */
+  sseEndpoint?: string
   /**
    * Factory producing the options, receiving whatever `inject` resolves.
    *

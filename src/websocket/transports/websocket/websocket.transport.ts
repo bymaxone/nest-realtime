@@ -126,7 +126,12 @@ export class WebSocketTransport implements ITransport {
       connectedAt,
       subject: null,
       close$: null,
-      originalAuth: { userId: auth.userId, tenantId: auth.tenantId, roles: auth.roles },
+      originalAuth: {
+        userId: auth.userId,
+        tenantId: auth.tenantId,
+        roles: auth.roles,
+        metadata: auth.metadata,
+      },
     })
 
     await socket.join(`${ROOM_PREFIXES.USER}:${auth.userId}`)
@@ -144,6 +149,7 @@ export class WebSocketTransport implements ITransport {
       userId: auth.userId,
       tenantId: auth.tenantId,
       roles: auth.roles,
+      metadata: auth.metadata,
       transport: 'websocket',
       ip: socket.handshake.address,
       userAgent: socket.handshake.headers['user-agent'],
@@ -170,6 +176,7 @@ export class WebSocketTransport implements ITransport {
       userId: record.userId,
       tenantId: record.tenantId,
       roles: record.originalAuth.roles,
+      metadata: record.originalAuth.metadata,
       transport: 'websocket' as const,
       ip: record.ip,
       userAgent: record.userAgent,

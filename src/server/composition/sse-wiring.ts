@@ -9,9 +9,6 @@ import { SseSubscriptionHandler } from '../transports/sse/sse-subscription.handl
 import { SseTransport } from '../transports/sse/sse.transport'
 import type { TransportWiring } from './transport-wiring.interface'
 
-/** The endpoint the async path binds to, since options resolve after decoration. */
-const DEFAULT_ASYNC_ENDPOINT = '/events'
-
 /**
  * Wiring for Server-Sent Events, and the reason the root entry point carries no
  * Socket.IO. Nothing reachable from here imports `@nestjs/websockets`, so an SSE
@@ -33,7 +30,7 @@ export const sseWiring: TransportWiring = {
     }
   },
 
-  buildAsync() {
+  buildAsync({ sseEndpoint }) {
     return {
       providers: [
         SseTransport,
@@ -41,7 +38,7 @@ export const sseWiring: TransportWiring = {
         RealtimePubSubSubscriber,
         { provide: REALTIME_TRANSPORT_TOKEN, useExisting: SseTransport },
       ],
-      controllers: [createSseController(DEFAULT_ASYNC_ENDPOINT)],
+      controllers: [createSseController(sseEndpoint)],
     }
   },
 }

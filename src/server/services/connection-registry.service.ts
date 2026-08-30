@@ -33,6 +33,8 @@ export interface ConnectionRecord {
     userId: string
     tenantId: string | undefined
     roles: readonly string[] | undefined
+    /** The authenticator's free-form bag, carried through verbatim and never read. */
+    metadata: Record<string, unknown> | undefined
   }
 }
 

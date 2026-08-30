@@ -127,6 +127,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
             ? { tenantId: conn.originalAuth.tenantId }
             : {}),
           ...(conn.originalAuth.roles !== undefined ? { roles: conn.originalAuth.roles } : {}),
+          ...(conn.originalAuth.metadata !== undefined
+            ? { metadata: conn.originalAuth.metadata }
+            : {}),
         }
         // Require strict true — a truthy non-boolean result (e.g. a user object) is not success.
         // When revalidate is absent, optional-chaining returns undefined; ?? true normalises it.
@@ -162,6 +165,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         userId: conn.userId,
         tenantId: conn.tenantId,
         roles: conn.originalAuth.roles,
+        metadata: conn.originalAuth.metadata,
         transport: 'sse',
         ip: conn.ip,
         userAgent: conn.userAgent,

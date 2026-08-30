@@ -145,6 +145,37 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     expect(onConnect).toHaveBeenCalledWith(expect.objectContaining({ roles: undefined }))
   })
 
+  // onConnect receives the authenticator's metadata bag, read off the record. This is
+  // the only point that has both the bag and a connectionId, so it is where a host
+  // correlates a connection with a trace or request id read during the handshake.
+  it('passes the connection metadata to onConnect', async () => {
+    const onConnect = jest.fn().mockResolvedValue(undefined)
+    const transport = mkTransport({
+      getConnection: jest
+        .fn()
+        .mockReturnValue(mkRecord('conn-1', 'u1', undefined, undefined, { traceId: 'trace-1' })),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+    expect(onConnect).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { traceId: 'trace-1' } }),
+    )
+  })
+
+  // An authenticator that returns no bag yields undefined, not an empty object.
+  it('passes undefined metadata to onConnect when the connection has none', async () => {
+    const onConnect = jest.fn().mockResolvedValue(undefined)
+    const handler = build(mkTransport(), mkHeartbeat(), mkOptions(), { onConnect })
+    const stream = await handler.handle(mkReq(), mkRes())
+    const sub = stream.subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+    expect(onConnect).toHaveBeenCalledWith(expect.objectContaining({ metadata: undefined }))
+  })
+
   // A throwing onConnect hook does not break the connection lifecycle.
   it('swallows a throwing onConnect hook', async () => {
     const onConnect = jest.fn().mockRejectedValue(new Error('hook boom'))
@@ -349,6 +380,32 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     await Promise.resolve()
     const ctx = (onError as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
     expect(ctx['transport']).toBe('sse')
+  })
+
+  // The onError payload is exactly { connectionId, error, transport } — it is NOT
+  // ConnectionEventMeta, so it carries neither roles nor the authenticator's metadata
+  // bag. This is pinned rather than left to the JSDoc because the docs claiming a hook
+  // receives something it does not is the exact defect this release fixes: widening the
+  // payload has to fail here, so whoever widens it updates the guarantee with it.
+  it('gives onError a payload with no roles and no metadata', async () => {
+    let capturedSubject: Subject<MessageEvent> | undefined
+    const transport = mkTransport({
+      registerConnection: jest
+        .fn()
+        .mockImplementation(async (params: { subject: Subject<MessageEvent> }) => {
+          capturedSubject = params.subject
+        }),
+      emitConnectionEvent: false,
+    })
+    const onError = jest.fn()
+    const handler = build(transport, mkHeartbeat(), mkOptions(), { onError })
+    const stream$ = await handler.handle(mkReq(), mkRes())
+    stream$.subscribe()
+    await Promise.resolve()
+    capturedSubject!.error(new Error('stream-error'))
+    await Promise.resolve()
+    const ctx = (onError as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(Object.keys(ctx).sort()).toEqual(['connectionId', 'error', 'transport'])
   })
 
   // onError receives transport: 'sse' when registerConnection rejects.
