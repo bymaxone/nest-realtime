@@ -20,6 +20,7 @@ allowBuilds:
 # an override placed there does nothing — it warns, but it does nothing.
 overrides:
   'brace-expansion': '^5.0.8'
+  'browserslist': '^4.28.7'
   'esbuild': '^0.28.1'
   'fast-uri': '^3.1.4'
   'js-yaml@3': '^3.15.0'
