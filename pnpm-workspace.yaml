@@ -2,6 +2,16 @@
 # neverBuiltDependencies and their siblings were removed in v11 and replaced by
 # this map. An unlisted package counts as unreviewed and its scripts are denied.
 allowBuilds:
+  # Denied deliberately, not merely unreviewed. jest-haste-map depends on
+  # @parcel/watcher, whose install script is `node scripts/build-from-source.js`,
+  # a no-op unless npm_config_build_from_source is 'true'. Denying it therefore
+  # costs nothing at all: the watcher still loads from the prebuilt per-platform
+  # binaries that package ships as optional dependencies. `false` rather than
+  # `true` because it is the setting that holds whatever the environment says —
+  # compiling a native addon should not be reachable from an env var during an
+  # install. Nothing here watches files in any case: `jest --watch` exists only as
+  # the `test:watch` script and no workflow invokes it.
+  '@parcel/watcher': false
   esbuild: true
   unrs-resolver: true
 
@@ -10,6 +20,7 @@ allowBuilds:
 # an override placed there does nothing — it warns, but it does nothing.
 overrides:
   'brace-expansion': '^5.0.8'
+  'browserslist': '^4.28.7'
   'esbuild': '^0.28.1'
   'fast-uri': '^3.1.4'
   'js-yaml@3': '^3.15.0'
