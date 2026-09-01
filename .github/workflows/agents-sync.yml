@@ -30,18 +30,16 @@ jobs:
       contents: write
       pull-requests: write
     secrets:
-      # Named rather than `inherit`, so the called workflow receives this one
-      # secret and not every secret this repository holds.
+      # A GitHub App rather than a personal access token: the credential is
+      # minted per run and expires within the hour, so there is nothing to
+      # rotate and nothing that can expire unnoticed. The two are read together
+      # and the called workflow fails loudly if only one is set, rather than
+      # falling back to a token nobody supplied.
       #
-      # The mapping is present even while the secret is not, because a reusable
-      # workflow receives no secret it is not passed: adding AGENTS_SYNC_TOKEN
-      # later would otherwise change nothing, and the run would keep using the
-      # default token while looking configured. An unset secret evaluates to the
-      # empty string, which the called workflow already falls back from.
-      #
-      # Why it is worth setting: a pull request opened with the default
-      # GITHUB_TOKEN starts no workflow runs, and this repository's ruleset
-      # requires eight checks — E2E (in-process), Verify build + size, the four
-      # `ci /` jobs, the OSV scan and the dependency review — so an unattended
-      # sync pull request cannot merge until somebody pushes to it.
-      sync-token: ${{ secrets.AGENTS_SYNC_TOKEN }}
+      # `sync-token` is deliberately not mapped. A mapping whose secret does not
+      # exist resolves to the empty string, which is the failure this file most
+      # needs to avoid: the run keeps using the default GITHUB_TOKEN, whose pull
+      # requests start no workflow runs, so the sync pull request cannot satisfy
+      # this repository's required checks while the workflow looks configured.
+      app-id: ${{ secrets.AGENTS_SYNC_APP_ID }}
+      app-private-key: ${{ secrets.AGENTS_SYNC_PRIVATE_KEY }}
