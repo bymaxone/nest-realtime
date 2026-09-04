@@ -77,6 +77,67 @@ describe('RealtimeGateway', () => {
     gateway = module.get(RealtimeGateway)
   })
 
+  it('handleConnection disconnects when the authenticator returns a blank userId', async () => {
+    // Fail closed: a blank identity indexes every such connection under one key and
+    // joins them to the room `user:`, so the socket is refused rather than registered.
+    authenticator.authenticate.mockResolvedValue({ userId: '' })
+    const socket = makeSocket()
+    await gateway.handleConnection(socket as never)
+    expect(socket.disconnect).toHaveBeenCalledWith(true)
+    expect(transportMock.registerSocket).not.toHaveBeenCalled()
+  })
+
+  it('handleConnection disconnects when the authenticator returns a blank tenantId', async () => {
+    // An empty tenant is a shared bucket rather than an absent one; undefined is the
+    // supported way to say a connection belongs to no tenant.
+    authenticator.authenticate.mockResolvedValue({ userId: 'u-1', tenantId: ' ' })
+    const socket = makeSocket()
+    await gateway.handleConnection(socket as never)
+    expect(socket.disconnect).toHaveBeenCalledWith(true)
+    expect(transportMock.registerSocket).not.toHaveBeenCalled()
+  })
+
+  it('applies tenantResolver before registering the socket', async () => {
+    // The resolver runs on both transports or on neither. It decides the tenant that
+    // routes a connection's events, so a consumer configuring it must get the same
+    // tenant whichever transport the client happened to open.
+    authenticator.authenticate.mockResolvedValue(validAuth)
+    const module = await buildModule({ tenantResolver: () => 't-resolved' })
+    const g = module.get(RealtimeGateway)
+    const socket = makeSocket()
+    await g.handleConnection(socket as never)
+    expect(transportMock.registerSocket).toHaveBeenCalledWith(
+      socket,
+      expect.objectContaining({ userId: 'u-1', tenantId: 't-resolved' }),
+    )
+  })
+
+  it('reports the resolved tenant in connection:established, not the raw one', async () => {
+    // The client is told which tenant it is on; telling it the pre-resolver value
+    // would contradict the routing the server actually applied.
+    authenticator.authenticate.mockResolvedValue(validAuth)
+    const module = await buildModule({ tenantResolver: () => 't-resolved' })
+    const g = module.get(RealtimeGateway)
+    const socket = makeSocket()
+    await g.handleConnection(socket as never)
+    expect(socket.emit).toHaveBeenCalledWith(
+      'connection:established',
+      expect.objectContaining({ traits: expect.objectContaining({ tenantId: 't-resolved' }) }),
+    )
+  })
+
+  it('falls back to the auth tenantId when no resolver is configured', async () => {
+    // Applying the resolver on both transports must not change what happens when there
+    // is no resolver: the authenticator's own tenant still routes the connection.
+    authenticator.authenticate.mockResolvedValue(validAuth)
+    const socket = makeSocket()
+    await gateway.handleConnection(socket as never)
+    expect(transportMock.registerSocket).toHaveBeenCalledWith(
+      socket,
+      expect.objectContaining({ tenantId: 't-1' }),
+    )
+  })
+
   it('afterInit calls transport.setServer with the server instance', () => {
     // afterInit wires the Socket.IO server to the transport.
     const fakeServer = {}

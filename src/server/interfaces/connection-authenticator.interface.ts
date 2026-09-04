@@ -44,7 +44,20 @@ export interface ConnectionAuthContext {
  * may carry extra fields through the `metadata` bag.
  */
 export interface AuthenticationResult {
+  /**
+   * The authenticated account. Must be a non-empty string: a blank one indexes
+   * every such connection under a single key and joins them all to the room
+   * `user:`, so it is refused at connection bootstrap rather than registered.
+   */
   readonly userId: string
+  /**
+   * The tenant this connection routes on, or absent when it belongs to none.
+   *
+   * Absent and empty are different. Omitting it — or returning `undefined` or
+   * `null` — means no tenant: indexed under none, joining no tenant room. An empty
+   * or whitespace-only string is refused, because it is a shared bucket rather than
+   * a missing value: every connection carrying `''` lands under the same key.
+   */
   readonly tenantId?: string
   readonly roles?: readonly string[]
   /**
@@ -86,6 +99,12 @@ export interface IConnectionAuthenticator {
    *
    * @returns the authenticated result, or `null` to reject the connection (the
    *          transport replies 401 / disconnects accordingly).
+   *
+   * Returning a result whose `userId` is blank, or whose `tenantId` is present but
+   * blank, is not a second way to reject: it is a contract violation. The connection
+   * is refused either way, but it surfaces as a server fault rather than a 401,
+   * because the credentials were accepted and the fault is in this method. Return
+   * `null` to reject a client.
    */
   authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null>
 

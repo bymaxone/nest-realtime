@@ -28,8 +28,19 @@ function mkRecord(id = 'c1', userId = 'u1'): ConnectionRecord {
   }
 }
 
+/**
+ * Stand in for ConnectionRegistry, filtering by transport as the real one does.
+ *
+ * Returning every record for any argument would be a laxer mock than the registry:
+ * the service reads both indexes, and a mock that ignores the argument reports each
+ * connection twice — a failure of the harness that reads as a defect in the service.
+ */
 function mkConnections(records: ConnectionRecord[]) {
-  return { allByTransport: jest.fn().mockReturnValue(records) }
+  return {
+    allByTransport: jest.fn((transport: string) =>
+      records.filter((r) => r.transport === transport),
+    ),
+  }
 }
 
 function mkRealtime() {
@@ -430,6 +441,52 @@ describe('ReauthenticationService', () => {
     expect(revalidate).toHaveBeenCalledWith(
       'c1',
       expect.not.objectContaining({ metadata: undefined }),
+    )
+  })
+
+  // A WebSocket connection is revalidated too. A policy that runs on one transport is
+  // not a revocation policy: a socket admitted under credentials valid at handshake
+  // would otherwise keep delivering for the life of the connection.
+  it('revalidates websocket connections, not only sse ones', async () => {
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const wsRecord: ConnectionRecord = {
+      ...mkRecord(),
+      connectionId: 'c-ws',
+      transport: 'websocket',
+    }
+    const connections = mkConnections([wsRecord])
+    const svc = build(
+      connections,
+      mkRealtime(),
+      mkAuth(revalidate),
+      mkOptions({ intervalSeconds: 60 }),
+    )
+    await svc.runCycle()
+    expect(revalidate).toHaveBeenCalledWith('c-ws', expect.objectContaining({ userId: 'u1' }))
+  })
+
+  // The failure meta reports the connection's own transport rather than a fixed one,
+  // so a host acting on it is not told every disconnect came from SSE.
+  it('reports the websocket transport in the failure meta', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const wsRecord: ConnectionRecord = {
+      ...mkRecord(),
+      connectionId: 'c-ws',
+      transport: 'websocket',
+    }
+    const connections = mkConnections([wsRecord])
+    const hooks = { onReauthenticationFailed: jest.fn().mockResolvedValue(undefined) }
+    const svc = build(
+      connections,
+      mkRealtime(),
+      mkAuth(revalidate),
+      mkOptions({ intervalSeconds: 60 }),
+      hooks,
+    )
+    await svc.runCycle()
+    await flush()
+    expect(hooks.onReauthenticationFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ transport: 'websocket' }),
     )
   })
 

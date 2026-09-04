@@ -44,8 +44,8 @@ function resolvePolicy(raw: ReauthenticationPolicy | undefined): RequiredPolicy 
 }
 
 /**
- * Periodically revalidates active SSE connections through the consumer-provided
- * `IConnectionAuthenticator.revalidate` contract.
+ * Periodically revalidates every active connection, on both transports, through the
+ * consumer-provided `IConnectionAuthenticator.revalidate` contract.
  *
  * A short positive cache (default 60 s) avoids hammering the auth backend on every
  * interval tick. On failure the service either disconnects immediately or first emits
@@ -104,7 +104,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   }
 
   /**
-   * Run one revalidation cycle over all active SSE connections.
+   * Run one revalidation cycle over every active connection, SSE and WebSocket alike.
    *
    * A cache hit within `cacheTtlMs` skips the `revalidate` call. A positive result
    * refreshes the cache. A negative result (or a thrown error) invokes the configured
@@ -114,7 +114,16 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    */
   async runCycle(): Promise<void> {
     const now = Date.now()
-    for (const conn of this.connections.allByTransport('sse')) {
+    // Both transports, not SSE alone. A revocation policy that runs on one of them
+    // is not a revocation policy: a WebSocket admitted under credentials that were
+    // valid at handshake would keep delivering for the life of the socket, which is
+    // the case the policy exists to prevent. The registry has no `all()`, so the two
+    // indexes are read in turn rather than widening its surface for one caller.
+    const connections = [
+      ...this.connections.allByTransport('sse'),
+      ...this.connections.allByTransport('websocket'),
+    ]
+    for (const conn of connections) {
       try {
         const lastValid = this.positiveCache.get(conn.connectionId)
         if (lastValid !== undefined && now - lastValid < this.policy.cacheTtlMs) continue
@@ -166,7 +175,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         tenantId: conn.tenantId,
         roles: conn.originalAuth.roles,
         metadata: conn.originalAuth.metadata,
-        transport: 'sse',
+        transport: conn.transport,
         ip: conn.ip,
         userAgent: conn.userAgent,
         connectedAt: conn.connectedAt,

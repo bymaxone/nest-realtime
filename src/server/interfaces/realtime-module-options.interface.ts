@@ -72,7 +72,17 @@ export interface ReauthenticationPolicy {
 export interface BymaxRealtimeModuleOptions {
   transport: TransportMode
   authenticator: IConnectionAuthenticator
-  tenantResolver?: (auth: AuthenticationResult) => string | undefined
+  /**
+   * Derive the tenant a connection routes on from the authenticated result.
+   *
+   * Applied on **both** transports. `undefined` and `null` both mean "no opinion"
+   * and fall back to `auth.tenantId` rather than clearing it; to place a connection
+   * in no tenant, return a result without one from the authenticator. `null` is in
+   * the signature because the implementation accepts it and a type narrower than the
+   * behaviour forces a cast on anyone testing the boundary. A blank string is
+   * refused, on the same terms as `AuthenticationResult.tenantId`.
+   */
+  tenantResolver?: (auth: AuthenticationResult) => string | undefined | null
   hooks?: IConnectionLifecycleHooks
   pubsub?: IRealtimePubSub
   offlineQueue?: IOfflineQueueStorage
