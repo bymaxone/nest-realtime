@@ -9,7 +9,7 @@
  * Shared builders live in `test/fixtures/sse/subscription-harness.ts` — the suite is
  * split by area and every part needs the same fakes.
  */
-import { UnauthorizedException } from '@nestjs/common'
+import { InternalServerErrorException, UnauthorizedException } from '@nestjs/common'
 import {
   mkRecord,
   mkTransport,
@@ -26,6 +26,43 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
     const transport = mkTransport({ authenticate: jest.fn().mockResolvedValue(null) })
     const handler = build(transport, mkHeartbeat(), mkOptions())
     await expect(handler.handle(mkReq(), mkRes())).rejects.toBeInstanceOf(UnauthorizedException)
+  })
+
+  // A blank identity is refused at bootstrap rather than registered: an empty userId
+  // indexes every such connection under one key and joins them to the room `user:`,
+  // and on a long-lived subscription that is a stream rather than one response.
+  it('refuses a connection whose authenticator returns a blank userId', async () => {
+    const transport = mkTransport({ authenticate: jest.fn().mockResolvedValue({ userId: '' }) })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    await expect(handler.handle(mkReq(), mkRes())).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    )
+    expect(transport.registerConnection).not.toHaveBeenCalled()
+  })
+
+  // Same for an empty tenant, which is a shared bucket rather than an absent one.
+  it('refuses a connection whose authenticator returns a blank tenantId', async () => {
+    const transport = mkTransport({
+      authenticate: jest.fn().mockResolvedValue({ userId: 'u1', tenantId: '  ' }),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    await expect(handler.handle(mkReq(), mkRes())).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    )
+    expect(transport.registerConnection).not.toHaveBeenCalled()
+  })
+
+  // The check runs on the RESOLVED auth: a resolver that returns a blank tenant is
+  // what routes the connection, so it is the value that has to carry an identity.
+  it('refuses a connection whose tenantResolver returns a blank tenantId', async () => {
+    const transport = mkTransport({
+      authenticate: jest.fn().mockResolvedValue({ userId: 'u1', tenantId: 't-real' }),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions({ tenantResolver: () => '' }))
+    await expect(handler.handle(mkReq(), mkRes())).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    )
+    expect(transport.registerConnection).not.toHaveBeenCalled()
   })
 
   // registerConnection is called with the correct parameters on subscribe.

@@ -10,6 +10,8 @@ import {
   REALTIME_OPTIONS_TOKEN,
   RESERVED_EVENT_NAMES,
   parseCookieHeader,
+  assertIdentityIsNotBlank,
+  resolveAuthTenant,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   ConnectionAuthContext,
@@ -79,42 +81,68 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
    * Fail-closed: any thrown error disconnects the socket immediately so it cannot
    * linger in an unregistered state and receive broadcast events.
    */
+  /**
+   * Map a Socket.IO handshake onto the transport-agnostic auth context.
+   *
+   * Socket.IO carries credentials in three places and the authenticator sees one
+   * shape: `handshake.auth` is merged into the headers and query it stands in for,
+   * and a repeated `ticket` parameter is collapsed to its first value, because the
+   * ticket pattern is single-valued and an array reaching an authenticator that
+   * expects a string is a bug at the far end.
+   *
+   * @param socket - The connecting Socket.IO socket.
+   * @returns The context handed to `IConnectionAuthenticator.authenticate`.
+   */
+  private buildAuthContext(socket: Socket): ConnectionAuthContext {
+    const { handshake } = socket
+    const headers = this.normalizeHeaders(handshake.headers)
+    const query: Record<string, string | string[] | undefined> = { ...handshake.query }
+
+    // Merge Socket.IO's dedicated auth field (spec §8.1, bearer + ticket patterns).
+    const handshakeAuth = handshake.auth as { token?: string; ticket?: string } | undefined
+    if (handshakeAuth?.token) headers['authorization'] = `Bearer ${handshakeAuth.token}`
+    if (handshakeAuth?.ticket) query['ticket'] = handshakeAuth.ticket
+
+    // The ticket is a single-value auth parameter; collapse any array form.
+    const ticket = firstQueryValue(query['ticket'])
+    if (ticket !== undefined) query['ticket'] = ticket
+
+    return {
+      cookies: parseCookieHeader(handshake.headers.cookie ?? ''),
+      headers,
+      query,
+      ip: handshake.address,
+      userAgent: handshake.headers['user-agent'],
+      transport: 'websocket',
+    }
+  }
+
   async handleConnection(socket: Socket): Promise<void> {
     try {
-      const { handshake } = socket
-      const headers = this.normalizeHeaders(handshake.headers)
-      const query: Record<string, string | string[] | undefined> = { ...handshake.query }
-
-      // Merge Socket.IO's dedicated auth field (spec §8.1, bearer + ticket patterns).
-      const handshakeAuth = handshake.auth as { token?: string; ticket?: string } | undefined
-      if (handshakeAuth?.token) headers['authorization'] = `Bearer ${handshakeAuth.token}`
-      if (handshakeAuth?.ticket) query['ticket'] = handshakeAuth.ticket
-
-      // The ticket is a single-value auth parameter; collapse any array form.
-      const ticket = firstQueryValue(query['ticket'])
-      if (ticket !== undefined) query['ticket'] = ticket
-
-      const ctx: ConnectionAuthContext = {
-        cookies: parseCookieHeader(handshake.headers.cookie ?? ''),
-        headers,
-        query,
-        ip: handshake.address,
-        userAgent: handshake.headers['user-agent'],
-        transport: 'websocket',
-      }
-
-      const auth = await this.transport.authenticator().authenticate(ctx)
+      const auth = await this.transport.authenticator().authenticate(this.buildAuthContext(socket))
       if (!auth) {
         socket.disconnect(true)
         return
       }
 
-      await this.transport.registerSocket(socket, auth)
+      // Both transports resolve the routing tenant through this one function, so a
+      // connection carries the same tenant whichever one opened it.
+      const resolvedAuth = resolveAuthTenant(this.options, auth)
+
+      // Throws; the catch below disconnects, which is the fail-closed path this method
+      // already relies on for every other error.
+      assertIdentityIsNotBlank(resolvedAuth)
+
+      await this.transport.registerSocket(socket, resolvedAuth)
 
       if (this.options.websocket?.emitConnectionEvent !== false) {
         socket.emit(RESERVED_EVENT_NAMES.CONNECTION_ESTABLISHED, {
           connectionId: socket.id,
-          traits: { userId: auth.userId, tenantId: auth.tenantId, roles: auth.roles },
+          traits: {
+            userId: resolvedAuth.userId,
+            tenantId: resolvedAuth.tenantId,
+            roles: resolvedAuth.roles,
+          },
         })
       }
     } catch (err) {

@@ -305,7 +305,7 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | **transport**              | `'sse'` \| `'websocket'` \| `'both'`                                                                                                        | — (**required**)                             |
 | **authenticator**          | `IConnectionAuthenticator`                                                                                                                  | — (**required**)                             |
-| **tenantResolver**         | `(auth) => string \| undefined` — derives `tenantId` from the auth result                                                                   | `auth.tenantId`                              |
+| **tenantResolver**         | `(auth) => string \| undefined` — derives `tenantId` from the auth result, on **both** transports                                                                   | `auth.tenantId`                              |
 | **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed` (fire-and-forget)                                                        | —                                            |
 | **pubsub**                 | `IRealtimePubSub` — cross-instance fan-out for SSE                                                                                          | `InMemoryPubSub`                             |
 | **offlineQueue**           | `IOfflineQueueStorage` — events held while a user is away                                                                                   | — (disabled)                                 |
@@ -545,6 +545,25 @@ Read-side view of live connections — useful for admin endpoints and metrics.
 | `ITransport`                |    —     | Implemented by the library; the seam every transport shares |
 
 Reference implementations shipped: `InMemoryPubSub` (default), `RedisRealtimePubSub`, `RedisOfflineQueue`.
+
+#### Identity must be present or absent, never blank
+
+`userId` must be a non-empty string, and `tenantId` must be either absent or a non-empty
+string. A connection whose authenticator — or whose `tenantResolver` — yields a blank one is
+**refused at bootstrap** rather than registered.
+
+The reason is that blank is not missing. `userId` and `tenantId` key the connection registry
+and compose the `user:` and `tenant:` rooms, so every connection carrying `''` lands under the
+same key and joins the same room; a later emit to that key reaches all of them. On a long-lived
+subscription that is not one wrong response but a stream that keeps delivering.
+
+To place a connection in no tenant, omit `tenantId` or return `undefined` or `null` — that is
+indexed under none and joins no tenant room, which an empty string is not. Whitespace counts as
+blank: `' '` composes `user: ` just as `''` does.
+
+A blank identity surfaces as a server fault rather than a `401`, because the client's
+credentials were accepted and the fault is in the authenticator. Return `null` to reject a
+client.
 
 #### Carrying handshake context into the hooks
 

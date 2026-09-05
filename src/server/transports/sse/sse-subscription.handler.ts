@@ -3,7 +3,14 @@
  * @layer transport
  */
 import { randomUUID } from 'node:crypto'
-import { Inject, Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common'
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  Optional,
+  UnauthorizedException,
+} from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import { EMPTY, merge, Observable, of, Subject } from 'rxjs'
 import type { Subscriber, Subscription } from 'rxjs'
@@ -24,6 +31,7 @@ import type {
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import type { SseRequest, SseResponse } from '../../interfaces/sse-http.interface'
+import { assertIdentityIsNotBlank, resolveAuthTenant } from '../../utils/assert-identity'
 import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { SseTransport } from './sse.transport'
@@ -151,6 +159,34 @@ export class SseSubscriptionHandler {
   ) {}
 
   /**
+   * Resolve the tenant this connection routes on, and refuse a blank identity.
+   *
+   * Both transports resolve the routing tenant through this one function, so a
+   * connection carries the same tenant whichever one opened it. The check runs on
+   * the resolved value rather than the raw one — validating what the server does not
+   * use would validate nothing.
+   *
+   * A blank identity is the consumer's configuration rather than the client's
+   * credentials, so it is deliberately not a 401: a 401 would tell a client its
+   * credentials were rejected when they were accepted, inviting a retry that cannot
+   * succeed. Wrapped rather than rethrown raw so the 500 is a decision Nest logs
+   * once, not an unhandled crash logging a stack on every reconnect.
+   *
+   * @param auth - The result the consumer's authenticator returned.
+   * @returns The same result with the routing tenant resolved.
+   * @throws InternalServerErrorException when a trait is present but blank.
+   */
+  private resolveAndValidateIdentity(auth: AuthenticationResult): AuthenticationResult {
+    const resolvedAuth = resolveAuthTenant(this.options, auth)
+    try {
+      assertIdentityIsNotBlank(resolvedAuth)
+    } catch (err) {
+      throw new InternalServerErrorException((err as Error).message)
+    }
+    return resolvedAuth
+  }
+
+  /**
    * Handle an incoming SSE connection request end-to-end.
    *
    * Sets anti-buffering headers, authenticates the request, captures the offline-gap
@@ -161,7 +197,15 @@ export class SseSubscriptionHandler {
    * @param req - The incoming request (SSE GET).
    * @param res - The response (passthrough for header mutations and heartbeat writes).
    * @returns An Observable of `MessageEvent` values for NestJS `@Sse` to stream.
-   * @throws UnauthorizedException when authentication returns null.
+   * @throws UnauthorizedException when authentication returns null — the client's
+   *   credentials were rejected, which is a 401.
+   * @throws Error carrying `REALTIME_AUTH_FAILED` when the authenticator, or the
+   *   configured `tenantResolver`, yields a blank `userId` or `tenantId`. This is
+   *   deliberately not a 401: the credentials were accepted and the fault is the
+   *   consumer's configuration, so it surfaces as a 500 whose message names the fix
+   *   in the server log rather than telling a client to retry something that cannot
+   *   succeed. Nest's default filter sends the client a generic body, so the message
+   *   does not leak.
    */
   async handle(req: SseRequest, res: SseResponse): Promise<Observable<MessageEvent>> {
     // Anti-buffering headers must be sent before the first byte.
@@ -174,10 +218,7 @@ export class SseSubscriptionHandler {
     const auth = await this.transport.authenticate(context)
     if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
 
-    // Apply an optional per-request tenant resolver, falling back to the auth result.
-    const resolvedTenantId = this.options.tenantResolver?.(auth) ?? auth.tenantId
-    const resolvedAuth: AuthenticationResult =
-      resolvedTenantId !== undefined ? { ...auth, tenantId: resolvedTenantId } : auth
+    const resolvedAuth = this.resolveAndValidateIdentity(auth)
 
     const connectionId = randomUUID()
     const subject = new Subject<MessageEvent>()

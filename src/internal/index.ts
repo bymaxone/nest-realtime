@@ -66,6 +66,7 @@ export { RedisOfflineQueue } from '../server/offline-queue/redis-offline-queue'
 export type { RedisOfflineQueueOptions } from '../server/offline-queue/redis-offline-queue'
 
 // Utilities and contracts.
+export { assertIdentityIsNotBlank, resolveAuthTenant } from '../server/utils/assert-identity'
 export { composeRoomId } from '../server/utils/compose-room-id'
 export { parseCookieHeader } from '../server/utils/parse-cookie-header'
 export * from '../server/interfaces'
