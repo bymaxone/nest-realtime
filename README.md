@@ -305,7 +305,7 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | **transport**              | `'sse'` \| `'websocket'` \| `'both'`                                                                                                        | — (**required**)                             |
 | **authenticator**          | `IConnectionAuthenticator`                                                                                                                  | — (**required**)                             |
-| **tenantResolver**         | `(auth) => string \| undefined` — derives `tenantId` from the auth result, on **both** transports                                                                   | `auth.tenantId`                              |
+| **tenantResolver**         | `(auth) => string \| undefined \| null` — derives `tenantId` from the auth result, on **both** transports; `undefined` and `null` mean "no opinion" and fall back    | `auth.tenantId`                              |
 | **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed` (fire-and-forget)                                                        | —                                            |
 | **pubsub**                 | `IRealtimePubSub` — cross-instance fan-out for SSE                                                                                          | `InMemoryPubSub`                             |
 | **offlineQueue**           | `IOfflineQueueStorage` — events held while a user is away                                                                                   | — (disabled)                                 |
@@ -557,9 +557,30 @@ and compose the `user:` and `tenant:` rooms, so every connection carrying `''` l
 same key and joins the same room; a later emit to that key reaches all of them. On a long-lived
 subscription that is not one wrong response but a stream that keeps delivering.
 
-To place a connection in no tenant, omit `tenantId` or return `undefined` or `null` — that is
-indexed under none and joins no tenant room, which an empty string is not. Whitespace counts as
-blank: `' '` composes `user: ` just as `''` does.
+To place a connection in no tenant, the **authenticator omits `tenantId`** — that is indexed
+under none and joins no tenant room, which an empty string is not. Whitespace counts as blank:
+`' '` composes `user: ` just as `''` does.
+
+Omission is the form to write, because it is the only one that compiles everywhere.
+`AuthenticationResult` declares `tenantId?: string`; the runtime accepts an explicit `undefined`
+or `null` too — an untyped claim spread into the result produces them routinely — but whether
+either *type-checks* depends on the consuming project's `tsconfig`, which the published
+declarations do not control:
+
+| consumer's `tsconfig`                     | `tenantId: undefined` | `tenantId: null` |
+| ----------------------------------------- | --------------------- | ---------------- |
+| `strict` + `exactOptionalPropertyTypes`   | `TS2375`              | `TS2322`         |
+| `strict`, no `exactOptionalPropertyTypes` | compiles              | `TS2322`         |
+| no `strictNullChecks`                     | compiles              | compiles         |
+
+Omitting the key is correct in all three.
+
+`tenantResolver` cannot clear a tenant, and this is the one asymmetry worth reading twice.
+Resolution is `tenantResolver?.(auth) ?? auth.tenantId`, so a resolver returning `undefined` or
+`null` means *no opinion* and falls back to the tenant the authenticator supplied. A resolver
+written to place a connection in no tenant by returning `null` leaves it in `auth.tenantId`'s
+room instead, still receiving that tenant's events. Decide the absent case in the
+authenticator, where absence is what it looks like.
 
 A blank identity surfaces as a server fault rather than a `401`, because the client's
 credentials were accepted and the fault is in the authenticator. Return `null` to reject a
