@@ -558,12 +558,22 @@ same key and joins the same room; a later emit to that key reaches all of them. 
 subscription that is not one wrong response but a stream that keeps delivering.
 
 To place a connection in no tenant, the **authenticator omits `tenantId`** — that is indexed
-under none and joins no tenant room, which an empty string is not. Omission is the whole of the
-typed contract: `AuthenticationResult` declares `tenantId?: string`, and under this package's
-`exactOptionalPropertyTypes` neither `null` nor an explicit `undefined` compiles. The runtime
-does accept both, because an untyped claim spread into the result produces them routinely, but
-a TypeScript consumer writing either gets a type error rather than a tenantless connection.
-Whitespace counts as blank: `' '` composes `user: ` just as `''` does.
+under none and joins no tenant room, which an empty string is not. Whitespace counts as blank:
+`' '` composes `user: ` just as `''` does.
+
+Omission is the form to write, because it is the only one that compiles everywhere.
+`AuthenticationResult` declares `tenantId?: string`; the runtime accepts an explicit `undefined`
+or `null` too — an untyped claim spread into the result produces them routinely — but whether
+either *type-checks* depends on the consuming project's `tsconfig`, which the published
+declarations do not control:
+
+| consumer's `tsconfig`                     | `tenantId: undefined` | `tenantId: null` |
+| ----------------------------------------- | --------------------- | ---------------- |
+| `strict` + `exactOptionalPropertyTypes`   | `TS2375`              | `TS2322`         |
+| `strict`, no `exactOptionalPropertyTypes` | compiles              | `TS2322`         |
+| no `strictNullChecks`                     | compiles              | compiles         |
+
+Omitting the key is correct in all three.
 
 `tenantResolver` cannot clear a tenant, and this is the one asymmetry worth reading twice.
 Resolution is `tenantResolver?.(auth) ?? auth.tenantId`, so a resolver returning `undefined` or
