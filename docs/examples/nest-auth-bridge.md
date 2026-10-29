@@ -91,7 +91,9 @@ import { NestAuthRealtimeBridge } from './nest-auth-realtime.bridge'
   imports: [
     JwtModule.register({ secret: process.env.JWT_SECRET, signOptions: { expiresIn: '15m' } }),
     BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       imports: [JwtModule],
+      extraProviders: [NestAuthRealtimeBridge],
       inject: [NestAuthRealtimeBridge],
       useFactory: (bridge: NestAuthRealtimeBridge) => ({
         transport: 'sse',
@@ -104,7 +106,6 @@ import { NestAuthRealtimeBridge } from './nest-auth-realtime.bridge'
       }),
     }),
   ],
-  providers: [NestAuthRealtimeBridge],
 })
 export class AppModule {}
 ```
@@ -138,14 +139,16 @@ async revalidate(_connectionId: string, auth: AuthenticationResult): Promise<boo
 }
 ```
 
-The library's `reauthenticationPolicy.cacheTtlMs` (default 60 s) means a revocation
-takes at most `cacheTtlMs` ms to propagate to existing connections.  For truly instant
-disconnects, call `realtimeService.disconnect(connectionId)` from your logout handler
-directly.
+A revocation takes effect at the next re-authentication cycle, at most
+`reauthenticationPolicy.intervalSeconds` after it; the cycle covers SSE and WebSocket
+connections alike. `cacheTtlMs` can only lengthen that delay. For an instant disconnect, call
+`realtimeService.disconnect(connectionId)` from your logout handler, which needs a connection
+id you recorded in `onConnect`.
 
 ### `cacheTtlMs` and the re-auth interval
 
 `cacheTtlMs` is the positive-result cache window inside `ReauthenticationService`.  A
 hit within the window skips a `revalidate()` call; the connection is kept without
-hitting Redis.  Set it to a value shorter than your access-token TTL so expiry is
-detected within one interval cycle.
+hitting Redis.  It matters only when it is larger than the interval
+(`cacheTtlMs` below `intervalSeconds * 1000` never produces a hit); set `intervalSeconds`
+below your access-token TTL so expiry is detected within one cycle.

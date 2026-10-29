@@ -21,10 +21,10 @@ export interface ConnectionAuthContext {
   /**
    * Query string parameters — useful for the ticket pattern.
    *
-   * Values follow the Node `ParsedUrlQuery` shape: a repeated key (`?a=1&a=2`)
-   * arrives as a `string[]`. Authenticators that expect a single value should
-   * normalize accordingly; the WebSocket gateway already collapses the `ticket`
-   * parameter to a single string before delegating.
+   * On WebSocket a repeated key (`?a=1&a=2`) arrives as a `string[]`, except the
+   * `ticket` parameter, which the gateway collapses to a single string. On SSE only
+   * a single string value is kept; a repeated key arrives as `undefined`.
+   * Authenticators that expect a single value should check `typeof value === 'string'`.
    */
   readonly query: Record<string, string | string[] | undefined>
   /**

@@ -21,7 +21,9 @@ across strict cross-origin boundaries where cookies are not forwarded:
    expired, or already consumed.
 
 The SSE request itself carries no credentials in headers; the ticket is single-use and
-lives only in the query string.
+lives only in the query string. On SSE, append `?ticket=` to the `url`. On WebSocket, pass
+`io(url, { auth: { ticket } })` (the `auth.ticket` option of the React hook); the gateway
+places it in `ctx.query.ticket` too, so one authenticator serves both transports.
 
 ## Reference implementation
 
@@ -49,7 +51,7 @@ export class TicketAuthenticator implements IConnectionAuthenticator {
 
   async authenticate(ctx: ConnectionAuthContext): Promise<AuthenticationResult | null> {
     const ticketId = ctx.query['ticket']
-    if (!ticketId) return null
+    if (typeof ticketId !== 'string' || !ticketId) return null
 
     const entry = this.store.get(ticketId)
     if (!entry) return null

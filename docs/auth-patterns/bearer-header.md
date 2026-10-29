@@ -28,8 +28,8 @@ export class BearerAuthenticator implements IConnectionAuthenticator {
   constructor(private readonly secret: string) {}
 
   async authenticate(ctx: ConnectionAuthContext): Promise<AuthenticationResult | null> {
-    // For WebSocket, the token may come from the handshake auth payload instead:
-    //   ctx.headers['x-socket-auth'] or ctx.query['token']
+    // A token sent as `io({ auth: { token } })` reaches this method as the same
+    // `authorization` header, so one code path serves both forms.
     const raw = ctx.headers['authorization']
     const token = this.extractBearer(raw)
     if (!token) return null
@@ -63,8 +63,8 @@ const socket = io({ auth: { token: '<jwt>' } })
 
 // Server side (inside authenticate)
 async authenticate(ctx: ConnectionAuthContext): Promise<AuthenticationResult | null> {
-  // Socket.IO populates ctx.query or a custom handshake auth object.
-  const token = ctx.query['token']
+  // The gateway turns `auth.token` into `Authorization: Bearer <token>`.
+  const token = this.extractBearer(ctx.headers['authorization'])
   if (!token) return null
   // ...validate token...
 }
@@ -72,10 +72,16 @@ async authenticate(ctx: ConnectionAuthContext): Promise<AuthenticationResult | n
 
 ## Security notes
 
+- **Map identity claims defensively.** A blank `userId`, or a present-but-blank `tenantId`, is
+  refused at bootstrap with `REALTIME_AUTH_FAILED` on both transports (an absent `tenantId` is
+  valid). Return `null` for a token that does not carry a usable `sub`, and omit `tenantId`
+  rather than passing an empty `tid` through.
+
 - **This pattern is WebSocket-only.** The SSE handler strips the `Authorization` header
   unconditionally before calling `IConnectionAuthenticator.authenticate` (see
-  `ConnectionAuthContext.headers` — the key is absent for SSE). An SSE client that
-  somehow sets `Authorization` will receive a 401.
+  `ConnectionAuthContext.headers` — the key is absent for SSE). The header is
+  removed before `authenticate()` runs, so an authenticator that relies on it alone returns
+  `null` and the SSE client receives a 401.
 - **Validate algorithm and audience.** When using JWTs, always specify the expected
   algorithm (`algorithms: ['RS256']`) and audience (`audience: 'my-service'`) to prevent
   algorithm-confusion attacks.

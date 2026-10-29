@@ -31,7 +31,7 @@ async authenticate(ctx: ConnectionAuthContext) {
 }
 ```
 
-**Notes:** Works same-origin and CORS (when `credentials: true`). The most secure
+**Notes:** Works same-origin. Cross-origin needs `websocket.cors: { origin: [...], credentials: true }`. The most secure
 option because the cookie is inaccessible to JavaScript (`HttpOnly`).
 
 ---
@@ -72,7 +72,7 @@ short-lived (seconds) and single-use to prevent replay.
 `io(url, { auth: { token } })` — the gateway normalizes it into
 `ctx.headers['authorization'] = 'Bearer <token>'`. Alternatively the client can set
 `extraHeaders: { authorization: 'Bearer <token>' }` (HTTP upgrade only; not applicable
-in browser WebSocket because `EventSource` and `WebSocket` both strip custom headers).
+in browser WebSocket because browser `WebSocket` and `EventSource` expose no way to set custom headers). The SSE handler additionally drops `authorization` itself.
 
 **Why Bearer works on WebSocket but NOT SSE:** The browser's `EventSource` API does not
 expose a way to set custom HTTP headers; the upgrade request carries only cookies. The
@@ -106,6 +106,6 @@ async authenticate(ctx: ConnectionAuthContext) {
 
 | Pattern | SSE (EventSource) | WebSocket (Socket.IO) | Notes |
 |---|---|---|---|
-| Cookie HttpOnly | ✅ Default | ✅ Works | Most secure |
+| Cookie HttpOnly | ✅ Recommended | ✅ Works | Most secure |
 | Ticket | ✅ Best for cross-origin | ✅ Via `auth.ticket` or query | Short-lived, single-use |
 | Bearer header | ❌ EventSource strips headers | ✅ Via `auth.token` | WS-only |

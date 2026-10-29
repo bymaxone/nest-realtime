@@ -9,7 +9,7 @@
 | **Cookie HttpOnly** | ✅ Browser sends automatically | ✅ `headers.cookie` in fetch | ✅ Socket.IO upgrade carries cookies |
 | **Ticket (query string)** | ✅ Append `?ticket=` to URL | ✅ Append `?ticket=` | ✅ URL query string |
 | **Ticket (auth field)** | ❌ EventSource has no auth field | ❌ Not applicable | ✅ `io(url, { auth: { ticket } })` |
-| **Bearer header** | ❌ EventSource strips custom headers | ⚠️ Works only in server-side code | ✅ Via `auth.token` or `extraHeaders` |
+| **Bearer header** | ❌ EventSource strips custom headers | ❌ The SSE handler drops `authorization` for every client | ✅ Via `auth.token` or `extraHeaders` |
 
 Legend: ✅ fully supported · ⚠️ restricted context · ❌ not supported
 
@@ -71,9 +71,12 @@ async authenticate(ctx: ConnectionAuthContext) {
 **Why it works on WebSocket, not SSE:**
 - The browser's `EventSource` API has no way to set custom HTTP headers — the request
   carries only URL + cookies. Bearer via header is therefore impossible for browser SSE.
+- The SSE handler also drops the `authorization` header from every request, so a bearer
+  header is never a valid SSE credential, browser or not.
 - Socket.IO's `auth` object is an application-level payload sent after the HTTP upgrade,
   so it bypasses the browser restriction entirely. `RealtimeGateway` normalizes
-  `auth.token` into `ctx.headers['authorization'] = 'Bearer <token>'`.
+  `auth.token` into `ctx.headers['authorization'] = 'Bearer <token>'`; `auth.token` and
+  `auth.ticket` take precedence over the header and the `?ticket=` query value they stand in for.
 
 **Client (WebSocket — preferred):**
 ```typescript
@@ -103,6 +106,6 @@ async authenticate(ctx: ConnectionAuthContext) {
 | Transport | Recommended pattern | Fallback |
 |---|---|---|
 | SSE (browser) | Cookie HttpOnly | Ticket in query string |
-| SSE (server-side) | Bearer header | Cookie or Ticket |
+| SSE (server-side) | Cookie (`Cookie` header) | Ticket in query string |
 | WebSocket (browser) | Cookie HttpOnly or `auth.token` | `auth.ticket` |
 | WebSocket (server-side) | `auth.token` | `extraHeaders` bearer |

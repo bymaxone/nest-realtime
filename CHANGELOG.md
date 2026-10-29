@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   emit `presence:*` events.
 - `SECURITY.md` states that only the latest minor line (1.2.x) receives security fixes; its table listed
   `0.1.x`.
+- The architecture notes, the auth patterns and the nest-auth bridge example match the code: `authorization`
+  is dropped on SSE, `auth.token` and `auth.ticket` reach the authenticator through the header and
+  `ctx.query.ticket`, `RealtimeIoAdapter` is imported from `/websocket`, and `cacheTtlMs` only matters when it
+  exceeds `intervalSeconds`.
 
 ## [1.2.0] - 2026-08-29
 
