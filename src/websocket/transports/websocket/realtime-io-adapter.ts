@@ -38,7 +38,7 @@ type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
  * (spec §11.5).
  */
 export class RealtimeIoAdapter extends IoAdapter {
-  private readonly logger = new Logger(RealtimeIoAdapter.name)
+  private readonly adapterLogger = new Logger(RealtimeIoAdapter.name)
   private readonly options: BymaxRealtimeModuleOptions
 
   constructor(app: INestApplicationContext) {
@@ -108,11 +108,11 @@ export class RealtimeIoAdapter extends IoAdapter {
       const pub = pubClient as { duplicate: () => unknown }
       const sub = pub.duplicate()
       server.adapter(createAdapter(pub as never, sub as never))
-      this.logger.log(
+      this.adapterLogger.log(
         'Socket.IO Redis adapter registered — cross-instance WebSocket fan-out enabled',
       )
     } catch (err) {
-      this.logger.error(
+      this.adapterLogger.error(
         `Failed to register @socket.io/redis-adapter: ${(err as Error).message}. ` +
           'Falling back to single-instance mode.',
       )
