@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and lists which reserved events the library emits and which it only reserves.
 - `IPresenceStorage` is documented as a contract the application drives; the library does not
   emit `presence:*` events.
+- `SECURITY.md` states that only the latest minor line (1.2.x) receives security fixes; its table listed
+  `0.1.x`.
 
 ## [1.2.0] - 2026-08-29
 

@@ -73,17 +73,17 @@ Never suppress by lowering `thresholds.break`. Every documented equivalent (or s
 
 These files represent the core correctness invariants of the library. Any surviving mutant here must be documented as a proven equivalent.
 
-| File                                                     | Why critical                                |
-| -------------------------------------------------------- | ------------------------------------------- |
-| `src/server/services/connection-registry.service.ts`     | FIFO eviction, per-user connection tracking |
-| `src/server/services/room-registry.service.ts`           | Room membership, multi-tenant scoping       |
-| `src/server/transports/sse/sse.transport.ts`             | SSE delivery, connection Subject lifecycle  |
-| `src/server/transports/sse/event-replay-buffer.ts`       | Last-Event-ID ring buffer correctness       |
-| `src/server/services/event-id-generator.service.ts`      | Monotonic ID generation for replay          |
-| `src/server/transports/sse/encode-sse-event.ts`          | SSE wire-format encoding correctness        |
-| `src/server/pubsub/realtime-pubsub-subscriber.ts`        | Echo-prevention, local-only re-emit         |
-| `src/server/transports/composite/composite.transport.ts` | Dual-transport fan-out correctness          |
-| `src/server/config/validate-options.ts`                  | Option validation prevents invalid configs  |
+| File                                                        | Why critical                                |
+| ----------------------------------------------------------- | ------------------------------------------- |
+| `src/server/services/connection-registry.service.ts`        | FIFO eviction, per-user connection tracking |
+| `src/server/services/room-registry.service.ts`              | Room membership, multi-tenant scoping       |
+| `src/server/transports/sse/sse.transport.ts`                | SSE delivery, connection Subject lifecycle  |
+| `src/server/transports/sse/event-replay-buffer.ts`          | Last-Event-ID ring buffer correctness       |
+| `src/server/services/event-id-generator.service.ts`         | Monotonic ID generation for replay          |
+| `src/server/utils/encode-sse-event.ts`                      | SSE wire-format encoding correctness        |
+| `src/server/pubsub/realtime-pubsub-subscriber.ts`           | Echo-prevention, local-only re-emit         |
+| `src/websocket/transports/composite/composite.transport.ts` | Dual-transport fan-out correctness          |
+| `src/server/config/validate-options.ts`                     | Option validation prevents invalid configs  |
 
 ---
 

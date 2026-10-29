@@ -10,7 +10,8 @@ import { ROOM_PREFIXES } from '../constants/room-prefixes.constants'
  * Validation of the parts (e.g. non-empty ids) is the caller's responsibility —
  * this helper only joins the prefix and parts with `:` and escapes nothing, so a
  * part must not contain `:`. `('a:b', 'c')` and `('a', 'b:c')` both give
- * `resource:a:b:c`; encode parts that come from outside with `encodeURIComponent`.
+ * `resource:a:b:c`; encode parts that come from outside with `encodeURIComponent`, which escapes `:` and so
+ * is sound for this `:` separator only.
  *
  * A `RESOURCE` room carries no tenant. When ids are only unique within one, pass
  * the tenant as its own encoded part rather than gluing it to the id.
