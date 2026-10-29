@@ -60,6 +60,12 @@ overrides:
   # qs GHSA-6pq8-jhm2-2vcw (6.3): via body-parser, express and superagent <- supertest.
   # Remove when those require qs >= 6.16.1.
   'qs': '^6.16.1'
+  # One socket.io for the whole tree. @nestjs/platform-socket.io pins an exact
+  # socket.io (4.8.3 at 11.2.8) while this package's devDependency resolves to the
+  # newest 4.x; two copies make IoAdapter's Server type differ from ours and
+  # RealtimeIoAdapter fails TS2416/TS2741. This floor also rewrites that exact pin.
+  # Remove when @nestjs/platform-socket.io depends on socket.io >= 4.8.4 itself.
+  'socket.io@4': '^4.8.4'
   'socket.io-parser': '^4.2.7'
   # zod GHSA-mrhx-c7xc-m3w5 (8.2): via eslint-plugin-react-hooks and stryker's
   # mutation-server-protocol. Remove when both require zod >= 4.6.6.
