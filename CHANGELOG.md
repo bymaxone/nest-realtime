@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `@parcel/watcher`'s build script is denied so `pnpm install` no longer exits 1.
 - One `socket.io` is resolved across the development tree, so `RealtimeIoAdapter` type-checks
   against the Nest version that pins its own copy.
+- `RealtimeIoAdapter` renamed its private logger field from `logger` to `adapterLogger`, so it cannot
+  collide with a member of the same name on the `IoAdapter` base class; behaviour is unchanged.
 
 ### Documentation
 
