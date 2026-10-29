@@ -19,10 +19,44 @@ allowBuilds:
 # NOT in package.json: pnpm 11 no longer reads the `pnpm` field of package.json, so
 # an override placed there does nothing — it warns, but it does nothing.
 overrides:
-  'brace-expansion': '^5.0.8'
+  # Each floor below names its advisory (GHSA, CVSS as OSV scores it), what pulls
+  # the package in, and when it can go. All are transitive and dev-only: nothing
+  # here ships, the package has zero direct dependencies.
+  #
+  # body-parser GHSA-27r3-jxmh-p828 (7.5): via express 5 <- @nestjs/platform-express.
+  # Remove when platform-express pins body-parser >= 2.4.0.
+  'body-parser@2': '^2.4.0'
+  # brace-expansion GHSA-6j4f-fj2g-mc7p (7.5), GHSA-qhr7-859c-m2p7 (7.5),
+  # GHSA-q2hr-2g5m-vwhr (5.3): via minimatch <- stryker, eslint and the jest chain.
+  # Remove when minimatch 10 requires brace-expansion >= 5.0.12.
+  'brace-expansion': '^5.0.12'
   'browserslist': '^4.28.7'
+  # engine.io GHSA-2gc4-cqfq-p2gv (7.5): via socket.io <- @nestjs/platform-socket.io.
+  # Remove when socket.io requires engine.io >= 6.6.10.
+  'engine.io@6': '^6.6.10'
   'esbuild': '^0.28.1'
-  'fast-uri': '^3.1.6'
-  'js-yaml@3': '^3.15.0'
-  'qs': '^6.16.0'
+  # fast-uri GHSA-58mr-gqgx-xq4g and GHSA-qw65-cvwx-89v3 (7.5), GHSA-w74x-v6f9-j3xg (6.1),
+  # GHSA-hrr3-gc8f-f4qj and GHSA-wjr9-j795-jxcr (4.8), GHSA-333x-w4r6-6crp and
+  # GHSA-xhq7-xmqj-769h (3.7): via ajv 8 <- @stryker-mutator/core.
+  # Remove when ajv requires fast-uri >= 3.1.9.
+  'fast-uri': '^3.1.9'
+  # handlebars GHSA-8r5x-fm3f-whwj (9.8), GHSA-p8wg-vrv2-v86f (9.2),
+  # GHSA-xw65-4hp5-5hc7 (4.7): via ts-jest. Remove when ts-jest requires >= 4.7.10.
+  'handlebars@4': '^4.7.10'
+  # js-yaml GHSA-2883-xcg3-v3hh (7.5): via @istanbuljs/load-nyc-config <- babel-plugin-istanbul.
+  # Remove when that chain moves to js-yaml 4.
+  'js-yaml@3': '^3.15.2'
+  # multer GHSA-q7qp-rjg7-q26m (7.5), GHSA-535w-7cp7-47q4, GHSA-qfvm-cv95-jqjf and
+  # GHSA-wc9g-mqfw-jrwm (7.5), GHSA-3pph-fpjx-jg34 (5.3), GHSA-qvfw-j98x-7q72 (3.7):
+  # via @nestjs/platform-express. Remove when platform-express pins multer >= 2.5.0.
+  'multer@2': '^2.5.0'
+  # proxy-addr GHSA-jqcg-44mw-7w3h (9.1): via express 5 <- @nestjs/platform-express.
+  # Remove when express requires proxy-addr >= 2.0.8.
+  'proxy-addr@2': '^2.0.8'
+  # qs GHSA-6pq8-jhm2-2vcw (6.3): via body-parser, express and superagent <- supertest.
+  # Remove when those require qs >= 6.16.1.
+  'qs': '^6.16.1'
   'socket.io-parser': '^4.2.7'
+  # zod GHSA-mrhx-c7xc-m3w5 (8.2): via eslint-plugin-react-hooks and stryker's
+  # mutation-server-protocol. Remove when both require zod >= 4.6.6.
+  'zod@4': '^4.6.6'
