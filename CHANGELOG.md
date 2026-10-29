@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **BREAKING (bootstrap-time): a blank identity is refused on both transports.** An authenticator
+  that returns `''` or a whitespace-only `userId`, or a present-but-blank `tenantId`, now fails the
+  connection. Such a value used to be indexed under an empty key and
+  joined to the room `user:` or `tenant:`, so every such connection shared one bucket and received
+  every emit addressed to it for the life of the subscription. An absent `tenantId` stays valid and
+  means no tenant.
+- **BREAKING (behavioural): `tenantResolver` now runs on WebSocket connections**, as it already
+  did on SSE. It was read on the SSE path and ignored on the WebSocket path, so one user opening
+  both transports could be routed to two different tenants by the same configuration. Resolution
+  goes through one shared function, so a connection carries the same tenant on either transport,
+  and `null` is treated as absent. An application that relied on the resolver not running on
+  WebSocket was relying on that defect.
+- Reauthentication now covers WebSocket connections, which previously kept delivering after their
+  credentials were revoked. Its failure meta reports the real `conn.transport` instead of a fixed
+  `'sse'`.
+
+### Changed
+
+- `tenantResolver` may return `string | undefined | null`. Not breaking: a resolver typed
+  `() => string | undefined` still satisfies the wider signature.
+
+### Fixed
+
+- Transitive development dependencies were raised past published advisories (`fast-uri`, `qs`,
+  `browserslist`, `body-parser`, `brace-expansion`, `engine.io`, `handlebars`, `js-yaml`, `multer`,
+  `proxy-addr`, `zod`). They are dev-only and not part of the published package.
+- `@parcel/watcher`'s build script is denied so `pnpm install` no longer exits 1.
+- One `socket.io` is resolved across the development tree, so `RealtimeIoAdapter` type-checks
+  against the Nest version that pins its own copy.
+
+### Documentation
+
+- The README separates the authenticator path from the `tenantResolver` path for an absent tenant,
+  and lists which reserved events the library emits and which it only reserves.
+- `IPresenceStorage` is documented as a contract the application drives; the library does not
+  emit `presence:*` events.
+
 ## [1.2.0] - 2026-08-29
 
 **Shipped as a minor, and two entries below are strictly speaking breaking.** Both are called

@@ -74,13 +74,13 @@ pnpm add @bymax-one/nest-realtime
 - ✅ **Offline queue** — `IOfflineQueueStorage` holds events for absent users and flushes them on reconnect
 - ✅ **Replay buffer** — per-user ring buffer answers `Last-Event-ID` after a dropped SSE stream
 - ✅ **FIFO connection limits** — the oldest connection is evicted, so a new tab never gets a 429
-- ✅ **Presence** — optional `IPresenceStorage` powers `presence:online` / `presence:offline`
+- ✅ **Presence contract** — optional `IPresenceStorage` seam and `usePresence()` hook; the library never calls the storage or emits `presence:*` itself, so your application does both
 
 ### 🧩 Developer Experience
 
 - ✅ **4 subpath exports** — server, WebSocket, shared types, and React; tree-shakeable, ESM + CJS dual output
 - ✅ **Dynamic module** — `forRoot()` and `forRootAsync()` with `useFactory` / `useClass` / `useExisting`
-- ✅ **Strict TypeScript, zero `any`** — `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` on
+- ✅ **Strict TypeScript, zero `any`** — `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` enabled
 - ✅ **Horizontal scaling** — `IRealtimePubSub` for SSE fan-out, `@socket.io/redis-adapter` for WebSocket
 - ✅ **Bundle gate in CI** — the SSE-only React bundle is measured on every build and fails over budget
 
@@ -309,7 +309,7 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed` (fire-and-forget)                                                        | —                                            |
 | **pubsub**                 | `IRealtimePubSub` — cross-instance fan-out for SSE                                                                                          | `InMemoryPubSub`                             |
 | **offlineQueue**           | `IOfflineQueueStorage` — events held while a user is away                                                                                   | — (disabled)                                 |
-| **presence**               | `IPresenceStorage` — online-user tracking                                                                                                   | — (disabled)                                 |
+| **presence**               | `IPresenceStorage` — contract for your own presence tracking; the library never calls it                                                                                                   | — (disabled)                                 |
 | **sse**                    | `endpoint`, `heartbeatMs`, `replayBufferSize`, `maxConnectionsPerUser`, `emitConnectionEvent`                                               | `/realtime/sse`, `30000`, `100`, `5`, `true` |
 | **websocket**              | `namespace`, `cors`, `maxHttpBufferSize`, `pingIntervalMs`, `pingTimeoutMs`, `maxConnectionsPerUser`, `emitConnectionEvent`, `redisAdapter` | `'/'`, — (Socket.IO defaults)                |
 | **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`                                                                  | `300`, `'disconnect'`, `60000`               |
@@ -633,6 +633,21 @@ composeRoomId('TENANT', tenantId) // → "tenant:t_acme"
 composeRoomId('RESOURCE', 'invoice', invoiceId) // → "resource:invoice:42"
 ```
 
+`composeRoomId` joins its parts with `:` and escapes nothing, so a part must not contain `:`.
+`('a:b', 'c')` and `('a', 'b:c')` both give `resource:a:b:c` and land in the same room. When a
+part comes from outside your code, encode it first:
+`composeRoomId('RESOURCE', encodeURIComponent(type), encodeURIComponent(id))`.
+
+A `resource:` room is not tenant-scoped: two tenants using the same type and id share it. When ids
+are only unique within a tenant, pass the tenant as its own encoded part —
+`composeRoomId('RESOURCE', 'invoice', encodeURIComponent(tenantId), encodeURIComponent(id))` —
+because gluing them into one part with a separator that ids may contain, such as `-`, lets two
+different pairs compose the same room.
+
+Never pass client-supplied input to `joinRoom` or `emitToRoom` as a room id without checking that
+it cannot start with the reserved `user:` or `tenant:` prefixes. The library does not guard them,
+and joining `tenant:<other>` receives that tenant's events.
+
 #### Role-scoped delivery
 
 There is no `emitToRole`. Roles are the consumer's authorization vocabulary, not
@@ -732,16 +747,23 @@ const onConnect = joinRoleRoom({ get: () => ({ joinRoom }) }, 'admin', 'role:adm
 
 ### Reserved Events
 
-Emitted by the library. Do not reuse these names for application events.
+These names belong to the library. Do not reuse them for application events.
 
-| Event                                  | Meaning                                                 |
-| -------------------------------------- | ------------------------------------------------------- |
-| `connection:established`               | Handshake accepted (suppress via `emitConnectionEvent`) |
-| `connection:reauthentication-failed`   | Credentials no longer valid                             |
-| `connection:credential-expiring`       | Credential nearing expiry                               |
-| `room:joined` / `room:left`            | Room membership changed                                 |
-| `error`                                | Transport-level error                                   |
-| `presence:online` / `presence:offline` | Presence changed (requires `IPresenceStorage`)          |
+**Emitted today**
+
+| Event                                | Meaning                                                 |
+| ------------------------------------ | ------------------------------------------------------- |
+| `connection:established`             | Handshake accepted (suppress via `emitConnectionEvent`) |
+| `connection:reauthentication-failed` | Credentials no longer valid                             |
+
+**Reserved, not emitted by the library.** An application may emit them itself; the library never does. The default SSE client subscribes to all of them except `error`. The browser dispatches a server-sent `error` event to the same handler as its own connection failures, so do not emit `error` over SSE: the client treats it as a dropped connection.
+
+| Event                                  | Meaning                                                              |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| `connection:credential-expiring`       | Credential nearing expiry                                            |
+| `room:joined` / `room:left`            | Room membership changed                                              |
+| `error`                                | Transport-level error                                                |
+| `presence:online` / `presence:offline` | Presence changed; emitted by your code, `IPresenceStorage` is a seam |
 
 > [!NOTE]
 > The SSE heartbeat is a `: keepalive` **comment line**, not a named event. It never appears in the `Last-Event-ID` id-space and never reaches a client listener.

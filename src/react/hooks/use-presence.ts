@@ -12,8 +12,8 @@
  * over the default SSE transport, not only over WebSocket.
  *
  * Preconditions:
- *   1. The backend must be configured with an `IPresenceStorage` implementation
- *      so it emits `presence:online` / `presence:offline` events.
+ *   1. The backend must emit `presence:online` / `presence:offline` itself. The
+ *      library never calls `IPresenceStorage` or emits these events.
  *   2. This hook must be mounted inside a `<RealtimeProvider>`.
  *
  * Note: `'use client'` is required for React Server Components compatibility.
