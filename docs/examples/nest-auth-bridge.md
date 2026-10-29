@@ -2,8 +2,10 @@
 
 `@bymax-one/nest-realtime` is **auth-agnostic**: it never imports a concrete authentication
 library.  The only auth surface it owns is the `IConnectionAuthenticator` contract.  This
-document shows how to bridge `@bymax-one/nest-auth`'s `JwtService` to that contract so you
-can reuse the same JWT validation logic your REST routes use.
+document shows how to bridge `@nestjs/jwt`'s `JwtService`, configured with the same secret and
+algorithm that `@bymax-one/nest-auth` signs with, to that contract so you can reuse the same
+JWT validation your REST routes use. `@bymax-one/nest-auth` also exports `AuthTokenVerifierService`
+(`verifyAccessToken`) from its root entry, which can replace the manual verification below.
 
 Everything in this document is **consumer-side code** — it lives in your NestJS application,
 not inside the `@bymax-one/nest-realtime` package.
