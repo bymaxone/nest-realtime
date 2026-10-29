@@ -633,7 +633,7 @@ composeRoomId('TENANT', tenantId) // → "tenant:t_acme"
 composeRoomId('RESOURCE', 'invoice', invoiceId) // → "resource:invoice:42"
 ```
 
-`composeRoomId` joins its parts with `:` and escapes nothing, so a part must not contain `:`.
+`composeRoomId` joins its parts with `:` and escapes nothing, so a part must not contain `:`. The `encodeURIComponent` advice below holds for that `:` separator only, because it escapes `:` and leaves characters such as `-`, `.`, `_` and `~` alone.
 `('a:b', 'c')` and `('a', 'b:c')` both give `resource:a:b:c` and land in the same room. When a
 part comes from outside your code, encode it first:
 `composeRoomId('RESOURCE', encodeURIComponent(type), encodeURIComponent(id))`.

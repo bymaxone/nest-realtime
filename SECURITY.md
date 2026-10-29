@@ -2,9 +2,12 @@
 
 ## Supported Versions
 
-| Version | Supported |
-| ------- | --------- |
-| `0.1.x` | ✅        |
+| Version          | Supported                                     |
+| ---------------- | --------------------------------------------- |
+| `1.2.x` (latest) | ✅ Receives security fixes                    |
+| Older lines      | ❌ Unsupported; upgrade to the latest `1.2.x` |
+
+Only the latest minor line receives security fixes. If you run an older version, upgrade first, then report.
 
 ## Reporting a Vulnerability
 

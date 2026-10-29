@@ -7,7 +7,10 @@ The HttpOnly cookie pattern is the recommended approach for **browser-based SSE 
 `EventSource` (the browser's native SSE API) does not allow custom headers such as
 `Authorization` — the browser controls what headers are sent and strips any header the
 consumer tries to inject.  Cookies, however, are sent automatically by the browser on
-every same-origin (and cross-origin when `credentials: 'include'` is configured) request.
+every same-origin request. Cross-origin, the client must opt in with `withCredentials: true`
+(the `useRealtime` / `RealtimeProvider` option, default `false`) and the server must allow
+credentials through `app.enableCors({ credentials: true, origin: [...] })`. The same cookie also
+authenticates a WebSocket connection, because the handshake carries it.
 Storing the access token in an `HttpOnly` cookie keeps it invisible to JavaScript, which
 is the primary defence against XSS token theft.
 

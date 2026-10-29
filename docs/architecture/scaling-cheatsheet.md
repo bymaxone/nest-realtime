@@ -14,11 +14,11 @@
 
 ```typescript
 import Redis from 'ioredis'
-import { RealtimeIoAdapter } from '@bymax-one/nest-realtime'
+import { BymaxRealtimeWebSocketModule, RealtimeIoAdapter } from '@bymax-one/nest-realtime/websocket'
 
 const redis = new Redis(process.env['REDIS_URL']!)
 
-BymaxRealtimeModule.forRoot({
+BymaxRealtimeWebSocketModule.forRoot({
   transport: 'websocket',
   authenticator,
   websocket: {
@@ -46,11 +46,12 @@ intermittently.
 
 **Options:**
 
-- **Disable polling** (`transports: ['websocket']`) — removes the affinity requirement
+- **Disable polling** (`transports: ['websocket']` in the `socket.io-client` `io()` options; the
+  `useRealtime` hook does not expose it) — removes the affinity requirement
   entirely; connections go straight to WebSocket. Clients with WebSocket-blocking
   proxies or firewalls will fail to connect.
 - **Enable sticky sessions** in your load balancer — use IP hash, cookie-based
-  affinity, or a proxy that forwards the `io` cookie. All major balancers support
+  affinity (the `io` cookie exists only if you enable Socket.IO's `cookie` server option), or a proxy that forwards it. All major balancers support
   this (NGINX `ip_hash`, AWS ALB sticky sessions, Cloudflare per-hostname affinity).
 
 The Redis adapter does NOT solve the sticky-session problem — it fans out messages

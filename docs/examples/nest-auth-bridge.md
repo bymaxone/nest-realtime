@@ -2,8 +2,9 @@
 
 `@bymax-one/nest-realtime` is **auth-agnostic**: it never imports a concrete authentication
 library.  The only auth surface it owns is the `IConnectionAuthenticator` contract.  This
-document shows how to bridge `@bymax-one/nest-auth`'s `JwtService` to that contract so you
-can reuse the same JWT validation logic your REST routes use.
+document shows how to bridge `@nestjs/jwt`'s `JwtService`, configured with the same secret and
+algorithm that `@bymax-one/nest-auth` signs with, to that contract so you can reuse the same
+JWT validation your REST routes use.
 
 Everything in this document is **consumer-side code** — it lives in your NestJS application,
 not inside the `@bymax-one/nest-realtime` package.
@@ -91,7 +92,9 @@ import { NestAuthRealtimeBridge } from './nest-auth-realtime.bridge'
   imports: [
     JwtModule.register({ secret: process.env.JWT_SECRET, signOptions: { expiresIn: '15m' } }),
     BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
       imports: [JwtModule],
+      extraProviders: [NestAuthRealtimeBridge],
       inject: [NestAuthRealtimeBridge],
       useFactory: (bridge: NestAuthRealtimeBridge) => ({
         transport: 'sse',
@@ -99,12 +102,10 @@ import { NestAuthRealtimeBridge } from './nest-auth-realtime.bridge'
         reauthenticationPolicy: {
           intervalSeconds: 300,
           onFailure: 'event',
-          cacheTtlMs: 60_000,
         },
       }),
     }),
   ],
-  providers: [NestAuthRealtimeBridge],
 })
 export class AppModule {}
 ```
@@ -138,14 +139,20 @@ async revalidate(_connectionId: string, auth: AuthenticationResult): Promise<boo
 }
 ```
 
-The library's `reauthenticationPolicy.cacheTtlMs` (default 60 s) means a revocation
-takes at most `cacheTtlMs` ms to propagate to existing connections.  For truly instant
-disconnects, call `realtimeService.disconnect(connectionId)` from your logout handler
-directly.
+A revocation takes effect at the next re-authentication cycle, at most
+`reauthenticationPolicy.intervalSeconds` after it; the cycle covers SSE and WebSocket
+connections alike. `cacheTtlMs` can only lengthen that delay. For an instant disconnect, call
+`realtimeService.disconnect(connectionId)` from your logout handler, which needs a connection
+id you recorded in `onConnect`.
 
 ### `cacheTtlMs` and the re-auth interval
 
 `cacheTtlMs` is the positive-result cache window inside `ReauthenticationService`.  A
 hit within the window skips a `revalidate()` call; the connection is kept without
-hitting Redis.  Set it to a value shorter than your access-token TTL so expiry is
-detected within one interval cycle.
+hitting Redis.  It matters only when it is larger than the interval
+(`cacheTtlMs` below `intervalSeconds * 1000` never produces a hit).
+
+`revalidate()` receives the stored `AuthenticationResult` (user, tenant, roles, `metadata`), not
+the token, so it cannot see the token's own expiry. To end a connection when its access token
+expires, copy the expiry in `authenticate()` (`metadata: { exp: payload.exp }`) and compare it with
+the current time in `revalidate()`; a Redis revocation key alone does not detect expiry.

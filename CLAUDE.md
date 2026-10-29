@@ -159,13 +159,13 @@ Moving a spec helper is not a pure refactor: the Stryker runner sets `rootDir: '
 
 ## Guidelines — Load Only What You Need
 
-| Domain    | File / Command                               | Load when...                      |
-| --------- | -------------------------------------------- | --------------------------------- |
-| NestJS    | `docs/guidelines/NESTJS-GUIDELINES.md`       | Modifying `src/server/`           |
-| RxJS      | `docs/guidelines/RXJS-GUIDELINES.md`         | Working on SSE Observable streams |
-| Socket.IO | `docs/guidelines/SOCKET-IO-GUIDELINES.md`    | Working on WebSocket transport    |
-| React     | `docs/guidelines/REACT-GUIDELINES.md`        | Working on `src/react/`           |
-| Testing   | `docs/guidelines/JEST-TESTING-GUIDELINES.md` | Writing or fixing tests           |
-| Infra     | `docs/architecture/infra-considerations.md`  | Deployment configs (proxies, CDN) |
+| Domain           | File / Command                                    | Load when...                       |
+| ---------------- | ------------------------------------------------- | ---------------------------------- |
+| Specification    | `docs/technical_specification.md`                 | Any design or contract question    |
+| WebSocket        | `docs/architecture/websocket-handshake.md`        | Working on the WebSocket transport |
+| Auth, both paths | `docs/architecture/auth-handshake-differences.md` | Working on authenticators          |
+| Scaling          | `docs/architecture/scaling-cheatsheet.md`         | Cross-instance fan-out             |
+| Infra (SSE)      | `docs/proxies-cheat-sheet.md`                     | Deployment configs (proxies, CDN)  |
+| Testing          | `docs/mutation_testing_plan.md`                   | Writing or fixing tests            |
 
 For full architecture, cross-instance emit shape, and testing patterns, see **[AGENTS.md](./AGENTS.md)**.
