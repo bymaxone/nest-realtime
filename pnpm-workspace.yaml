@@ -64,7 +64,8 @@ overrides:
   # socket.io (4.8.3 at 11.2.8) while this package's devDependency resolves to the
   # newest 4.x; two copies make IoAdapter's Server type differ from ours and
   # RealtimeIoAdapter fails TS2416/TS2741. This floor also rewrites that exact pin.
-  # Remove when @nestjs/platform-socket.io depends on socket.io >= 4.8.4 itself.
+  # Remove when the exact socket.io pin of @nestjs/platform-socket.io and this
+  # package's devDependency resolve to the same version.
   'socket.io@4': '^4.8.4'
   'socket.io-parser': '^4.2.7'
   # zod GHSA-mrhx-c7xc-m3w5 (8.2): via eslint-plugin-react-hooks and stryker's
