@@ -74,13 +74,13 @@ pnpm add @bymax-one/nest-realtime
 - ✅ **Offline queue** — `IOfflineQueueStorage` holds events for absent users and flushes them on reconnect
 - ✅ **Replay buffer** — per-user ring buffer answers `Last-Event-ID` after a dropped SSE stream
 - ✅ **FIFO connection limits** — the oldest connection is evicted, so a new tab never gets a 429
-- ✅ **Presence** — optional `IPresenceStorage` powers `presence:online` / `presence:offline`
+- ✅ **Presence contract** — optional `IPresenceStorage` seam and `usePresence()` hook; the library never calls the storage or emits `presence:*` itself, so your application does both
 
 ### 🧩 Developer Experience
 
 - ✅ **4 subpath exports** — server, WebSocket, shared types, and React; tree-shakeable, ESM + CJS dual output
 - ✅ **Dynamic module** — `forRoot()` and `forRootAsync()` with `useFactory` / `useClass` / `useExisting`
-- ✅ **Strict TypeScript, zero `any`** — `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` on
+- ✅ **Strict TypeScript, zero `any`** — `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` enabled
 - ✅ **Horizontal scaling** — `IRealtimePubSub` for SSE fan-out, `@socket.io/redis-adapter` for WebSocket
 - ✅ **Bundle gate in CI** — the SSE-only React bundle is measured on every build and fails over budget
 
@@ -732,16 +732,23 @@ const onConnect = joinRoleRoom({ get: () => ({ joinRoom }) }, 'admin', 'role:adm
 
 ### Reserved Events
 
-Emitted by the library. Do not reuse these names for application events.
+These names belong to the library. Do not reuse them for application events.
 
-| Event                                  | Meaning                                                 |
-| -------------------------------------- | ------------------------------------------------------- |
-| `connection:established`               | Handshake accepted (suppress via `emitConnectionEvent`) |
-| `connection:reauthentication-failed`   | Credentials no longer valid                             |
-| `connection:credential-expiring`       | Credential nearing expiry                               |
-| `room:joined` / `room:left`            | Room membership changed                                 |
-| `error`                                | Transport-level error                                   |
-| `presence:online` / `presence:offline` | Presence changed (requires `IPresenceStorage`)          |
+**Emitted today**
+
+| Event                                | Meaning                                                 |
+| ------------------------------------ | ------------------------------------------------------- |
+| `connection:established`             | Handshake accepted (suppress via `emitConnectionEvent`) |
+| `connection:reauthentication-failed` | Credentials no longer valid                             |
+
+**Reserved, not emitted by the library.** Clients already listen for them, so an application may emit them itself; the library never does.
+
+| Event                                  | Meaning                                                              |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| `connection:credential-expiring`       | Credential nearing expiry                                            |
+| `room:joined` / `room:left`            | Room membership changed                                              |
+| `error`                                | Transport-level error                                                |
+| `presence:online` / `presence:offline` | Presence changed; emitted by your code, `IPresenceStorage` is a seam |
 
 > [!NOTE]
 > The SSE heartbeat is a `: keepalive` **comment line**, not a named event. It never appears in the `Last-Event-ID` id-space and never reaches a client listener.

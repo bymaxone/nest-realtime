@@ -2284,15 +2284,17 @@ function App() {
 
 Canonical events reserved by the lib (do not use these names for custom events):
 
-| Event                                | When                                                                 | Payload                                                  | Direction                           |
-| ------------------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------- |
-| `connection:established`             | After successful auth                                                | `{ connectionId: string, traits: AuthenticationResult }` | server → client                     |
-| `connection:reauthentication-failed` | Periodic re-auth failed                                              | `{ reason: string }`                                     | server → client (before disconnect) |
-| `connection:credential-expiring`     | _Reserved (not emitted in v0.1 — no expiry-detection mechanism yet)_ | `{ expiresAt: string }`                                  | server → client                     |
-| `room:joined`                        | _Reserved (not emitted in v0.1 — `joinRoom` does not yet emit it)_   | `{ roomId: string }`                                     | server → client                     |
-| `room:left`                          | _Reserved (not emitted in v0.1 — `leaveRoom` does not yet emit it)_  | `{ roomId: string }`                                     | server → client                     |
-| `error`                              | Transport error                                                      | `{ code: string, message: string }`                      | server → client                     |
+| Event                                | When                                                                                                 | Payload                                                  | Direction                           |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------- |
+| `connection:established`             | After successful auth                                                                                | `{ connectionId: string, traits: AuthenticationResult }` | server → client                     |
+| `connection:reauthentication-failed` | Periodic re-auth failed                                                                              | `{ reason: string }`                                     | server → client (before disconnect) |
+| `connection:credential-expiring`     | _Reserved (not emitted in v0.1 — no expiry-detection mechanism yet)_                                 | `{ expiresAt: string }`                                  | server → client                     |
+| `room:joined`                        | _Reserved (not emitted in v0.1 — `joinRoom` does not yet emit it)_                                   | `{ roomId: string }`                                     | server → client                     |
+| `room:left`                          | _Reserved (not emitted in v0.1 — `leaveRoom` does not yet emit it)_                                  | `{ roomId: string }`                                     | server → client                     |
+| `error`                              | _Reserved (not emitted — the library surfaces transport errors through `IConnectionLifecycleHooks`)_ | `{ code: string, message: string }`                      | server → client                     |
 
+> `presence:online` / `presence:offline` are likewise reserved and never emitted by the library: `IPresenceStorage` (§5.6) is a contract the application drives and `usePresence` only listens.
+>
 > The SSE **heartbeat** is a `: keepalive` comment (§6.1), **not** a named event — it never reaches `addEventListener` and so is not listed here. Events marked _Reserved_ are names the lib owns (so consumers must not reuse them) but does not yet emit in v0.1; emitting `room:joined`/`room:left` from `joinRoom`/`leaveRoom` is a candidate for a later minor version. The `connection:reauthentication-failed` payload is `{ reason: string }` consistently in §8.3 and here.
 
 In WebSocket, client → server reserved events:
