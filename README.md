@@ -638,8 +638,11 @@ composeRoomId('RESOURCE', 'invoice', invoiceId) // → "resource:invoice:42"
 part comes from outside your code, encode it first:
 `composeRoomId('RESOURCE', encodeURIComponent(type), encodeURIComponent(id))`.
 
-A `resource:` room is not tenant-scoped: two tenants using the same type and id share it. Put the
-tenant in the id (`resource:invoice:{tenantId}-42`) when ids are only unique within a tenant.
+A `resource:` room is not tenant-scoped: two tenants using the same type and id share it. When ids
+are only unique within a tenant, pass the tenant as its own encoded part —
+`composeRoomId('RESOURCE', 'invoice', encodeURIComponent(tenantId), encodeURIComponent(id))` —
+because gluing them into one part with a separator that ids may contain, such as `-`, lets two
+different pairs compose the same room.
 
 Never pass client-supplied input to `joinRoom` or `emitToRoom` as a room id without checking that
 it cannot start with the reserved `user:` or `tenant:` prefixes. The library does not guard them,
@@ -753,7 +756,7 @@ These names belong to the library. Do not reuse them for application events.
 | `connection:established`             | Handshake accepted (suppress via `emitConnectionEvent`) |
 | `connection:reauthentication-failed` | Credentials no longer valid                             |
 
-**Reserved, not emitted by the library.** An application may emit them itself; the library never does. The default SSE client subscribes to all of them except `error`, which the browser reserves for its own connection failures, so an `error` event emitted over SSE does not reach it.
+**Reserved, not emitted by the library.** An application may emit them itself; the library never does. The default SSE client subscribes to all of them except `error`. The browser dispatches a server-sent `error` event to the same handler as its own connection failures, so do not emit `error` over SSE: the client treats it as a dropped connection.
 
 | Event                                  | Meaning                                                              |
 | -------------------------------------- | -------------------------------------------------------------------- |

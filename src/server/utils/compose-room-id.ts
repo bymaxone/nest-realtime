@@ -12,8 +12,8 @@ import { ROOM_PREFIXES } from '../constants/room-prefixes.constants'
  * part must not contain `:`. `('a:b', 'c')` and `('a', 'b:c')` both give
  * `resource:a:b:c`; encode parts that come from outside with `encodeURIComponent`.
  *
- * A `RESOURCE` room carries no tenant. Put the tenant in the id when ids are only
- * unique within one.
+ * A `RESOURCE` room carries no tenant. When ids are only unique within one, pass
+ * the tenant as its own encoded part rather than gluing it to the id.
  *
  * @example
  * ```ts
