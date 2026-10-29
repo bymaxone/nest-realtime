@@ -4,8 +4,7 @@
 library.  The only auth surface it owns is the `IConnectionAuthenticator` contract.  This
 document shows how to bridge `@nestjs/jwt`'s `JwtService`, configured with the same secret and
 algorithm that `@bymax-one/nest-auth` signs with, to that contract so you can reuse the same
-JWT validation your REST routes use. `@bymax-one/nest-auth` also exports `AuthTokenVerifierService`
-(`verifyAccessToken`) from its root entry, which can replace the manual verification below.
+JWT validation your REST routes use.
 
 Everything in this document is **consumer-side code** — it lives in your NestJS application,
 not inside the `@bymax-one/nest-realtime` package.
@@ -103,7 +102,6 @@ import { NestAuthRealtimeBridge } from './nest-auth-realtime.bridge'
         reauthenticationPolicy: {
           intervalSeconds: 300,
           onFailure: 'event',
-          cacheTtlMs: 60_000,
         },
       }),
     }),
@@ -152,5 +150,9 @@ id you recorded in `onConnect`.
 `cacheTtlMs` is the positive-result cache window inside `ReauthenticationService`.  A
 hit within the window skips a `revalidate()` call; the connection is kept without
 hitting Redis.  It matters only when it is larger than the interval
-(`cacheTtlMs` below `intervalSeconds * 1000` never produces a hit); set `intervalSeconds`
-below your access-token TTL so expiry is detected within one cycle.
+(`cacheTtlMs` below `intervalSeconds * 1000` never produces a hit).
+
+`revalidate()` receives the stored `AuthenticationResult` (user, tenant, roles, `metadata`), not
+the token, so it cannot see the token's own expiry. To end a connection when its access token
+expires, copy the expiry in `authenticate()` (`metadata: { exp: payload.exp }`) and compare it with
+the current time in `revalidate()`; a Redis revocation key alone does not detect expiry.
