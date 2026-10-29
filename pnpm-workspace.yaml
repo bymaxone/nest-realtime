@@ -26,10 +26,14 @@ overrides:
   # body-parser GHSA-27r3-jxmh-p828 (7.5): via express 5 <- @nestjs/platform-express.
   # Remove when platform-express pins body-parser >= 2.4.0.
   'body-parser@2': '^2.4.0'
-  # brace-expansion GHSA-6j4f-fj2g-mc7p (7.5), GHSA-qhr7-859c-m2p7 (7.5),
-  # GHSA-q2hr-2g5m-vwhr (5.3): via minimatch <- stryker, eslint and the jest chain.
-  # Remove when minimatch 10 requires brace-expansion >= 5.0.12.
-  'brace-expansion': '^5.0.12'
+  # brace-expansion GHSA-6j4f-fj2g-mc7p and GHSA-qhr7-859c-m2p7 (7.5), GHSA-q2hr-2g5m-vwhr
+  # (5.3): via minimatch <- stryker, eslint and the jest chain. Scoped per major because
+  # minimatch 3 consumes brace-expansion 1.x, minimatch 9 consumes 2.x and minimatch 10
+  # consumes 5.x; one cross-major floor breaks `minimatch.braceExpand` for the other two.
+  # Remove each floor when its minimatch line requires a brace-expansion at or above it.
+  'brace-expansion@1': '^1.1.21'
+  'brace-expansion@2': '^2.1.7'
+  'brace-expansion@5': '^5.0.12'
   'browserslist': '^4.28.7'
   # engine.io GHSA-2gc4-cqfq-p2gv (7.5): via socket.io <- @nestjs/platform-socket.io.
   # Remove when socket.io requires engine.io >= 6.6.10.
