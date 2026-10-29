@@ -47,7 +47,13 @@ export class RealtimeService {
     return this.transport.broadcast(event, data)
   }
 
-  /** Add a specific connection to a room. */
+  /**
+   * Add a specific connection to a room.
+   *
+   * The room id is not checked. Never pass client-supplied input that could start
+   * with the reserved `user:` or `tenant:` prefixes: joining `tenant:<other>`
+   * receives that tenant's events.
+   */
   joinRoom(connectionId: string, roomId: string): Promise<void> {
     return this.transport.joinRoom(connectionId, roomId)
   }

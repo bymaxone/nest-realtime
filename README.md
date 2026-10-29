@@ -309,7 +309,7 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed` (fire-and-forget)                                                        | —                                            |
 | **pubsub**                 | `IRealtimePubSub` — cross-instance fan-out for SSE                                                                                          | `InMemoryPubSub`                             |
 | **offlineQueue**           | `IOfflineQueueStorage` — events held while a user is away                                                                                   | — (disabled)                                 |
-| **presence**               | `IPresenceStorage` — online-user tracking                                                                                                   | — (disabled)                                 |
+| **presence**               | `IPresenceStorage` — contract for your own presence tracking; the library never calls it                                                                                                   | — (disabled)                                 |
 | **sse**                    | `endpoint`, `heartbeatMs`, `replayBufferSize`, `maxConnectionsPerUser`, `emitConnectionEvent`                                               | `/realtime/sse`, `30000`, `100`, `5`, `true` |
 | **websocket**              | `namespace`, `cors`, `maxHttpBufferSize`, `pingIntervalMs`, `pingTimeoutMs`, `maxConnectionsPerUser`, `emitConnectionEvent`, `redisAdapter` | `'/'`, — (Socket.IO defaults)                |
 | **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`                                                                  | `300`, `'disconnect'`, `60000`               |
@@ -633,6 +633,18 @@ composeRoomId('TENANT', tenantId) // → "tenant:t_acme"
 composeRoomId('RESOURCE', 'invoice', invoiceId) // → "resource:invoice:42"
 ```
 
+`composeRoomId` joins its parts with `:` and escapes nothing, so a part must not contain `:`.
+`('a:b', 'c')` and `('a', 'b:c')` both give `resource:a:b:c` and land in the same room. When a
+part comes from outside your code, encode it first:
+`composeRoomId('RESOURCE', encodeURIComponent(type), encodeURIComponent(id))`.
+
+A `resource:` room is not tenant-scoped: two tenants using the same type and id share it. Put the
+tenant in the id (`resource:invoice:{tenantId}-42`) when ids are only unique within a tenant.
+
+Never pass client-supplied input to `joinRoom` or `emitToRoom` as a room id without checking that
+it cannot start with the reserved `user:` or `tenant:` prefixes. The library does not guard them,
+and joining `tenant:<other>` receives that tenant's events.
+
 #### Role-scoped delivery
 
 There is no `emitToRole`. Roles are the consumer's authorization vocabulary, not
@@ -741,7 +753,7 @@ These names belong to the library. Do not reuse them for application events.
 | `connection:established`             | Handshake accepted (suppress via `emitConnectionEvent`) |
 | `connection:reauthentication-failed` | Credentials no longer valid                             |
 
-**Reserved, not emitted by the library.** Clients already listen for them, so an application may emit them itself; the library never does.
+**Reserved, not emitted by the library.** An application may emit them itself; the library never does. The default SSE client subscribes to all of them except `error`, which the browser reserves for its own connection failures, so an `error` event emitted over SSE does not reach it.
 
 | Event                                  | Meaning                                                              |
 | -------------------------------------- | -------------------------------------------------------------------- |
