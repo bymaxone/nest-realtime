@@ -73,8 +73,9 @@ async authenticate(ctx: ConnectionAuthContext): Promise<AuthenticationResult | n
 ## Security notes
 
 - **Map identity claims defensively.** A blank `userId`, or a present-but-blank `tenantId`, is
-  refused at bootstrap with `REALTIME_AUTH_FAILED` on both transports (an absent `tenantId` is
-  valid). Return `null` for a token that does not carry a usable `sub`, and omit `tenantId`
+  refused at bootstrap on both transports (an absent `tenantId` is valid): SSE answers a generic
+  HTTP 500 and WebSocket disconnects, and the `REALTIME_AUTH_FAILED` reason is written to the
+  server log, not sent to the client. Return `null` for a token that does not carry a usable `sub`, and omit `tenantId`
   rather than passing an empty `tid` through.
 
 - **This pattern is WebSocket-only.** The SSE handler strips the `Authorization` header
