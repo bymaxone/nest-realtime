@@ -45,8 +45,8 @@ were routed to a tenant that differed by transport.
 
 - **Blank identity.** Make `authenticate()` return a non-empty `userId`, or `null` to reject the
   connection. Omit `tenantId` for a connection that belongs to no tenant; do not return `''`. A
-  refused connection answers HTTP 500 carrying the reason on SSE, and is disconnected on WebSocket
-  with the reason logged, so a claim that can be blank (an unset `sub` or `tid`) shows up as a failed connection
+  blank identity answers HTTP 500 with a generic body on SSE, and is disconnected on WebSocket;
+  both log the reason server-side, so a claim that can be blank (an unset `sub` or `tid`) shows up as a failed connection
   rather than a shared room.
 - **`tenantResolver`.** It now also receives WebSocket connections, and it gets the
   `AuthenticationResult`, not the transport. A resolver that was only correct for SSE must be made
