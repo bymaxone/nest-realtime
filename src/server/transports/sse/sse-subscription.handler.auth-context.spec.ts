@@ -9,7 +9,8 @@
  * Shared builders live in `test/fixtures/sse/subscription-harness.ts` — the suite is
  * split by area and every part needs the same fakes.
  */
-import { InternalServerErrorException, UnauthorizedException } from '@nestjs/common'
+import { InternalServerErrorException, Logger, UnauthorizedException } from '@nestjs/common'
+import { assertIdentityIsNotBlank } from '../../utils/assert-identity'
 import {
   mkRecord,
   mkTransport,
@@ -38,6 +39,31 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
       InternalServerErrorException,
     )
     expect(transport.registerConnection).not.toHaveBeenCalled()
+  })
+
+  // The reason names the operator's fix ("return a real userId …"), so it belongs in the
+  // server log and not in the body a client of a misconfigured backend receives. The WebSocket
+  // gateway already keeps it in the log only.
+  it('answers a blank identity with a generic 500 and logs the reason server-side', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    let reason = ''
+    try {
+      assertIdentityIsNotBlank({ userId: '' })
+    } catch (err) {
+      reason = (err as Error).message
+    }
+    const transport = mkTransport({ authenticate: jest.fn().mockResolvedValue({ userId: '' }) })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const thrown = await handler.handle(mkReq(), mkRes()).catch((err: unknown) => err)
+    expect(thrown).toBeInstanceOf(InternalServerErrorException)
+    const body = (thrown as InternalServerErrorException).getResponse()
+    expect(body).toEqual({ statusCode: 500, message: 'Internal Server Error' })
+    expect(JSON.stringify(body)).not.toContain('REALTIME_AUTH_FAILED')
+    expect(JSON.stringify(body)).not.toContain('real userId')
+    expect(reason).toContain('REALTIME_AUTH_FAILED')
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    expect(errorSpy).toHaveBeenCalledWith(`SSE connection refused — responding 500: ${reason}`)
+    errorSpy.mockRestore()
   })
 
   // Same for an empty tenant, which is a shared bucket rather than an absent one.

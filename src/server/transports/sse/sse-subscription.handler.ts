@@ -172,16 +172,22 @@ export class SseSubscriptionHandler {
    * succeed. Wrapped rather than rethrown raw so the 500 is a decision Nest logs
    * once, not an unhandled crash logging a stack on every reconnect.
    *
+   * The reason names the operator's fix, so it goes to the server log and the client
+   * receives Nest's generic 500 body, as the WebSocket gateway does by disconnecting
+   * without a message.
+   *
    * @param auth - The result the consumer's authenticator returned.
    * @returns The same result with the routing tenant resolved.
-   * @throws InternalServerErrorException when a trait is present but blank.
+   * @throws InternalServerErrorException with the generic body when a trait is present
+   *   but blank.
    */
   private resolveAndValidateIdentity(auth: AuthenticationResult): AuthenticationResult {
     const resolvedAuth = resolveAuthTenant(this.options, auth)
     try {
       assertIdentityIsNotBlank(resolvedAuth)
     } catch (err) {
-      throw new InternalServerErrorException((err as Error).message)
+      this.logger.error(`SSE connection refused — responding 500: ${(err as Error).message}`)
+      throw new InternalServerErrorException()
     }
     return resolvedAuth
   }
@@ -199,13 +205,13 @@ export class SseSubscriptionHandler {
    * @returns An Observable of `MessageEvent` values for NestJS `@Sse` to stream.
    * @throws UnauthorizedException when authentication returns null — the client's
    *   credentials were rejected, which is a 401.
-   * @throws Error carrying `REALTIME_AUTH_FAILED` when the authenticator, or the
-   *   configured `tenantResolver`, yields a blank `userId` or `tenantId`. This is
-   *   deliberately not a 401: the credentials were accepted and the fault is the
-   *   consumer's configuration, so it surfaces as a 500 whose message names the fix
-   *   in the server log rather than telling a client to retry something that cannot
-   *   succeed. Nest's default filter sends the client a generic body, so the message
-   *   does not leak.
+   * @throws InternalServerErrorException when the authenticator, or the configured
+   *   `tenantResolver`, yields a blank `userId` or `tenantId`. This is deliberately not
+   *   a 401: the credentials were accepted and the fault is the consumer's
+   *   configuration, so it surfaces as a 500 rather than telling a client to retry
+   *   something that cannot succeed. The exception carries no message, so the client
+   *   gets Nest's generic body, and the `REALTIME_AUTH_FAILED` reason naming the fix is
+   *   written to the server log.
    */
   async handle(req: SseRequest, res: SseResponse): Promise<Observable<MessageEvent>> {
     // Anti-buffering headers must be sent before the first byte.
