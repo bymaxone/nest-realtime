@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**This version carries two behavioural breaks, both under Security below.** An authenticator that
+returns a blank identity is now refused, and `tenantResolver` now runs on WebSocket connections.
+Neither is a compile error: both change what a running backend does, so read "Apply to a derived
+backend" before upgrading. Each closes a defect in which connections shared one delivery bucket or
+were routed to a tenant that differed by transport.
+
 ### Security
 
 - **BREAKING (bootstrap-time): a blank identity is refused on both transports.** An authenticator
@@ -32,14 +38,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Transitive development dependencies were raised past published advisories (`fast-uri`, `qs`,
-  `browserslist`, `body-parser`, `brace-expansion`, `engine.io`, `handlebars`, `js-yaml`, `multer`,
-  `proxy-addr`, `zod`). They are dev-only and not part of the published package.
-- `@parcel/watcher`'s build script is denied so `pnpm install` no longer exits 1.
-- One `socket.io` is resolved across the development tree, so `RealtimeIoAdapter` type-checks
-  against the Nest version that pins its own copy.
 - `RealtimeIoAdapter` renamed its private logger field from `logger` to `adapterLogger`, so it cannot
   collide with a member of the same name on the `IoAdapter` base class; behaviour is unchanged.
+
+### Apply to a derived backend
+
+- **Blank identity.** Make `authenticate()` return a non-empty `userId`, or `null` to reject the
+  connection. Omit `tenantId` for a connection that belongs to no tenant; do not return `''`. A
+  refused connection answers HTTP 500 carrying the reason on SSE, and is disconnected on WebSocket
+  with the reason logged, so a claim that can be blank (an unset `sub` or `tid`) shows up as a failed connection
+  rather than a shared room.
+- **`tenantResolver`.** It now also receives WebSocket connections, and it gets the
+  `AuthenticationResult`, not the transport. A resolver that was only correct for SSE must be made
+  correct for both; returning `undefined` or `null` keeps `auth.tenantId`.
+- **Reauthentication.** WebSocket connections are now checked as well. If `revalidate()` can return
+  `false` for a credential that is still acceptable, those sockets are now closed on the next cycle.
 
 ### Documentation
 
