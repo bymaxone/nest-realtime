@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   socket connected.** The catch in `handleConnection` read `.message` from whatever was thrown, so a
   rejection with `null` or `undefined` made the catch itself throw before `socket.disconnect(true)`
   ran. The reason is now logged as `String(reason)` when it is not an `Error`, and the socket is
-  always closed. The handshake middleware already behaved this way; this is the path that runs when
+  always closed. The handshake middleware already logged it this way; this is the path that runs when
   the gateway is used without it.
 
 ## [1.2.2] - 2026-10-31
