@@ -193,7 +193,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       }
     } catch (err) {
       this.logger.error(
-        `handleConnection threw for socket ${socket.id} — disconnecting: ${(err as Error).message}`,
+        `handleConnection threw for socket ${socket.id} — disconnecting: ${err instanceof Error ? err.message : String(err)}`,
       )
       socket.disconnect(true)
     }
