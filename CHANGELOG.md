@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check:published` resolves a relative import in a README snippet to the snippet that exports the
   imported names, and fails one that no snippet exports and no stub under `scripts/readme-modules/`
   types, instead of ignoring it as an unresolved module that makes the names `any`.
+- `check:published` tolerates a parse error in a README snippet only where the syntax tree shows a
+  bare `...` standing in for an argument, element or property, at that exact line and column, so a
+  real syntax error elsewhere in a snippet is no longer ignored.
 
 ### Documentation
 
