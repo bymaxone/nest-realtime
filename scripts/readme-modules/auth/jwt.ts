@@ -1,5 +1,4 @@
 /**
- * @fileoverview The same `./jwt` stub, for the snippet that is itself compiled as
- * `auth/cookie-authenticator.ts`, where `./jwt` is a sibling of that file.
+ * @fileoverview The `./jwt` stub as a sibling of a module under `auth/`.
  */
 export * from '../jwt'
