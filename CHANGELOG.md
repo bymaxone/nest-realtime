@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ignores events a WebSocket client sends; the per-entry-point option types, `PRESENCE_EVENT_NAMES`
   and `UsePresenceReturn`; and that `RealtimeGateway`, `WebSocketTransport` and `CompositeTransport`
   are exported for the module's own wiring.
+  A Troubleshooting entry quotes the start-up error verbatim, and a test fails if the README and the
+  message differ.
 - `ConnectionRegistry.register` and `unregister` are tagged `@internal`: they are the transports'
   own bookkeeping, and a record added by an application is counted by the lookups and suppresses
   offline-queue appends for that user while nothing can be delivered to it.

@@ -3,6 +3,8 @@
  * @layer transport
  */
 import 'reflect-metadata'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { Logger } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import { Test } from '@nestjs/testing'
@@ -203,6 +205,15 @@ describe('RealtimeGateway', () => {
       const message = String(errorSpy.mock.calls[0]?.[0])
       expect(message).toContain('so the websocket options are ignored and the gateway CORS')
       expect(message).not.toMatch(/websocket options \(/)
+    })
+
+    it('says in the README troubleshooting section exactly what it logs', () => {
+      // A consumer who meets the message looks it up in the README, so the text must match.
+      gateway.afterInit({} as never)
+      const message = String(errorSpy.mock.calls[0]?.[0])
+      const readme = readFileSync(join(__dirname, '..', '..', '..', '..', 'README.md'), 'utf8')
+
+      expect(readme).toContain(message)
     })
 
     it('stays silent when the server came from RealtimeIoAdapter', () => {

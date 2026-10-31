@@ -879,6 +879,16 @@ SSE connections are long-lived HTTP responses, and several common proxy defaults
 
 Platform-specific configuration is in [docs/proxies-cheat-sheet.md](./docs/proxies-cheat-sheet.md).
 
+### Troubleshooting
+
+**The log shows `RealtimeIoAdapter is not the active WebSocket adapter`.** The gateway logs this once at start-up, as an error, when its Socket.IO server was not created by `RealtimeIoAdapter`:
+
+```
+RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options are ignored and the gateway CORS stays closed (origin: false): browsers on another origin cannot connect. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from '@bymax-one/nest-realtime/websocket'.
+```
+
+When `websocket` options are set, their names follow the words "the websocket options" in parentheses, for example `(cors, redisAdapter)`. The fix is the `main.ts` line in [step 7](#7-add-websocket-optional): `RealtimeIoAdapter` applies `cors`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`, and until it is installed none of them takes effect.
+
 ---
 
 ## 🤝 Contributing
