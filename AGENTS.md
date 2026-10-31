@@ -198,9 +198,8 @@ rewrite published history.
 
 ## Where this repository narrows a shared rule
 
-Only what a reviewer of **these** diffs gets wrong. Each of the following is a case where the
-type, the name or the obvious reading says one thing and the runtime does another — the shape a
-reviewer cannot catch by reading carefully, which is the criterion for earning a place here.
+Only what a reviewer of **these** diffs gets wrong: each case is one where the type, the name or the
+obvious reading says one thing and the runtime does another.
 
 ### The root bundle must not reach the Socket.IO stack
 
@@ -528,11 +527,9 @@ E2E tests use the `eventsource` npm package as a Node.js polyfill for `EventSour
 
 Configuration: `stryker.config.json` — thresholds `high: 100, low: 100, break: 100`.
 
-Two scripts, and the difference matters. `pnpm mutation:full` clears `reports/stryker-incremental.json` first and measures cold (~15 min) — **use it whenever the answer matters**. `pnpm mutation` (and a bare `npx stryker run`) is incremental: it reuses stored verdicts, finishes in minutes, and can report a stale score for a mutant whose covering tests were just rewritten.
+`pnpm mutation:full` measures cold (~15 min); `pnpm mutation` is incremental and can be stale; see "`pnpm mutation` can report a stale score" above.
 
 Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs, and only when a changed path matches `mutation-source-globs` in `ci.yml`. When nothing matches, the job skips its steps and still reports success — a green `CI passed` is not by itself evidence the gate ran. The weekly cold run lives in `mutation-full.yml`.
-
-Moving a spec helper is not a pure refactor. The Stryker runner sets `rootDir: 'src'`, so anything a spec imports from outside `jest.stryker.config.ts`'s `roots` leaves `perTest` coverage analysis and its mutants survive, silently, with every other gate green. The `tests per mutant` figure in the report is the tell: a drop after a test-only change means attribution broke, not that the suite got smaller.
 
 Critical paths held to 100%:
 
@@ -585,4 +582,4 @@ Before marking any change complete:
 
 ## Session memory (Obsidian vault)
 
-Lessons from earlier sessions live outside the repository, in the owner's Obsidian vault at `~/Documents/MyApps/obsidian/Brain/`, when it is present on this machine. Before a task, find this repository's hub under `02 - Areas/`: the table in `02 - Areas/Bymax/Bymax.md` maps each Bymax repository to its folder; for any other repository, search `02 - Areas/` for the repository name. Read the hub with its `Learnings.md` and `Decisions.md`, and the relevant stack notes under `03 - Resources/`. When the vault and the code disagree, the code wins. Record each non-obvious gotcha, root cause or decision in the hub as the vault's `_meta/conventions.md` describes; a repository without a hub gets one from `_meta/templates/project-hub.md`.
+Lessons from earlier sessions live outside the repository, in the owner's Obsidian vault at `~/Documents/MyApps/obsidian/Brain/`, when it is present on this machine. Before a task, find this repository's hub under `02 - Areas/` (the table in `02 - Areas/Bymax/Bymax.md` maps each Bymax repository to its folder; otherwise search by name). Read the hub with its `Learnings.md` and `Decisions.md`, and the relevant stack notes under `03 - Resources/`. When the vault and the code disagree, the code wins. Record each non-obvious gotcha, root cause or decision in the hub as the vault's `_meta/conventions.md` describes; a repository without a hub gets one from `_meta/templates/project-hub.md`.
