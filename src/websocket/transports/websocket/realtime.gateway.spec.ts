@@ -436,6 +436,31 @@ describe('RealtimeGateway', () => {
     expect(transportMock.registerSocket).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['null', null, 'null'],
+    ['undefined', undefined, 'undefined'],
+    ['a string', 'denied', 'denied'],
+  ])(
+    'handleConnection still disconnects when the authenticator rejects with %s',
+    async (_label, reason, logged) => {
+      // A rejection that is not an Error has no message to read; the socket must still be closed.
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      try {
+        authenticator.authenticate.mockRejectedValue(reason)
+        const socket = makeSocket()
+
+        await expect(gateway.handleConnection(socket as never)).resolves.toBeUndefined()
+
+        expect(socket.disconnect).toHaveBeenCalledWith(true)
+        expect(errorSpy).toHaveBeenCalledWith(
+          `handleConnection threw for socket sock-1 — disconnecting: ${logged}`,
+        )
+      } finally {
+        errorSpy.mockRestore()
+      }
+    },
+  )
+
   it('handleConnection disconnects socket and does not throw when registerSocket() throws', async () => {
     // Any unexpected error from downstream transport is caught: the socket is forcibly
     // disconnected rather than leaving it in a partially-registered limbo state.
