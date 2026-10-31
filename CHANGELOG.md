@@ -48,8 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A Troubleshooting entry quotes the start-up error verbatim, and a test fails if the README and the
   message differ.
 - `ConnectionRegistry.register` and `unregister` are tagged `@internal`: they are the transports'
-  own bookkeeping, and a record added by an application is counted by the lookups and suppresses
-  offline-queue appends for that user while nothing can be delivered to it.
+  own bookkeeping, and a record added by an application is counted by the lookups (an `sse` one also
+  suppresses offline-queue appends for that user) while nothing can be delivered to it.
 - **README:** the Testing section no longer states a test count and a mutant count, which had
   drifted from the suite (626 tests in 37 suites against 663 in 43; only the end-to-end count was
   still right). It keeps the claims a gate enforces: 100% coverage and a mutation break threshold
