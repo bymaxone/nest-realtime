@@ -2,13 +2,11 @@
  * @fileoverview End-to-end: a WebSocket handshake refusal is a `connect_error`, never a connection.
  * @layer e2e
  *
- * The gateway used to authenticate in `handleConnection`, which Socket.IO runs after it has
- * accepted the connection: the client saw `connect` and then `disconnect: io server disconnect`
- * with no code, and could not tell a refusal from any other server disconnect. The handshake is
- * now authenticated by a Socket.IO middleware, so a refusal reaches the client as a
- * `connect_error` that carries `REALTIME_AUTH_FAILED` in `data.code`, and the client does not
- * reconnect on its own. These tests drive a real Nest application with real Socket.IO clients
- * over both transports, with authenticators that await a timer and a file read first.
+ * Constraint under test: authentication completes before Socket.IO accepts the connection, so a
+ * refusal reaches the client as a `connect_error` carrying `REALTIME_AUTH_FAILED` in `data.code`
+ * and the client does not reconnect on its own. The tests drive a real Nest application with real
+ * Socket.IO clients over both transports, with authenticators that await a timer and a file read
+ * first.
  */
 import 'reflect-metadata'
 import type { INestApplication } from '@nestjs/common'
