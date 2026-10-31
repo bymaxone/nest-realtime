@@ -110,11 +110,11 @@ Consumer-controlled membership: `RealtimeService.joinRoom(connectionId, roomId)`
 
 ### Online path (connection present)
 
-`emitToUser` → `ConnectionRegistry.getConnections(userId)` → direct delivery via transport.
+`emitToUser` → `ConnectionRegistry.byUser(userId, 'sse')` (`src/server/transports/sse/sse.transport.ts:181`, `connectionsForUser`) → direct delivery via the transport.
 
 ### Offline path (no active connections)
 
-`emitToUser` → no connections found → `IOfflineQueueStorage.enqueue(userId, event)`.
+`emitToUser` → no SSE connection on this instance for the user (`sse.transport.ts:200`) → `IOfflineQueueStorage.append(userId, event)`.
 
 On reconnect: `OfflineQueueDeliveryService` retrieves the events missed since `Last-Event-ID`, and acknowledges them only after they are emitted.
 
@@ -193,7 +193,7 @@ E2E tests use the `eventsource` npm package as a Node.js polyfill for `EventSour
 | Code                               | Constant                                       | When emitted                                      |
 | ---------------------------------- | ---------------------------------------------- | ------------------------------------------------- |
 | `REALTIME_INVALID_OPTIONS`         | `REALTIME_ERROR_CODES.INVALID_OPTIONS`         | Bad `forRoot` options at bootstrap                |
-| `REALTIME_AUTH_FAILED`             | `REALTIME_ERROR_CODES.AUTH_FAILED`             | `authenticate()` returned `null`                  |
+| `REALTIME_AUTH_FAILED`             | `REALTIME_ERROR_CODES.AUTH_FAILED`             | `authenticate()` returned `null` (SSE 401 only)   |
 | `REALTIME_REAUTHENTICATION_FAILED` | `REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED` | `revalidate()` returned `false`                   |
 | `REALTIME_TOO_MANY_CONNECTIONS`    | `REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS`    | FIFO eviction of oldest connection                |
 | `REALTIME_INVALID_TICKET`          | `REALTIME_ERROR_CODES.INVALID_TICKET`          | Ticket not found / expired                        |
