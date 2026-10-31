@@ -641,13 +641,14 @@ function elisionPositions(code, ext) {
 
 /** Where the module file for a relative specifier goes, or `null` when no file may
  * be written for it. The specifier is README text, so the path is constructed only
- * from plain names (no `..`, no `@`, no backslash), never replaces a file that
+ * from plain names (a dot only between name characters, as in `app.module`; no `..`,
+ * no `@`, no backslash), never replaces a file that
  * already exists (a snippet file or the prelude) and must stay under the gate
  * directory once symlinks are resolved: the consumer holds a symlink to the
  * repository. Stubs are copied afterwards without overwriting, so a snippet that
  * exports the imported names takes precedence over a stub. */
 function moduleFilePath(specifier) {
-  if (!/^\.\/(?:[\w-]+\/)*[\w-]+$/.test(specifier)) return null
+  if (!/^\.\/(?:[\w-]+(?:\.[\w-]+)*\/)*[\w-]+(?:\.[\w-]+)*$/.test(specifier)) return null
   const file = join(GATE_DIR, `${specifier}.ts`)
   if (existsSync(file)) return null
   let dir = dirname(file)
