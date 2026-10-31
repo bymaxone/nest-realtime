@@ -708,10 +708,8 @@ function checkSnippets() {
 
   // The names a snippet uses without introducing them are declared, typed, in
   // `readme-prelude.d.ts`, so a call through one of them is checked and an
-  // undeclared name is an error. Three kinds of diagnostic are counted and reported
-  // without failing: the parse error a bare `...` elision leaves in an argument,
-  // element or property position, an import of a module the fixture does not
-  // install, and a property missing on a class the snippet declares and abbreviates.
+  // undeclared name is an error. The filters below name the diagnostics that are
+  // counted and reported without failing.
   const PARSE_ELISION = new Set(['TS1108', 'TS1109'])
   /** The snippet file a diagnostic line points at, with its path split on either
    * separator because paths may carry backslashes on Windows. */
