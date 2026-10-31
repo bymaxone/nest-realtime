@@ -121,6 +121,11 @@ function buildMeta(record: ConnectionRecord) {
 }
 
 /** Parameters forwarded from `handle()` into `buildStream()`. */
+interface AuthenticatedRequest {
+  context: ConnectionAuthContext
+  auth: AuthenticationResult
+}
+
 interface StreamParams {
   connectionId: string
   resolvedAuth: AuthenticationResult
@@ -146,6 +151,8 @@ interface StreamParams {
 @Injectable()
 export class SseSubscriptionHandler {
   private readonly logger = new Logger(SseSubscriptionHandler.name)
+
+  private readonly authenticated = new WeakMap<object, AuthenticatedRequest>()
 
   constructor(
     @Inject(SseTransport) private readonly transport: SseTransport,
@@ -218,13 +225,10 @@ export class SseSubscriptionHandler {
     res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('X-Accel-Buffering', 'no')
 
-    // Build the auth context; the authorization header is stripped (not valid for SSE).
-    const context = buildAuthContext(req)
-
-    const auth = await this.transport.authenticate(context)
-    if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
-
-    const resolvedAuth = this.resolveAndValidateIdentity(auth)
+    // The route guard normally authenticated already.
+    const done = this.authenticated.get(req)
+    this.authenticated.delete(req)
+    const { context, auth: resolvedAuth } = done ?? (await this.authenticateRequest(req))
 
     const connectionId = randomUUID()
     const subject = new Subject<MessageEvent>()
@@ -266,6 +270,22 @@ export class SseSubscriptionHandler {
       replay$,
       queueEvents,
     })
+  }
+
+  /**
+   * Authenticate ahead of the route, from a guard: with an interceptor registered Nest commits
+   * `200` on the next macrotask, so a refusal that needs I/O is a status only if it comes first.
+   */
+  async authenticateBeforeCommit(req: SseRequest): Promise<void> {
+    this.authenticated.set(req, await this.authenticateRequest(req))
+  }
+
+  private async authenticateRequest(req: SseRequest): Promise<AuthenticatedRequest> {
+    // The authorization header is stripped (not valid for SSE).
+    const context = buildAuthContext(req)
+    const auth = await this.transport.authenticate(context)
+    if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
+    return { context, auth: this.resolveAndValidateIdentity(auth) }
   }
 
   /**

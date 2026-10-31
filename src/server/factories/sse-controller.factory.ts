@@ -2,8 +2,8 @@
  * @fileoverview Factory building a dynamic SSE controller bound to a configured path.
  * @layer transport
  */
-import { Controller, Inject, Req, Res, Sse } from '@nestjs/common'
-import type { MessageEvent, Type } from '@nestjs/common'
+import { Controller, Inject, Injectable, Req, Res, Sse, UseGuards } from '@nestjs/common'
+import type { CanActivate, ExecutionContext, MessageEvent, Type } from '@nestjs/common'
 import type { Observable } from 'rxjs'
 import type { SseRequest, SseResponse } from '../interfaces/sse-http.interface'
 import { SseSubscriptionHandler } from '../transports/sse/sse-subscription.handler'
@@ -20,6 +20,17 @@ import { normalizeEndpointPath } from '../utils/normalize-endpoint-path'
 export function createSseController(endpoint: string): Type<unknown> {
   const ssePath = normalizeEndpointPath(endpoint)
 
+  /** Authenticates before the route runs, so a refusal after I/O is still a status. */
+  @Injectable()
+  class SseAuthGuard implements CanActivate {
+    constructor(@Inject(SseSubscriptionHandler) private readonly handler: SseSubscriptionHandler) {}
+
+    async canActivate(context: ExecutionContext): Promise<boolean> {
+      await this.handler.authenticateBeforeCommit(context.switchToHttp().getRequest<SseRequest>())
+      return true
+    }
+  }
+
   @Controller()
   class DynamicSseController {
     // Explicit @Inject: the published bundle is built by esbuild/tsup, which does
@@ -27,6 +38,7 @@ export function createSseController(endpoint: string): Type<unknown> {
     // be resolved by token rather than by reflected type.
     constructor(@Inject(SseSubscriptionHandler) private readonly handler: SseSubscriptionHandler) {}
 
+    @UseGuards(SseAuthGuard)
     @Sse(ssePath)
     subscribe(
       @Req() req: SseRequest,

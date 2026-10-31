@@ -2,6 +2,7 @@
  * @fileoverview Unit tests for the dynamic SSE controller factory.
  * @layer transport
  */
+import { GUARDS_METADATA } from '@nestjs/common/constants'
 import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import type { Observable } from 'rxjs'
@@ -33,7 +34,50 @@ function build(handler: SseSubscriptionHandler, endpoint: string): SseController
   return new ControllerClass(handler) as unknown as SseControllerInstance
 }
 
+interface GuardInstance {
+  canActivate(context: unknown): Promise<boolean>
+}
+
+/** The guard class registered on the dynamic controller's route. */
+function guardOf(endpoint: string): new (handler: SseSubscriptionHandler) => GuardInstance {
+  const cls = createSseController(endpoint)
+  const guards = Reflect.getMetadata(GUARDS_METADATA, cls.prototype.subscribe) as unknown[]
+  return guards[0] as new (handler: SseSubscriptionHandler) => GuardInstance
+}
+
 describe('createSseController', () => {
+  // The route authenticates ahead of the response: Nest awaits a guard before an `@Sse()` route
+  // runs, while it commits the stream's headers from a timer once the route has returned.
+  it('registers exactly one guard on the SSE route', () => {
+    const cls = createSseController('/events')
+    const guards = Reflect.getMetadata(GUARDS_METADATA, cls.prototype.subscribe) as unknown[]
+    expect(guards).toHaveLength(1)
+  })
+
+  // The guard asks the handler to authenticate this request and lets it through.
+  it('guard authenticates the request through the handler and allows it', async () => {
+    const authenticateBeforeCommit = jest.fn().mockResolvedValue(undefined)
+    const handler = { authenticateBeforeCommit } as unknown as SseSubscriptionHandler
+    const req = mkReq()
+    const context = { switchToHttp: () => ({ getRequest: () => req }) }
+
+    const allowed = await new (guardOf('/events'))(handler).canActivate(context)
+
+    expect(authenticateBeforeCommit).toHaveBeenCalledWith(req)
+    expect(allowed).toBe(true)
+  })
+
+  // A refusal or a failure from the handler reaches Nest's exception filters unchanged.
+  it('guard lets the handler rejection through', async () => {
+    const failure = new Error('refused')
+    const handler = {
+      authenticateBeforeCommit: jest.fn().mockRejectedValue(failure),
+    } as unknown as SseSubscriptionHandler
+    const context = { switchToHttp: () => ({ getRequest: () => mkReq() }) }
+
+    await expect(new (guardOf('/events'))(handler).canActivate(context)).rejects.toBe(failure)
+  })
+
   // The controller delegates every request to SseSubscriptionHandler.handle.
   it('delegates the request to the handler', async () => {
     const handler = mkHandler()
