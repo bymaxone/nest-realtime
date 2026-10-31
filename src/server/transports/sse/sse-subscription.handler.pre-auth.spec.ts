@@ -19,7 +19,7 @@ import {
 
 describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
   // An authenticator that does real I/O before refusing still produces a 401, because the
-  // refusal now happens in the guard, ahead of the response.
+  // refusal happens in the guard, ahead of the response.
   it('refuses with a 401 after the authenticator awaited I/O', async () => {
     const authenticate = jest.fn(async () => {
       await sleep(5)
@@ -45,7 +45,7 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
     await expect(handler.authenticateBeforeCommit(mkReq())).rejects.toBe(failure)
   })
 
-  // A blank identity stays a 500 with the reason in the log, now before the response starts.
+  // A blank identity is a 500 with the reason in the log, decided before the response starts.
   it('refuses a blank identity with a generic 500', async () => {
     const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     try {

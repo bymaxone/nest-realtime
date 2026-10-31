@@ -2,15 +2,15 @@
  * @fileoverview End-to-end: an SSE refusal that needs I/O is an HTTP status, not a 200 stream.
  * @layer e2e
  *
- * In an application with an interceptor registered, Nest commits `200 text/event-stream` from a
- * timer once an `@Sse()` route returns, without waiting for the promise the route returned.
- * Authentication used to run inside that route, so an authenticator that awaited real I/O before
- * refusing lost the race: the client had already received a 200 and then got the refusal as an
- * `event: error` frame, which a browser `EventSource` treats as a reconnectable stream. Without
- * an interceptor Nest answered a late rejection with its status, so every case here runs both
- * ways: the interceptor variant is the one that fails without the guard. The tests drive a real
- * Nest application over real HTTP with authenticators that do what a session or revocation
- * lookup does: await a timer and a file read, then decide.
+ * Constraint under test: a refusal decided after real I/O reaches the client as an HTTP status. In
+ * an application with an interceptor registered, Nest commits `200 text/event-stream` from a timer
+ * once an `@Sse()` route returns, without waiting for the promise the route returned, and a
+ * refusal written after that can only be an `event: error` frame, which a browser `EventSource`
+ * treats as a reconnectable stream. Authentication therefore has to finish in a guard, which Nest
+ * awaits first. Without an interceptor Nest answers a late rejection with its status, so every
+ * case here runs both ways: the interceptor variant is the one that fails when authentication is
+ * not in a guard. The tests drive a real Nest application over real HTTP with authenticators that
+ * do what a session or revocation lookup does: await a timer and a file read, then decide.
  */
 import { Injectable } from '@nestjs/common'
 import type {
@@ -112,7 +112,7 @@ describe.each([
     expect(`${res.text}${JSON.stringify(res.body)}`).not.toContain('ECONNREFUSED')
   })
 
-  // A blank identity from an authenticator that did I/O stays a generic 500 before the stream.
+  // A blank identity from an authenticator that did I/O is a generic 500, decided before the stream.
   it('answers 500 for a blank identity returned after I/O', async () => {
     app = await boot(
       {
@@ -129,7 +129,7 @@ describe.each([
     expect(res.status).toBe(500)
   })
 
-  // Accepted credentials still open the stream, and the authenticator ran once for the request.
+  // Accepted credentials open the stream, and the authenticator runs once for the request.
   it('opens the stream with connection:established when the authenticator accepts after I/O', async () => {
     const authenticate = jest.fn(async () => {
       await doIo()
