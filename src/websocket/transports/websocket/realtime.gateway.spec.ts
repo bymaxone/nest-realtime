@@ -552,6 +552,30 @@ describe('RealtimeGateway', () => {
       }
     })
 
+    it.each([
+      ['null', null, 'null'],
+      ['undefined', undefined, 'undefined'],
+      ['a string', 'denied', 'denied'],
+    ])(
+      'still answers the generic error when the authenticator rejects with %s',
+      async (_label, reason, logged) => {
+        // A rejection that is not an Error has no message to read; the handshake must still complete.
+        const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+        try {
+          authenticator.authenticate.mockRejectedValue(reason)
+          const next = jest.fn()
+
+          await installMiddleware()(makeSocket(), next)
+
+          expect(next).toHaveBeenCalledTimes(1)
+          expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
+          expect(errorSpy).toHaveBeenCalledWith(`handshake refused for socket sock-1: ${logged}`)
+        } finally {
+          errorSpy.mockRestore()
+        }
+      },
+    )
+
     it('answers a blank identity with the same generic error and registers nothing', async () => {
       const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
       try {

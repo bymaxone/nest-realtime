@@ -79,7 +79,9 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       this.authenticated.set(socket, resolvedAuth)
       next()
     } catch (err) {
-      this.logger.error(`handshake refused for socket ${socket.id}: ${(err as Error).message}`)
+      this.logger.error(
+        `handshake refused for socket ${socket.id}: ${err instanceof Error ? err.message : String(err)}`,
+      )
       next(new Error('Internal Server Error'))
     }
   }
