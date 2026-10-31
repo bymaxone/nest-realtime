@@ -17,6 +17,7 @@ import type {
   ConnectionAuthContext,
   BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
+import { isRealtimeIoServer } from './realtime-io-adapter'
 import { WebSocketTransport } from './websocket.transport'
 
 /** Collapse a possibly multi-valued query parameter to its first string value. */
@@ -58,7 +59,20 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   /** Wire the resolved Socket.IO server to the transport after gateway init. */
   afterInit(server: Server): void {
     this.transport.setServer(server)
+    if (!isRealtimeIoServer(server)) this.reportMissingAdapter()
     this.logger.log('RealtimeGateway initialized')
+  }
+
+  /** Report a server that `RealtimeIoAdapter` did not create: its options are dropped. */
+  private reportMissingAdapter(): void {
+    const configured = Object.keys(this.options.websocket ?? {})
+    this.logger.error(
+      'RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options' +
+        (configured.length > 0 ? ` (${configured.join(', ')})` : '') +
+        ' are ignored and the gateway CORS stays closed (origin: false): browsers on another ' +
+        'origin cannot connect. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in ' +
+        "main.ts, importing it from '@bymax-one/nest-realtime/websocket'.",
+    )
   }
 
   /**

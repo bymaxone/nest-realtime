@@ -28,7 +28,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     stripping them takes it from 14.34 to 10.04 KB brotli — so headroom here is
 //     cheap to reclaim, and a loose ratchet would hide that a 30% reduction is
 //     available rather than force the question.
-//   websocket 5.99 KB →  6.5 KB (8% headroom — the Socket.IO stack alone)
+//   websocket 6.63 KB →  6.9 KB (4% headroom — the Socket.IO stack alone, including the
+//     start-up message that names the fix when `RealtimeIoAdapter` is not installed)
 //   shared    0.44 KB →  0.6 KB (37% headroom, kept slightly generous for future constants)
 //   react     2.26 KB →  2.4 KB (6% headroom)
 //
@@ -43,7 +44,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 500 },
   { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 15_200 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 6_500 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 6_900 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 600 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_400 },
 ]
