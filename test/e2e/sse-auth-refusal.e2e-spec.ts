@@ -91,13 +91,14 @@ describe.each([
     expect(res.body).toMatchObject({ statusCode: 401, message: 'REALTIME_AUTH_FAILED' })
   })
 
-  // Same for the authenticator that cannot decide: an infrastructure failure is a 5xx.
-  it('answers 500, not 200, when the authenticator throws after I/O', async () => {
+  // Same for the authenticator that cannot decide: an infrastructure failure is a 5xx, and what
+  // the client reads says nothing about the backend (a Redis error names a host and a port).
+  it('answers 500, not 200, when the authenticator throws after I/O, without its message', async () => {
     app = await boot(
       {
         authenticate: async () => {
           await doIo()
-          throw new Error('session store unreachable')
+          throw new Error('connect ECONNREFUSED 10.20.30.40:6379')
         },
       },
       withInterceptor,
@@ -107,6 +108,8 @@ describe.each([
 
     expect(res.status).toBe(500)
     expect(res.headers['content-type']).not.toMatch(/text\/event-stream/)
+    expect(`${res.text}${JSON.stringify(res.body)}`).not.toContain('10.20.30.40')
+    expect(`${res.text}${JSON.stringify(res.body)}`).not.toContain('ECONNREFUSED')
   })
 
   // A blank identity from an authenticator that did I/O stays a generic 500 before the stream.
