@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **README:** the Testing section no longer states a test count and a mutant count, which had
+  drifted from the suite (626 tests in 37 suites against 663 in 43; only the end-to-end count was
+  still right). It keeps the claims a gate enforces: 100% coverage and a mutation break threshold
+  of 100.
+
+### Tests
+
+- A spec parses the README and asserts it against the code: the `sse` and `reauthenticationPolicy`
+  defaults in the Configuration table, the error codes, the DI tokens and the reserved event names.
+  A default or a name that changes in code without the README now fails the suite.
+
 ## [1.2.1] - 2026-10-30
 
 **This version carries two behavioural breaks, both under Security below.** An authenticator that
