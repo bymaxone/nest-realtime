@@ -611,6 +611,34 @@ function localModules(blocks) {
   return modules
 }
 
+/**
+ * Where a snippet leaves an argument, an element or a property out with a bare `...`,
+ * as the positions of the diagnostics the parser reports for it. The parse tree
+ * decides, not the text: regular expressions, template literals, JSX text, comments
+ * and strings are already resolved there, so none of them can pass for an elision.
+ * An elision is a spread whose expression is missing, and the parser reports the
+ * missing expression at the next token, which is where the position is taken.
+ * Returns `line:column` keys, both 1-based, in the numbering of the compiled text.
+ */
+function elisionPositions(code, ext) {
+  const kind = ext === 'tsx' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const file = ts.createSourceFile('snippet', code, ts.ScriptTarget.Latest, true, kind)
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, file.languageVariant, code)
+  const positions = new Set()
+  const visit = (node) => {
+    const spread = node.kind === ts.SyntaxKind.SpreadElement || ts.isSpreadAssignment(node)
+    if (spread && node.expression.pos === node.expression.end) {
+      scanner.resetTokenState(node.expression.pos)
+      scanner.scan()
+      const { line, character } = file.getLineAndCharacterOfPosition(scanner.getTokenStart())
+      positions.add(`${String(line + 1)}:${String(character + 1)}`)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return positions
+}
+
 /** Where the module file for a relative specifier goes, or `null` when no file may
  * be written for it. The specifier is README text, so the path is constructed only
  * from plain names (no `..`, no `@`, no backslash), never replaces a file that
@@ -653,11 +681,15 @@ function checkSnippets() {
   scaffoldConsumer()
   /** file name → its source, so a diagnostic can be traced back to the snippet. */
   const sources = new Map()
+  /** file name → the positions of its elisions in the text actually compiled, which is
+   * what a diagnostic's line and column index. */
+  const elisions = new Map()
   subjects.forEach(({ ext, raw, code }, i) => {
     const name = `snippet-${String(i + 1).padStart(2, '0')}.${ext}`
     // The abbreviated-type check below reads what the author wrote, not the header
     // this script added, which names every public type.
     sources.set(name, raw)
+    elisions.set(name, elisionPositions(code, ext))
     writeFileSync(join(GATE_DIR, name), code)
   })
   // A module the README names in an import resolves to the snippet that exports it.
@@ -676,16 +708,20 @@ function checkSnippets() {
 
   // The names a snippet uses without introducing them are declared, typed, in
   // `readme-prelude.d.ts`, so a call through one of them is checked and an
-  // undeclared name is an error. Three kinds of diagnostic are counted and reported
-  // without failing: a parse-level elision (`…`, a bare `return`), an import of a
-  // module the fixture does not install, and a property missing on a class the
-  // snippet declares and abbreviates.
-  const CONTEXT_ONLY = new Set([
-    // Parse-level: a snippet that elides code with `…` or shows a bare `return`
-    // is prose, not a program.
-    'TS1108',
-    'TS1109',
-  ])
+  // undeclared name is an error. The filters below name the diagnostics that are
+  // counted and reported without failing.
+  const PARSE_ELISION = new Set(['TS1108', 'TS1109'])
+  /** The snippet file a diagnostic line points at, with its path split on either
+   * separator because paths may carry backslashes on Windows. */
+  const fileOf = (line) => (/^([^(]+)\(/.exec(line)?.[1] ?? '').split(/[\\/]/).pop() ?? ''
+  /** Whether a parse diagnostic is the one the parser reports for an elision. Decided
+   * by the diagnostic's own position, so an ellipsis elsewhere in the snippet, or on
+   * the same line, says nothing about a syntax error somewhere else. */
+  const isParseElision = (line) => {
+    if (!PARSE_ELISION.has((/error (TS\d+)/.exec(line) ?? [])[1])) return false
+    const at = /\((\d+),(\d+)\)/.exec(line)
+    return at !== null && (elisions.get(fileOf(line))?.has(`${at[1]}:${at[2]}`) ?? false)
+  }
   /** `Property 'x' does not exist on type 'Y'` is an API defect when `Y` comes
    * from the package, and snippet noise when `Y` is a class the snippet declares
    * itself and abbreviates — a README example routinely writes `this.repo`
@@ -719,10 +755,7 @@ function checkSnippets() {
       console.log(`  snippets: ${subjects.length} README snippets compile against dist/`)
     }
     const real = lines.filter(
-      (l) =>
-        !CONTEXT_ONLY.has((/error (TS\d+)/.exec(l) ?? [])[1]) &&
-        !isForeignModule(l) &&
-        !isAbbreviatedLocalType(l, sources),
+      (l) => !isParseElision(l) && !isForeignModule(l) && !isAbbreviatedLocalType(l, sources),
     )
     const context = lines.length - real.length
     if (real.length > 0) {
@@ -735,7 +768,7 @@ function checkSnippets() {
       console.log(
         `  snippets: ${subjects.length} compiled against dist/` +
           (context > 0
-            ? ` (${context} diagnostic(s) ignored: a peer the fixture does not install, a parse-level elision or the reader's own module)`
+            ? ` (${context} diagnostic(s) ignored: a peer the fixture does not install, a bare ellipsis or the reader's own module)`
             : ''),
       )
     }
