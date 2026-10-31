@@ -21,9 +21,11 @@ import { execFileSync } from 'node:child_process'
 import { lookup } from 'node:dns/promises'
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -573,6 +575,58 @@ function scaffoldConsumer() {
 // 3. The README's own snippets compile against the built package.
 // ---------------------------------------------------------------------------
 
+/** Relative imports across the snippets, each resolved to the first snippet that
+ * exports every name imported from it, so a block that imports `./auth/x` is checked
+ * against the class another block wrote instead of against `any`. */
+function localModules(blocks) {
+  const modules = new Map()
+  for (const { code } of blocks) {
+    for (const m of code.matchAll(
+      /^import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"](\.[^'"]+)['"]/gm,
+    )) {
+      const [, list, specifier] = m
+      if (modules.has(specifier)) continue
+      const wanted = list
+        .split(',')
+        .map(
+          (n) =>
+            n
+              .trim()
+              .replace(/^type\s+/, '')
+              .split(/\s+as\s+/)[0],
+        )
+        .filter(Boolean)
+      const source = blocks.find((b) =>
+        wanted.every((n) =>
+          new RegExp(
+            // `$` is an identifier character and a regexp anchor, so it is escaped.
+            `^export\\s+(?:const|class|interface|type|function|enum)\\s+${n.replaceAll('$', '\\$')}(?![\\w$])`,
+            'm',
+          ).test(b.code),
+        ),
+      )
+      if (source) modules.set(specifier, source)
+    }
+  }
+  return modules
+}
+
+/** Where the module file for a relative specifier goes, or `null` when no file may
+ * be written for it. The specifier is README text, so the path is constructed only
+ * from plain names (no `..`, no `@`, no backslash), never replaces a file that
+ * already exists (a snippet file or the prelude) and must stay under the gate
+ * directory once symlinks are resolved: the consumer holds a symlink to the
+ * repository. Stubs are copied afterwards without overwriting, so a snippet that
+ * exports the imported names takes precedence over a stub. */
+function moduleFilePath(specifier) {
+  if (!/^\.\/(?:[\w-]+\/)*[\w-]+$/.test(specifier)) return null
+  const file = join(GATE_DIR, `${specifier}.ts`)
+  if (existsSync(file)) return null
+  let dir = dirname(file)
+  while (!existsSync(dir)) dir = dirname(dir)
+  return `${realpathSync(dir)}${sep}`.startsWith(`${realpathSync(GATE_DIR)}${sep}`) ? file : null
+}
+
 function checkSnippets() {
   // `tsx` too, and the fence language is kept: a React example has to be written
   // to a .tsx file or it does not parse, and a package with a React subpath
@@ -606,6 +660,19 @@ function checkSnippets() {
     sources.set(name, raw)
     writeFileSync(join(GATE_DIR, name), code)
   })
+  // A module the README names in an import resolves to the snippet that exports it.
+  // One it never shows is typed by a stub under `scripts/readme-modules/`, copied to
+  // the same relative path; any other relative import stays unresolved and fails.
+  for (const [specifier, source] of localModules(blocks)) {
+    // A specifier with no safe path stays unresolved, which fails the gate.
+    const file = moduleFilePath(specifier)
+    if (file === null) continue
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, prepareSnippet(source.code, importsPackage(source.code)))
+  }
+  const stubs = join(ROOT, 'scripts', 'readme-modules')
+  if (existsSync(stubs))
+    cpSync(stubs, GATE_DIR, { recursive: true, force: false, errorOnExist: false })
 
   // The names a snippet uses without introducing them are declared, typed, in
   // `readme-prelude.d.ts`, so a call through one of them is checked and an
@@ -639,8 +706,11 @@ function checkSnippets() {
     return new RegExp(`\\b(class|interface|type)\\s+${name}(?![\\w$])`).test(own)
   }
   /** An import of some OTHER package the fixture does not install — a documented
-   * optional integration. Reported as uncovered, not as a failure. */
-  const isForeignModule = (line) => /error TS2307/.test(line) && !line.includes(PKG.name)
+   * optional integration. Reported as uncovered, not as a failure. A relative import
+   * that no snippet exports and no stub types is a defect: it would make every name
+   * it brings in `any`. */
+  const isForeignModule = (line) =>
+    /error TS2307/.test(line) && !line.includes(PKG.name) && !/Cannot find module '\./.test(line)
 
   try {
     const lines = compileGate()

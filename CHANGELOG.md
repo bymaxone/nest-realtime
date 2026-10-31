@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the others. The names a snippet uses without declaring them are typed in
   `scripts/readme-prelude.d.ts`, so a wrong method, option or destructured field is an error instead
   of a call on `any`.
+- `check:published` resolves a relative import in a README snippet to the snippet that exports the
+  imported names, and fails one that no snippet exports and no stub under `scripts/readme-modules/`
+  types, instead of ignoring it as an unresolved module that makes the names `any`.
 
 ### Documentation
 
