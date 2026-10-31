@@ -307,7 +307,7 @@ The same shape applies to `emitToTenant`, `emitToRoom` and `broadcast` (`op` is 
 Cross-instance revocation on SSE: `disconnect(connectionId)` closes a connection this instance owns and
 stops there; only for a connection it does not own does it publish
 `{ op: 'disconnect', args: { connectionId, reason } }`, and the subscriber calls
-`disconnectLocal(connectionId)`. WebSocket reaches other instances through Socket.IO's own adapter.
+`disconnectLocal(connectionId)`. WebSocket reaches other instances through the Socket.IO adapter, when one is configured.
 
 `RealtimePubSubSubscriber` must NOT re-publish what it receives (infinite loop): it ignores messages carrying
 its own per-instance ID (`REALTIME_INSTANCE_ID_TOKEN`).
