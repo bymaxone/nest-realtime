@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interceptor is registered. Fixes
   [#161](https://github.com/bymaxone/nest-realtime/issues/161).
 
+  The library also no longer lets an error's message reach the stream. Nest 11.2.3 writes the
+  message of an error raised after the stream has started into the `event: error` frame, so a
+  rejected connection registration, or a failure of another dependency after authentication, could
+  put text such as `connect ECONNREFUSED 10.20.30.40:6379` in front of the client. Any error that
+  is not an HTTP exception is now logged server-side and sent as a generic 500; an HTTP exception
+  an authenticator throws on purpose (a rate limit, say) is sent unchanged.
+
   **Apply to a consumer.** Nothing to change. If you worked around the old behaviour by treating
   an `error` event with `REALTIME_AUTH_FAILED` on a `200` stream as a refusal, that workaround can go:
   the refusal is now the HTTP status, and `EventSource` stops on a `401` instead of reconnecting.

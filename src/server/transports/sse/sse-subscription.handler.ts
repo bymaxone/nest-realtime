@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import {
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -221,6 +222,17 @@ export class SseSubscriptionHandler {
    *   written to the server log.
    */
   async handle(req: SseRequest, res: SseResponse): Promise<Observable<MessageEvent>> {
+    try {
+      return await this.handleRequest(req, res)
+    } catch (err) {
+      throw this.toClientError(err, 'SSE handshake failed')
+    }
+  }
+
+  private async handleRequest(
+    req: SseRequest,
+    res: SseResponse,
+  ): Promise<Observable<MessageEvent>> {
     // Anti-buffering headers must be sent before the first byte.
     res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('X-Accel-Buffering', 'no')
@@ -277,7 +289,18 @@ export class SseSubscriptionHandler {
    * `200` on the next macrotask, so a refusal that needs I/O is a status only if it comes first.
    */
   async authenticateBeforeCommit(req: SseRequest): Promise<void> {
-    this.authenticated.set(req, await this.authenticateRequest(req))
+    try {
+      this.authenticated.set(req, await this.authenticateRequest(req))
+    } catch (err) {
+      throw this.toClientError(err, 'SSE authentication failed')
+    }
+  }
+
+  /** An HTTP exception as it is, anything else as a generic 500: Nest 11.2.3 streams `err.message`. */
+  private toClientError(err: unknown, what: string): HttpException {
+    if (err instanceof HttpException) return err
+    this.logger.error(`${what} — responding 500: ${(err as Error).message}`)
+    return new InternalServerErrorException()
   }
 
   private async authenticateRequest(req: SseRequest): Promise<AuthenticatedRequest> {
@@ -356,7 +379,7 @@ export class SseSubscriptionHandler {
         this.fireHook(() =>
           this.hooks?.onError?.({ connectionId, error: err as Error, transport: 'sse' }),
         )
-        subscriber.error(err)
+        subscriber.error(this.toClientError(err, 'SSE registration failed'))
       })
   }
 

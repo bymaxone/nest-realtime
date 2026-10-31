@@ -7,7 +7,12 @@
  * `authenticateBeforeCommit`; `handle` then reuses that outcome instead of authenticating twice.
  */
 import { setTimeout as sleep } from 'node:timers/promises'
-import { InternalServerErrorException, Logger, UnauthorizedException } from '@nestjs/common'
+import {
+  HttpException,
+  InternalServerErrorException,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common'
 import {
   mkTransport,
   mkHeartbeat,
@@ -16,6 +21,8 @@ import {
   mkRes,
   build,
 } from '../../../../test/fixtures/sse/subscription-harness'
+import type { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
+import { SseSubscriptionHandler } from './sse-subscription.handler'
 
 describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
   // An authenticator that does real I/O before refusing still produces a 401, because the
@@ -32,17 +39,75 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
     )
   })
 
-  // An infrastructure failure inside the authenticator is not turned into a refusal or hidden:
-  // the guard rejects with it, and Nest answers with a 5xx.
-  it('rejects with the error an authenticator throws after I/O', async () => {
-    const failure = new Error('session store unreachable')
-    const authenticate = jest.fn(async () => {
-      await sleep(5)
-      throw failure
-    })
-    const handler = build(mkTransport({ authenticate }), mkHeartbeat(), mkOptions())
+  // An infrastructure failure inside the authenticator is not turned into a refusal: the guard
+  // rejects with a generic 500, and the detail goes to the server log, not to the client.
+  it('rejects with a generic 500 when an authenticator throws after I/O, and logs the detail', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      const authenticate = jest.fn(async () => {
+        await sleep(5)
+        throw new Error('connect ECONNREFUSED 10.20.30.40:6379')
+      })
+      const handler = build(mkTransport({ authenticate }), mkHeartbeat(), mkOptions())
 
-    await expect(handler.authenticateBeforeCommit(mkReq())).rejects.toBe(failure)
+      const thrown = await handler.authenticateBeforeCommit(mkReq()).catch((err: unknown) => err)
+
+      expect(thrown).toBeInstanceOf(InternalServerErrorException)
+      expect(JSON.stringify((thrown as InternalServerErrorException).getResponse())).not.toContain(
+        '10.20.30.40',
+      )
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('10.20.30.40'))
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  // An HTTP exception the authenticator throws on purpose (a rate limit, say) is the consumer's
+  // answer and reaches the client unchanged.
+  it('lets an HttpException from the authenticator through unchanged', async () => {
+    const limit = new HttpException('slow down', 429)
+    const handler = build(
+      mkTransport({ authenticate: jest.fn().mockRejectedValue(limit) }),
+      mkHeartbeat(),
+      mkOptions(),
+    )
+
+    await expect(handler.authenticateBeforeCommit(mkReq())).rejects.toBe(limit)
+    await expect(handler.handle(mkReq(), mkRes())).rejects.toBe(limit)
+  })
+
+  // Past authentication, a failure of another dependency (the offline queue read) after I/O
+  // must not carry its message either: it answers a generic 500 and is logged.
+  it('answers a generic 500 when the offline-queue read fails after the guard', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      const offlineDelivery = {
+        retrieve: jest.fn(async () => {
+          await sleep(5)
+          throw new Error('connect ECONNREFUSED 10.20.30.40:6379')
+        }),
+        acknowledge: jest.fn(),
+      } as unknown as OfflineQueueDeliveryService
+      const handler = new SseSubscriptionHandler(
+        mkTransport(),
+        mkHeartbeat(),
+        mkOptions(),
+        undefined,
+        offlineDelivery,
+      )
+
+      const thrown = await handler
+        .handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+        .catch((err: unknown) => err)
+
+      expect(thrown).toBeInstanceOf(InternalServerErrorException)
+      expect(JSON.stringify((thrown as InternalServerErrorException).getResponse())).not.toContain(
+        '10.20.30.40',
+      )
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('10.20.30.40'))
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   // A blank identity is a 500 with the reason in the log, decided before the response starts.
