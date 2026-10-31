@@ -71,6 +71,10 @@ function publicImports() {
   return `import { ${parts.join(', ')} } from '${PKG.name}'`
 }
 
+/** One `import ... from '...'` statement, so it can be lifted out of a snippet or
+ * kept out of a search for what the snippet itself declares. */
+const IMPORT_STATEMENT = /^import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?\n/gm
+
 /**
  * Turns a README fragment into something a compiler can check without changing what
  * it claims: a snippet that does not import the package gets every public name of the
@@ -80,11 +84,10 @@ function publicImports() {
  * interface, type, enum, function or const is left as written.
  */
 function prepareSnippet(code, importsPkg) {
-  const importPattern = /^import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?\n/gm
-  const imports = code.match(importPattern) ?? []
+  const imports = code.match(IMPORT_STATEMENT) ?? []
   // `{ ... }` is how a snippet says "the usual arguments". Left alone it is a parse
   // error, and a parse error in a call hides every semantic error around it.
-  const body = code.replace(importPattern, '').replaceAll('{ ... }', '{} as never')
+  const body = code.replace(IMPORT_STATEMENT, '').replaceAll('{ ... }', '{} as never')
   const header = `${importsPkg ? '' : `${publicImports()}\n`}${imports.join('')}`
   const declares =
     /^(export\s+)?(default\s+)?(abstract\s+)?(class|interface|type|enum|function|const)\s/m.test(
@@ -105,7 +108,7 @@ function compileGate() {
   const config = ts.readConfigFile(join(GATE_DIR, 'tsconfig.json'), ts.sys.readFile)
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, GATE_DIR)
   const program = ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options })
-  return ts.getPreEmitDiagnostics(program).map((d) => {
+  return [...parsed.errors, ...ts.getPreEmitDiagnostics(program)].map((d) => {
     const text = ts.flattenDiagnosticMessageText(d.messageText, ' ')
     if (!d.file) return `error TS${String(d.code)}: ${text}`
     const { line, character } = d.file.getLineAndCharacterOfPosition(d.start ?? 0)
@@ -560,8 +563,10 @@ function scaffoldConsumer() {
     )}\n`,
   )
   // The names a snippet uses without introducing them, typed for real so a call
-  // made through one is checked instead of silently resolving to `any`.
-  copyFileSync(join(ROOT, 'scripts', 'readme-prelude.d.ts'), join(GATE_DIR, 'prelude.d.ts'))
+  // made through one is checked instead of silently resolving to `any`. Copied as
+  // `.ts`: the repository's `skipLibCheck` would skip a `.d.ts`, and a stale import
+  // in the prelude would then turn its types into `any` without an error.
+  copyFileSync(join(ROOT, 'scripts', 'readme-prelude.d.ts'), join(GATE_DIR, 'prelude.ts'))
 }
 
 // ---------------------------------------------------------------------------
@@ -624,7 +629,10 @@ function checkSnippets() {
     if (!m) return false
     const file = /^([^(]+)\(/.exec(line)?.[1]
     // Paths may use backslashes on Windows, so the basename is taken on either.
-    const own = sources.get(file?.split(/[\\/]/).pop() ?? '') ?? ''
+    // A union or an object type is not a declared name, and an imported
+    // `type Name` is the package's own type: neither may exempt the error.
+    if (!/^[A-Za-z_$][\w$]*$/.test(m[1])) return false
+    const own = (sources.get(file?.split(/[\\/]/).pop() ?? '') ?? '').replace(IMPORT_STATEMENT, '')
     return new RegExp(`\\b(class|interface|type)\\s+${m[1]}\\b`).test(own)
   }
   /** An import of some OTHER package the fixture does not install — a documented
