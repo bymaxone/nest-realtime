@@ -298,14 +298,15 @@ This invariant must be respected in all implementations and descriptions:
 ```
 emitToUser(userId, event)
   ├─ 1. local delivery:  emitToUserLocal(userId, event)   (connections on THIS instance)
-  └─ 2. publish once:    IRealtimePubSub.publish({ op: 'emit', userId, event })
+  └─ 2. publish once:    IRealtimePubSub.publish({ op: 'emitToUser', args: { userId, event, data, id } })
 
 Subscriber (other instances): message arrives → emitToUserLocal(userId, event)   (no re-publish → no loop)
 ```
 
-The same shape applies to `emitToTenant`, `emitToRoom` and `broadcast`. Cross-instance revocation:
-`disconnect(connectionId)` disconnects the local connection if present, then publishes
-`{ op: 'disconnect', connectionId }`; the subscriber calls `disconnectLocal(connectionId)`.
+The same shape applies to `emitToTenant`, `emitToRoom` and `broadcast` (`op` is the method name).
+Cross-instance revocation: `disconnect(connectionId)` disconnects the local connection if present, then
+publishes `{ op: 'disconnect', args: { connectionId, reason } }`; the subscriber calls
+`disconnectLocal(connectionId)`.
 
 `RealtimePubSubSubscriber` must NOT re-publish what it receives (infinite loop): it ignores messages carrying
 its own per-instance ID (`REALTIME_INSTANCE_ID_TOKEN`).
@@ -324,8 +325,9 @@ its own per-instance ID (`REALTIME_INSTANCE_ID_TOKEN`).
 
 ## Authentication Flow
 
-`IConnectionAuthenticator.authenticate(ctx)` returns an `AuthenticationResult` or `null`; `null` is a
-401 on SSE and a disconnect with `REALTIME_AUTH_FAILED` on WebSocket. A success is registered in
+`IConnectionAuthenticator.authenticate(ctx)` returns an `AuthenticationResult` or `null`; `null` is
+a 401 on SSE (`UnauthorizedException` carrying `REALTIME_AUTH_FAILED`) and a plain `socket.disconnect(true)`
+on WebSocket, which sends no code. A success is registered in
 `ConnectionRegistry`, auto-joined to its rooms, and announced with `connection:established` when
 `emitConnectionEvent` is true.
 
@@ -349,7 +351,8 @@ emits `connection:reauthentication-failed` instead.
 
 ## Offline Queue and Replay
 
-With no active connection, `emitToUser` enqueues through `IOfflineQueueStorage`. On reconnect,
+When this instance holds no SSE connection for the user, `emitToUser` appends the event through
+`IOfflineQueueStorage.append`, fire-and-forget: a queue failure never breaks the live emit. On reconnect,
 `OfflineQueueDeliveryService` retrieves what the client missed since `Last-Event-ID`, de-duplicates it
 against the replay buffer, and acknowledges only after the events reach a live subscriber, so a client
 that drops mid-delivery keeps them durable (at-least-once).

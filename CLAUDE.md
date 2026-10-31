@@ -168,4 +168,4 @@ Moving a spec helper is not a pure refactor: the Stryker runner sets `rootDir: '
 | Infra (SSE)      | `docs/proxies-cheat-sheet.md`                     | Deployment configs (proxies, CDN)  |
 | Testing          | `docs/mutation_testing_plan.md`                   | Writing or fixing tests            |
 
-For full architecture, cross-instance emit shape, and testing patterns, see **[AGENTS.md](./AGENTS.md)**.
+For the architecture invariants, the cross-instance emit shape and the mutation-testing rules, see **[AGENTS.md](./AGENTS.md)**; the source layout and the unit and E2E test patterns are in [`docs/architecture/source-layout-and-reference.md`](./docs/architecture/source-layout-and-reference.md).
