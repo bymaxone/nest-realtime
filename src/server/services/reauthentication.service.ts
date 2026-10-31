@@ -34,8 +34,12 @@ interface RequiredPolicy {
   cacheTtlMs: number
 }
 
-/** Resolve the policy from options, applying defaults. */
-function resolvePolicy(raw: ReauthenticationPolicy | undefined): RequiredPolicy {
+/**
+ * Resolve the policy from options, applying defaults.
+ *
+ * Exported so the README's option-defaults table can be asserted against the real values.
+ */
+export function resolvePolicy(raw: ReauthenticationPolicy | undefined): RequiredPolicy {
   return {
     intervalSeconds: raw?.intervalSeconds ?? 300,
     onFailure: raw?.onFailure ?? 'disconnect',
