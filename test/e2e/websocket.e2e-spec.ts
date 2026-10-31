@@ -50,12 +50,18 @@ async function waitForEvent<T>(socket: ClientSocket, event: string, timeoutMs = 
   })
 }
 
-async function waitForDisconnect(socket: ClientSocket, timeoutMs = 5_000): Promise<void> {
+async function waitForConnectError(
+  socket: ClientSocket,
+  timeoutMs = 5_000,
+): Promise<Error & { data?: { code?: string } }> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Timed out waiting for disconnect')), timeoutMs)
-    socket.once('disconnect', () => {
+    const timer = setTimeout(
+      () => reject(new Error('Timed out waiting for connect_error')),
+      timeoutMs,
+    )
+    socket.once('connect_error', (err: Error & { data?: { code?: string } }) => {
       clearTimeout(timer)
-      resolve()
+      resolve(err)
     })
   })
 }
@@ -117,10 +123,13 @@ describe('WebSocket transport (e2e)', () => {
     expect((established.traits as { userId: string }).userId).toBe('token-user')
   })
 
-  it('invalid auth → socket is disconnected', async () => {
-    // Auth failure leads to immediate disconnect — no connection:established.
+  it('invalid auth → connect_error carrying REALTIME_AUTH_FAILED, never connected', async () => {
+    // The handshake is refused before the connection is accepted: the client reads the code
+    // from the error and no connection:established is ever sent.
     const socket = connect({ auth: { token: 'bad-token' } })
-    await waitForDisconnect(socket)
+    const err = await waitForConnectError(socket)
+    expect(err.message).toBe('REALTIME_AUTH_FAILED')
+    expect(err.data?.code).toBe('REALTIME_AUTH_FAILED')
     expect(socket.connected).toBe(false)
   })
 

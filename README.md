@@ -179,7 +179,7 @@ export class CookieAuthenticator implements IConnectionAuthenticator {
 ```
 
 > [!NOTE]
-> Returning `null` rejects the connection — throwing is not required. See [Auth Inversion](#-security-model) for the ticket and bearer patterns.
+> Returning `null` rejects the connection — throwing is not required. On SSE the client gets a `401`; on WebSocket the handshake fails with a `connect_error` whose `err.data.code` is `REALTIME_AUTH_FAILED` (`socket.active` is `false`, so Socket.IO does not retry on its own). See [Auth Inversion](#-security-model) for the ticket and bearer patterns.
 
 ### 3. Register the Module
 
@@ -825,7 +825,7 @@ These names belong to the library. Do not reuse them for application events. The
 | ---------------------------------- | ------------------------------------------------------------------- |
 | `REALTIME_INVALID_OPTIONS`         | Raised at bootstrap for an invalid option                           |
 | `REALTIME_NO_AUTHENTICATOR`        | Raised at bootstrap when the authenticator is missing or invalid    |
-| `REALTIME_AUTH_FAILED`             | Raised: the SSE 401 body and the blank-identity refusal             |
+| `REALTIME_AUTH_FAILED`             | Raised when authentication is refused: the SSE 401 body and the WebSocket handshake refusal |
 | `REALTIME_REAUTHENTICATION_FAILED` | Raised when a revalidation fails                                    |
 | `REALTIME_TOO_MANY_CONNECTIONS`    | Raised as the reason an evicted connection is closed                |
 | `REALTIME_INVALID_TICKET`          | Reserved, never raised today: a ticket store is yours to write      |

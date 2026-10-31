@@ -7,6 +7,7 @@ import type { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from '@n
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets'
 import type { Server, Socket } from 'socket.io'
 import {
+  REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
   RESERVED_EVENT_NAMES,
   parseCookieHeader,
@@ -14,6 +15,7 @@ import {
   resolveAuthTenant,
 } from '@bymax-one/nest-realtime/internal'
 import type {
+  AuthenticationResult,
   ConnectionAuthContext,
   BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
@@ -56,8 +58,37 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
   ) {}
 
+  /** Identities the handshake middleware resolved, until `handleConnection` takes them. */
+  private readonly authenticated = new WeakMap<Socket, AuthenticationResult>()
+
+  /** Authenticate before accept: a refusal is a `connect_error` with `data.code`; a failure is generic. */
+  private readonly authenticateHandshake = async (
+    socket: Socket,
+    next: (err?: Error) => void,
+  ): Promise<void> => {
+    try {
+      const auth = await this.transport.authenticator().authenticate(this.buildAuthContext(socket))
+      if (!auth) {
+        const refusal = new Error(REALTIME_ERROR_CODES.AUTH_FAILED) as Error & { data: unknown }
+        refusal.data = { code: REALTIME_ERROR_CODES.AUTH_FAILED }
+        next(refusal)
+        return
+      }
+      const resolvedAuth = resolveAuthTenant(this.options, auth)
+      assertIdentityIsNotBlank(resolvedAuth)
+      this.authenticated.set(socket, resolvedAuth)
+      next()
+    } catch (err) {
+      this.logger.error(
+        `handshake refused for socket ${socket.id}: ${err instanceof Error ? err.message : String(err)}`,
+      )
+      next(new Error('Internal Server Error'))
+    }
+  }
+
   /** Wire the resolved Socket.IO server to the transport after gateway init. */
   afterInit(server: Server): void {
+    server.use(this.authenticateHandshake)
     this.transport.setServer(server)
     if (!isRealtimeIoServer(server)) this.reportMissingAdapter()
     this.logger.log('RealtimeGateway initialized')
@@ -133,19 +164,20 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
 
   async handleConnection(socket: Socket): Promise<void> {
     try {
-      const auth = await this.transport.authenticator().authenticate(this.buildAuthContext(socket))
-      if (!auth) {
-        socket.disconnect(true)
-        return
+      // The middleware normally authenticated already; otherwise do it here, failing closed.
+      let resolvedAuth = this.authenticated.get(socket)
+      this.authenticated.delete(socket)
+      if (!resolvedAuth) {
+        const auth = await this.transport
+          .authenticator()
+          .authenticate(this.buildAuthContext(socket))
+        if (!auth) {
+          socket.disconnect(true)
+          return
+        }
+        resolvedAuth = resolveAuthTenant(this.options, auth)
+        assertIdentityIsNotBlank(resolvedAuth)
       }
-
-      // Both transports resolve the routing tenant through this one function, so a
-      // connection carries the same tenant whichever one opened it.
-      const resolvedAuth = resolveAuthTenant(this.options, auth)
-
-      // Throws; the catch below disconnects, which is the fail-closed path this method
-      // already relies on for every other error.
-      assertIdentityIsNotBlank(resolvedAuth)
 
       await this.transport.registerSocket(socket, resolvedAuth)
 

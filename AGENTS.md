@@ -327,8 +327,9 @@ its own per-instance ID (`REALTIME_INSTANCE_ID_TOKEN`).
 ## Authentication Flow
 
 `IConnectionAuthenticator.authenticate(ctx)` returns an `AuthenticationResult` or `null`; `null` is
-a 401 on SSE (`UnauthorizedException` carrying `REALTIME_AUTH_FAILED`) and a plain `socket.disconnect(true)`
-on WebSocket, which sends no code. A success is registered in
+a 401 on SSE (`UnauthorizedException` carrying `REALTIME_AUTH_FAILED`) and a `connect_error` on
+WebSocket (`err.data.code === 'REALTIME_AUTH_FAILED'`), refused in a Socket.IO middleware before the
+socket connects; a throw (a blank identity included) is a generic `Internal Server Error` `connect_error`. A success is registered in
 `ConnectionRegistry`, auto-joined to its rooms, and announced with `connection:established` when
 `emitConnectionEvent` is true.
 
