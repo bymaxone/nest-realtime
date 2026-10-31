@@ -76,6 +76,58 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
     await expect(handler.handle(mkReq(), mkRes())).rejects.toBe(limit)
   })
 
+  // Past authentication nothing is the consumer's deliberate answer any more: even an
+  // HttpException from the offline-queue storage, with an internal message, becomes a generic 500.
+  it('turns an HttpException from the offline-queue read into a generic 500', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      const offlineDelivery = {
+        retrieve: jest
+          .fn()
+          .mockRejectedValue(new HttpException('cache 10.20.30.40:6379 down', 503)),
+        acknowledge: jest.fn(),
+      } as unknown as OfflineQueueDeliveryService
+      const handler = new SseSubscriptionHandler(
+        mkTransport(),
+        mkHeartbeat(),
+        mkOptions(),
+        undefined,
+        offlineDelivery,
+      )
+
+      const thrown = await handler
+        .handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+        .catch((err: unknown) => err)
+
+      expect(thrown).toBeInstanceOf(InternalServerErrorException)
+      expect(JSON.stringify((thrown as InternalServerErrorException).getResponse())).not.toContain(
+        '10.20.30.40',
+      )
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('10.20.30.40'))
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  // A rejection that is not an Error (a bare null, say) must not make the logging throw.
+  it('answers a generic 500 for a rejection that is not an Error', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      const handler = build(
+        mkTransport({ authenticate: jest.fn().mockRejectedValue(null) }),
+        mkHeartbeat(),
+        mkOptions(),
+      )
+
+      await expect(handler.authenticateBeforeCommit(mkReq())).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      )
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('null'))
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
   // Past authentication, a failure of another dependency (the offline queue read) after I/O
   // must not carry its message either: it answers a generic 500 and is logged.
   it('answers a generic 500 when the offline-queue read fails after the guard', async () => {

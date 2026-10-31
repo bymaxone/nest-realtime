@@ -8,7 +8,7 @@
  * Shared builders live in `test/fixtures/sse/subscription-harness.ts` — the suite is
  * split by area and every part needs the same fakes.
  */
-import { InternalServerErrorException, Logger } from '@nestjs/common'
+import { HttpException, InternalServerErrorException, Logger } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import type { Subject } from 'rxjs'
 import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
@@ -293,6 +293,33 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ error: regError }))
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('10.20.30.40'))
     errorSpy.mockRestore()
+  })
+
+  // The registration failure is the library's own dependency, so even an HttpException from it
+  // reaches the stream as a generic error, never with its message.
+  it('errors the stream with a generic error when registration rejects with an HttpException', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      const transport = mkTransport({
+        registerConnection: jest
+          .fn()
+          .mockRejectedValue(new HttpException('cache 10.20.30.40:6379 down', 503)),
+        emitConnectionEvent: false,
+      })
+      const handler = build(transport, mkHeartbeat(), mkOptions())
+      const stream = await handler.handle(mkReq(), mkRes())
+      const errors: unknown[] = []
+      stream.subscribe({ error: (err) => errors.push(err) })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(errors[0]).toBeInstanceOf(InternalServerErrorException)
+      expect(
+        JSON.stringify((errors[0] as InternalServerErrorException).getResponse()),
+      ).not.toContain('10.20.30.40')
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   // FINDING A: registration is async and can resolve AFTER the downstream subscriber has

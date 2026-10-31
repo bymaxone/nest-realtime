@@ -222,17 +222,6 @@ export class SseSubscriptionHandler {
    *   written to the server log.
    */
   async handle(req: SseRequest, res: SseResponse): Promise<Observable<MessageEvent>> {
-    try {
-      return await this.handleRequest(req, res)
-    } catch (err) {
-      throw this.toClientError(err, 'SSE handshake failed')
-    }
-  }
-
-  private async handleRequest(
-    req: SseRequest,
-    res: SseResponse,
-  ): Promise<Observable<MessageEvent>> {
     // Anti-buffering headers must be sent before the first byte.
     res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('X-Accel-Buffering', 'no')
@@ -240,7 +229,25 @@ export class SseSubscriptionHandler {
     // The route guard normally authenticated already.
     const done = this.authenticated.get(req)
     this.authenticated.delete(req)
-    const { context, auth: resolvedAuth } = done ?? (await this.authenticateRequest(req))
+    let authenticated: AuthenticatedRequest
+    try {
+      authenticated = done ?? (await this.authenticateRequest(req))
+    } catch (err) {
+      throw this.toClientError(err, 'SSE authentication failed')
+    }
+    try {
+      return await this.openStream(req, res, authenticated)
+    } catch (err) {
+      throw this.serverError(err, 'SSE handshake failed')
+    }
+  }
+
+  private async openStream(
+    req: SseRequest,
+    res: SseResponse,
+    authenticated: AuthenticatedRequest,
+  ): Promise<Observable<MessageEvent>> {
+    const { context, auth: resolvedAuth } = authenticated
 
     const connectionId = randomUUID()
     const subject = new Subject<MessageEvent>()
@@ -296,10 +303,15 @@ export class SseSubscriptionHandler {
     }
   }
 
-  /** An HTTP exception as it is, anything else as a generic 500: Nest 11.2.3 streams `err.message`. */
+  // Nest 11.2.3 streams `err.message`: only an authenticator's HTTP exception may pass as it is.
   private toClientError(err: unknown, what: string): HttpException {
-    if (err instanceof HttpException) return err
-    this.logger.error(`${what} — responding 500: ${(err as Error).message}`)
+    return err instanceof HttpException ? err : this.serverError(err, what)
+  }
+
+  private serverError(err: unknown, what: string): HttpException {
+    this.logger.error(
+      `${what} — responding 500: ${err instanceof Error ? err.message : String(err)}`,
+    )
     return new InternalServerErrorException()
   }
 
@@ -379,7 +391,7 @@ export class SseSubscriptionHandler {
         this.fireHook(() =>
           this.hooks?.onError?.({ connectionId, error: err as Error, transport: 'sse' }),
         )
-        subscriber.error(this.toClientError(err, 'SSE registration failed'))
+        subscriber.error(this.serverError(err, 'SSE registration failed'))
       })
   }
 

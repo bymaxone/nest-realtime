@@ -22,8 +22,9 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 // Budgets calibrated against measured brotli sizes, with per-bundle headroom:
 //   server    0.24 KB →  0.5 KB (a re-export facade over the shared runtime)
-//   internal 15.40 KB → 15.6 KB (1.3% headroom — the bulk of an SSE install, including the
-//     route guard that authenticates before the SSE response is committed)
+//   internal 15.62 KB → 15.7 KB (0.5% headroom — the bulk of an SSE install, including the
+//     route guard that authenticates before the SSE response is committed and the handling
+//     that keeps an error's message out of the stream)
 //     Tighter than the 7% the other ratchets carry, on purpose: this bundle ships
 //     roughly 15.8 KB raw of comments —
 //     stripping them takes it from 14.34 to 10.04 KB brotli — so headroom here is
@@ -44,7 +45,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 500 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 15_600 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 15_700 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 6_900 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 600 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_400 },
