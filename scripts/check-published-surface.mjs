@@ -598,7 +598,8 @@ function localModules(blocks) {
       const source = blocks.find((b) =>
         wanted.every((n) =>
           new RegExp(
-            `^export\\s+(?:const|class|interface|type|function|enum)\\s+${n}(?![\\w$])`,
+            // `$` is an identifier character and a regexp anchor, so it is escaped.
+            `^export\\s+(?:const|class|interface|type|function|enum)\\s+${n.replaceAll('$', '\\$')}(?![\\w$])`,
             'm',
           ).test(b.code),
         ),
@@ -646,7 +647,10 @@ function checkSnippets() {
   // One it never shows is typed by a stub under `scripts/readme-modules/`, copied to
   // the same relative path; any other relative import stays unresolved and fails.
   for (const [specifier, source] of localModules(blocks)) {
-    const file = join(GATE_DIR, `${specifier}.ts`)
+    const file = resolve(GATE_DIR, `${specifier}.ts`)
+    // A specifier such as `../x` would put the file outside the throwaway consumer;
+    // it stays unresolved, which fails the gate, rather than writing there.
+    if (!file.startsWith(`${GATE_DIR}${sep}`)) continue
     mkdirSync(dirname(file), { recursive: true })
     writeFileSync(file, prepareSnippet(source.code, importsPackage(source.code)))
   }
