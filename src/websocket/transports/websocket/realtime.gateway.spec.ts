@@ -146,7 +146,7 @@ describe('RealtimeGateway', () => {
     // afterInit wires the Socket.IO server to the transport.
     const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     try {
-      const fakeServer = {}
+      const fakeServer = { use: jest.fn() }
       gateway.afterInit(fakeServer as never)
       expect(transportMock.setServer).toHaveBeenCalledWith(fakeServer)
     } finally {
@@ -158,7 +158,7 @@ describe('RealtimeGateway', () => {
     const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     try {
-      gateway.afterInit({} as never)
+      gateway.afterInit({ use: jest.fn() } as never)
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('initialized'))
     } finally {
       logSpy.mockRestore()
@@ -186,7 +186,7 @@ describe('RealtimeGateway', () => {
         })
       ).get(RealtimeGateway)
 
-      gateway.afterInit({} as never)
+      gateway.afterInit({ use: jest.fn() } as never)
 
       expect(errorSpy).toHaveBeenCalledTimes(1)
       const message = String(errorSpy.mock.calls[0]?.[0])
@@ -199,7 +199,7 @@ describe('RealtimeGateway', () => {
 
     it('still reports it when no websocket option is set, without naming any', () => {
       // The gateway CORS is closed whether or not the consumer configured anything.
-      gateway.afterInit({} as never)
+      gateway.afterInit({ use: jest.fn() } as never)
 
       expect(errorSpy).toHaveBeenCalledTimes(1)
       const message = String(errorSpy.mock.calls[0]?.[0])
@@ -209,7 +209,7 @@ describe('RealtimeGateway', () => {
 
     it('says in the README troubleshooting section exactly what it logs', () => {
       // A consumer who meets the message looks it up in the README, so the text must match.
-      gateway.afterInit({} as never)
+      gateway.afterInit({ use: jest.fn() } as never)
       const message = String(errorSpy.mock.calls[0]?.[0])
       const readme = readFileSync(join(__dirname, '..', '..', '..', '..', 'README.md'), 'utf8')
 
@@ -220,7 +220,7 @@ describe('RealtimeGateway', () => {
       // The adapter is the supported setup, so the gateway has nothing to report.
       const superSpy = jest
         .spyOn(IoAdapter.prototype, 'createIOServer')
-        .mockImplementation(() => ({ adapter: jest.fn() }))
+        .mockImplementation(() => ({ adapter: jest.fn(), use: jest.fn() }))
       try {
         const app = { get: jest.fn().mockReturnValue({ sse: {} }) }
         const server = new RealtimeIoAdapter(app as never).createIOServer(3000)
@@ -488,5 +488,110 @@ describe('RealtimeGateway', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+  describe('handshake authentication (before the connection is accepted)', () => {
+    type Next = (err?: Error & { data?: { code?: string } }) => void
+
+    /** Register the gateway on a fake server and return the middleware it installed. */
+    function installMiddleware(): (socket: unknown, next: Next) => Promise<void> {
+      const server = { use: jest.fn() }
+      gateway.afterInit(server as never)
+      return server.use.mock.calls[0]?.[0] as (socket: unknown, next: Next) => Promise<void>
+    }
+
+    it('registers one middleware on the server it is initialised with', () => {
+      const server = { use: jest.fn() }
+      gateway.afterInit(server as never)
+      expect(server.use).toHaveBeenCalledTimes(1)
+      expect(server.use).toHaveBeenCalledWith(expect.any(Function))
+    })
+
+    it('refuses with an error carrying REALTIME_AUTH_FAILED in message and data.code', async () => {
+      // The client reads the code from connect_error and never sees a connection.
+      authenticator.authenticate.mockResolvedValue(null as never)
+      const next = jest.fn()
+
+      await installMiddleware()(makeSocket(), next)
+
+      expect(next).toHaveBeenCalledTimes(1)
+      const err = next.mock.calls[0]?.[0] as Error & { data?: { code?: string } }
+      expect(err.message).toBe('REALTIME_AUTH_FAILED')
+      expect(err.data).toEqual({ code: 'REALTIME_AUTH_FAILED' })
+    })
+
+    it('lets an accepted handshake through and keeps its identity for handleConnection', async () => {
+      authenticator.authenticate.mockResolvedValue(validAuth)
+      const socket = makeSocket()
+      const next = jest.fn()
+
+      await installMiddleware()(socket, next)
+      await gateway.handleConnection(socket as never)
+
+      expect(next).toHaveBeenCalledWith()
+      expect(authenticator.authenticate).toHaveBeenCalledTimes(1)
+      expect(transportMock.registerSocket).toHaveBeenCalledWith(
+        socket,
+        expect.objectContaining({ userId: 'u-1', tenantId: 't-1' }),
+      )
+    })
+
+    it('answers an authenticator failure with a generic error that carries no code, and logs it', async () => {
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      try {
+        authenticator.authenticate.mockRejectedValue(new Error('session store unreachable'))
+        const next = jest.fn()
+
+        await installMiddleware()(makeSocket(), next)
+
+        const err = next.mock.calls[0]?.[0] as Error & { data?: unknown }
+        expect(err.message).toBe('Internal Server Error')
+        expect(err.data).toBeUndefined()
+        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('session store unreachable'))
+      } finally {
+        errorSpy.mockRestore()
+      }
+    })
+
+    it('answers a blank identity with the same generic error and registers nothing', async () => {
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      try {
+        authenticator.authenticate.mockResolvedValue({ userId: '' })
+        const next = jest.fn()
+
+        await installMiddleware()(makeSocket(), next)
+
+        expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
+        expect(transportMock.registerSocket).not.toHaveBeenCalled()
+      } finally {
+        errorSpy.mockRestore()
+      }
+    })
+
+    it('applies tenantResolver in the middleware so handleConnection registers the resolved tenant', async () => {
+      gateway = (await buildModule({ tenantResolver: () => 'resolved-tenant' })).get(
+        RealtimeGateway,
+      )
+      authenticator.authenticate.mockResolvedValue({ userId: 'u-1', tenantId: 'raw-tenant' })
+      const socket = makeSocket()
+
+      await installMiddleware()(socket, jest.fn())
+      await gateway.handleConnection(socket as never)
+
+      expect(transportMock.registerSocket).toHaveBeenCalledWith(
+        socket,
+        expect.objectContaining({ tenantId: 'resolved-tenant' }),
+      )
+    })
+
+    it('uses a handshake result for one connection only', async () => {
+      authenticator.authenticate.mockResolvedValue(validAuth)
+      const socket = makeSocket()
+
+      await installMiddleware()(socket, jest.fn())
+      await gateway.handleConnection(socket as never)
+      await gateway.handleConnection(socket as never)
+
+      expect(authenticator.authenticate).toHaveBeenCalledTimes(2)
+    })
   })
 })
