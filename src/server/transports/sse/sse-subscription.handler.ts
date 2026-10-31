@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import {
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -120,6 +121,11 @@ function buildMeta(record: ConnectionRecord) {
   }
 }
 
+interface AuthenticatedRequest {
+  context: ConnectionAuthContext
+  auth: AuthenticationResult
+}
+
 /** Parameters forwarded from `handle()` into `buildStream()`. */
 interface StreamParams {
   connectionId: string
@@ -146,6 +152,8 @@ interface StreamParams {
 @Injectable()
 export class SseSubscriptionHandler {
   private readonly logger = new Logger(SseSubscriptionHandler.name)
+
+  private readonly authenticated = new WeakMap<object, AuthenticatedRequest>()
 
   constructor(
     @Inject(SseTransport) private readonly transport: SseTransport,
@@ -218,13 +226,28 @@ export class SseSubscriptionHandler {
     res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('X-Accel-Buffering', 'no')
 
-    // Build the auth context; the authorization header is stripped (not valid for SSE).
-    const context = buildAuthContext(req)
+    // The route guard normally authenticated already.
+    const done = this.authenticated.get(req)
+    this.authenticated.delete(req)
+    let authenticated: AuthenticatedRequest
+    try {
+      authenticated = done ?? (await this.authenticateRequest(req))
+    } catch (err) {
+      throw this.toClientError(err, 'SSE authentication failed')
+    }
+    try {
+      return await this.openStream(req, res, authenticated)
+    } catch (err) {
+      throw this.serverError(err, 'SSE handshake failed')
+    }
+  }
 
-    const auth = await this.transport.authenticate(context)
-    if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
-
-    const resolvedAuth = this.resolveAndValidateIdentity(auth)
+  private async openStream(
+    req: SseRequest,
+    res: SseResponse,
+    authenticated: AuthenticatedRequest,
+  ): Promise<Observable<MessageEvent>> {
+    const { context, auth: resolvedAuth } = authenticated
 
     const connectionId = randomUUID()
     const subject = new Subject<MessageEvent>()
@@ -266,6 +289,38 @@ export class SseSubscriptionHandler {
       replay$,
       queueEvents,
     })
+  }
+
+  /**
+   * Authenticate ahead of the route, from a guard: with an interceptor registered Nest commits
+   * `200` on the next macrotask, so a refusal that needs I/O is a status only if it comes first.
+   */
+  async authenticateBeforeCommit(req: SseRequest): Promise<void> {
+    try {
+      this.authenticated.set(req, await this.authenticateRequest(req))
+    } catch (err) {
+      throw this.toClientError(err, 'SSE authentication failed')
+    }
+  }
+
+  // Nest 11.2.3 streams `err.message`: only an authenticator's HTTP exception may pass as it is.
+  private toClientError(err: unknown, what: string): HttpException {
+    return err instanceof HttpException ? err : this.serverError(err, what)
+  }
+
+  private serverError(err: unknown, what: string): HttpException {
+    this.logger.error(
+      `${what} — responding 500: ${err instanceof Error ? err.message : String(err)}`,
+    )
+    return new InternalServerErrorException()
+  }
+
+  private async authenticateRequest(req: SseRequest): Promise<AuthenticatedRequest> {
+    // The authorization header is stripped (not valid for SSE).
+    const context = buildAuthContext(req)
+    const auth = await this.transport.authenticate(context)
+    if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
+    return { context, auth: this.resolveAndValidateIdentity(auth) }
   }
 
   /**
@@ -336,7 +391,7 @@ export class SseSubscriptionHandler {
         this.fireHook(() =>
           this.hooks?.onError?.({ connectionId, error: err as Error, transport: 'sse' }),
         )
-        subscriber.error(err)
+        subscriber.error(this.serverError(err, 'SSE registration failed'))
       })
   }
 

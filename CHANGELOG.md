@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **An SSE refusal that needs I/O is now a `401`, not a `200` followed by an error event.** The
+  SSE route returned the handler's promise and authenticated inside it. In an application with an
+  interceptor registered (a logging interceptor, for one), Nest commits `200 text/event-stream` from
+  a timer on the next macrotask, without waiting for that promise, so an authenticator that awaited
+  real I/O (a revocation or session lookup, a Redis read) before refusing lost the race. The client
+  had already received a `200`, then got
+  `event: error` with `REALTIME_AUTH_FAILED` and a closed stream, which a browser `EventSource`
+  treats as reconnectable and retries in a loop, while access logs recorded a `200` for refused
+  credentials. A refusal reached synchronously, or within microtasks (no cookie, a forged or expired
+  token checked in memory), got its `401`, and so did a late one in an application with no
+  interceptor. No connection was ever registered, so nothing was exposed.
+
+  Authentication now runs in a guard on the SSE route, which Nest awaits before the route and before
+  the stream starts, and the handler takes its result, so `authenticate()` still runs once per
+  connection. A refusal answers `401` (`REALTIME_AUTH_FAILED`), a blank identity `500` and an
+  authenticator that throws a `5xx`, whatever the authenticator awaited and whether or not an
+  interceptor is registered. Fixes
+  [#161](https://github.com/bymaxone/nest-realtime/issues/161).
+
+  The library also no longer lets an error's message reach the stream. Nest 11.2.3 writes the
+  message of an error raised after the stream has started into the `event: error` frame, so a
+  rejected connection registration, or a failure of another dependency after authentication, could
+  put text such as `connect ECONNREFUSED 10.20.30.40:6379` in front of the client. Any error that
+  is not an HTTP exception is now logged server-side and sent as a generic 500; an HTTP exception
+  an authenticator throws on purpose (a rate limit, say) is sent unchanged.
+
+  **Apply to a consumer.** Nothing to change. If you worked around the old behaviour by treating
+  an `error` event with `REALTIME_AUTH_FAILED` on a `200` stream as a refusal, that workaround can go:
+  the refusal is now the HTTP status, and `EventSource` stops on a `401` instead of reconnecting.
+  A test that asserted `200` for a refused connection should assert `401`.
+
 ### Changed
 
 - **`RealtimeGateway` now logs an error at start-up when the WebSocket adapter in use is not

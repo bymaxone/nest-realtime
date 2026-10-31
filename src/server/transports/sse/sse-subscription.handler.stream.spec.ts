@@ -8,7 +8,7 @@
  * Shared builders live in `test/fixtures/sse/subscription-harness.ts` — the suite is
  * split by area and every part needs the same fakes.
  */
-import { Logger } from '@nestjs/common'
+import { HttpException, InternalServerErrorException, Logger } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import type { Subject } from 'rxjs'
 import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
@@ -265,10 +265,12 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     await expect(handler.handle(mkReq(), mkRes())).resolves.toBeDefined()
   })
 
-  // When registerConnection rejects, onError fires best-effort and the stream errors
-  // so the @Sse consumer receives a deterministic failure response.
-  it('routes a registerConnection failure to onError and errors the stream', async () => {
-    const regError = new Error('registration-failed')
+  // When registerConnection rejects, onError fires best-effort with the original error and the
+  // stream errors with a generic one: some Nest versions write an error's message into the
+  // stream, and a message from a store names a host.
+  it('routes a registerConnection failure to onError and errors the stream without its message', async () => {
+    const regError = new Error('connect ECONNREFUSED 10.20.30.40:6379')
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     const transport = mkTransport({
       registerConnection: jest.fn().mockRejectedValue(regError),
       emitConnectionEvent: false,
@@ -283,8 +285,43 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     await Promise.resolve()
     await Promise.resolve()
     expect(errors).toHaveLength(1)
-    expect(errors[0]).toBe(regError)
+    expect(errors[0]).toBeInstanceOf(InternalServerErrorException)
+    expect((errors[0] as Error).message).toBe('Internal Server Error')
+    expect(JSON.stringify((errors[0] as InternalServerErrorException).getResponse())).not.toContain(
+      '10.20.30.40',
+    )
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ error: regError }))
+    expect(errorSpy).toHaveBeenCalledWith(
+      'SSE registration failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+    )
+    errorSpy.mockRestore()
+  })
+
+  // The registration failure is the library's own dependency, so even an HttpException from it
+  // reaches the stream as a generic error, never with its message.
+  it('errors the stream with a generic error when registration rejects with an HttpException', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      const transport = mkTransport({
+        registerConnection: jest
+          .fn()
+          .mockRejectedValue(new HttpException('cache 10.20.30.40:6379 down', 503)),
+        emitConnectionEvent: false,
+      })
+      const handler = build(transport, mkHeartbeat(), mkOptions())
+      const stream = await handler.handle(mkReq(), mkRes())
+      const errors: unknown[] = []
+      stream.subscribe({ error: (err) => errors.push(err) })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(errors[0]).toBeInstanceOf(InternalServerErrorException)
+      expect(
+        JSON.stringify((errors[0] as InternalServerErrorException).getResponse()),
+      ).not.toContain('10.20.30.40')
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   // FINDING A: registration is async and can resolve AFTER the downstream subscriber has
