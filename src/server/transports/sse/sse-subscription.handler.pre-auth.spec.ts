@@ -56,7 +56,31 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
       expect(JSON.stringify((thrown as InternalServerErrorException).getResponse())).not.toContain(
         '10.20.30.40',
       )
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('10.20.30.40'))
+      expect(errorSpy).toHaveBeenCalledWith(
+        'SSE authentication failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+      )
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  // The same failure reached through handle() (the handler used without the guard) is logged
+  // under the same label and answers the same generic 500.
+  it('logs and answers a generic 500 when handle() itself meets an authenticator failure', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      const authenticate = jest.fn(async () => {
+        await sleep(5)
+        throw new Error('connect ECONNREFUSED 10.20.30.40:6379')
+      })
+      const handler = build(mkTransport({ authenticate }), mkHeartbeat(), mkOptions())
+
+      await expect(handler.handle(mkReq(), mkRes())).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      )
+      expect(errorSpy).toHaveBeenCalledWith(
+        'SSE authentication failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+      )
     } finally {
       errorSpy.mockRestore()
     }
@@ -103,7 +127,9 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
       expect(JSON.stringify((thrown as InternalServerErrorException).getResponse())).not.toContain(
         '10.20.30.40',
       )
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('10.20.30.40'))
+      expect(errorSpy).toHaveBeenCalledWith(
+        'SSE handshake failed — responding 500: cache 10.20.30.40:6379 down',
+      )
     } finally {
       errorSpy.mockRestore()
     }
@@ -156,7 +182,9 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
       expect(JSON.stringify((thrown as InternalServerErrorException).getResponse())).not.toContain(
         '10.20.30.40',
       )
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('10.20.30.40'))
+      expect(errorSpy).toHaveBeenCalledWith(
+        'SSE handshake failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+      )
     } finally {
       errorSpy.mockRestore()
     }

@@ -291,7 +291,9 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
       '10.20.30.40',
     )
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ error: regError }))
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('10.20.30.40'))
+    expect(errorSpy).toHaveBeenCalledWith(
+      'SSE registration failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+    )
     errorSpy.mockRestore()
   })
 
