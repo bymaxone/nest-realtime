@@ -120,12 +120,12 @@ function buildMeta(record: ConnectionRecord) {
   }
 }
 
-/** Parameters forwarded from `handle()` into `buildStream()`. */
 interface AuthenticatedRequest {
   context: ConnectionAuthContext
   auth: AuthenticationResult
 }
 
+/** Parameters forwarded from `handle()` into `buildStream()`. */
 interface StreamParams {
   connectionId: string
   resolvedAuth: AuthenticationResult
