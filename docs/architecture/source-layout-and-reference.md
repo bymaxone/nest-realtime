@@ -8,36 +8,38 @@
 
 ```
 src/
-├── internal/       → `./internal` — NOT public API. The one bundle the `.` and
-│                     `./websocket` entries both import by package specifier, so
-│                     their shared classes and `Symbol` tokens keep one identity.
-├── server/         → `.` subpath — the SSE module and everything transport-agnostic
-│   ├── config/     → option validation (validate-options.ts)
-│   ├── constants/  → injection tokens, reserved event names, room prefixes
-│   ├── composition/ → TransportWiring seam + the composition both modules share
-│   ├── interfaces/ → ALL contracts: ITransport, IConnectionAuthenticator, IRealtimePubSub, ...
-│   ├── offline-queue/ → RedisOfflineQueue (reference impl; requires ioredis peer)
-│   ├── pubsub/     → InMemoryPubSub, RedisRealtimePubSub, PubSubSubscriber
-│   ├── services/   → ConnectionRegistry, RoomRegistry, RealtimeService, EventIdGenerator,
-│   │                  AuthenticationCache, ReauthenticationService, HeartbeatService,
-│   │                  OfflineQueueManager, PresenceManager
-│   ├── transports/
-│   │   └── sse/    → SseTransport, SseController, SseSubscriptionHandler, EventReplayBuffer, encodeSseEvent
-│   ├── utils/      → composeRoomId, parseCookieHeader
-│   └── realtime.module.ts → BymaxRealtimeModule (SSE only; forRoot + forRootAsync)
-├── websocket/      → `./websocket` subpath — the only graph that imports Socket.IO
+├── internal/        → `./internal` — NOT public API. The one bundle the `.` and `./websocket`
+│                      entries both import by package specifier, so their shared classes and
+│                      `Symbol` tokens keep one identity.
+├── server/          → `.` subpath — the SSE module and everything transport-agnostic
+│   ├── realtime.module.ts → BymaxRealtimeModule (SSE only; forRoot + forRootAsync)
+│   ├── composition/ → TransportWiring seam (transport-wiring.interface.ts), sse-wiring.ts and the
+│   │                  module factory both modules share
+│   ├── config/      → default-options.ts, validate-options.ts
+│   ├── constants/   → injection tokens, reserved event names, room prefixes
+│   ├── factories/   → sse-controller.factory.ts
+│   ├── interfaces/  → the contracts: transport, connection authenticator, lifecycle hooks, pub/sub,
+│   │                  offline-queue storage, presence storage, module options, SSE HTTP shapes
+│   ├── offline-queue/ → OfflineQueueDeliveryService, RedisOfflineQueue (needs the ioredis peer)
+│   ├── pubsub/      → InMemoryPubSub, RedisRealtimePubSub, RealtimePubSubSubscriber
+│   ├── services/    → ConnectionRegistry, RoomRegistry, RealtimeService, EventIdGenerator,
+│   │                  ReauthenticationService
+│   ├── transports/sse/ → SseTransport, SseSubscriptionHandler, HeartbeatService, EventReplayBuffer
+│   └── utils/       → composeRoomId, parseCookieHeader, encodeSseEvent, assert-identity,
+│                      normalize-endpoint-path
+├── websocket/       → `./websocket` subpath — the only graph that imports Socket.IO
 │   ├── realtime-websocket.module.ts → BymaxRealtimeWebSocketModule ('websocket' | 'both')
 │   ├── websocket-wiring.ts → the TransportWiring the module supplies
 │   └── transports/
 │       ├── websocket/ → WebSocketTransport, RealtimeGateway, RealtimeIoAdapter
 │       └── composite/ → CompositeTransport ('both')
-├── shared/         → `./shared` subpath — zero-dep types + constants
-│   ├── constants/  → ROOM_PREFIXES, RESERVED_EVENT_NAMES, REALTIME_ERROR_CODES
-│   └── types/      → TransportMode, RealtimeEvent, PublicConnectionMeta
-└── react/          → `./react` subpath — browser hooks + provider
-    ├── hooks/      → useRealtime, useRealtimeConnection, usePresence
-    │               → (internal: useRealtimeSse, useRealtimeWs)
-    └── providers/  → RealtimeProvider, useRealtimeContext
+├── shared/          → `./shared` subpath — zero-dep types + constants
+│   ├── constants/   → error codes, reserved event names, room prefixes
+│   └── types/       → connection meta, RealtimeEvent, TransportMode
+└── react/           → `./react` subpath — browser hooks + provider
+    ├── hooks/       → useRealtime, useRealtimeConnection, usePresence
+    ├── internal/    → use-realtime-sse, use-realtime-ws
+    └── providers/   → RealtimeProvider, useRealtimeContext
 ```
 
 ## Transport Architecture
@@ -68,7 +70,7 @@ Three concrete implementations:
 
 - Uses NestJS `@Sse()` decorator; each connection is an RxJS `Observable<MessageEvent>` returned from the controller.
 - Every connected `(userId, connectionId)` pair has a per-connection `Subject` in the `ConnectionRegistry`.
-- `HeartbeatService` writes `: keepalive\n\n` raw comment lines to the response stream at `sse.heartbeatMs` intervals (default 25 s). This is **not** a `MessageEvent` and is **not** assigned an event ID.
+- `HeartbeatService` writes `: keepalive\n\n` raw comment lines to the response stream at `sse.heartbeatMs` intervals (default 30 s). This is **not** a `MessageEvent` and is **not** assigned an event ID.
 - `EventReplayBuffer` is a ring buffer (FIFO, per-user) that stores the last `replayBufferSize` events. On reconnect, the SSE controller sends `Last-Event-ID` replay.
 - `encode-sse-event.ts` serializes `RealtimeEvent` to the SSE wire format (`id:`, `event:`, `data:` fields).
 
@@ -114,14 +116,14 @@ Consumer-controlled membership: `RealtimeService.joinRoom(connectionId, roomId)`
 
 `emitToUser` → no connections found → `IOfflineQueueStorage.enqueue(userId, event)`.
 
-On reconnect: `OfflineQueueManager` flushes queued events to the new connection before any live events.
+On reconnect: `OfflineQueueDeliveryService` retrieves the events missed since `Last-Event-ID`, and acknowledges them only after they are emitted.
 
 ### Last-Event-ID replay (SSE)
 
 `EventReplayBuffer` stores the last `N` events per user (ring buffer). On SSE reconnect with `Last-Event-ID` header:
 
 1. `SseSubscriptionHandler` reads the `Last-Event-ID`.
-2. `EventReplayBuffer.getEventsAfter(userId, lastId)` returns missed events.
+2. `EventReplayBuffer.since(userId, lastId)` returns missed events.
 3. They are emitted before the live stream.
 
 ## React Subpath Architecture

@@ -282,7 +282,7 @@ hook signatures, the test patterns and the error-code table are in
 - `ITransport.kind` is `'sse' | 'websocket'`, never `'both'`. `CompositeTransport` (`transport: 'both'`)
   reports `kind === 'sse'`, because SSE is the dominant transport and WebSocket is the opt-in addition.
 - The SSE heartbeat is a raw `: keepalive` comment line written by `HeartbeatService` at
-  `sse.heartbeatMs` (default 25 s). It is **not** a `MessageEvent` and is **not** assigned an event ID.
+  `sse.heartbeatMs` (default 30 s). It is **not** a `MessageEvent` and is **not** assigned an event ID.
 - `EventReplayBuffer` is a per-user ring buffer of the last `replayBufferSize` events. On reconnect,
   `SseSubscriptionHandler` replays what follows `Last-Event-ID` before the live stream.
 - The Redis adapter is wired in `RealtimeIoAdapter` when `websocket.redisAdapter.pubClient` is given; it
@@ -307,7 +307,7 @@ The same shape applies to `emitToTenant`, `emitToRoom` and `broadcast`. Cross-in
 `disconnect(connectionId)` disconnects the local connection if present, then publishes
 `{ op: 'disconnect', connectionId }`; the subscriber calls `disconnectLocal(connectionId)`.
 
-`PubSubSubscriber` must NOT re-publish what it receives (infinite loop): it ignores messages carrying
+`RealtimePubSubSubscriber` must NOT re-publish what it receives (infinite loop): it ignores messages carrying
 its own per-instance ID (`REALTIME_INSTANCE_ID_TOKEN`).
 
 ---
@@ -349,8 +349,10 @@ emits `connection:reauthentication-failed` instead.
 
 ## Offline Queue and Replay
 
-With no active connection, `emitToUser` enqueues through `IOfflineQueueStorage`; on reconnect,
-`OfflineQueueManager` flushes the queue to the new connection before any live event.
+With no active connection, `emitToUser` enqueues through `IOfflineQueueStorage`. On reconnect,
+`OfflineQueueDeliveryService` retrieves what the client missed since `Last-Event-ID`, de-duplicates it
+against the replay buffer, and acknowledges only after the events reach a live subscriber, so a client
+that drops mid-delivery keeps them durable (at-least-once).
 
 ---
 
