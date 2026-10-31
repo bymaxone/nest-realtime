@@ -25,6 +25,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -610,6 +611,20 @@ function localModules(blocks) {
   return modules
 }
 
+/** Where the module file for a relative specifier goes, or `null` when no file may
+ * be written for it. The specifier is README text, so the path is constructed only
+ * from plain names (no `..`, no `@`, no backslash), never replaces a file that
+ * exists (a snippet, the prelude, a stub) and must stay under the gate directory
+ * once symlinks are resolved: the consumer holds a symlink to the repository. */
+function moduleFilePath(specifier) {
+  if (!/^\.\/(?:[\w-]+\/)*[\w-]+$/.test(specifier)) return null
+  const file = join(GATE_DIR, `${specifier}.ts`)
+  if (existsSync(file)) return null
+  let dir = dirname(file)
+  while (!existsSync(dir)) dir = dirname(dir)
+  return `${realpathSync(dir)}${sep}`.startsWith(`${realpathSync(GATE_DIR)}${sep}`) ? file : null
+}
+
 function checkSnippets() {
   // `tsx` too, and the fence language is kept: a React example has to be written
   // to a .tsx file or it does not parse, and a package with a React subpath
@@ -647,10 +662,9 @@ function checkSnippets() {
   // One it never shows is typed by a stub under `scripts/readme-modules/`, copied to
   // the same relative path; any other relative import stays unresolved and fails.
   for (const [specifier, source] of localModules(blocks)) {
-    const file = resolve(GATE_DIR, `${specifier}.ts`)
-    // A specifier such as `../x` would put the file outside the throwaway consumer;
-    // it stays unresolved, which fails the gate, rather than writing there.
-    if (!file.startsWith(`${GATE_DIR}${sep}`)) continue
+    // A specifier with no safe path stays unresolved, which fails the gate.
+    const file = moduleFilePath(specifier)
+    if (file === null) continue
     mkdirSync(dirname(file), { recursive: true })
     writeFileSync(file, prepareSnippet(source.code, importsPackage(source.code)))
   }
