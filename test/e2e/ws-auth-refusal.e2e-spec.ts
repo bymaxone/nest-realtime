@@ -30,6 +30,15 @@ async function doIo(): Promise<void> {
   await sleep(25)
 }
 
+/** Close a client and wait for its engine, so no polling request outlives the server it talks to. */
+async function closeClient(client: ClientSocket | undefined): Promise<void> {
+  const engine = client?.io.engine
+  if (!client || !engine || engine.readyState === 'closed') return
+  const closed = new Promise<void>((resolve) => engine.once('close', () => resolve()))
+  client.close()
+  await closed
+}
+
 interface Outcome {
   events: string[]
   error?: (Error & { data?: { code?: string } }) | undefined
@@ -48,7 +57,7 @@ describe.each([['websocket'], ['polling']])(
     })
 
     afterEach(async () => {
-      client?.close()
+      await closeClient(client)
       await app?.close()
       app = undefined
       client = undefined
