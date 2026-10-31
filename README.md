@@ -480,7 +480,7 @@ A realtime channel fails in ways that are hard to reproduce — dropped streams,
 
 - ✅ **100% coverage** — statements, branches, functions, and lines, enforced as a release gate
 - ✅ **100% mutation score** — zero survivors, gated by [Stryker](https://stryker-mutator.io/) with a break threshold of 100
-- ✅ **Unit, integration and end-to-end suites** — the end-to-end ones drive real HTTP, SSE and Socket.IO connections in-process
+- ✅ **Unit, integration and end-to-end suites** — the end-to-end ones drive real Socket.IO connections in-process
 - ✅ **Cross-instance e2e** — real Redis pub/sub fan-out between two live instances, not a mocked channel
 - ✅ **Bundle-size gate** — the SSE-only React bundle is measured on every build and fails over budget
 
