@@ -136,32 +136,30 @@ describe.each([
     await app.listen(0)
     const { port } = app.getHttpServer().address() as AddressInfo
 
-    const firstChunk = await new Promise<{
-      status: number | undefined
-      type: string
-      text: string
-    }>((resolve, reject) => {
-      const req = get(
-        { host: '127.0.0.1', port, path: ENDPOINT, headers: { Accept: 'text/event-stream' } },
-        (res) => {
-          res.once('data', (chunk: Buffer) => {
-            resolve({
-              status: res.statusCode,
-              type: String(res.headers['content-type']),
-              text: chunk.toString('utf8'),
+    // The stream opens with a bare newline, so read until the event itself has arrived.
+    const opened = await new Promise<{ status: number | undefined; type: string; text: string }>(
+      (resolve, reject) => {
+        const req = get(
+          { host: '127.0.0.1', port, path: ENDPOINT, headers: { Accept: 'text/event-stream' } },
+          (res) => {
+            let text = ''
+            res.on('data', (chunk: Buffer) => {
+              text += chunk.toString('utf8')
+              if (!text.includes('connection:established')) return
+              resolve({ status: res.statusCode, type: String(res.headers['content-type']), text })
+              req.destroy()
             })
-            req.destroy()
-          })
-        },
-      )
-      req.on('error', (err) => {
-        if ((err as NodeJS.ErrnoException).code !== 'ECONNRESET') reject(err)
-      })
-    })
+          },
+        )
+        req.on('error', (err) => {
+          if ((err as NodeJS.ErrnoException).code !== 'ECONNRESET') reject(err)
+        })
+      },
+    )
 
-    expect(firstChunk.status).toBe(200)
-    expect(firstChunk.type).toMatch(/text\/event-stream/)
-    expect(firstChunk.text).toContain('connection:established')
+    expect(opened.status).toBe(200)
+    expect(opened.type).toMatch(/text\/event-stream/)
+    expect(opened.text).toContain('connection:established')
     expect(authenticate).toHaveBeenCalledTimes(1)
   })
 })
