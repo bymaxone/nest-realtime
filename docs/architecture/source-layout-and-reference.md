@@ -133,7 +133,7 @@ On reconnect: `OfflineQueueDeliveryService` retrieves the events missed since `L
 A React context provider that manages the connection lifecycle:
 
 - **SSE mode** (default): creates an `EventSource` and dispatches events to subscribers.
-- **WebSocket mode** (`forceWebSocket: true` or auto-upgrade): dynamically imports `socket.io-client` via `await import('socket.io-client')` — the static bundle never includes it.
+- **WebSocket mode** (`transport: 'websocket'`, or a `ws://` / `wss://` URL under `'auto'`): dynamically imports `socket.io-client` via `await import('socket.io-client')` — the static bundle never includes it.
 
 ### `useRealtime`
 
