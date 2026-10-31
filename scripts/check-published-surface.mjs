@@ -50,10 +50,9 @@ const GATE_DIR = join(ROOT, '.docs-gate')
  * library has none — the check then covers only the README snippets. */
 const TYPE_TESTS_GLOB = existsSync(join(ROOT, 'test', 'types')) ? '../test/types/**/*.ts' : '*.ts'
 
-/** The repository's pinned compiler, loaded as a library: the `tsc` command stops
- * after the syntax errors and never reports the semantic ones, so a single
- * unparsable snippet would hide every wrong option name in every other snippet
- * and in the type tests. */
+/** The repository's pinned compiler, loaded as a library: the API reports syntactic
+ * and semantic diagnostics together, so one unparsable snippet cannot hide a wrong
+ * option name in another snippet or in the type tests. */
 const ts = createRequire(join(ROOT, 'package.json'))('typescript')
 
 /** `import { values, type Types } from '<pkg>'` for every name the root entry exports,
@@ -77,8 +76,8 @@ function publicImports() {
  * it claims: a snippet that does not import the package gets every public name of the
  * root entry imported; a block of statements is put in an async function whose `this`
  * holds the services, so `await` and `this.realtime` mean what the prose means.
- * Imports are hoisted out of the wrapper, and a snippet that declares classes,
- * interfaces or types is left as written.
+ * Imports are hoisted out of the wrapper, and a snippet that declares a class,
+ * interface, type, enum, function or const is left as written.
  */
 function prepareSnippet(code, importsPkg) {
   const importPattern = /^import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?\n/gm
@@ -605,9 +604,10 @@ function checkSnippets() {
 
   // The names a snippet uses without introducing them are declared, typed, in
   // `readme-prelude.d.ts`, so a call through one of them is checked and an
-  // undeclared name is an error. What is still not held against a snippet is a
-  // parse-level elision (`…`, a bare `return`) and a peer package the fixture does
-  // not install; those are counted and reported, never dropped silently.
+  // undeclared name is an error. Three kinds of diagnostic are counted and reported
+  // without failing: a parse-level elision (`…`, a bare `return`), an import of a
+  // module the fixture does not install, and a property missing on a class the
+  // snippet declares and abbreviates.
   const CONTEXT_ONLY = new Set([
     // Parse-level: a snippet that elides code with `…` or shows a bare `return`
     // is prose, not a program.

@@ -26,7 +26,7 @@ declare global {
   const invoiceId: string
   const entry: Record<string, unknown>
 
-  /** The authenticator the Quick Start section implements. */
+  /** The consumer's own authenticator, which a snippet instantiates without defining. */
   class CookieAuthenticator implements IConnectionAuthenticator {
     authenticate: IConnectionAuthenticator['authenticate']
   }
@@ -38,7 +38,7 @@ declare global {
   function verify(token: string | undefined): Promise<{ sub: string } | null>
   const tracer: { recordConnection(connectionId: string, traceparent: unknown): void }
 
-  /** Defined by an earlier README snippet. */
+  /** A helper that one README snippet defines and others call. */
   function joinRoleRoom(
     resolver: {
       get(token: typeof RealtimeService): { joinRoom(c: string, r: string): Promise<void> }
