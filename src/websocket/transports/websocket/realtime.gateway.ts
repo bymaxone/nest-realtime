@@ -58,15 +58,10 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
   ) {}
 
-  /** Wire the resolved Socket.IO server to the transport after gateway init. */
   /** Identities the handshake middleware resolved, until `handleConnection` takes them. */
   private readonly authenticated = new WeakMap<Socket, AuthenticationResult>()
 
-  /**
-   * Authenticate the handshake before the connection is accepted. A refusal is a
-   * `connect_error` the client can read, carrying `REALTIME_AUTH_FAILED` in `data.code`;
-   * a failure of the authenticator itself, or a blank identity, is a generic error with no code.
-   */
+  /** Authenticate before accept: a refusal is a `connect_error` with `data.code`; a failure is generic. */
   private readonly authenticateHandshake = async (
     socket: Socket,
     next: (err?: Error) => void,
@@ -79,7 +74,6 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         next(refusal)
         return
       }
-      // Both transports resolve the routing tenant through this one function.
       const resolvedAuth = resolveAuthTenant(this.options, auth)
       assertIdentityIsNotBlank(resolvedAuth)
       this.authenticated.set(socket, resolvedAuth)
@@ -90,6 +84,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     }
   }
 
+  /** Wire the resolved Socket.IO server to the transport after gateway init. */
   afterInit(server: Server): void {
     server.use(this.authenticateHandshake)
     this.transport.setServer(server)
@@ -167,8 +162,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
 
   async handleConnection(socket: Socket): Promise<void> {
     try {
-      // The handshake middleware normally authenticated already; without it (a gateway used
-      // on its own) this method does it, and fails closed on a refusal.
+      // The middleware normally authenticated already; otherwise do it here, failing closed.
       let resolvedAuth = this.authenticated.get(socket)
       this.authenticated.delete(socket)
       if (!resolvedAuth) {
@@ -179,10 +173,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
           socket.disconnect(true)
           return
         }
-        // Both transports resolve the routing tenant through this one function, so a
-        // connection carries the same tenant whichever one opened it.
         resolvedAuth = resolveAuthTenant(this.options, auth)
-        // Throws; the catch below disconnects, the fail-closed path for every other error.
         assertIdentityIsNotBlank(resolvedAuth)
       }
 

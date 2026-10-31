@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A refused WebSocket handshake is now a `connect_error` with a code, not a connect followed by a
+  silent disconnect.** The gateway authenticated in `handleConnection`, after Socket.IO had already
+  accepted the socket, so a client saw `connect` and then a bare `disconnect` with no reason it could
+  act on. Authentication now runs in a Socket.IO middleware on the handshake: a `null` result fails the
+  connection with `connect_error` carrying `err.data.code === 'REALTIME_AUTH_FAILED'`, and an
+  authenticator that throws fails it with a generic `Internal Server Error` that never carries the
+  thrown message. `authenticate()` still runs once per connection. **Apply note:** a client that
+  treated any `disconnect` as a refusal must now listen for `connect_error`
+  (`socket.on('connect_error', (err) => err.data?.code)`); `socket.active` is `false` after a
+  refusal, so Socket.IO does not reconnect on its own.
+
 - **An SSE refusal that needs I/O is now a `401`, not a `200` followed by an error event.** The
   SSE route returned the handler's promise and authenticated inside it. In an application with an
   interceptor registered (a logging interceptor, for one), Nest commits `200 text/event-stream` from
