@@ -614,8 +614,10 @@ function localModules(blocks) {
 /** Where the module file for a relative specifier goes, or `null` when no file may
  * be written for it. The specifier is README text, so the path is constructed only
  * from plain names (no `..`, no `@`, no backslash), never replaces a file that
- * exists (a snippet, the prelude, a stub) and must stay under the gate directory
- * once symlinks are resolved: the consumer holds a symlink to the repository. */
+ * already exists (a snippet file or the prelude) and must stay under the gate
+ * directory once symlinks are resolved: the consumer holds a symlink to the
+ * repository. Stubs are copied afterwards without overwriting, so a snippet that
+ * exports the imported names takes precedence over a stub. */
 function moduleFilePath(specifier) {
   if (!/^\.\/(?:[\w-]+\/)*[\w-]+$/.test(specifier)) return null
   const file = join(GATE_DIR, `${specifier}.ts`)
