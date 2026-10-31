@@ -52,7 +52,11 @@ export class ConnectionRegistry {
   private readonly byUserId = new Map<string, Set<string>>()
   private readonly byTenantId = new Map<string, Set<string>>()
 
-  /** Register a connection and index it by user and tenant. */
+  /**
+   * Register a connection and index it by user and tenant.
+   *
+   * @internal Transport bookkeeping: applications must not call it.
+   */
   register(record: ConnectionRecord): void {
     this.byId.set(record.connectionId, record)
     this.addToSetMap(this.byUserId, record.userId, record.connectionId)
@@ -61,7 +65,11 @@ export class ConnectionRegistry {
     }
   }
 
-  /** Remove a connection from every index. Returns the removed record, if any. */
+  /**
+   * Remove a connection from every index. Returns the removed record, if any.
+   *
+   * @internal Transport bookkeeping: applications must not call it.
+   */
   unregister(connectionId: string): ConnectionRecord | undefined {
     const record = this.byId.get(connectionId)
     if (!record) return undefined

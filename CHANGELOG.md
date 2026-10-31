@@ -33,6 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the refusal is now the HTTP status, and `EventSource` stops on a `401` instead of reconnecting.
   A test that asserted `200` for a refused connection should assert `401`.
 
+### Changed
+
+- **`RealtimeGateway` now logs an error at start-up when the WebSocket adapter in use is not
+  `RealtimeIoAdapter`.** Under any other adapter the `websocket.*` options (`cors`, `namespace`,
+  `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize`, `redisAdapter`) are dropped, and the
+  gateway's own CORS is `origin: false`, so a browser on another origin cannot connect. Nothing
+  reported this before. The message names the options it found and the fix,
+  `app.useWebSocketAdapter(new RealtimeIoAdapter(app))` in `main.ts`. It is a log line, not an
+  exception: an application that works today (same-origin, or Socket.IO's own defaults) keeps booting.
+
 ### Internal
 
 - `check:published` compiles every README snippet, not only the ones that import the package, through
@@ -40,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the others. The names a snippet uses without declaring them are typed in
   `scripts/readme-prelude.d.ts`, so a wrong method, option or destructured field is an error instead
   of a call on `any`.
+- `check:published` accepts a dot inside a relative module name (`./app.module`), which the path
+  allowlist added with the relative-import resolution rejected; `..` segments are still refused.
 - `check:published` resolves a relative import in a README snippet to the snippet that exports the
   imported names, and fails one that no snippet exports and no stub under `scripts/readme-modules/`
   types, instead of ignoring it as an unresolved module that makes the names `any`.
@@ -49,6 +61,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **README:** a new step 7, "Add WebSocket", shows the complete working setup: the module from
+  `/websocket`, `RealtimeIoAdapter` in `main.ts` and `redisAdapter`. The README never named
+  `BymaxRealtimeWebSocketModule` or `RealtimeIoAdapter` before, and the sentence saying the Redis
+  adapter "is registered for you" omitted that this only happens once the adapter is installed.
+  Also documented: the error codes that are reserved and never raised today (`REALTIME_INVALID_TICKET`,
+  `REALTIME_PUBSUB_UNAVAILABLE`, `REALTIME_PAYLOAD_TOO_LARGE`, `REALTIME_REPLAY_BUFFER_MISS`) in a
+  status table; that presence is a contract and the server must emit `presence:*`; that the server
+  ignores events a WebSocket client sends; the per-entry-point option types, `PRESENCE_EVENT_NAMES`
+  and `UsePresenceReturn`; and that `RealtimeGateway`, `WebSocketTransport` and `CompositeTransport`
+  are exported for the module's own wiring.
+  A Troubleshooting entry quotes the start-up error verbatim, and a test fails if the README and the
+  message differ.
+- `ConnectionRegistry.register` and `unregister` are tagged `@internal`: they are the transports'
+  own bookkeeping, and a record added by an application is counted by the lookups (an `sse` one also
+  suppresses offline-queue appends for that user) while nothing can be delivered to it.
 - **README:** the Testing section no longer states a test count and a mutant count, which had
   drifted from the suite (626 tests in 37 suites against 663 in 43; only the end-to-end count was
   still right). It keeps the claims a gate enforces: 100% coverage and a mutation break threshold
@@ -56,6 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests
 
+- `RealtimeIoAdapter` marks the servers and namespaces it creates, and `RealtimeGateway` checks
+  them in `afterInit`; both are covered, with the case of a server from another adapter.
 - A spec parses the README and asserts it against the code: the `sse` and `reauthenticationPolicy`
   defaults in the Configuration table, the error codes, the DI tokens and the reserved event names.
   A default or a name that changes in code without the README now fails the suite.

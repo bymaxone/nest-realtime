@@ -103,6 +103,8 @@ One package, four entry points — import only what your app needs:
  server    websocket    react
 ```
 
+`/websocket` also exports `RealtimeGateway`, `WebSocketTransport` and `CompositeTransport`. They are exported for the module's own wiring and for tests: applications register `BymaxRealtimeWebSocketModule` and install `RealtimeIoAdapter`, and do not construct them.
+
 The `shared` subpath carries no Node or NestJS import, so the same event names and error codes are used on both sides of the wire without duplicating a constant.
 
 **The `websocket` subpath exists so the server one costs nothing extra.** Everything that touches `@nestjs/websockets`, `@nestjs/platform-socket.io` and `socket.io` is reachable only through it, so an application on SSE — the default transport — never installs the Socket.IO stack. Importing it is what opts in, in the install as much as in the configuration.
@@ -293,7 +295,54 @@ BymaxRealtimeModule.forRoot({
 })
 ```
 
-For WebSocket, pass an ioredis client to `websocket.redisAdapter.pubClient` and `@socket.io/redis-adapter` is registered for you.
+For WebSocket, scaling goes through Socket.IO's own Redis adapter instead, configured in [step 7](#7-add-websocket-optional); `pubsub` and `offlineQueue` do not apply to WebSocket connections.
+
+### 7. Add WebSocket (optional)
+
+WebSocket lives behind its own subpath, so an SSE application never installs the Socket.IO stack. Install its peers (see [Install](#1-install)), then do two things: register `BymaxRealtimeWebSocketModule` from `/websocket` instead of `BymaxRealtimeModule`, and install `RealtimeIoAdapter` in `main.ts`.
+
+```typescript
+// app.module.ts
+import { Module } from '@nestjs/common'
+import { BymaxRealtimeWebSocketModule } from '@bymax-one/nest-realtime/websocket'
+import Redis from 'ioredis'
+import { CookieAuthenticator } from './auth/cookie-authenticator'
+
+const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379')
+
+@Module({
+  imports: [
+    BymaxRealtimeWebSocketModule.forRoot({
+      transport: 'websocket', // or 'both' to serve SSE as well
+      authenticator: new CookieAuthenticator(),
+      websocket: {
+        cors: { origin: 'https://app.example.com', credentials: true },
+        redisAdapter: { pubClient: redis }, // only to scale across instances
+      },
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+```typescript
+// main.ts
+import { NestFactory } from '@nestjs/core'
+import { RealtimeIoAdapter } from '@bymax-one/nest-realtime/websocket'
+import { AppModule } from './app.module'
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule)
+  app.useWebSocketAdapter(new RealtimeIoAdapter(app))
+  await app.listen(3000)
+}
+bootstrap()
+```
+
+> [!IMPORTANT]
+> The `main.ts` line is not optional. `RealtimeIoAdapter` is what applies `websocket.cors`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`. Without it those options are ignored, the gateway's own CORS stays closed (`origin: false`) so a browser on another origin cannot connect, and the module logs an error at start-up that names this fix.
+
+With `redisAdapter`, the adapter registers `@socket.io/redis-adapter` and calls `pubClient.duplicate()` for the subscriber; the library never opens its own Redis connection. Socket.IO's polling fallback needs sticky sessions even then — see [docs/architecture/scaling-cheatsheet.md](./docs/architecture/scaling-cheatsheet.md). On the frontend, a `ws://` or `wss://` `url` selects WebSocket in `RealtimeProvider`. Replay through `Last-Event-ID` and the offline queue are SSE features: a WebSocket connection has neither.
 
 ---
 
@@ -316,6 +365,8 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 
 > [!NOTE]
 > `websocket.maxConnectionsPerUser` is **opt-in** and unlimited unless set to a positive number, while `sse.maxConnectionsPerUser` defaults to `5`. The two transports differ here on purpose: an SSE stream holds an HTTP connection open, a Socket.IO client multiplexes.
+
+The options are typed per entry point: `SseRealtimeModuleOptions` and `SseRealtimeModuleAsyncOptions` fix `transport: 'sse'`, and `WebSocketRealtimeModuleOptions` and `WebSocketRealtimeModuleAsyncOptions` (from `/websocket`) fix `'websocket' | 'both'`. `forRootAsync` takes `useFactory`, `useClass` (a `BymaxRealtimeModuleOptionsFactory`) or `useExisting`.
 
 > [!IMPORTANT]
 > **`forRootAsync` takes the SSE route on the registration, not from the factory.** NestJS
@@ -523,7 +574,7 @@ All methods return `Promise<void>`.
 
 ### ConnectionRegistry
 
-Read-side view of live connections — useful for admin endpoints and metrics.
+Read-side view of live connections — useful for admin endpoints and metrics. The class also has `register` and `unregister`; those are the transports' own bookkeeping, so do not call them (a record you add has no stream or socket behind it).
 
 | Method                           | Returns                                          |
 | -------------------------------- | ------------------------------------------------ |
@@ -540,7 +591,7 @@ Read-side view of live connections — useful for admin endpoints and metrics.
 | `IConnectionAuthenticator`  |    ✅    | Validate a connection, return `userId` / `tenantId`         |
 | `IRealtimePubSub`           |    —     | Cross-instance fan-out for SSE                              |
 | `IOfflineQueueStorage`      |    —     | Hold events for disconnected users                          |
-| `IPresenceStorage`          |    —     | Track who is online                                         |
+| `IPresenceStorage`          |    —     | Contract only: the library never calls it; your code stores presence and emits `presence:online` / `presence:offline` |
 | `IConnectionLifecycleHooks` |    —     | Fire-and-forget connect / disconnect / error callbacks      |
 | `ITransport`                |    —     | Implemented by the library; the seam every transport shares |
 
@@ -747,7 +798,7 @@ const onConnect = joinRoleRoom({ get: () => ({ joinRoom }) }, 'admin', 'role:adm
 
 ### Reserved Events
 
-These names belong to the library. Do not reuse them for application events.
+These names belong to the library. Do not reuse them for application events. They are exported from `/shared` as `RESERVED_EVENT_NAMES` and `PRESENCE_EVENT_NAMES` (type `PresenceEventName`).
 
 **Emitted today**
 
@@ -770,7 +821,17 @@ These names belong to the library. Do not reuse them for application events.
 
 ### Error Codes
 
-`REALTIME_INVALID_OPTIONS` · `REALTIME_NO_AUTHENTICATOR` · `REALTIME_AUTH_FAILED` · `REALTIME_REAUTHENTICATION_FAILED` · `REALTIME_TOO_MANY_CONNECTIONS` · `REALTIME_INVALID_TICKET` · `REALTIME_PUBSUB_UNAVAILABLE` · `REALTIME_PAYLOAD_TOO_LARGE` · `REALTIME_REPLAY_BUFFER_MISS`
+| Code                               | Status                                                              |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| `REALTIME_INVALID_OPTIONS`         | Raised at bootstrap for an invalid option                           |
+| `REALTIME_NO_AUTHENTICATOR`        | Raised at bootstrap when the authenticator is missing or invalid    |
+| `REALTIME_AUTH_FAILED`             | Raised: the SSE 401 body and the blank-identity refusal             |
+| `REALTIME_REAUTHENTICATION_FAILED` | Raised when a revalidation fails                                    |
+| `REALTIME_TOO_MANY_CONNECTIONS`    | Raised as the reason an evicted connection is closed                |
+| `REALTIME_INVALID_TICKET`          | Reserved, never raised today: a ticket store is yours to write      |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | Reserved, never raised today: a pub/sub failure is logged           |
+| `REALTIME_PAYLOAD_TOO_LARGE`       | Reserved, never raised today                                        |
+| `REALTIME_REPLAY_BUFFER_MISS`      | Reserved, never raised today                                        |
 
 ### DI Tokens
 
@@ -783,7 +844,7 @@ These names belong to the library. Do not reuse them for application events.
 | `useRealtime(options)`           | `{ transport, connected, events, lastEvent, error, reconnectAttempts, reconnect, emit }` — opens the connection |
 | `useRealtimeContext()`           | The same value, from the nearest `<RealtimeProvider>` — throws when used outside one                            |
 | `useRealtimeConnection(options)` | `{ connected, error, reconnectAttempts, reconnect }` — status only, no events array                             |
-| `usePresence()`                  | `{ onlineUserIds, isOnline(userId), count }` — reads presence events from the provider                          |
+| `usePresence()`                  | `UsePresenceReturn`: `{ onlineUserIds, isOnline(userId), count }` — reads `presence:*` events from the provider; your server must emit them |
 
 `RealtimeProvider` takes a single `options` prop of type `UseRealtimeOptions`:
 
@@ -800,7 +861,7 @@ These names belong to the library. Do not reuse them for application events.
 | `maxAttempts`        | `number`                         | — (unlimited) | **SSE only** — give up and close after N failures   |
 
 > [!NOTE]
-> `emit` is WebSocket-exclusive — SSE is server → client only. `reconnectAttempts` is always `0` on WebSocket, where Socket.IO owns the retry policy and exposes no count.
+> `emit` is WebSocket-exclusive — SSE is server → client only — and the server ignores what it sends: `RealtimeGateway` registers no message handlers, so receiving client events needs a gateway of your own. `reconnectAttempts` is always `0` on WebSocket, where Socket.IO owns the retry policy and exposes no count.
 
 ---
 
@@ -817,6 +878,16 @@ SSE connections are long-lived HTTP responses, and several common proxy defaults
 | **WebSocket + polling**  | Enable sticky sessions. The Redis adapter syncs messages between instances, but not handshake affinity |
 
 Platform-specific configuration is in [docs/proxies-cheat-sheet.md](./docs/proxies-cheat-sheet.md).
+
+### Troubleshooting
+
+**The log shows `RealtimeIoAdapter is not the active WebSocket adapter`.** The gateway logs this once at start-up, as an error, when its Socket.IO server was not created by `RealtimeIoAdapter`:
+
+```
+RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options are ignored and the gateway CORS stays closed (origin: false): browsers on another origin cannot connect. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from '@bymax-one/nest-realtime/websocket'.
+```
+
+When `websocket` options are set, their names follow the words "the websocket options" in parentheses, for example `(cors, redisAdapter)`. The fix is the `main.ts` line in [step 7](#7-add-websocket-optional): `RealtimeIoAdapter` applies `cors`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`, and until it is installed none of them takes effect.
 
 ---
 

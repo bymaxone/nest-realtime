@@ -7,7 +7,7 @@ import { Logger } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions } from '@bymax-one/nest-realtime/internal'
-import { RealtimeIoAdapter } from './realtime-io-adapter'
+import { RealtimeIoAdapter, isRealtimeIoServer } from './realtime-io-adapter'
 
 // Mock @socket.io/redis-adapter so the lazy require inside installRedisAdapter
 // is controllable in tests without needing the actual package wired to Redis.
@@ -190,6 +190,23 @@ describe('RealtimeIoAdapter', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Falling back'))
   })
 
+  describe('isRealtimeIoServer', () => {
+    it('is true for a server created by createIOServer', () => {
+      // The gateway tells the adapter's servers from any other adapter's by this answer.
+      const adapter = new RealtimeIoAdapter(makeApp() as never)
+      expect(isRealtimeIoServer(adapter.createIOServer(3000))).toBe(true)
+    })
+
+    it('is false for a server this adapter did not create', () => {
+      // Nest's default IoAdapter builds its own server, which ignores every websocket.* option.
+      expect(isRealtimeIoServer(makeServer())).toBe(false)
+    })
+
+    it.each([[null], [undefined], ['server'], [42]])('is false for %p', (value) => {
+      expect(isRealtimeIoServer(value)).toBe(false)
+    })
+  })
+
   describe('create — namespace binding', () => {
     let createSuperSpy: jest.SpyInstance
 
@@ -214,6 +231,18 @@ describe('RealtimeIoAdapter', () => {
 
       expect(root.of).toHaveBeenCalledWith('/rt')
       expect(result).toBe(nsServer)
+    })
+
+    it('marks the namespace it returns as one of its own', () => {
+      // With a namespace the gateway receives the namespace, not the root server.
+      const nsServer = { marker: 'ns' }
+      createSuperSpy = jest
+        .spyOn(IoAdapter.prototype, 'create')
+        .mockReturnValue(makeRootServer(nsServer) as never)
+
+      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
+
+      expect(isRealtimeIoServer(adapter.create(3000))).toBe(true)
     })
 
     it('returns the root server unchanged when namespace is unset', () => {

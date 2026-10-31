@@ -13,6 +13,13 @@ import type { BymaxRealtimeModuleOptions } from '@bymax-one/nest-realtime/intern
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
 type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
 
+const realtimeServers = new WeakSet<object>()
+
+/** Whether `server` was created by `RealtimeIoAdapter`. */
+export function isRealtimeIoServer(server: unknown): boolean {
+  return typeof server === 'object' && server !== null && realtimeServers.has(server)
+}
+
 /**
  * Custom NestJS `IoAdapter` that:
  *
@@ -64,7 +71,9 @@ export class RealtimeIoAdapter extends IoAdapter {
     const server = super.create(port, options)
     const ns = this.options.websocket?.namespace
     if (ns && ns !== '/' && typeof (server as { of?: unknown }).of === 'function') {
-      return (server as unknown as { of: (name: string) => Server }).of(ns)
+      const namespace = (server as unknown as { of: (name: string) => Server }).of(ns)
+      realtimeServers.add(namespace)
+      return namespace
     }
     return server
   }
@@ -92,6 +101,7 @@ export class RealtimeIoAdapter extends IoAdapter {
       this.installRedisAdapter(server, wsOpts.redisAdapter.pubClient)
     }
 
+    realtimeServers.add(server)
     return server
   }
 
