@@ -19,8 +19,17 @@
 
 import { execFileSync } from 'node:child_process'
 import { lookup } from 'node:dns/promises'
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve, sep } from 'node:path'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -41,8 +50,72 @@ const GATE_DIR = join(ROOT, '.docs-gate')
  * library has none — the check then covers only the README snippets. */
 const TYPE_TESTS_GLOB = existsSync(join(ROOT, 'test', 'types')) ? '../test/types/**/*.ts' : '*.ts'
 
-/** The repository's pinned compiler. */
-const TSC = join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc')
+/** The repository's pinned compiler, loaded as a library: the API reports syntactic
+ * and semantic diagnostics together, so one unparsable snippet cannot hide a wrong
+ * option name in another snippet or in the type tests. */
+const ts = createRequire(join(ROOT, 'package.json'))('typescript')
+
+/** `import { values, type Types } from '<pkg>'` for every name the root entry exports,
+ * read from the built declaration file so it cannot drift from `dist/`. */
+function publicImports() {
+  const entry = join(ROOT, 'dist', 'server', 'index.d.ts')
+  const program = ts.createProgram({ rootNames: [entry], options: { skipLibCheck: true } })
+  const checker = program.getTypeChecker()
+  const source = program.getSourceFile(entry)
+  const moduleSymbol = source && checker.getSymbolAtLocation(source)
+  const names = moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : []
+  const parts = names.map((symbol) => {
+    const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
+    return target.flags & ts.SymbolFlags.Value ? symbol.name : `type ${symbol.name}`
+  })
+  return `import { ${parts.join(', ')} } from '${PKG.name}'`
+}
+
+/** One `import ... from '...'` statement, so it can be lifted out of a snippet or
+ * kept out of a search for what the snippet itself declares. */
+const IMPORT_STATEMENT = /^import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?\n/gm
+
+/**
+ * Turns a README fragment into something a compiler can check without changing what
+ * it claims: a snippet that does not import the package gets every public name of the
+ * root entry imported; a block of statements is put in an async function whose `this`
+ * holds the services, so `await` and `this.realtime` mean what the prose means.
+ * Imports are hoisted out of the wrapper, and a snippet that declares a class,
+ * interface, type, enum, function or const is left as written.
+ */
+function prepareSnippet(code, importsPkg) {
+  const imports = code.match(IMPORT_STATEMENT) ?? []
+  // `{ ... }` is how a snippet says "the usual arguments". Left alone it is a parse
+  // error, and a parse error in a call hides every semantic error around it.
+  const body = code.replace(IMPORT_STATEMENT, '').replaceAll('{ ... }', '{} as never')
+  const header = `${importsPkg ? '' : `${publicImports()}\n`}${imports.join('')}`
+  const declares =
+    /^(export\s+)?(default\s+)?(abstract\s+)?(class|interface|type|enum|function|const)\s/m.test(
+      body,
+    )
+  if (declares) return `${header}${body}`
+  // A run of `key: value,` lines is a piece of the options a `forRootAsync` call takes;
+  // putting it inside that call is what lets the compiler check each key.
+  if (/^(inject|useFactory):/m.test(body)) {
+    return `${header}BymaxRealtimeModule.forRootAsync({\n  transport: 'sse',\n${body}})\n`
+  }
+  return `${header}async function snippet(this: SnippetContext) {\n${body}}\n`
+}
+
+/** Compiles the consumer project and returns every diagnostic as a `tsc`-shaped
+ * line, syntactic and semantic together. */
+function compileGate() {
+  const config = ts.readConfigFile(join(GATE_DIR, 'tsconfig.json'), ts.sys.readFile)
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, GATE_DIR)
+  const program = ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options })
+  return [...parsed.errors, ...ts.getPreEmitDiagnostics(program)].map((d) => {
+    const text = ts.flattenDiagnosticMessageText(d.messageText, ' ')
+    if (!d.file) return `error TS${String(d.code)}: ${text}`
+    const { line, character } = d.file.getLineAndCharacterOfPosition(d.start ?? 0)
+    const where = relative(ROOT, d.file.fileName).split(sep).join('/')
+    return `${where}(${String(line + 1)},${String(character + 1)}): error TS${String(d.code)}: ${text}`
+  })
+}
 
 const failures = []
 /** Record a failure without stopping, so one run reports every problem. */
@@ -489,6 +562,11 @@ function scaffoldConsumer() {
       2,
     )}\n`,
   )
+  // The names a snippet uses without introducing them, typed for real so a call
+  // made through one is checked instead of silently resolving to `any`. Copied as
+  // `.ts`: the repository's `skipLibCheck` would skip a `.d.ts`, and a stale import
+  // in the prelude would then turn its types into `any` without an error.
+  copyFileSync(join(ROOT, 'scripts', 'readme-prelude.d.ts'), join(GATE_DIR, 'prelude.ts'))
 }
 
 // ---------------------------------------------------------------------------
@@ -503,34 +581,39 @@ function checkSnippets() {
     ext: m[1] === 'tsx' ? 'tsx' : 'ts',
     code: m[2],
   }))
-  // Only snippets that IMPORT the package: those are the ones making a claim
-  // about the public API. Merely naming it in a comment is not a claim.
-  const subjects = blocks.filter((b) => new RegExp(`from ['"]${PKG.name}`).test(b.code))
-  if (subjects.length === 0) {
+  const importsPackage = (code) => new RegExp(`from ['"]${PKG.name}`).test(code)
+  if (!blocks.some((b) => importsPackage(b.code))) {
     fail('snippets', 'no README snippet imports the package — the gate would be vacuous')
     return
   }
+  // Every snippet is compiled, not only the ones that import the package: a snippet
+  // that shows a call without repeating the import still makes a claim about the
+  // options. One that does not import the package gets every public name imported
+  // for it, so it is checked against the real types.
+  const subjects = blocks.map((b) => ({
+    ...b,
+    raw: b.code,
+    code: prepareSnippet(b.code, importsPackage(b.code)),
+  }))
 
   scaffoldConsumer()
   /** file name → its source, so a diagnostic can be traced back to the snippet. */
   const sources = new Map()
-  subjects.forEach(({ ext, code }, i) => {
+  subjects.forEach(({ ext, raw, code }, i) => {
     const name = `snippet-${String(i + 1).padStart(2, '0')}.${ext}`
-    sources.set(name, code)
+    // The abbreviated-type check below reads what the author wrote, not the header
+    // this script added, which names every public type.
+    sources.set(name, raw)
     writeFileSync(join(GATE_DIR, name), code)
   })
 
-  // A README snippet is written for a reader, not for a compiler: it may use a
-  // variable introduced by the paragraph above it. Those diagnostics say nothing
-  // about the published API, so they are counted and reported rather than
-  // failing the build — and never dropped silently.
+  // The names a snippet uses without introducing them are declared, typed, in
+  // `readme-prelude.d.ts`, so a call through one of them is checked and an
+  // undeclared name is an error. Three kinds of diagnostic are counted and reported
+  // without failing: a parse-level elision (`…`, a bare `return`), an import of a
+  // module the fixture does not install, and a property missing on a class the
+  // snippet declares and abbreviates.
   const CONTEXT_ONLY = new Set([
-    'TS2304',
-    'TS2552',
-    'TS7006',
-    'TS18004',
-    'TS2531',
-    'TS2532',
     // Parse-level: a snippet that elides code with `…` or shows a bare `return`
     // is prose, not a program.
     'TS1108',
@@ -545,25 +628,26 @@ function checkSnippets() {
     const m = /Property '[^']+' does not exist on type '([^']+)'/.exec(line)
     if (!m) return false
     const file = /^([^(]+)\(/.exec(line)?.[1]
-    // `tsc` emits backslashes on Windows, so the basename is taken on either.
-    const own = sources.get(file?.split(/[\\/]/).pop() ?? '') ?? ''
-    return new RegExp(`\\b(class|interface|type)\\s+${m[1]}\\b`).test(own)
+    // Paths may use backslashes on Windows, so the basename is taken on either.
+    // A union or an object type is not a declared name, and an imported
+    // `type Name` is the package's own type: neither may exempt the error.
+    if (!/^[A-Za-z_$][\w$]*$/.test(m[1])) return false
+    const own = (sources.get(file?.split(/[\\/]/).pop() ?? '') ?? '').replace(IMPORT_STATEMENT, '')
+    // `$` is the one identifier character that is also a regexp metacharacter, and it
+    // is not a word character, so `\b` cannot end the name: a lookahead does.
+    const name = m[1].replaceAll('$', '\\$')
+    return new RegExp(`\\b(class|interface|type)\\s+${name}(?![\\w$])`).test(own)
   }
   /** An import of some OTHER package the fixture does not install — a documented
    * optional integration. Reported as uncovered, not as a failure. */
   const isForeignModule = (line) => /error TS2307/.test(line) && !line.includes(PKG.name)
 
   try {
-    // The repository's own TypeScript, not `npx tsc`: npx may fetch a different
-    // version, and a gate that compiles against a compiler the project does not
-    // use is measuring the wrong thing.
-    execFileSync(process.execPath, [TSC, '-p', GATE_DIR], { cwd: ROOT, stdio: 'pipe' })
-    console.log(`  snippets: ${subjects.length} README snippets compile against dist/`)
-  } catch (err) {
-    const lines = `${err.stdout ?? ''}${err.stderr ?? ''}`
-      .trim()
-      .split('\n')
-      .filter((l) => /error TS\d+/.test(l))
+    const lines = compileGate()
+    if (process.env.GATE_DEBUG) console.log(lines.join('\n'))
+    if (lines.length === 0) {
+      console.log(`  snippets: ${subjects.length} README snippets compile against dist/`)
+    }
     const real = lines.filter(
       (l) =>
         !CONTEXT_ONLY.has((/error (TS\d+)/.exec(l) ?? [])[1]) &&
@@ -577,12 +661,14 @@ function checkSnippets() {
         `${real.length} README snippet error(s) about the published API:\n${real.map((l) => `      ${l}`).join('\n')}`,
       )
     }
-    console.log(
-      `  snippets: ${subjects.length} compiled against dist/` +
-        (context > 0
-          ? ` (${context} diagnostic(s) ignored: undeclared context or a peer the fixture does not install)`
-          : ''),
-    )
+    if (lines.length > 0) {
+      console.log(
+        `  snippets: ${subjects.length} compiled against dist/` +
+          (context > 0
+            ? ` (${context} diagnostic(s) ignored: a peer the fixture does not install, a parse-level elision or the reader's own module)`
+            : ''),
+      )
+    }
   } finally {
     rmSync(GATE_DIR, { recursive: true, force: true })
   }

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Internal
+
+- `check:published` compiles every README snippet, not only the ones that import the package, through
+  the TypeScript API, so a parse-level elision in one snippet no longer hides the semantic errors in
+  the others. The names a snippet uses without declaring them are typed in
+  `scripts/readme-prelude.d.ts`, so a wrong method, option or destructured field is an error instead
+  of a call on `any`.
+
 ### Documentation
 
 - **README:** the Testing section no longer states a test count and a mutant count, which had
