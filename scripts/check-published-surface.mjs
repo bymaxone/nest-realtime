@@ -633,7 +633,10 @@ function checkSnippets() {
     // `type Name` is the package's own type: neither may exempt the error.
     if (!/^[A-Za-z_$][\w$]*$/.test(m[1])) return false
     const own = (sources.get(file?.split(/[\\/]/).pop() ?? '') ?? '').replace(IMPORT_STATEMENT, '')
-    return new RegExp(`\\b(class|interface|type)\\s+${m[1]}\\b`).test(own)
+    // `$` is the one identifier character that is also a regexp metacharacter, and it
+    // is not a word character, so `\b` cannot end the name: a lookahead does.
+    const name = m[1].replaceAll('$', '\\$')
+    return new RegExp(`\\b(class|interface|type)\\s+${name}(?![\\w$])`).test(own)
   }
   /** An import of some OTHER package the fixture does not install — a documented
    * optional integration. Reported as uncovered, not as a failure. */
