@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-11-01
+
 ### Fixed
 
 - **A revocation that cannot reach its connection no longer answers success.** `disconnect()` on
@@ -24,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A revocation that fails during re-authentication is retried.** The cycle kept the failure to
   itself and stopped revalidating the remaining connections; it now logs it, goes on, and revalidates
   the connection again on the next cycle. A rejected cycle no longer leaves an unhandled rejection.
-
 - **A failed publish or a failed offline-queue write is no longer silent.** An emit whose publish
   to the other instances was refused still resolves, as before, but the failure is now logged with
   `REALTIME_PUBSUB_UNAVAILABLE` and the operation and passed to the new `onDeliveryFailure` hook,
@@ -37,8 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counted and reported at most once a minute instead of vanishing, and an emit made before the
   WebSocket gateway attaches its server says so once.
 - **An instance that cannot hear the others no longer comes up silently deaf.** When the Redis
-  pub/sub subscription at boot was refused (a wrong password, a missing
-  permission) the library logged a warning and started anyway, so the instance missed every
+  pub/sub subscription at boot was refused (a wrong password, a missing permission) the library logged a warning and started anyway, so the instance missed every
   cross-instance revocation. A refusal now fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`. When
   Redis is merely unreachable the boot used to hang, waiting for a subscribe that ioredis keeps
   queued (measured above 40 s on a closed port); it now completes, logs
@@ -63,11 +63,13 @@ configured, the user is offline on this instance, the queue could not keep the e
 instance can have delivered it. Count `onDeliveryFailure` (new, optional, nothing to implement) to see
 the publishes and queue writes that failed without failing the call.
 
-A bus that refuses the subscription now fails the application's boot instead of logging and
-continuing: a misconfigured Redis password or ACL surfaces at startup. Wire `isPubSubReady()` into
-the readiness probe so an instance that is up but cannot hear the others (Redis unreachable, or the
-subscriber connection dropped) is taken out of rotation; see the README. A custom `IRealtimePubSub`
-needs no change: `isSubscribed` is optional, and a bus without it counts as subscribed.
+A Redis that refuses the pub/sub subscription (a wrong password, a missing permission) now fails
+the application's boot instead of logging and continuing, so a misconfigured credential or ACL
+surfaces at startup. A Redis that is only unreachable no longer hangs the boot: the instance boots
+unready and subscribes when a connection succeeds. Wire `isPubSubReady()` into the readiness probe
+so an instance that is up but cannot hear the others (Redis unreachable, or the subscriber
+connection dropped) is taken out of rotation; see the README. A custom `IRealtimePubSub` needs no
+change: `isSubscribed` is optional, and a bus without it counts as subscribed.
 
 ### Added
 
@@ -761,7 +763,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.6...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.7...HEAD
+[1.2.7]: https://github.com/bymaxone/nest-realtime/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/bymaxone/nest-realtime/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/bymaxone/nest-realtime/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/bymaxone/nest-realtime/compare/v1.2.3...v1.2.4
