@@ -23,8 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pnpm check:api` compares the built `.d.ts` and `.d.cts` files, comments ignored, with the previous
   published version, and the Release workflow runs it before the publish. A patch whose public
   declarations differ fails the release; a minor or a major passes with the differences printed.
-  There is no override. A declaration that only `./internal` carries counts, because the public
-  types are defined there.
+  There is no override.
 
 ## [1.2.5] - 2026-11-01
 
