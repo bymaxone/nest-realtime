@@ -86,6 +86,7 @@ function buildAuthContext(req: SseRequest): ConnectionAuthContext {
     headers,
     query: sanitizeQuery(req.query),
     ip: resolveIp(req),
+    remoteAddress: req.socket?.remoteAddress,
     userAgent: singleHeader(req.headers['user-agent']),
     transport: 'sse',
   }

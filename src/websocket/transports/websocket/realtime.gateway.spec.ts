@@ -373,6 +373,24 @@ describe('RealtimeGateway', () => {
     expect((ctx['headers'] as Record<string, string>)['x-forwarded-for']).toBe('1.2.3.4,5.6.7.8')
   })
 
+  it('exposes the handshake peer as remoteAddress, whatever X-Forwarded-For says', async () => {
+    // handshake.address is the connection's own remote address; a forged header cannot change it.
+    authenticator.authenticate.mockResolvedValue(null)
+    const socket = {
+      ...makeSocket(),
+      handshake: {
+        address: '10.0.0.5',
+        auth: {},
+        headers: { 'x-forwarded-for': '6.6.6.6', 'user-agent': 'jest', cookie: '' },
+        query: {},
+      },
+    }
+    await gateway.handleConnection(socket as never)
+    expect(authenticator.authenticate).toHaveBeenCalledWith(
+      expect.objectContaining({ remoteAddress: '10.0.0.5', transport: 'websocket' }),
+    )
+  })
+
   it('uses empty string when cookie header is absent', async () => {
     // Missing cookie header defaults to empty string before parsing.
     authenticator.authenticate.mockResolvedValue(null)

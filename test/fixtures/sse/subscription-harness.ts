@@ -90,6 +90,7 @@ export function mkReq(over: Partial<Record<string, unknown>> = {}): Request {
     headers: (over.headers as Request['headers']) ?? {},
     query: over.query ?? {},
     ip: over.ip,
+    socket: over.socket,
   } as unknown as Request
 }
 

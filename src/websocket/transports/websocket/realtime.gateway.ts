@@ -156,6 +156,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       headers,
       query,
       ip: handshake.address,
+      remoteAddress: handshake.address,
       userAgent: handshake.headers['user-agent'],
       transport: 'websocket',
     }

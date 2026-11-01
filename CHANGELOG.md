@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ConnectionAuthContext.remoteAddress`, the TCP peer of the connection.** It is read from the
+  socket (`req.socket.remoteAddress` on SSE, `handshake.address` on WebSocket), never from a header,
+  so a client cannot forge it. It is distinct from `ip`, which on SSE comes from `X-Forwarded-For`.
+  An authenticator behind a reverse proxy can check it against its trusted proxies before believing
+  a forwarded header such as `X-Forwarded-Host`. It is `undefined` when the socket reports no
+  address. `SseRequest` gains an optional `socket` for it. Nothing existing changes.
+
+### Internal
+
+- The `internal` bundle budget in `pnpm size` is raised to make room for the line that reads the
+  peer address.
+
 ## [1.2.4] - 2026-11-01
 
 ### Fixed

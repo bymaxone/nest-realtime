@@ -239,6 +239,33 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
     expect(context.userAgent).toBeUndefined()
   })
 
+  // The peer address is the socket's own, so neither X-Forwarded-For nor req.ip can change it.
+  it('exposes the socket peer as remoteAddress, whatever X-Forwarded-For and req.ip say', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const handler = build(mkTransport({ authenticate }), mkHeartbeat(), mkOptions())
+    const req = mkReq({
+      headers: { 'x-forwarded-for': '6.6.6.6' },
+      ip: '7.7.7.7',
+      socket: { remoteAddress: '10.0.0.5' },
+    })
+    await handler.handle(req, mkRes())
+    expect(authenticate).toHaveBeenCalledWith(
+      expect.objectContaining({ remoteAddress: '10.0.0.5', ip: '6.6.6.6' }),
+    )
+  })
+
+  // A request whose framework exposes no socket, or a socket with no address, has no peer to report.
+  it.each([
+    ['no socket', undefined],
+    ['a socket without an address', {}],
+  ])('leaves remoteAddress undefined for %s', async (_label, socket) => {
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const handler = build(mkTransport({ authenticate }), mkHeartbeat(), mkOptions())
+    await handler.handle(mkReq({ socket }), mkRes())
+    const context = authenticate.mock.calls[0]?.[0] as { remoteAddress?: string }
+    expect(context.remoteAddress).toBeUndefined()
+  })
+
   it('trims whitespace from the X-Forwarded-For candidate before using it as the IP', async () => {
     // Without trim(), " 1.2.3.4 " leaks as-is into the connection ip.
     const transport = mkTransport()

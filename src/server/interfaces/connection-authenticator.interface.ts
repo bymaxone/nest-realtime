@@ -33,6 +33,18 @@ export interface ConnectionAuthContext {
    * without validating the proxy chain.
    */
   readonly ip: string
+  /**
+   * The TCP peer address of the connection: the socket's own `remoteAddress`, never read
+   * from a header, so a client cannot forge it. It is the proxy's address when one sits
+   * in front of the application, and it is distinct from `ip`, which on SSE comes from
+   * `X-Forwarded-For`. Use it to decide whether a forwarded header such as
+   * `X-Forwarded-Host` may be believed, by checking it against the proxies you trust.
+   *
+   * `undefined` when the socket reports no address. A peer on IPv4 can arrive in its
+   * IPv4-mapped IPv6 form (`::ffff:10.0.0.1`); the value is passed through as the socket
+   * reports it.
+   */
+  readonly remoteAddress?: string | undefined
   /** Raw User-Agent. */
   readonly userAgent: string | undefined
   /** Transport kind initiating the connection. */

@@ -32,6 +32,12 @@ export interface SseRequest {
   readonly headers: Readonly<Record<string, SseHeaderValue>>
   /** Remote address as the HTTP framework resolved it, when it resolves one. */
   readonly ip?: string | undefined
+  /**
+   * The underlying connection, when the framework exposes it (Express and Fastify do as
+   * `req.socket`). Its `remoteAddress` is the TCP peer, unlike `ip`, which a trusted-proxy
+   * setting can derive from a header.
+   */
+  readonly socket?: { readonly remoteAddress?: string | undefined } | undefined
   /** Parsed query string. Values are narrowed to strings by the caller. */
   readonly query: Readonly<Record<string, unknown>>
 }
