@@ -50,6 +50,9 @@ the client.
 - A workflow runs the same check in a pull request that changes `package.json` and moves the version,
   so a release that changes the declarations without the note fails before the tag. A pull request
   that leaves the version alone skips it.
+- The workflow jobs that check out the repository and then run its scripts no longer keep the job's
+  token in the git configuration: `persist-credentials: false` on the checkout wherever no later
+  step pushes or tags.
 - The `internal` bundle budget in `pnpm size` is raised to fit the client-address validation.
 
 ## [1.2.5] - 2026-11-01
