@@ -23,6 +23,7 @@ import type {
   BymaxRealtimeModuleOptions,
   ReauthenticationPolicy,
 } from '../interfaces/realtime-module-options.interface'
+import { describeError } from '../utils/describe-error'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
 import { RealtimeService } from './realtime.service'
@@ -153,9 +154,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         }
         await this.handleFailure(conn)
       } catch (err) {
-        this.logger.warn(
-          `Reauthentication errored for ${conn.connectionId}: ${(err as Error).message}`,
-        )
+        this.logger.warn(`Reauthentication errored for ${conn.connectionId}: ${describeError(err)}`)
         await this.handleFailure(conn)
       }
     }
@@ -185,7 +184,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         connectedAt: conn.connectedAt,
       }),
     ).catch((err: unknown) => {
-      this.logger.warn(`onReauthenticationFailed hook failed: ${(err as Error).message}`)
+      this.logger.warn(`onReauthenticationFailed hook failed: ${describeError(err)}`)
     })
 
     await this.realtime.disconnect(conn.connectionId, REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED)

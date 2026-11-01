@@ -13,6 +13,7 @@ import type {
   RealtimePubSubMessage,
 } from '../interfaces/realtime-pubsub.interface'
 import { SseTransport } from '../transports/sse/sse.transport'
+import { describeError } from '../utils/describe-error'
 
 interface EmitUserArgs {
   userId: string
@@ -68,7 +69,7 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
       this.unsubscribe = await this.pubsub.subscribe((msg) => this.handle(msg))
     } catch (err) {
       this.logger.warn(
-        `Failed to subscribe to pub/sub: ${(err as Error).message}. Cross-instance fan-out disabled; remote events will not reach this instance.`,
+        `Failed to subscribe to pub/sub: ${describeError(err)}. Cross-instance fan-out disabled; remote events will not reach this instance.`,
       )
     }
   }
@@ -78,7 +79,7 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
       try {
         await this.unsubscribe()
       } catch (err) {
-        this.logger.warn(`Pub/sub unsubscribe failed: ${(err as Error).message}`)
+        this.logger.warn(`Pub/sub unsubscribe failed: ${describeError(err)}`)
       }
       this.unsubscribe = null
     }
@@ -120,7 +121,7 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
         }
       }
     } catch (err) {
-      this.logger.warn(`Pub/sub message handling failed: ${(err as Error).message}`)
+      this.logger.warn(`Pub/sub message handling failed: ${describeError(err)}`)
     }
   }
 }

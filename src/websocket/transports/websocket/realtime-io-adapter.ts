@@ -7,7 +7,11 @@ import type { INestApplicationContext } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
 import type { Server, ServerOptions } from 'socket.io'
-import { REALTIME_ERROR_CODES, REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
+import {
+  describeError,
+  REALTIME_ERROR_CODES,
+  REALTIME_OPTIONS_TOKEN,
+} from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions } from '@bymax-one/nest-realtime/internal'
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
@@ -125,7 +129,7 @@ export class RealtimeIoAdapter extends IoAdapter {
       const sub = pub.duplicate()
       server.adapter(createAdapter(pub as never, sub as never))
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err)
+      const reason = describeError(err)
       throw new Error(
         `[${RealtimeIoAdapter.name}] ${REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED}: ` +
           `websocket.redisAdapter is set but the Socket.IO Redis adapter could not be installed (${reason}). ` +

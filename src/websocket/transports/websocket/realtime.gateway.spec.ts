@@ -440,6 +440,7 @@ describe('RealtimeGateway', () => {
     ['null', null, 'null'],
     ['undefined', undefined, 'undefined'],
     ['a string', 'denied', 'denied'],
+    ['an object with no prototype', Object.create(null), 'unprintable error'],
   ])(
     'handleConnection still disconnects when the authenticator rejects with %s',
     async (_label, reason, logged) => {
@@ -581,6 +582,7 @@ describe('RealtimeGateway', () => {
       ['null', null, 'null'],
       ['undefined', undefined, 'undefined'],
       ['a string', 'denied', 'denied'],
+      ['an object with no prototype', Object.create(null), 'unprintable error'],
     ])(
       'still answers the generic error when the authenticator rejects with %s',
       async (_label, reason, logged) => {

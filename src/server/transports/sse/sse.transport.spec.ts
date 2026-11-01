@@ -608,6 +608,35 @@ describe('SseTransport', () => {
     }
   })
 
+  // The fire-and-forget catch must survive a rejection that is not an Error.
+  it.each([
+    ['null', null, 'null'],
+    ['an object with no prototype', Object.create(null), 'unprintable error'],
+  ])(
+    'logs an offlineQueue.append rejection with %s without raising',
+    async (_label, reason, logged) => {
+      // Reading .message from null throws inside the .catch and surfaces as an unhandled rejection.
+      const offlineQueue = {
+        append: jest.fn().mockRejectedValue(reason),
+        retrieveSince: jest.fn(),
+        acknowledge: jest.fn(),
+      } as unknown as IOfflineQueueStorage
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+      try {
+        const { transport } = build({ offlineQueue })
+        await transport.emitToUser('u1', 'foo', {})
+        await new Promise((resolve) => setImmediate(resolve))
+        expect(warnSpy).toHaveBeenCalledWith(`Offline queue append failed: ${logged}`)
+        expect(unhandled).not.toHaveBeenCalled()
+      } finally {
+        process.off('unhandledRejection', unhandled)
+        warnSpy.mockRestore()
+      }
+    },
+  )
+
   // A rejecting onDisconnect hook is isolated (logged, never an unhandled rejection).
   it('isolates a throwing onDisconnect hook', async () => {
     const onDisconnect = jest.fn().mockRejectedValue(new Error('boom'))

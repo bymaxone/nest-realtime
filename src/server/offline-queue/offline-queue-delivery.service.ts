@@ -8,6 +8,7 @@ import type {
   IOfflineQueueStorage,
   OfflineQueuedEvent,
 } from '../interfaces/offline-queue-storage.interface'
+import { describeError } from '../utils/describe-error'
 
 const RETRIEVE_LIMIT = 200
 
@@ -57,7 +58,7 @@ export class OfflineQueueDeliveryService {
     try {
       events = await this.storage.retrieveSince(userId, lastEventId, RETRIEVE_LIMIT)
     } catch (err) {
-      this.logger.warn(`Offline queue retrieve failed: ${(err as Error).message}`)
+      this.logger.warn(`Offline queue retrieve failed: ${describeError(err)}`)
       return []
     }
 
@@ -88,7 +89,7 @@ export class OfflineQueueDeliveryService {
     try {
       await this.storage.acknowledge(userId, lastId)
     } catch (err) {
-      this.logger.warn(`Offline queue acknowledge failed: ${(err as Error).message}`)
+      this.logger.warn(`Offline queue acknowledge failed: ${describeError(err)}`)
     }
   }
 }
