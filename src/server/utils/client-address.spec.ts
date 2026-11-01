@@ -151,11 +151,11 @@ describe('resolveClientAddress', () => {
       hookIp?: string
     }
 
-    async function connectBehind(
+    /** A listening SSE application whose authenticator and `onConnect` hook record the `ip` they get. */
+    async function startApp(
       trustProxy: string | undefined,
-      forwardedFor: string | undefined,
-    ): Promise<Seen> {
-      const seen: Seen = {}
+      seen: Seen,
+    ): Promise<{ readonly app: NestExpressApplication; readonly port: number }> {
       const authenticator: IConnectionAuthenticator = {
         authenticate: (context) => {
           seen.authenticateIp = context.ip
@@ -178,33 +178,46 @@ describe('resolveClientAddress', () => {
       const app = moduleRef.createNestApplication<NestExpressApplication>()
       if (trustProxy !== undefined) app.set('trust proxy', trustProxy)
       await app.listen(0, '127.0.0.1')
-      const port = (app.getHttpServer().address() as AddressInfo).port
+      return { app, port: (app.getHttpServer().address() as AddressInfo).port }
+    }
+
+    /** Open the SSE stream with an optional forwarded header, wait for its first chunk, then drop it. */
+    function openAndDrop(port: number, forwardedFor: string | undefined): Promise<void> {
+      return new Promise<void>((resolve, reject) => {
+        const req = get(
+          {
+            host: '127.0.0.1',
+            port,
+            path: '/realtime/sse',
+            headers: {
+              accept: 'text/event-stream',
+              ...(forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor }),
+            },
+            agent: false,
+          },
+          (res) => {
+            res.once('data', () => {
+              setTimeout(() => {
+                req.destroy()
+                resolve()
+              }, 50)
+            })
+          },
+        )
+        req.on('error', (error: NodeJS.ErrnoException) =>
+          error.code === 'ECONNRESET' ? resolve() : reject(error),
+        )
+      })
+    }
+
+    async function connectBehind(
+      trustProxy: string | undefined,
+      forwardedFor: string | undefined,
+    ): Promise<Seen> {
+      const seen: Seen = {}
+      const { app, port } = await startApp(trustProxy, seen)
       try {
-        await new Promise<void>((resolve, reject) => {
-          const req = get(
-            {
-              host: '127.0.0.1',
-              port,
-              path: '/realtime/sse',
-              headers: {
-                accept: 'text/event-stream',
-                ...(forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor }),
-              },
-              agent: false,
-            },
-            (res) => {
-              res.once('data', () => {
-                setTimeout(() => {
-                  req.destroy()
-                  resolve()
-                }, 50)
-              })
-            },
-          )
-          req.on('error', (error: NodeJS.ErrnoException) =>
-            error.code === 'ECONNRESET' ? resolve() : reject(error),
-          )
-        })
+        await openAndDrop(port, forwardedFor)
       } finally {
         await app.close()
       }
