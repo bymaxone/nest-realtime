@@ -246,3 +246,41 @@ segment and any deletion fails it.
 change which tests are credited with covering a mutant without changing a line of source. The new
 file sits under `src/`, which is inside `roots`, and the score held at 100 % — but that was
 verified by running it, not assumed.
+
+## Cold runs of 2026-11-01 — timeouts 7 to 28 (open observation)
+
+Three cold runs (`mutation-full.yml`, no incremental file) bracket the change. None had a
+surviving mutant.
+
+| Run         | Commit    | Killed | Timed out | Survived | Stryker time |
+| ----------- | --------- | ------ | --------- | -------- | ------------ |
+| 41290064555 | `0048a20` | 745    | 7         | 0        | 12 min 14 s  |
+| 41337058537 | `672254c` | 737    | 28        | 0        | 15 min 52 s  |
+| 41340440659 | `dd5f01f` | 737    | 28        | 0        | 13 min 44 s  |
+
+Where the timeouts sit:
+
+| File                                                        | `0048a20` | `672254c` and `dd5f01f` |
+| ----------------------------------------------------------- | --------- | ----------------------- |
+| `src/server/transports/sse/sse.transport.ts`                | 4         | 13                      |
+| `src/server/services/connection-registry.service.ts`        | 0         | 8                       |
+| `src/server/transports/sse/sse-subscription.handler.ts`     | 0         | 3                       |
+| `src/websocket/transports/websocket/websocket.transport.ts` | 2         | 2                       |
+| `src/server/config/default-options.ts`                      | 0         | 1                       |
+| `src/server/services/reauthentication.service.ts`           | 1         | 1                       |
+
+A mutant whose change makes the code hang is counted as detected, so the cost is run time and not
+correctness.
+
+**What is known.** The distribution is identical in the second and third run, so the waits in
+the real-request specs do not account for the rise: the third run came after those waits
+were made to fail with a message within a second or two. The jump happened between `0048a20` and
+`672254c`; what in that range causes it is not known. Locally, emptying `register()` in the connection
+registry did not time out with either version of the request helper: it failed on an assertion
+in about a second.
+
+**What is not known.** Which test stalls each of the 21 new timeouts. A scoped run of
+`connection-registry.service.ts` and `sse.transport.ts` with the real-request specs excluded from
+the Jest config would show whether any of them disappears.
+
+**Revisit when** the cold run passes about 25 minutes, or a timeout ever becomes a survivor.
