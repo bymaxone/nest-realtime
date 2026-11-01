@@ -53,6 +53,28 @@ jobs:
           fi
           echo "Tag ${GITHUB_REF_NAME} matches package.json version ${PKG_VERSION} ✓"
 
+      - name: Extract release notes from CHANGELOG
+        # The GitHub Release body is the tag's own CHANGELOG section, so the notes a reader
+        # sees are the ones reviewed in the release PR. It runs before the gates and the
+        # publish: a version with no section stops the release before anything reaches the
+        # registry, and there is no fallback text. The version is matched as a literal, so the
+        # dots in `1.2.5` match only dots, and only a heading's own first bracket counts, so
+        # a second bracketed token on another heading cannot open the section. The notes go
+        # through a file, never through a shell or an output variable.
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "## [" ver "]") == 1) { found = 1; next }
+            }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "::error::CHANGELOG.md has no non-empty section for $VERSION" >&2
+            exit 1
+          fi
+
       - name: Run prepublishOnly gate
         run: pnpm prepublishOnly
 
@@ -93,40 +115,12 @@ jobs:
         # the artifact the gates checked. Observed in the 1.0.1 release run.
         run: npm publish --provenance --access public --ignore-scripts
 
-      - name: Extract release notes from CHANGELOG
-        # Pulls out the section for the tag being released, so the Release body is
-        # the notes for THIS version rather than the entire file — which is what
-        # `body_path: CHANGELOG.md` published, growing with every release. Falls
-        # back to a pointer when the section is not found; `check:published`
-        # already fails the build in that case, so the fallback is a safety net,
-        # not the expected path.
-        id: changelog
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          NOTES=$(awk -v ver="$VERSION" '
-            /^## \[/ {
-              if (found) exit
-              if ($0 ~ "\\[" ver "\\]") { found=1; next }
-            }
-            found { print }
-          ' CHANGELOG.md)
-          if [ -z "$NOTES" ]; then
-            NOTES="See [CHANGELOG.md](./CHANGELOG.md) for details."
-          fi
-          {
-            echo 'notes<<EOF'
-            echo "$NOTES"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Create GitHub Release
-        # Notes are passed through an env var, NOT `${{ ... }}` interpolation, so
-        # backticks and `$()` inside the CHANGELOG cannot be evaluated by bash —
-        # otherwise changelog content executes arbitrary commands on the runner.
+        # The body is the notes file written before the gates, passed as a file so nothing
+        # inside the CHANGELOG is evaluated by a shell or can end an output value.
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_NOTES: ${{ steps.changelog.outputs.notes }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
-            --notes "$RELEASE_NOTES"
+            --notes-file "$RUNNER_TEMP/release-notes.md"
