@@ -103,20 +103,24 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
     )
   })
 
-  // The IP is resolved from X-Forwarded-For when present.
-  it('resolves the IP from X-Forwarded-For', async () => {
+  // The client address is the one the application's `trust proxy` setting produced, so a forged
+  // entry in front of the proxy's own cannot become the address the authenticator and the hooks see.
+  it('takes the address from req.ip, not from the first X-Forwarded-For entry', async () => {
     const transport = mkTransport()
-    const req = mkReq({ headers: { 'x-forwarded-for': '1.2.3.4, 5.6.7.8' } })
+    const req = mkReq({
+      ip: '203.0.113.9',
+      headers: { 'x-forwarded-for': '6.6.6.6, 203.0.113.9' },
+    })
     const handler = build(transport, mkHeartbeat(), mkOptions())
     const stream = await handler.handle(req, mkRes())
     stream.subscribe().unsubscribe()
     expect(transport.registerConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ ip: '1.2.3.4' }),
+      expect.objectContaining({ ip: '203.0.113.9' }),
     )
   })
 
   // Without a forwarded header the request IP is used.
-  it('falls back to req.ip when X-Forwarded-For is absent', async () => {
+  it('uses req.ip when X-Forwarded-For is absent', async () => {
     const transport = mkTransport()
     const handler = build(transport, mkHeartbeat(), mkOptions())
     const stream = await handler.handle(mkReq({ ip: '9.9.9.9' }), mkRes())
@@ -126,15 +130,23 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
     )
   })
 
-  // With neither source the IP resolves to 'unknown'.
-  it('resolves IP to "unknown" when nothing is available', async () => {
+  // With no address on any channel the field is empty, the same answer for "none" the family gives.
+  it('resolves the IP to an empty string when no channel carries an address', async () => {
     const transport = mkTransport()
     const handler = build(transport, mkHeartbeat(), mkOptions())
     const stream = await handler.handle(mkReq(), mkRes())
     stream.subscribe().unsubscribe()
-    expect(transport.registerConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ ip: 'unknown' }),
-    )
+    expect(transport.registerConnection).toHaveBeenCalledWith(expect.objectContaining({ ip: '' }))
+  })
+
+  // A header text that is not an address never reaches the authenticator or the hooks as `ip`.
+  it('never passes a non-address X-Forwarded-For text as the IP', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+    const handler = build(mkTransport({ authenticate }), mkHeartbeat(), mkOptions())
+    const req = mkReq({ headers: { 'x-forwarded-for': "junk'; DROP TABLE x;--" } })
+    await handler.handle(req, mkRes())
+    const context = authenticate.mock.calls[0]?.[0] as { ip: string }
+    expect(context.ip).toBe('')
   })
 
   // The authorization header is stripped from the SSE auth context.
@@ -250,7 +262,7 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
     })
     await handler.handle(req, mkRes())
     expect(authenticate).toHaveBeenCalledWith(
-      expect.objectContaining({ remoteAddress: '10.0.0.5', ip: '6.6.6.6' }),
+      expect.objectContaining({ remoteAddress: '10.0.0.5', ip: '7.7.7.7' }),
     )
   })
 
@@ -264,18 +276,6 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
     await handler.handle(mkReq({ socket }), mkRes())
     const context = authenticate.mock.calls[0]?.[0] as { remoteAddress?: string }
     expect(context.remoteAddress).toBeUndefined()
-  })
-
-  it('trims whitespace from the X-Forwarded-For candidate before using it as the IP', async () => {
-    // Without trim(), " 1.2.3.4 " leaks as-is into the connection ip.
-    const transport = mkTransport()
-    const req = mkReq({ headers: { 'x-forwarded-for': ' 1.2.3.4 , 5.6.7.8' } })
-    const handler = build(transport, mkHeartbeat(), mkOptions())
-    const stream = await handler.handle(req, mkRes())
-    stream.subscribe().unsubscribe()
-    expect(transport.registerConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ ip: '1.2.3.4' }),
-    )
   })
 
   it('joins array-valued headers with a comma separator in the auth context', async () => {

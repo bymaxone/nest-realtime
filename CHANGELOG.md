@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The SSE client address no longer comes from the leftmost `X-Forwarded-For` entry.** The
+  connection context's `ip` and the `ip` the hooks receive were the first raw entry of that header,
+  which the client writes, with no check that it was an address and no regard for the application's
+  `trust proxy` setting: with `trust proxy` set to `'loopback'` and the header `6.6.6.6, 203.0.113.9`,
+  Express reported `203.0.113.9` and the library reported `6.6.6.6`. On SSE `ip` is now the address `trust proxy` produced (`req.ip`, else the nearest trusted hop, else the socket
+  peer), `''` when no channel carries an address, and a header text that is not an address is never
+  returned. WebSocket is unchanged: it reads the handshake's peer address. `SseRequest` gains an
+  optional `ips`.
+
+#### Apply to a derived backend
+
+A hook or an authenticator that reads `ip` on SSE may now see a different value, and the new one is
+the correct one: the address your `trust proxy` setting vouches for. Behind a reverse proxy, set
+`trust proxy` on the application (for example `app.set('trust proxy', 'loopback')`), or `ip` is the
+proxy's address, as it already was on WebSocket. An application that never set it sees the socket
+peer where it used to see whatever the client put in the header. `ip` is `''` where it used to be
+`'unknown'` when nothing carries an address. Compare against `remoteAddress` to tell the proxy from
+the client.
+
 ### Tests
 
 - **The README Quick Start is executed, not only type-checked.** Specs take the Quick Start
@@ -27,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A workflow runs the same check in a pull request that changes `package.json` and moves the version,
   so a release that changes the declarations without the note fails before the tag. A pull request
   that leaves the version alone skips it.
+- The `internal` bundle budget in `pnpm size` is raised to fit the client-address validation, whose
+  zone and peer rules are code that cannot be trimmed.
 
 ## [1.2.5] - 2026-11-01
 

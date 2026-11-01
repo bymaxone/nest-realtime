@@ -25,13 +25,22 @@ export interface SseRequest {
   /**
    * Request headers, keyed as the HTTP framework delivers them. Node lowercases
    * incoming header names, and the endpoint looks them up lowercase — `cookie`,
-   * `user-agent`, `x-forwarded-for` and `last-event-id` — so an adapter that
+   * `user-agent` and `last-event-id` — so an adapter that
    * preserves the client's casing has to lowercase the keys before it gets here,
    * or those lookups miss.
    */
   readonly headers: Readonly<Record<string, SseHeaderValue>>
-  /** Remote address as the HTTP framework resolved it, when it resolves one. */
+  /**
+   * Client address as the HTTP framework resolved it under the application's trusted-proxy
+   * setting, when it resolves one. The endpoint validates it before using it.
+   */
   readonly ip?: string | undefined
+  /**
+   * The addresses behind `ip`, from the client end toward the socket, when the framework reports
+   * them (Express and Fastify do under a trusted-proxy setting). Each entry after the first is a
+   * hop that setting already vouched for.
+   */
+  readonly ips?: readonly string[] | undefined
   /**
    * The underlying connection, when the framework exposes it (Express and Fastify do as
    * `req.socket`). Its `remoteAddress` is the TCP peer, unlike `ip`, which a trusted-proxy
