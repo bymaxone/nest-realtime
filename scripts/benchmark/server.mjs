@@ -71,4 +71,6 @@ process.on('message', async (msg) => {
     process.exit(0)
   }
 })
+// A run that died took the parent with it; nothing is left to drive this instance.
+process.on('disconnect', () => process.exit(1))
 process.send({ cmd: 'ready' })

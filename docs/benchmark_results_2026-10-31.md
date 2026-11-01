@@ -16,7 +16,7 @@ docker stop bench-redis
 
 `--only connect,fanout,memory,cross,redis` selects scenarios; without `--redis-url` the two Redis scenarios are skipped. The script writes the JSON and a Markdown file with the tables below next to it.
 
-Each server instance is its own process (`scripts/benchmark/server.mjs`) booting `dist/` the way a consumer would, so memory is the server's own and the load generator shares no heap with it. All clients live in one process (`scripts/benchmark/run.mjs`), over loopback; at high client counts that process can lag, so its event-loop delay is reported beside every latency table. Latency is receipt time minus a timestamp the server writes into the payload, both from `performance.timeOrigin + performance.now()`, which is comparable between local processes. The authenticator trusts a `u` query parameter, so the numbers describe the transport, not an identity provider.
+Each server instance is its own process (`scripts/benchmark/server.mjs`) booting `dist/` the way a consumer would, so memory is the server's own and the load generator shares no heap with it. All clients live in one process (`scripts/benchmark/run.mjs`), over loopback; at high client counts that process can lag, so its event-loop delay is reported beside the fan-out and cross-instance tables (the connect scenario opens one client at a time). Latency is receipt time minus a timestamp the server writes into the payload, both from `performance.timeOrigin + performance.now()`, which is comparable between local processes. The authenticator trusts a `u` query parameter, so the numbers describe the transport, not an identity provider.
 
 ## Machine and versions
 
@@ -71,10 +71,10 @@ Same noise caveat as above: compare orders of magnitude, not 2 ms.
 
 #### Cross-instance latency through Redis (ms)
 
-| transport | clients on other instance | deliveries | p50  | p95  | p99  | max  |
-| --------- | ------------------------- | ---------- | ---- | ---- | ---- | ---- |
-| sse       | 100                       | 5000/5000  | 2.45 | 4.94 | 6.27 | 7.26 |
-| websocket | 100                       | 5000/5000  | 1.58 | 4.45 | 6.69 | 7.86 |
+| transport | clients on other instance | deliveries | p50  | p95  | p99  | max  | client loop lag p99 |
+| --------- | ------------------------- | ---------- | ---- | ---- | ---- | ---- | ------------------- |
+| sse       | 100                       | 5000/5000  | 2.45 | 4.94 | 6.27 | 7.26 | 2.42                |
+| websocket | 100                       | 5000/5000  | 1.58 | 4.45 | 6.69 | 7.86 | 2.55                |
 
 #### Redis connections per instance
 
@@ -112,10 +112,10 @@ Same noise caveat as above: compare orders of magnitude, not 2 ms.
 
 #### Cross-instance latency through Redis (ms)
 
-| transport | clients on other instance | deliveries | p50  | p95  | p99  | max  |
-| --------- | ------------------------- | ---------- | ---- | ---- | ---- | ---- |
-| sse       | 100                       | 5000/5000  | 1.82 | 4.33 | 6.21 | 7.38 |
-| websocket | 100                       | 5000/5000  | 2.54 | 5    | 6.94 | 7.28 |
+| transport | clients on other instance | deliveries | p50  | p95  | p99  | max  | client loop lag p99 |
+| --------- | ------------------------- | ---------- | ---- | ---- | ---- | ---- | ------------------- |
+| sse       | 100                       | 5000/5000  | 1.82 | 4.33 | 6.21 | 7.38 | 2.44                |
+| websocket | 100                       | 5000/5000  | 2.54 | 5    | 6.94 | 7.28 | 2.45                |
 
 #### Redis connections per instance
 

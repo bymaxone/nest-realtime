@@ -61,6 +61,15 @@ const fmt = (s) => ({
 })
 
 let nextPort = 3900
+const children = new Set()
+
+/** Stop every server this run started: a failed or interrupted run must not leave one listening. */
+function killChildren() {
+  for (const child of children) child.kill('SIGKILL')
+}
+process.on('exit', killChildren)
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => process.exit(130))
+
 /** Start a server process and resolve once it listens. */
 async function startServer(transport, { redis = false } = {}) {
   const port = nextPort++
@@ -73,6 +82,8 @@ async function startServer(transport, { redis = false } = {}) {
       ...(redis ? { REDIS_URL: redisUrl } : { REDIS_URL: '' }),
     },
   })
+  children.add(child)
+  child.once('exit', () => children.delete(child))
   const waiting = new Map()
   child.on('message', (msg) => {
     if (msg.cmd === 'ready') waiting.get('ready')?.(msg)
@@ -122,6 +133,7 @@ function openClient(server, user, onBench) {
     })
   }
   return new Promise((resolve, reject) => {
+    let ready = false
     const req = get(
       {
         host: '127.0.0.1',
@@ -132,8 +144,10 @@ function openClient(server, user, onBench) {
       },
       (res) => {
         let buffer = ''
-        let ready = false
         res.setEncoding('utf8')
+        res.on('close', () => {
+          if (!ready) reject(new Error('SSE stream closed before connection:established'))
+        })
         res.on('data', (chunk) => {
           buffer += chunk
           let end
@@ -156,7 +170,7 @@ function openClient(server, user, onBench) {
       },
     )
     req.on('error', (err) => {
-      if (err.code !== 'ECONNRESET') reject(err)
+      if (!ready) reject(err)
     })
   })
 }
@@ -321,6 +335,16 @@ if (only.has('redis')) {
   for (const t of transports) results.scenarios.redis.push(await benchRedisConnections(t))
 }
 
+/** A cell that received fewer deliveries than it expected is a failed measurement, not a fast one. */
+for (const cell of [...(results.scenarios.fanout ?? []), ...(results.scenarios.cross ?? [])]) {
+  if (cell.received !== cell.expectedDeliveries) {
+    console.error(
+      `${cell.transport}: ${cell.received} of ${cell.expectedDeliveries} deliveries arrived`,
+    )
+    process.exitCode = 1
+  }
+}
+
 /** Markdown tables for the scenarios that ran, so a results document is generated, not retyped. */
 function toMarkdown(report) {
   const out = []
@@ -393,12 +417,22 @@ function toMarkdown(report) {
       '### Cross-instance latency through Redis (ms)',
       '',
       table(
-        ['transport', 'clients on other instance', 'deliveries', 'p50', 'p95', 'p99', 'max'],
+        [
+          'transport',
+          'clients on other instance',
+          'deliveries',
+          'p50',
+          'p95',
+          'p99',
+          'max',
+          'client loop lag p99',
+        ],
         cross.map((r) => [
           r.transport,
           r.clientsOnOtherInstance,
           `${r.received}/${r.expectedDeliveries}`,
           ...ms(r.deliveryMs),
+          r.clientLoopDelayMs.p99,
         ]),
       ),
       '',
@@ -426,4 +460,4 @@ mkdirSync(dirname(outFile), { recursive: true })
 writeFileSync(outFile, `${JSON.stringify(results, null, 2)}\n`)
 writeFileSync(outFile.replace(/\.json$/, '') + '.md', toMarkdown(results))
 console.log(JSON.stringify(results, null, 2))
-process.exit(0)
+process.exit(process.exitCode ?? 0)
