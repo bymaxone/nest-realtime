@@ -20,6 +20,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -274,7 +275,45 @@ try {
   writeFileSync(join(consumerDir, 'probe.mjs'), esmProbe)
   writeFileSync(join(consumerDir, 'probe.cjs'), cjsProbe)
 
-  for (const probe of ['probe.mjs', 'probe.cjs']) {
+  // A consumer's bundler picks the package's `import` build by the consumer's import syntax, whatever
+  // format it emits. The same probe, bundled to CommonJS with esbuild (the engine of this repo's own
+  // build tool, resolved from it so nothing new is installed), must load and register the adapter.
+  const requireFromHere = createRequire(import.meta.url)
+  const esbuildPath = requireFromHere.resolve('esbuild', {
+    paths: [dirname(requireFromHere.resolve('tsup/package.json'))],
+  })
+  writeFileSync(
+    join(consumerDir, 'probe-rebundle.mjs'),
+    esmProbe.replace("const FORMAT = 'ESM'", "const FORMAT = 'ESM re-bundled to CommonJS'"),
+  )
+  await requireFromHere(esbuildPath).build({
+    absWorkingDir: consumerDir,
+    entryPoints: ['probe-rebundle.mjs'],
+    outfile: 'probe-rebundled.cjs',
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    external: [
+      '@nestjs/*',
+      'reflect-metadata',
+      'rxjs',
+      'socket.io',
+      '@socket.io/redis-adapter',
+      'ioredis',
+      'ioredis-mock',
+    ],
+    // Inside this repository esbuild would resolve the package name to the repository itself;
+    // every entry point is pinned to the extracted tarball so the bundle holds one copy of it.
+    alias: {
+      [packageName]: join(packageDir, 'dist/server/index.mjs'),
+      [`${packageName}/websocket`]: join(packageDir, 'dist/websocket/index.mjs'),
+      [`${packageName}/internal`]: join(packageDir, 'dist/internal/index.mjs'),
+      [`${packageName}/shared`]: join(packageDir, 'dist/shared/index.mjs'),
+    },
+    logLevel: 'silent',
+  })
+
+  for (const probe of ['probe.mjs', 'probe.cjs', 'probe-rebundled.cjs']) {
     try {
       process.stdout.write(run('node', [probe], { cwd: consumerDir, stdio: 'pipe' }))
     } catch (error) {
