@@ -1,7 +1,7 @@
 /**
  * @fileoverview Delivery-failure reporting of SseTransport: what an emit logs, what it hands to
- * `onDeliveryFailure`, and when it rejects. Split from `sse.transport.spec.ts`, which covers the
- * transport's delivery, registry and lifecycle behaviour.
+ * `onDeliveryFailure`, and when it rejects. Delivery, registry and lifecycle behaviour are covered
+ * by `sse.transport.spec.ts`.
  * @layer test
  */
 import { Logger } from '@nestjs/common'
