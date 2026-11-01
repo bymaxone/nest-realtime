@@ -265,7 +265,9 @@ describe('SseTransport', () => {
     publish.mockRejectedValueOnce(new Error('redis down'))
     const failure = await transport.disconnect('held-elsewhere').catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(Error)
-    expect((failure as Error).message).toContain('REALTIME_PUBSUB_UNAVAILABLE')
+    expect((failure as Error).message).toBe(
+      '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of held-elsewhere could not be published (redis down)',
+    )
     expect(((failure as Error).cause as Error).message).toBe('redis down')
   })
 
@@ -278,6 +280,16 @@ describe('SseTransport', () => {
     await transport.joinRoom('ws1', 'room:x')
     expect(rooms.members('room:x')).toEqual([])
     await expect(transport.leaveRoom('missing', 'room:x')).resolves.toBeUndefined()
+  })
+
+  // The room registry is shared with the WebSocket transport: an SSE leave must not remove the
+  // membership of a connection that transport holds.
+  it('leaves the room membership of a WebSocket connection alone', async () => {
+    const { transport, rooms, connections } = build()
+    addConn(connections, { connectionId: 'ws1', userId: 'u1', transport: 'websocket' })
+    rooms.join('ws1', 'room:x')
+    await transport.leaveRoom('ws1', 'room:x')
+    expect(rooms.members('room:x')).toEqual(['ws1'])
   })
 
   // joinRoom and leaveRoom delegate to the room registry.

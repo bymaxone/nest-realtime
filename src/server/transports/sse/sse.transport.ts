@@ -250,8 +250,9 @@ export class SseTransport implements ITransport {
   async disconnect(connectionId: string, reason?: string): Promise<void> {
     const record = this.connections.get(connectionId)
     if (record) {
-      // A connection held here as a WebSocket is the WebSocket transport's to close.
-      if (record.transport === 'sse') await this.disconnectLocal(connectionId, reason)
+      // A connection held here as a WebSocket is the WebSocket transport's to close:
+      // `disconnectLocal` leaves it alone.
+      await this.disconnectLocal(connectionId, reason)
       return
     }
     try {

@@ -158,7 +158,7 @@ export class CompositeTransport implements ITransport {
       REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
       CompositeTransport.name,
       `${op} of ${connectionId} failed on both transports`,
-      new AggregateError(reasons),
+      new AggregateError(reasons, reasons.map(describeError).join('; ')),
     )
   }
 

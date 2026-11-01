@@ -406,7 +406,10 @@ describe('WebSocketTransport', () => {
     // Without a wired server the revocation cannot reach any connection, here or on another
     // node, so the caller is told instead of being answered with a success.
     const failure = await transport.disconnect('sock-1').catch((error: unknown) => error)
-    expect((failure as Error).message).toContain('REALTIME_TRANSPORT_UNAVAILABLE')
+    expect((failure as Error).message).toBe(
+      '[WebSocketTransport] REALTIME_TRANSPORT_UNAVAILABLE: the WebSocket server is not attached, so sock-1 cannot be revoked (server not attached)',
+    )
+    expect(((failure as Error).cause as Error).message).toBe('server not attached')
   })
 
   it('disconnect rejects with REALTIME_TRANSPORT_UNAVAILABLE when the adapter throws', async () => {
@@ -417,7 +420,9 @@ describe('WebSocketTransport', () => {
     })
     transport.setServer(server as never)
     const failure = await transport.disconnect('remote-id').catch((error: unknown) => error)
-    expect((failure as Error).message).toContain('REALTIME_TRANSPORT_UNAVAILABLE')
+    expect((failure as Error).message).toBe(
+      '[WebSocketTransport] REALTIME_TRANSPORT_UNAVAILABLE: the revocation of remote-id could not be sent (adapter down)',
+    )
     expect(((failure as Error).cause as Error).message).toBe('adapter down')
   })
 
