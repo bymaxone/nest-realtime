@@ -146,7 +146,7 @@ function openStream(port: number, cookie?: string): Promise<SseStream> {
               const timer = setTimeout(() => {
                 waiting.delete(check)
                 fail(new Error(`Stream never carried "${needle}"; it carried:\n${text}`))
-              }, 3000)
+              }, 1500)
               const check = (): void => {
                 if (!text.includes(needle)) return
                 clearTimeout(timer)
