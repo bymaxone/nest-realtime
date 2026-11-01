@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-11-01
+
 ### Added
 
 - **`ConnectionAuthContext.remoteAddress`, the TCP peer of the connection.** It is read from the
@@ -632,7 +634,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.4...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.5...HEAD
+[1.2.5]: https://github.com/bymaxone/nest-realtime/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/bymaxone/nest-realtime/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/bymaxone/nest-realtime/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-realtime/compare/v1.2.1...v1.2.2
