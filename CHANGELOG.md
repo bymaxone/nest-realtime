@@ -36,6 +36,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `disconnect` that fails no longer leaves an unhandled rejection, an unparsable bus payload is
   counted and reported at most once a minute instead of vanishing, and an emit made before the
   WebSocket gateway attaches its server says so once.
+- **An instance that cannot hear the others no longer comes up silently deaf.** When the Redis
+  pub/sub subscription at boot was refused (a wrong password, a missing permission, a wrong
+  database) the library logged a warning and started anyway, so the instance missed every
+  cross-instance revocation. A refusal now fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`. When
+  Redis is merely unreachable the boot used to hang, waiting for a subscribe that ioredis keeps
+  queued (measured above 40 s on a closed port); it now completes, logs
+  `REALTIME_PUBSUB_UNAVAILABLE` once, and the instance reports itself unready until a connection
+  succeeds. The state follows the connection for the life of the process: a drop makes it unready
+  again, logged once per outage rather than once per retry, and it is ready only once the SUBSCRIBE
+  is confirmed, whether or not the client has `autoResubscribe` on.
 
 #### Apply to a derived backend
 
@@ -49,16 +59,26 @@ configured, the user is offline on this instance, the queue could not keep the e
 instance can have delivered it. Count `onDeliveryFailure` (new, optional, nothing to implement) to see
 the publishes and queue writes that failed without failing the call.
 
+A bus that refuses the subscription now fails the application's boot instead of logging and
+continuing: a misconfigured Redis password or ACL surfaces at startup. Wire `isPubSubReady()` into
+the readiness probe so an instance that is up but cannot hear the others (Redis unreachable, or the
+subscriber connection dropped) is taken out of rotation; see the README. A custom `IRealtimePubSub`
+needs no change: `isSubscribed` is optional, and a bus without it counts as subscribed.
+
 ### Added
 
 - `IConnectionLifecycleHooks.onDeliveryFailure(failure)`, with the exported `DeliveryFailure` type
   (`code`, `op`, `error`), called when a delivery path fails but the call that used it still
   resolves.
+- `RealtimeService.isPubSubReady()`, for a readiness probe: false while the instance does not hear
+  the other instances. `RedisRealtimePubSub.isSubscribed()` is the state behind it, and
+  `IRealtimePubSub.isSubscribed?()` lets a custom bus report its own.
 
 ### Internal
 
 - The `internal` and `websocket` bundle budgets in `pnpm size` are raised to fit the revocation that
-  rejects when it cannot reach its connection and the report of a delivery path that failed.
+  rejects when it cannot reach its connection, the report of a delivery path that failed and the
+  subscriber's lifecycle state.
 - The workflow jobs that check out the repository and then run its scripts no longer keep the job's
   token in the git configuration: `persist-credentials: false` on the checkout wherever no later
   step pushes or tags.

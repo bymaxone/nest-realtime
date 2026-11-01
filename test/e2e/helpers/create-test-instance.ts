@@ -13,6 +13,7 @@ import { HeartbeatService } from '../../../src/server/transports/sse/heartbeat.s
 import { SseTransport } from '../../../src/server/transports/sse/sse.transport'
 import { RealtimePubSubSubscriber } from '../../../src/server/pubsub/realtime-pubsub-subscriber'
 import { InMemoryPubSub } from '../../../src/server/pubsub/in-memory-pubsub'
+import type { IRealtimePubSub } from '../../../src/server/interfaces/realtime-pubsub.interface'
 import type { IConnectionAuthenticator } from '../../../src/server/interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../../../src/server/interfaces/realtime-module-options.interface'
 
@@ -28,18 +29,24 @@ export interface TestInstance {
 }
 
 /**
- * Build two fully-wired SSE transport instances sharing the same InMemoryPubSub bus.
+ * Build fully-wired SSE transport instances sharing one InMemoryPubSub bus, or one bus each
+ * when `busFor` is given.
  *
  * Use this in cross-instance e2e specs to verify that emits on one instance
  * fan-out to connections on the other.
  */
-export function createTestInstances(count: number): {
+export function createTestInstances(
+  count: number,
+  busFor?: () => IRealtimePubSub,
+): {
   instances: TestInstance[]
   pubsub: InMemoryPubSub
 } {
   const pubsub = new InMemoryPubSub()
 
   const instances: TestInstance[] = Array.from({ length: count }, () => {
+    // One bus per instance when the caller supplies them, as in a real deployment.
+    const bus = busFor ? busFor() : pubsub
     const instanceId = randomUUID()
     const connections = new ConnectionRegistry()
     const rooms = new RoomRegistry()
@@ -59,13 +66,13 @@ export function createTestInstances(count: number): {
       idGen,
       heartbeat,
       auth,
-      pubsub,
+      bus,
       {},
       options,
       instanceId,
     )
 
-    const subscriber = new RealtimePubSubSubscriber(pubsub, instanceId, transport)
+    const subscriber = new RealtimePubSubSubscriber(bus, instanceId, transport)
 
     function addConnection(
       connectionId: string,

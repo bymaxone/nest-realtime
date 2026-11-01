@@ -18,6 +18,23 @@ function mockTransport(): jest.Mocked<ITransport> {
   } as unknown as jest.Mocked<ITransport>
 }
 
+describe('RealtimeService readiness', () => {
+  // The instance is ready when the bus says it is subscribed, and not ready when it says not.
+  it.each([true, false])('reports the bus state %s', (state) => {
+    const service = new RealtimeService(mockTransport(), { isSubscribed: () => state } as never)
+    expect(service.isPubSubReady()).toBe(state)
+  })
+
+  // A bus that reports no state (the in-memory one), or none at all, never holds the instance back.
+  it.each([
+    ['a bus without isSubscribed', {}],
+    ['no bus', undefined],
+  ])('is ready with %s', (_label, pubsub) => {
+    const service = new RealtimeService(mockTransport(), pubsub as never)
+    expect(service.isPubSubReady()).toBe(true)
+  })
+})
+
 describe('RealtimeService', () => {
   let transport: jest.Mocked<ITransport>
   let service: RealtimeService

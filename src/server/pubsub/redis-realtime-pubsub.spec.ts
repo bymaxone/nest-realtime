@@ -153,6 +153,7 @@ describe('RedisRealtimePubSub', () => {
     const failingSub = {
       subscribe: jest.fn().mockRejectedValue(new Error('redis down')),
       on: jest.fn(),
+      disconnect: jest.fn(),
     }
     const recoverySub = {
       subscribe: jest.fn().mockResolvedValue(undefined),
@@ -170,6 +171,8 @@ describe('RedisRealtimePubSub', () => {
 
     // First subscribe fails — must reject and not leave the handler registered.
     await expect(pubsub.subscribe(handler)).rejects.toThrow('redis down')
+    // The failed subscriber is closed, not left retrying in the background.
+    expect(failingSub.disconnect).toHaveBeenCalledTimes(1)
 
     // Second subscribe must retry (duplicate called a second time) and succeed.
     const unsub = await pubsub.subscribe(handler)

@@ -2,8 +2,12 @@
  * @fileoverview Transport-agnostic public realtime API.
  * @layer application
  */
-import { Inject, Injectable } from '@nestjs/common'
-import { REALTIME_TRANSPORT_TOKEN } from '../constants/injection-tokens.constants'
+import { Inject, Injectable, Optional } from '@nestjs/common'
+import {
+  REALTIME_PUBSUB_TOKEN,
+  REALTIME_TRANSPORT_TOKEN,
+} from '../constants/injection-tokens.constants'
+import type { IRealtimePubSub } from '../interfaces/realtime-pubsub.interface'
 import type { ITransport } from '../interfaces/transport.interface'
 
 /**
@@ -15,7 +19,25 @@ import type { ITransport } from '../interfaces/transport.interface'
  */
 @Injectable()
 export class RealtimeService {
-  constructor(@Inject(REALTIME_TRANSPORT_TOKEN) private readonly transport: ITransport) {}
+  constructor(
+    @Inject(REALTIME_TRANSPORT_TOKEN) private readonly transport: ITransport,
+    @Optional() @Inject(REALTIME_PUBSUB_TOKEN) private readonly pubsub?: IRealtimePubSub,
+  ) {}
+
+  /**
+   * Whether this instance hears the events and revocations other instances publish. False while
+   * the bus is unreachable or its subscriber connection is down, so a readiness probe can take a
+   * deaf instance out of rotation. True for a bus that does not report a state.
+   *
+   * @example
+   * ```ts
+   * // In a health indicator: `isHealthy` is false while the instance cannot hear the others.
+   * return indicator.check('realtime', realtime.isPubSubReady())
+   * ```
+   */
+  isPubSubReady(): boolean {
+    return this.pubsub?.isSubscribed?.() ?? true
+  }
 
   /**
    * Send to all of a user's connections (across devices/tabs).

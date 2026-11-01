@@ -25,6 +25,19 @@ export interface IRealtimePubSub {
   /** Publish a message to all subscribers (the other instances). */
   publish(message: RealtimePubSubMessage): Promise<void>
 
-  /** Subscribe to messages. Resolves to an async unsubscribe handle. */
+  /**
+   * Subscribe to messages. Resolves to an async unsubscribe handle.
+   *
+   * Rejects when the bus refuses the subscription for a reason no retry fixes (a wrong password,
+   * a missing permission), which fails the application's boot. A bus that cannot be reached yet
+   * may resolve and report itself through `isSubscribed`.
+   */
   subscribe(handler: (message: RealtimePubSubMessage) => void): Promise<() => Promise<void>>
+
+  /**
+   * Whether this instance is subscribed right now, so the messages other instances publish reach
+   * it. Optional: a bus that cannot be unsubscribed once subscribed (the in-memory one) omits it
+   * and counts as subscribed.
+   */
+  isSubscribed?(): boolean
 }
