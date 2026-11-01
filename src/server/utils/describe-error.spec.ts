@@ -4,6 +4,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import { describeError } from './describe-error'
 
 const SRC = join(__dirname, '..', '..')
@@ -27,6 +28,20 @@ describe('describeError', () => {
   ])('returns String(reason) for %s', (_label, reason, expected) => {
     // A rejection need not be an Error; reading .message from it would throw inside the catch.
     expect(describeError(reason)).toBe(expected)
+  })
+
+  it('returns the message of an object that is not an Error but carries one', () => {
+    // Hooks and storages reject with plain objects shaped like errors; their message is the useful part.
+    expect(describeError({ message: 'queue unavailable' })).toBe('queue unavailable')
+  })
+
+  it('returns the message of an Error created in another realm', () => {
+    // instanceof Error is false across realms (a worker, a vm context); the message is still there.
+    expect(describeError(runInNewContext('new Error("boom")'))).toBe('boom')
+  })
+
+  it('ignores a message that is not a string', () => {
+    expect(describeError({ message: 5 })).toBe('[object Object]')
   })
 
   it('does not throw for an object with no prototype', () => {
