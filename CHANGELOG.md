@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-11-01
+
 ### Fixed
 
 - **A rejection that is not an `Error` no longer makes the handler reporting it fail.** Handlers
@@ -14,9 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `null` or `undefined`, or with an object that has no prototype, made the `catch` itself throw. In
   a fire-and-forget `.catch` that surfaced as an unhandled rejection. They now describe the reason
   through one function that never throws, and a test fails if a source file goes back to the old
-  patterns.
+  patterns. The text logged for an `Error` or a string reason is unchanged; a plain object with a
+  string `message` now logs that message instead of `[object Object]`.
 
-### Internal
+### Documentation
 
 - A local benchmark (`pnpm benchmark`, in `scripts/benchmark/`, not a CI gate) measures connect
   latency, fan-out latency for 1, 100 and 1000 clients, cross-instance latency through Redis, memory
@@ -222,7 +225,7 @@ were routed to a tenant that differed by transport.
 **Shipped as a minor, and two entries below are strictly speaking breaking.** Both are called
 out as such rather than hidden: removing the `service` option is a compile error for anyone who
 passed it, and the new required key on `ConnectionEventMeta` is a compile error for anyone who
-*constructs* one. Neither changes runtime behaviour for any working configuration — `service`
+_constructs_ one. Neither changes runtime behaviour for any working configuration — `service`
 was never read by anything, and reading the meta (what a hook does) is unaffected. The precedent
 is 1.1.1, which added a required `roles` key to the same type and shipped as a patch. The third
 item, the new bootstrap throw on a disagreeing SSE endpoint, replaces a silent misconfiguration
@@ -280,7 +283,7 @@ configured.
   channel, and it is the reason the field was declared in the first place.
 
   **This adds a required key** to `ConnectionEventMeta`, exactly as `roles` did in 1.1.1.
-  Reading the meta is unaffected, which is what a hook does; code that *constructs* one
+  Reading the meta is unaffected, which is what a hook does; code that _constructs_ one
   (typically a test fixture) must now supply `metadata`. `undefined` stays meaningful — an
   authenticator that returns no bag is not one that returns an empty object. Like `roles`, it is
   a connect-time snapshot that `revalidate` does not refresh, and the library never reads a key.
@@ -615,7 +618,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/bymaxone/nest-realtime/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/bymaxone/nest-realtime/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-realtime/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-realtime/compare/v1.2.0...v1.2.1
