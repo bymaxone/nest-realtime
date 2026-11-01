@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-10-31
+
 **Apply before upgrading, if you set `websocket.redisAdapter`:** make sure `@socket.io/redis-adapter`
 is installed and that `pubClient` is an ioredis client. 1.2.2 and earlier logged one error and served a single
 instance when the adapter could not be installed, and every ESM consumer was in that state, so
@@ -595,7 +597,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/bymaxone/nest-realtime/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-realtime/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-realtime/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-realtime/compare/v1.1.2...v1.2.0
