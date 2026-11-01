@@ -350,18 +350,18 @@ With `redisAdapter`, the adapter registers `@socket.io/redis-adapter` and calls 
 
 All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `authenticator` are required.
 
-| Group                      | Key Options                                                                                                                                 | Default                                      |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| **transport**              | `'sse'` \| `'websocket'` \| `'both'`                                                                                                        | — (**required**)                             |
-| **authenticator**          | `IConnectionAuthenticator`                                                                                                                  | — (**required**)                             |
-| **tenantResolver**         | `(auth) => string \| undefined \| null` — derives `tenantId` from the auth result, on **both** transports; `undefined` and `null` mean "no opinion" and fall back    | `auth.tenantId`                              |
-| **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed`, `onDeliveryFailure` (fire-and-forget)                                                        | —                                            |
-| **pubsub**                 | `IRealtimePubSub` — cross-instance fan-out for SSE                                                                                          | `InMemoryPubSub`                             |
-| **offlineQueue**           | `IOfflineQueueStorage` — events held while a user is away                                                                                   | — (disabled)                                 |
-| **presence**               | `IPresenceStorage` — contract for your own presence tracking; the library never calls it                                                                                                   | — (disabled)                                 |
-| **sse**                    | `endpoint`, `heartbeatMs`, `replayBufferSize`, `maxConnectionsPerUser`, `emitConnectionEvent`                                               | `/realtime/sse`, `30000`, `100`, `5`, `true` |
-| **websocket**              | `namespace`, `cors`, `maxHttpBufferSize`, `pingIntervalMs`, `pingTimeoutMs`, `maxConnectionsPerUser`, `emitConnectionEvent`, `redisAdapter` | `'/'`, — (Socket.IO defaults)                |
-| **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`                                                                  | `300`, `'disconnect'`, `60000`               |
+| Group                      | Key Options                                                                                                                                                       | Default                                      |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| **transport**              | `'sse'` \| `'websocket'` \| `'both'`                                                                                                                              | — (**required**)                             |
+| **authenticator**          | `IConnectionAuthenticator`                                                                                                                                        | — (**required**)                             |
+| **tenantResolver**         | `(auth) => string \| undefined \| null` — derives `tenantId` from the auth result, on **both** transports; `undefined` and `null` mean "no opinion" and fall back | `auth.tenantId`                              |
+| **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed`, `onDeliveryFailure` (fire-and-forget)                                                         | —                                            |
+| **pubsub**                 | `IRealtimePubSub` — cross-instance fan-out for SSE                                                                                                                | `InMemoryPubSub`                             |
+| **offlineQueue**           | `IOfflineQueueStorage` — events held while a user is away                                                                                                         | — (disabled)                                 |
+| **presence**               | `IPresenceStorage` — contract for your own presence tracking; the library never calls it                                                                          | — (disabled)                                 |
+| **sse**                    | `endpoint`, `heartbeatMs`, `replayBufferSize`, `maxConnectionsPerUser`, `emitConnectionEvent`                                                                     | `/realtime/sse`, `30000`, `100`, `5`, `true` |
+| **websocket**              | `namespace`, `cors`, `maxHttpBufferSize`, `pingIntervalMs`, `pingTimeoutMs`, `maxConnectionsPerUser`, `emitConnectionEvent`, `redisAdapter`                       | `'/'`, — (Socket.IO defaults)                |
+| **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`                                                                                        | `300`, `'disconnect'`, `60000`               |
 
 > [!NOTE]
 > `websocket.maxConnectionsPerUser` is **opt-in** and unlimited unless set to a positive number, while `sse.maxConnectionsPerUser` defaults to `5`. The two transports differ here on purpose: an SSE stream holds an HTTP connection open, a Socket.IO client multiplexes.
@@ -494,16 +494,16 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 
 ## 🛡️ Security Table
 
-| Layer                 | Implementation                                                                 |
-| --------------------- | ------------------------------------------------------------------------------ |
-| Credential validation | Delegated entirely to consumer-supplied `IConnectionAuthenticator`             |
-| Auth library imports  | None — enforced by a CI grep over `src/`                                       |
-| Tenant isolation      | Room-scoped (`tenant:{id}`), resolved from the authenticated result            |
+| Layer                 | Implementation                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Credential validation | Delegated entirely to consumer-supplied `IConnectionAuthenticator`                                                        |
+| Auth library imports  | None — enforced by a CI grep over `src/`                                                                                  |
+| Tenant isolation      | Room-scoped (`tenant:{id}`), resolved from the authenticated result                                                       |
 | Connection revocation | `disconnect(connectionId)`, propagated cross-instance via `op: 'disconnect'`; rejects when it cannot reach the connection |
-| Credential expiry     | Interval re-authentication with `disconnect` or event on failure               |
-| Connection flooding   | FIFO eviction per user — oldest closed, new admitted, never a 429              |
-| SSE transport headers | `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform` by default |
-| WebSocket origin      | Explicit `cors` config passed straight to Socket.IO                            |
+| Credential expiry     | Interval re-authentication with `disconnect` or event on failure                                                          |
+| Connection flooding   | FIFO eviction per user — oldest closed, new admitted, never a 429                                                         |
+| SSE transport headers | `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform` by default                                            |
+| WebSocket origin      | Explicit `cors` config passed straight to Socket.IO                                                                       |
 
 > [!IMPORTANT]
 > This package holds **zero credential logic**. That is its central security property — and it means the strength of your realtime auth is exactly the strength of the authenticator you plug in.
@@ -576,6 +576,31 @@ All methods return `Promise<void>`.
 
 `joinRoom` and `leaveRoom` act on a connection **this instance holds**; for any other id they resolve and change nothing. A failure of the transport that holds the connection rejects the call.
 
+**An instance must hear the others.** With `RedisRealtimePubSub`, a subscription the server refuses (a wrong password, a missing permission) **fails the boot**: retrying cannot fix it, and an instance that never hears a revocation must not look healthy. A Redis that is only unreachable does not block the boot. The instance starts, logs once that it is not subscribed, and subscribes when a connection succeeds. Until then, and again whenever the subscriber connection drops, `isPubSubReady()` is false. Put it in your readiness probe:
+
+```ts
+import { Injectable } from '@nestjs/common'
+import { HealthIndicatorService } from '@nestjs/terminus'
+import { RealtimeService } from '@bymax-one/nest-realtime'
+
+@Injectable()
+export class RealtimeHealthIndicator {
+  constructor(
+    private readonly realtime: RealtimeService,
+    private readonly indicators: HealthIndicatorService,
+  ) {}
+
+  check(key = 'realtime') {
+    const indicator = this.indicators.check(key)
+    return this.realtime.isPubSubReady()
+      ? indicator.up()
+      : indicator.down({ reason: 'not subscribed to the realtime bus' })
+  }
+}
+```
+
+`isPubSubReady()` is true for a bus that reports no state, such as the default in-memory one, and with `transport: 'websocket'`, which does not use the bus.
+
 ### ConnectionRegistry
 
 Read-side view of live connections — useful for admin endpoints and metrics. The class also has `register` and `unregister`; those are the transports' own bookkeeping, so do not call them (a record you add has no stream or socket behind it).
@@ -590,14 +615,14 @@ Read-side view of live connections — useful for admin endpoints and metrics. T
 
 ### Contracts
 
-| Interface                   | Required | Purpose                                                     |
-| --------------------------- | :------: | ----------------------------------------------------------- |
-| `IConnectionAuthenticator`  |    ✅    | Validate a connection, return `userId` / `tenantId`         |
-| `IRealtimePubSub`           |    —     | Cross-instance fan-out for SSE                              |
-| `IOfflineQueueStorage`      |    —     | Hold events for disconnected users                          |
+| Interface                   | Required | Purpose                                                                                                               |
+| --------------------------- | :------: | --------------------------------------------------------------------------------------------------------------------- |
+| `IConnectionAuthenticator`  |    ✅    | Validate a connection, return `userId` / `tenantId`                                                                   |
+| `IRealtimePubSub`           |    —     | Cross-instance fan-out for SSE                                                                                        |
+| `IOfflineQueueStorage`      |    —     | Hold events for disconnected users                                                                                    |
 | `IPresenceStorage`          |    —     | Contract only: the library never calls it; your code stores presence and emits `presence:online` / `presence:offline` |
-| `IConnectionLifecycleHooks` |    —     | Fire-and-forget connect / disconnect / error callbacks      |
-| `ITransport`                |    —     | Implemented by the library; the seam every transport shares |
+| `IConnectionLifecycleHooks` |    —     | Fire-and-forget connect / disconnect / error callbacks                                                                |
+| `ITransport`                |    —     | Implemented by the library; the seam every transport shares                                                           |
 
 Reference implementations shipped: `InMemoryPubSub` (default), `RedisRealtimePubSub`, `RedisOfflineQueue`.
 
@@ -619,7 +644,7 @@ under none and joins no tenant room, which an empty string is not. Whitespace co
 Omission is the form to write, because it is the only one that compiles everywhere.
 `AuthenticationResult` declares `tenantId?: string`; the runtime accepts an explicit `undefined`
 or `null` too — an untyped claim spread into the result produces them routinely — but whether
-either *type-checks* depends on the consuming project's `tsconfig`, which the published
+either _type-checks_ depends on the consuming project's `tsconfig`, which the published
 declarations do not control:
 
 | consumer's `tsconfig`                     | `tenantId: undefined` | `tenantId: null` |
@@ -632,7 +657,7 @@ Omitting the key is correct in all three.
 
 `tenantResolver` cannot clear a tenant, and this is the one asymmetry worth reading twice.
 Resolution is `tenantResolver?.(auth) ?? auth.tenantId`, so a resolver returning `undefined` or
-`null` means *no opinion* and falls back to the tenant the authenticator supplied. A resolver
+`null` means _no opinion_ and falls back to the tenant the authenticator supplied. A resolver
 written to place a connection in no tenant by returning `null` leaves it in `auth.tenantId`'s
 room instead, still receiving that tenant's events. Decide the absent case in the
 authenticator, where absence is what it looks like.
@@ -680,10 +705,10 @@ that is not an address is never returned, and `ip` is `''` when no channel carri
 Without `trust proxy` it is the peer. Only `remoteAddress` can be trusted without knowing that
 setting:
 
-| Field           | SSE                                                   | WebSocket           | Forgeable by the client                           |
-| --------------- | ----------------------------------------------------- | ------------------- | ------------------------------------------------- |
-| `ip`            | `req.ip`, which follows the app's `trust proxy` value | `handshake.address` | Only as far as `trust proxy` believes the header  |
-| `remoteAddress` | `req.socket.remoteAddress`                            | `handshake.address` | No                                                |
+| Field           | SSE                                                   | WebSocket           | Forgeable by the client                          |
+| --------------- | ----------------------------------------------------- | ------------------- | ------------------------------------------------ |
+| `ip`            | `req.ip`, which follows the app's `trust proxy` value | `handshake.address` | Only as far as `trust proxy` believes the header |
+| `remoteAddress` | `req.socket.remoteAddress`                            | `handshake.address` | No                                               |
 
 `remoteAddress` is the TCP peer, read from the socket and never from a header. Behind a reverse
 proxy it is the proxy's address. Use it to decide whether a forwarded header such as
@@ -844,19 +869,19 @@ These names belong to the library. Do not reuse them for application events. The
 
 ### Error Codes
 
-| Code                               | Status                                                              |
-| ---------------------------------- | ------------------------------------------------------------------- |
-| `REALTIME_INVALID_OPTIONS`         | Raised at bootstrap for an invalid option                           |
-| `REALTIME_NO_AUTHENTICATOR`        | Raised at bootstrap when the authenticator is missing or invalid    |
-| `REALTIME_AUTH_FAILED`             | Raised when authentication is refused: the SSE 401 body and the WebSocket handshake refusal |
-| `REALTIME_REAUTHENTICATION_FAILED` | Raised when a revalidation fails                                    |
-| `REALTIME_TOO_MANY_CONNECTIONS`    | Raised as the reason an evicted connection is closed                |
-| `REALTIME_INVALID_TICKET`          | Reserved, never raised today: a ticket store is yours to write      |
-| `REALTIME_PUBSUB_UNAVAILABLE`      | Raised as the rejection of a disconnect when the bus refuses the revocation; an emit's publish failure is logged and passed to the delivery-failure hook |
+| Code                               | Status                                                                                                                                                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REALTIME_INVALID_OPTIONS`         | Raised at bootstrap for an invalid option                                                                                                                                                                 |
+| `REALTIME_NO_AUTHENTICATOR`        | Raised at bootstrap when the authenticator is missing or invalid                                                                                                                                          |
+| `REALTIME_AUTH_FAILED`             | Raised when authentication is refused: the SSE 401 body and the WebSocket handshake refusal                                                                                                               |
+| `REALTIME_REAUTHENTICATION_FAILED` | Raised when a revalidation fails                                                                                                                                                                          |
+| `REALTIME_TOO_MANY_CONNECTIONS`    | Raised as the reason an evicted connection is closed                                                                                                                                                      |
+| `REALTIME_INVALID_TICKET`          | Reserved, never raised today: a ticket store is yours to write                                                                                                                                            |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | Raised as the rejection of a disconnect when the bus refuses the revocation; an emit's publish failure is logged and passed to the delivery-failure hook                                                  |
 | `REALTIME_TRANSPORT_UNAVAILABLE`   | Raised as the rejection of a disconnect, a join or a leave when the transport that holds the connection fails or has no server attached, and of an emit to an offline user that has no delivery path left |
-| `REALTIME_REDIS_ADAPTER_FAILED`    | Raised at bootstrap when the Redis adapter is configured and cannot be installed |
-| `REALTIME_PAYLOAD_TOO_LARGE`       | Reserved, never raised today                                        |
-| `REALTIME_REPLAY_BUFFER_MISS`      | Reserved, never raised today                                        |
+| `REALTIME_REDIS_ADAPTER_FAILED`    | Raised at bootstrap when the Redis adapter is configured and cannot be installed                                                                                                                          |
+| `REALTIME_PAYLOAD_TOO_LARGE`       | Reserved, never raised today                                                                                                                                                                              |
+| `REALTIME_REPLAY_BUFFER_MISS`      | Reserved, never raised today                                                                                                                                                                              |
 
 ### DI Tokens
 
@@ -864,11 +889,11 @@ These names belong to the library. Do not reuse them for application events. The
 
 ### React Hooks
 
-| Hook                             | Returns                                                                                                         |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `useRealtime(options)`           | `{ transport, connected, events, lastEvent, error, reconnectAttempts, reconnect, emit }` — opens the connection |
-| `useRealtimeContext()`           | The same value, from the nearest `<RealtimeProvider>` — throws when used outside one                            |
-| `useRealtimeConnection(options)` | `{ connected, error, reconnectAttempts, reconnect }` — status only, no events array                             |
+| Hook                             | Returns                                                                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useRealtime(options)`           | `{ transport, connected, events, lastEvent, error, reconnectAttempts, reconnect, emit }` — opens the connection                             |
+| `useRealtimeContext()`           | The same value, from the nearest `<RealtimeProvider>` — throws when used outside one                                                        |
+| `useRealtimeConnection(options)` | `{ connected, error, reconnectAttempts, reconnect }` — status only, no events array                                                         |
 | `usePresence()`                  | `UsePresenceReturn`: `{ onlineUserIds, isOnline(userId), count }` — reads `presence:*` events from the provider; your server must emit them |
 
 `RealtimeProvider` takes a single `options` prop of type `UseRealtimeOptions`:

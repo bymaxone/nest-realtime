@@ -9,9 +9,18 @@ import type {
   IRealtimePubSub,
   RealtimePubSubMessage,
 } from '../interfaces/realtime-pubsub.interface'
+import { describeError } from '../utils/describe-error'
+import { unavailableError } from '../utils/unavailable-error'
 
 /** The shortest time between two reports of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
+
+/** A connection failure as text: ioredis wraps a refused connect in an error with no message. */
+function connectionReason(err: unknown): string {
+  const code = (err as { code?: unknown } | null)?.code
+  const text = describeError(err)
+  return [typeof code === 'string' ? code : '', text].filter(Boolean).join(' ') || String(err)
+}
 
 /** Options for RedisRealtimePubSub. */
 export interface RedisRealtimePubSubOptions {
@@ -30,6 +39,12 @@ export interface RedisRealtimePubSubOptions {
  *
  * Messages are JSON-encoded. A malformed payload is dropped and counted, and the count is
  * reported at most once a minute.
+ *
+ * Whether this instance hears the other instances is a state, `isSubscribed()`, that follows the
+ * subscriber connection for the life of the process. `subscribe()` fails when the server answers
+ * with an error reply (a wrong password, a missing permission), which no retry can fix; when the
+ * server cannot be reached it resolves at once and the instance stays unsubscribed until a
+ * connection succeeds. Each change of that state is logged once, not once per retry.
  *
  * @example
  * ```ts
@@ -59,10 +74,26 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   /** Payloads dropped as unparsable since the last report, and when that report was made. */
   private malformedDropped = 0
   private malformedReportedAt = 0
+  /** Whether the subscriber connection holds a confirmed SUBSCRIBE right now. */
+  #subscribed = false
+  /** Whether the current outage has been logged, so a retry loop adds no line. */
+  // Stryker disable next-line BooleanLiteral: equivalent — createSubscriber sets it before any use
+  #outageLogged = false
+  /** Connections closed on purpose, whose `close` is not an outage and says nothing of a successor. */
+  readonly #retired = new WeakSet<Redis>()
 
   constructor(options: RedisRealtimePubSubOptions) {
     this.#pub = options.client
     this.channel = options.channel ?? 'bymax:realtime'
+  }
+
+  /**
+   * Whether this instance holds a confirmed subscription to the channel, so the events and
+   * revocations other instances publish reach it. False before the first successful subscribe,
+   * while the subscriber connection is down, and after the last handler has unsubscribed.
+   */
+  isSubscribed(): boolean {
+    return this.#subscribed
   }
 
   /** JSON-encodes the message and PUBLISHes it to the configured channel. */
@@ -96,8 +127,13 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {
         this.#subInit = null
+        this.#retired.add(sub)
+        const connected = this.#subscribed
+        this.#subscribed = false
         try {
-          await sub.quit()
+          // QUIT queues behind a connection that never came up and would never answer.
+          if (connected) await sub.quit()
+          else sub.disconnect()
         } catch {
           // Quit failures are non-fatal; the reference is already cleared so the
           // next subscribe rebuilds a fresh client.
@@ -113,10 +149,89 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   }
 
   private async createSubscriber(): Promise<Redis> {
-    const sub = this.#pub.duplicate()
-    await sub.subscribe(this.channel)
+    this.#outageLogged = false
+    // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
+    // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it.
+    const sub = this.#pub.duplicate({ autoResubscribe: false })
+    let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
+    // An error reply is the server's answer and reaches the caller as the SUBSCRIBE's rejection;
+    // anything else, an error or a close with no error at all, is the connection failing, which
+    // ioredis retries on its own.
+    const unreachableFirst = new Promise<{ readonly unreachable: unknown }>((resolve) => {
+      sub.on('error', (err: Error) => {
+        if (err.name !== 'ReplyError') resolve({ unreachable: err })
+      })
+      sub.on('close', () => {
+        resolve({ unreachable: new Error() })
+        if (!this.#retired.has(sub)) this.markDown('connection closed')
+      })
+    })
+    // After a reconnect the subscription is gone with the old connection; subscribing again is
+    // what restores it, and its answer is what confirms it.
+    sub.on('ready', () => {
+      if (attached) this.confirm(sub)
+    })
+    const first = sub.subscribe(this.channel)
+    try {
+      const outcome = await Promise.race([
+        first.then(() => 'subscribed' as const),
+        unreachableFirst,
+      ])
+      if (outcome === 'subscribed') {
+        this.markUp()
+      } else {
+        this.markDown(connectionReason(outcome.unreachable))
+        // A confirmation needs no handler here: the connection's first `ready` sends its own.
+        first.catch((err: unknown) => this.refused(err))
+      }
+    } catch (err) {
+      this.#retired.add(sub)
+      sub.disconnect()
+      throw unavailableError(
+        REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
+        RedisRealtimePubSub.name,
+        `could not subscribe to "${this.channel}"`,
+        err,
+      )
+    }
+    attached = true
     return sub
+  }
+
+  private confirm(sub: Redis): void {
+    sub.subscribe(this.channel).then(
+      () => this.markUp(),
+      (err: unknown) => this.refused(err),
+    )
+  }
+
+  /** A server that was reached and refused the SUBSCRIBE after boot: it stays unsubscribed. */
+  private refused(err: unknown): void {
+    // A command rejected because the connection closed is an outage, which 'close' reports.
+    if ((err as { name?: unknown } | null)?.name !== 'ReplyError') return
+    this.#subscribed = false
+    this.logger.warn(
+      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: the server refused the subscription to "${this.channel}": ${describeError(err)}`,
+    )
+  }
+
+  private markUp(): void {
+    if (this.#subscribed) return
+    this.#subscribed = true
+    this.#outageLogged = false
+    this.logger.log(
+      `Subscribed to "${this.channel}"; remote events and revocations reach this instance`,
+    )
+  }
+
+  private markDown(reason: string): void {
+    this.#subscribed = false
+    if (this.#outageLogged) return
+    this.#outageLogged = true
+    this.logger.warn(
+      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: not subscribed to "${this.channel}": ${reason}. Remote events and revocations will not reach this instance until it subscribes again`,
+    )
   }
 
   /**

@@ -175,28 +175,15 @@ describe('RealtimePubSubSubscriber', () => {
     ).not.toThrow()
   })
 
-  // A subscribe failure is swallowed so the module still starts.
-  it('swallows a subscribe failure and continues without a bus', async () => {
+  // A bus that refuses the subscription fails the boot: an instance that cannot hear the others
+  // would miss every revocation, so the refusal reaches the application's startup unchanged.
+  it('fails the boot with the bus error when subscribe rejects', async () => {
     const { pubsub } = buildPubSub()
-    pubsub.subscribe.mockRejectedValueOnce(new Error('redis down'))
+    const failure = new Error('redis refused')
+    pubsub.subscribe.mockRejectedValueOnce(failure)
     const sse = buildSse()
     const subscriber = new RealtimePubSubSubscriber(pubsub as never, 'inst-1', sse)
-    await expect(subscriber.onModuleInit()).resolves.toBeUndefined()
-  })
-
-  // The subscribe-failure warn message includes the error text so operators can diagnose it.
-  it('logs the error message when subscribe fails', async () => {
-    const { pubsub } = buildPubSub()
-    pubsub.subscribe.mockRejectedValueOnce(new Error('redis down'))
-    const sse = buildSse()
-    const subscriber = new RealtimePubSubSubscriber(pubsub as never, 'inst-1', sse)
-    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-    try {
-      await subscriber.onModuleInit()
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('redis down'))
-    } finally {
-      warnSpy.mockRestore()
-    }
+    await expect(subscriber.onModuleInit()).rejects.toBe(failure)
   })
 
   // A failing unsubscribe on shutdown is swallowed.

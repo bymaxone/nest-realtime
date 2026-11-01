@@ -48,8 +48,9 @@ interface DisconnectArgs {
  * the transport's `*Local` methods, which deliver without re-publishing.
  *
  * Messages from this instance (echo) are dropped via the `origin` guard.
- * Subscribe/unsubscribe failures are logged and swallowed so a Redis hiccup at
- * startup does not crash the application.
+ * A subscribe that fails fails the boot: an instance that cannot hear the others would
+ * miss every revocation. A bus that merely cannot be reached yet resolves its subscribe and
+ * reports itself through `isSubscribed()` instead. An unsubscribe failure is logged.
  */
 @Injectable()
 export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShutdown {
@@ -65,13 +66,7 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
   ) {}
 
   async onModuleInit(): Promise<void> {
-    try {
-      this.unsubscribe = await this.pubsub.subscribe((msg) => this.handle(msg))
-    } catch (err) {
-      this.logger.warn(
-        `Failed to subscribe to pub/sub: ${describeError(err)}. Cross-instance fan-out disabled; remote events will not reach this instance.`,
-      )
-    }
+    this.unsubscribe = await this.pubsub.subscribe((msg) => this.handle(msg))
   }
 
   async onApplicationShutdown(): Promise<void> {
