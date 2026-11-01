@@ -62,8 +62,8 @@ export class WebSocketTransport implements ITransport {
   /**
    * Wire the Socket.IO server. Called by `RealtimeGateway.afterInit`.
    *
-   * All emit methods silently no-op until this is called, so the transport is
-   * safe to construct before the HTTP server is ready.
+   * Until this is called an emit delivers nothing and still resolves, with one warning for
+   * the first, so the transport is safe to construct before the HTTP server is ready.
    *
    * @param server - The live Socket.IO `Server` instance from the NestJS gateway.
    */

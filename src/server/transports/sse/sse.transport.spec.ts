@@ -678,8 +678,8 @@ describe('SseTransport', () => {
     },
   )
 
-  // A failed publish of an emit stays best-effort but is no longer silent: the log line carries the
-  // stable code and the operation, and the consumer's hook receives the failure.
+  // A failed publish of an emit stays best-effort and visible: the log line carries the stable code
+  // and the operation, and the consumer's hook receives the failure.
   it('reports a failed emit publish to the log and to onDeliveryFailure', async () => {
     const onDeliveryFailure = jest.fn()
     const { transport, publish } = build({ hooks: { onDeliveryFailure } })

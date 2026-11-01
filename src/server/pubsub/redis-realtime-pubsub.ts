@@ -28,7 +28,8 @@ export interface RedisRealtimePubSubOptions {
  * `SUBSCRIBE` (a lazily-duplicated clone). The subscriber clone is created on
  * the first `subscribe()` call and quit on the last `unsubscribe()`.
  *
- * Messages are JSON-encoded. Malformed payloads are silently dropped.
+ * Messages are JSON-encoded. A malformed payload is dropped and counted, and the count is
+ * reported at most once a minute.
  *
  * @example
  * ```ts

@@ -82,8 +82,8 @@ describe('RedisRealtimePubSub', () => {
     expect(b).toHaveBeenCalledTimes(1)
   })
 
-  // Malformed JSON from Redis is silently dropped.
-  it('drops malformed JSON payloads silently', async () => {
+  // A malformed JSON payload from Redis never reaches a handler.
+  it('does not deliver malformed JSON payloads to a handler', async () => {
     const { pubsub, client } = build()
     const handler = jest.fn()
     await pubsub.subscribe(handler)
@@ -93,8 +93,8 @@ describe('RedisRealtimePubSub', () => {
     expect(handler).not.toHaveBeenCalled()
   })
 
-  // A payload the bus cannot parse is dropped but no longer silently: the log names the code, and
-  // a burst is reported once per minute with the count, so a version skew shows without flooding.
+  // A payload the bus cannot parse is dropped and reported: the log names the code, and a burst is
+  // reported once per minute with the count, so a version skew shows without flooding.
   it('warns about malformed payloads once per minute with the count dropped', async () => {
     const { pubsub, client } = build()
     await pubsub.subscribe(jest.fn())
