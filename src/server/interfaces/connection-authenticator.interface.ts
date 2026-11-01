@@ -28,16 +28,18 @@ export interface ConnectionAuthContext {
    */
   readonly query: Record<string, string | string[] | undefined>
   /**
-   * Client IP — best-effort. Derived from `X-Forwarded-For` when present, which is
-   * spoofable unless set by a trusted proxy; do not use it for security decisions
-   * without validating the proxy chain.
+   * Client IP. On SSE it is the address the application's `trust proxy` setting produced
+   * (`req.ip`, else the nearest trusted hop, else the socket peer), so `X-Forwarded-For` is
+   * believed only as far as that setting reaches and is never read directly. On WebSocket
+   * it is the handshake's peer address, which behind a proxy is the proxy's. `''` when no
+   * channel carries an address; a header text that is not an address is never returned.
    */
   readonly ip: string
   /**
    * The TCP peer address of the connection: the socket's own `remoteAddress`, never read
    * from a header, so a client cannot forge it. It is the proxy's address when one sits
-   * in front of the application, and it is distinct from `ip`, which on SSE comes from
-   * `X-Forwarded-For`. Use it to decide whether a forwarded header such as
+   * in front of the application, and it is distinct from `ip`, which on SSE follows the
+   * application's `trust proxy` setting. Use it to decide whether a forwarded header such as
    * `X-Forwarded-Host` may be believed, by checking it against the proxies you trust.
    *
    * `undefined` when the socket reports no address. A peer on IPv4 can arrive in its

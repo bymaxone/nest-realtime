@@ -670,12 +670,16 @@ does not refresh it. The library never reads a key.
 
 #### Client address versus peer address
 
-`authenticate` receives two addresses, and only one of them can be trusted on its own:
+`authenticate` receives two addresses. On SSE `ip` is the address your application's
+`trust proxy` setting produced, validated: `X-Forwarded-For` is never read directly, a header text
+that is not an address is never returned, and `ip` is `''` when no channel carries an address.
+Without `trust proxy` it is the peer. Only `remoteAddress` can be trusted without knowing that
+setting:
 
-| Field           | SSE                                          | WebSocket           | Forgeable by the client     |
-| --------------- | -------------------------------------------- | ------------------- | --------------------------- |
-| `ip`            | `X-Forwarded-For` first value, else `req.ip` | `handshake.address` | Yes on SSE, no on WebSocket |
-| `remoteAddress` | `req.socket.remoteAddress`                   | `handshake.address` | No                          |
+| Field           | SSE                                                   | WebSocket           | Forgeable by the client                           |
+| --------------- | ----------------------------------------------------- | ------------------- | ------------------------------------------------- |
+| `ip`            | `req.ip`, which follows the app's `trust proxy` value | `handshake.address` | Only as far as `trust proxy` believes the header  |
+| `remoteAddress` | `req.socket.remoteAddress`                            | `handshake.address` | No                                                |
 
 `remoteAddress` is the TCP peer, read from the socket and never from a header. Behind a reverse
 proxy it is the proxy's address. Use it to decide whether a forwarded header such as

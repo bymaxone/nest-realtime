@@ -35,6 +35,7 @@ import type { SseRequest, SseResponse } from '../../interfaces/sse-http.interfac
 import { assertIdentityIsNotBlank, resolveAuthTenant } from '../../utils/assert-identity'
 import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
+import { resolveClientAddress } from '../../utils/client-address'
 import { describeError } from '../../utils/describe-error'
 import { SseTransport } from './sse.transport'
 import { HeartbeatService } from './heartbeat.service'
@@ -42,19 +43,6 @@ import { HeartbeatService } from './heartbeat.service'
 /** Coerce a possibly-multi-valued header to a single string. */
 function singleHeader(value: string | string[] | undefined): string | undefined {
   return typeof value === 'string' ? value : undefined
-}
-
-/**
- * Resolve the best-effort client IP, preferring `X-Forwarded-For`.
- *
- * `X-Forwarded-For` is trusted verbatim and is spoofable unless a trusted reverse
- * proxy sets it. Do not use the resolved IP for security decisions without validating
- * the proxy chain.
- */
-function resolveIp(req: SseRequest): string {
-  const forwarded = req.headers['x-forwarded-for']
-  const candidate = (typeof forwarded === 'string' ? forwarded.split(',')[0] : undefined) ?? ''
-  return candidate.trim() || req.ip || 'unknown'
 }
 
 /** Normalize header names to lowercase and flatten array values. */
@@ -85,7 +73,7 @@ function buildAuthContext(req: SseRequest): ConnectionAuthContext {
     cookies: parseCookieHeader(singleHeader(req.headers['cookie']) ?? ''),
     headers,
     query: sanitizeQuery(req.query),
-    ip: resolveIp(req),
+    ip: resolveClientAddress(req),
     remoteAddress: req.socket?.remoteAddress,
     userAgent: singleHeader(req.headers['user-agent']),
     transport: 'sse',
