@@ -23,9 +23,10 @@ instead. A Redis that is merely unreachable does not fail the boot.
   stayed single-instance: an emit on one instance never reached a client on another. Measured on the
   published bundle with two instances and a real Redis, 0 of 5000 messages crossed; with the adapter
   installed, 5000 of 5000 did. CommonJS consumers were not affected. The ESM bundle now declares a
-  `require` that resolves from the package, `pnpm size` fails when an ESM bundle calls a `require`
-  it does not declare, and `pnpm check:runtime` boots the packed tarball in ESM and CommonJS and
-  asserts the adapter registers.
+  `require` that resolves from the package, and still loads when a consumer's bundler re-bundles it
+  into CommonJS, where `import.meta.url` is undefined. `pnpm size` fails when an ESM bundle calls a
+  `require` it does not declare, and `pnpm check:runtime` boots the packed tarball in ESM, in
+  CommonJS and re-bundled into CommonJS, and asserts the adapter registers in each.
 
 - **A WebSocket authenticator that rejects with a value that is not an `Error` no longer leaves the
   socket connected.** The catch in `handleConnection` read `.message` from whatever was thrown, so a

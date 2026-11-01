@@ -153,7 +153,7 @@ const esmFiles = readdirSync(join(rootDir, 'dist'), { recursive: true })
 let undeclaredRequire = false
 for (const name of esmFiles) {
   const contents = readFileSync(join(rootDir, 'dist', name), 'utf8')
-  if (/__require\(/.test(contents) && !/createRequire\(import\.meta\.url\)/.test(contents)) {
+  if (/__require\(/.test(contents) && !/createRequire\(import\.meta\.url\b/.test(contents)) {
     console.error(
       `✗ DYNAMIC REQUIRE  dist/${name} calls \`__require(\` without declaring a \`require\`: in ESM it throws`,
     )
