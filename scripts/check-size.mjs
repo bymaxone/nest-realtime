@@ -37,7 +37,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     stripping them takes it from 14.34 to 10.04 KB brotli — so headroom here is
 //     cheap to reclaim, and a loose ratchet would hide that a 30% reduction is
 //     available rather than force the question.
-//   websocket 7.48 KB →  7.55 KB (7,476 B measured, 1.0% headroom — the Socket.IO stack alone,
+//   websocket 7.48 KB →  7.55 KB (7,477 B measured, 1.0% headroom — the Socket.IO stack alone,
 //     including the start-up message that names the fix when `RealtimeIoAdapter` is not installed,
 //     the boot error that names the cause when the Redis adapter cannot be installed, the
 //     revocation that rejects when the server is not attached or its fan-out throws and the
