@@ -789,6 +789,31 @@ describe('SseTransport', () => {
     )
   })
 
+  // A rejected emit already tells its caller; reporting it through the hook as well would count the
+  // same failure twice, so the hook hears only about failures behind a call that resolved.
+  it.each([
+    ['the bus cannot reach another instance', 'memory'],
+    ['the bus failed too', 'failed'],
+  ])('does not call onDeliveryFailure when the emit rejects because %s', async (_label, bus) => {
+    const onDeliveryFailure = jest.fn()
+    const offlineQueue = {
+      append: jest.fn().mockRejectedValue(new Error('queue down')),
+      retrieveSince: jest.fn(),
+      acknowledge: jest.fn(),
+    } as unknown as IOfflineQueueStorage
+    const { transport, publish } = build({
+      offlineQueue,
+      hooks: { onDeliveryFailure },
+      ...(bus === 'memory' ? { pubsub: new InMemoryPubSub() } : {}),
+    })
+    if (bus === 'failed') publish.mockRejectedValueOnce(new Error('redis down'))
+    await expect(transport.emitToUser('u1', 'foo', {})).rejects.toThrow(
+      'REALTIME_TRANSPORT_UNAVAILABLE',
+    )
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(onDeliveryFailure).not.toHaveBeenCalled()
+  })
+
   // With a bus that can reach other instances the user may be online there, where the publish
   // delivers the event live: the emit resolves, and the queue failure is reported.
   it('resolves an offline emit the queue could not keep when the bus accepted it', async () => {

@@ -53,6 +53,11 @@ export interface RegisterSseConnectionParams {
   userAgent: string | undefined
 }
 
+/** A caught failure, boxed so that a thrown `undefined` or `null` is still a failure. */
+interface Failure {
+  readonly error: unknown
+}
+
 /**
  * SSE transport implementation.
  *
@@ -205,50 +210,58 @@ export class SseTransport implements ITransport {
    * A failed publish or a failed append is reported (log and `onDeliveryFailure`) and the call
    * still resolves, since delivery to the other instances is at-most-once. It rejects only when
    * the event has no delivery path left: the user is offline here, the queue could not keep it,
-   * and the bus either failed or cannot reach another instance (the in-memory bus).
+   * and the bus either failed or cannot reach another instance (the in-memory bus). A rejection
+   * carries the queue failure as its cause and is not also reported to the hook.
    */
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
     const id = this.idGen.next()
     this.emitToUserLocal(userId, event, data, id)
     const queue = this.offlineQueue
     const offline = queue !== undefined && this.connections.byUser(userId, 'sse').length === 0
-    const [queueFailure, published] = await Promise.all([
+    const [queueFailure, publishFailure] = await Promise.all([
       offline
-        ? this.appendOffline(queue, userId, { id, event, data, emittedAt: new Date() })
+        ? this.tryAppend(queue, userId, { id, event, data, emittedAt: new Date() })
         : undefined,
-      this.publish({ op: 'emitToUser', args: { userId, event, data, id } }),
+      this.tryPublish({ op: 'emitToUser', args: { userId, event, data, id } }),
     ])
-    if (queueFailure !== undefined && !(published && this.busReachesOtherInstances())) {
+    if (
+      queueFailure !== undefined &&
+      (publishFailure !== undefined || !this.busReachesOtherInstances())
+    ) {
+      // A rejection tells the caller; the hook hears only about failures behind a resolved call.
       throw unavailableError(
         REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
         SseTransport.name,
         `${event} for ${userId} has no delivery path: the user is offline here and the offline queue failed`,
-        queueFailure,
+        queueFailure.error,
       )
     }
-  }
-
-  /** Append to the offline queue; resolves with the failure, or `undefined` once it is kept. */
-  private async appendOffline(
-    queue: IOfflineQueueStorage,
-    userId: string,
-    event: OfflineQueuedEvent,
-  ): Promise<unknown> {
-    try {
-      await queue.append(userId, event)
-      return undefined
-    } catch (error) {
+    if (publishFailure !== undefined) this.reportPublishFailure('emitToUser', publishFailure)
+    if (queueFailure !== undefined) {
       reportDeliveryFailure(
         this.logger,
         this.hooks,
         {
           code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
           op: 'offlineAppend',
-          error,
+          error: queueFailure.error,
         },
         'Offline queue append failed',
       )
-      return error ?? new Error('offline queue append failed')
+    }
+  }
+
+  /** Append to the offline queue; resolves with the failure, or `undefined` once it is kept. */
+  private async tryAppend(
+    queue: IOfflineQueueStorage,
+    userId: string,
+    event: OfflineQueuedEvent,
+  ): Promise<Failure | undefined> {
+    try {
+      await queue.append(userId, event)
+      return undefined
+    } catch (error) {
+      return { error }
     }
   }
 
@@ -403,27 +416,31 @@ export class SseTransport implements ITransport {
     }
   }
 
-  /**
-   * Publish once to the bus. A failure is reported and never fails the live emit path; the
-   * result says whether the bus accepted the message.
-   */
-  private async publish(message: Omit<RealtimePubSubMessage, 'origin'>): Promise<boolean> {
+  /** Publish once to the bus; resolves with the failure, or `undefined` once the bus accepted it. */
+  private async tryPublish(
+    message: Omit<RealtimePubSubMessage, 'origin'>,
+  ): Promise<Failure | undefined> {
     try {
       await this.pubsub.publish({ ...message, origin: this.instanceId })
-      return true
+      return undefined
     } catch (error) {
-      reportDeliveryFailure(
-        this.logger,
-        this.hooks,
-        {
-          code: REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
-          op: message.op,
-          error,
-        },
-        'pubsub.publish failed',
-      )
-      return false
+      return { error }
     }
+  }
+
+  /** Publish once to the bus. A failure is reported and never fails the live emit path. */
+  private async publish(message: Omit<RealtimePubSubMessage, 'origin'>): Promise<void> {
+    const failure = await this.tryPublish(message)
+    if (failure !== undefined) this.reportPublishFailure(message.op, failure)
+  }
+
+  private reportPublishFailure(op: string, { error }: Failure): void {
+    reportDeliveryFailure(
+      this.logger,
+      this.hooks,
+      { code: REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE, op, error },
+      'pubsub.publish failed',
+    )
   }
 
   /** Evict a user's oldest connections (FIFO) when over `maxConnectionsPerUser`. */
