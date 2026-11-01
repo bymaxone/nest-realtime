@@ -3,7 +3,7 @@
 A local measurement of the built package, not a CI gate. Numbers depend on the machine; the script exists to be rerun and compared on the same one.
 
 > [!IMPORTANT]
-> **Read the tables with the noise in mind.** Two runs on this machine differ by up to about 2.5 ms in fan-out p50 at 1000 clients (25–48%) and by up to 1.35 ms in single-client p99. A difference smaller than that between two cells, or between two runs, is not a finding. The ordering of the cells and their order of magnitude are stable; see [Run-to-run spread](#run-to-run-spread).
+> **Read the tables with the noise in mind.** Two runs on this machine differ by up to about 2.5 ms in fan-out p50 at 1000 clients (28–48%) and by up to 1.35 ms in single-client p99. A difference smaller than that between two cells, or between two runs, is not a finding. The ordering of the cells and their order of magnitude are stable; see [Run-to-run spread](#run-to-run-spread).
 
 ## How to reproduce
 
@@ -128,15 +128,15 @@ Same noise caveat as above: compare orders of magnitude, not 2 ms.
 
 - Heap per idle connection is deterministic: identical in both runs (25.22 KiB for SSE, 16.18 KiB for WebSocket). RSS per connection moved by at most 0.9 KiB (1.2%).
 - Connect p50 moved by at most 0.01 ms; the p99 tails by at most 0.2 ms.
-- Fan-out p50 at 1000 clients moved by 1.9 ms (SSE) and 2.4 ms (WebSocket) between runs, 25–48%; p99 moved by at most 1.2 ms. Single-client p99 moved by up to 1.35 ms (50 samples).
+- Fan-out p50 at 1000 clients moved by 1.9 ms (SSE) and 2.4 ms (WebSocket) between runs, 28–48%; p99 moved by at most 1.2 ms. Single-client p99 moved by up to 1.35 ms (50 samples).
 - Treat differences under about 2.5 ms at 1000 clients as noise on this machine. The ordering of the cells and their order of magnitude are stable.
 
 ## Findings
 
 1. **The WebSocket Redis adapter did not install in the ES module build.** The first run of the cross-instance scenario delivered 0 of 5000 messages to the other instance and each instance opened one Redis connection instead of two; the instance log said `Dynamic require of "@socket.io/redis-adapter" is not supported`. Fixed in 1.2.3 (#167, #169); the rerun above delivers 5000 of 5000 on both transports.
-2. **Fan-out latency grows linearly with the local audience**, at about 7 µs per extra local socket: p50 of 0.1–0.3 ms for one client, about 1 ms for 100, 5–9 ms for 1000. An emit to 1000 clients is complete for its slowest recipient in 7–12 ms on one core.
-3. **SSE costs about 50% more memory per idle connection than WebSocket** (about 78 versus 52 KiB of RSS; 25.2 versus 16.2 KiB of heap), and its fan-out at 1000 clients is about 25–35% slower; the ordering held in both runs.
-4. **Cross-instance delivery adds roughly 1–2 ms at p50** over the same-instance path with a real Redis, and lost nothing over 20000 cross-instance deliveries.
+2. **Fan-out latency grows linearly with the local audience**, at about 7 µs per extra local socket: p50 of 0.1–0.3 ms for one client, 0.6–2 ms for 100, 5–9 ms for 1000. An emit to 1000 clients is complete for its slowest recipient in 7–12 ms.
+3. **SSE costs about 50% more memory per idle connection than WebSocket** (about 78 versus 52 KiB of RSS; 25.2 versus 16.2 KiB of heap); the ordering held in both runs.
+4. **Cross-instance delivery is in the same range as same-instance delivery at 100 clients** (p50 1.6–2.5 ms against 0.6–2.0 ms), within the noise, and lost nothing.
 5. **Two Redis connections per instance on both transports**: the consumer's own client plus the one the library duplicates for the subscriber. The library opens exactly one connection of its own.
 
 ## Limits of this measurement
