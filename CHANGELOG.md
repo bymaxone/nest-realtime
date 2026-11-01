@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Throwaway proof of the pull-request declaration check; this branch is never merged.
 
+#### Apply to a derived backend
+
+Nothing to change. This section exists only so the declaration check has its note.
+
 ### Tests
 
 - **The README Quick Start is executed, not only type-checked.** Specs take the Quick Start
