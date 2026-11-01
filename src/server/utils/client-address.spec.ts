@@ -6,6 +6,7 @@
  */
 import { isIP } from 'node:net'
 import { get } from 'node:http'
+import type { ClientRequest } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Test } from '@nestjs/testing'
 import type { NestExpressApplication } from '@nestjs/platform-express'
@@ -151,73 +152,125 @@ describe('resolveClientAddress', () => {
       hookIp?: string
     }
 
+    /** The longest any wait below lasts; a wait that expires names what it was waiting for. */
+    const WAIT_MS = 1000
+
+    /** Settles with `work`, or rejects with a message naming `what` once `WAIT_MS` has passed. */
+    function within<T>(work: Promise<T>, what: string): Promise<T> {
+      return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error(`${what} did not happen within ${WAIT_MS} ms`)),
+          WAIT_MS,
+        )
+        work.then(
+          (value) => {
+            clearTimeout(timer)
+            resolve(value)
+          },
+          (error: unknown) => {
+            clearTimeout(timer)
+            reject(error instanceof Error ? error : new Error(String(error)))
+          },
+        )
+      })
+    }
+
+    interface Started {
+      readonly app: NestExpressApplication
+      readonly port: number
+      /** Resolves when the `onConnect` hook has recorded its address. */
+      readonly hookRan: Promise<void>
+    }
+
     /** A listening SSE application whose authenticator and `onConnect` hook record the `ip` they get. */
     async function startApp(
       trustProxy: string | undefined,
       seen: Seen,
-    ): Promise<{ readonly app: NestExpressApplication; readonly port: number }> {
+      hookDelayMs: number,
+    ): Promise<Started> {
+      let markHookRan: () => void = () => undefined
+      const hookRan = new Promise<void>((resolve) => {
+        markHookRan = resolve
+      })
       const authenticator: IConnectionAuthenticator = {
         authenticate: (context) => {
           seen.authenticateIp = context.ip
           return Promise.resolve({ userId: 'u1' })
         },
       }
+      const hooks = {
+        onConnect: (meta: { readonly ip: string }) => {
+          setTimeout(() => {
+            seen.hookIp = meta.ip
+            markHookRan()
+          }, hookDelayMs)
+        },
+      }
       const moduleRef = await Test.createTestingModule({
-        imports: [
-          BymaxRealtimeModule.forRoot({
-            transport: 'sse',
-            authenticator,
-            hooks: {
-              onConnect: (meta) => {
-                seen.hookIp = meta.ip
-              },
-            },
-          }),
-        ],
+        imports: [BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator, hooks })],
       }).compile()
       const app = moduleRef.createNestApplication<NestExpressApplication>()
       if (trustProxy !== undefined) app.set('trust proxy', trustProxy)
       await app.listen(0, '127.0.0.1')
-      return { app, port: (app.getHttpServer().address() as AddressInfo).port }
+      return { app, port: (app.getHttpServer().address() as AddressInfo).port, hookRan }
     }
 
-    /** Open the SSE stream with an optional forwarded header, wait for its first chunk, then drop it. */
-    function openAndDrop(port: number, forwardedFor: string | undefined): Promise<void> {
-      return new Promise<void>((resolve, reject) => {
-        const req = get(
-          {
-            host: '127.0.0.1',
-            port,
-            path: '/realtime/sse',
-            headers: {
-              accept: 'text/event-stream',
-              ...(forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor }),
-            },
-            agent: false,
-          },
-          (res) => {
-            res.once('data', () => {
-              setTimeout(() => {
-                req.destroy()
-                resolve()
-              }, 50)
-            })
-          },
-        )
-        req.on('error', (error: NodeJS.ErrnoException) =>
-          error.code === 'ECONNRESET' ? resolve() : reject(error),
-        )
+    /** Open the SSE stream; `firstChunk` settles when its first chunk arrives or the stream ends first. */
+    function openStream(
+      port: number,
+      forwardedFor: string | undefined,
+    ): { readonly req: ClientRequest; readonly firstChunk: Promise<void> } {
+      const headers = {
+        accept: 'text/event-stream',
+        ...(forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor }),
+      }
+      let settle: { resolve: () => void; reject: (error: Error) => void } | undefined
+      const firstChunk = new Promise<void>((resolve, reject) => {
+        settle = { resolve, reject }
       })
+      const req = get(
+        { host: '127.0.0.1', port, path: '/realtime/sse', headers, agent: false },
+        (res) => {
+          res.once('data', () => settle?.resolve())
+          res.once('close', () =>
+            settle?.reject(new Error('the stream closed before its first chunk')),
+          )
+        },
+      )
+      req.on('error', (error) => settle?.reject(error))
+      return { req, firstChunk }
+    }
+
+    /**
+     * Open the stream, wait for its first chunk and, when `hookRan` is given, for the hook, then
+     * drop it. Each wait is bounded on its own and names itself when it expires; the request is
+     * dropped whichever way the exchange ends. A test that reads only what the authenticator saw
+     * passes no hook signal, because the authenticator has run before the first chunk is written.
+     */
+    async function openAndDrop(
+      port: number,
+      forwardedFor: string | undefined,
+      hookRan: Promise<void> | undefined,
+    ): Promise<void> {
+      const { req, firstChunk } = openStream(port, forwardedFor)
+      try {
+        await within(firstChunk, 'the first chunk of the stream')
+        if (hookRan !== undefined) await within(hookRan, 'the onConnect hook')
+      } finally {
+        req.destroy()
+      }
     }
 
     async function connectBehind(
       trustProxy: string | undefined,
       forwardedFor: string | undefined,
+      awaitHook = false,
+      hookDelayMs = 0,
     ): Promise<Seen> {
       const seen: Seen = {}
-      const { app, port } = await startApp(trustProxy, seen)
+      const { app, port, hookRan } = await startApp(trustProxy, seen, hookDelayMs)
       try {
-        await openAndDrop(port, forwardedFor)
+        await openAndDrop(port, forwardedFor, awaitHook ? hookRan : undefined)
       } finally {
         await app.close()
       }
@@ -229,9 +282,18 @@ describe('resolveClientAddress', () => {
     // address Express reports, which is also what the hook receives. Why: the leftmost entry is
     // written by the client, and `trust proxy` decides how far the header is believed.
     it('reports the address trust proxy produced, not the forged leftmost entry', async () => {
-      const seen = await connectBehind('loopback', '6.6.6.6, 203.0.113.9')
+      const seen = await connectBehind('loopback', '6.6.6.6, 203.0.113.9', true)
 
       expect(seen.authenticateIp).toBe('203.0.113.9')
+      expect(seen.hookIp).toBe('203.0.113.9')
+    })
+
+    // Scenario: `onConnect` runs well after the first chunk reaches the client, as it can on a
+    // loaded machine. Expected: the hook's address is still observed. Why: the helper must wait for
+    // the hook itself, since a fixed pause after the first chunk is a guess about timing.
+    it('observes the hook address even when onConnect runs late', async () => {
+      const seen = await connectBehind('loopback', '6.6.6.6, 203.0.113.9', true, 300)
+
       expect(seen.hookIp).toBe('203.0.113.9')
     })
 
