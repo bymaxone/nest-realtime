@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   published version, and the Release workflow runs it before the publish. It always prints what
   differs. A difference passes only when the CHANGELOG section of the version being released holds
   an "Apply to a derived backend" note (or the older "Apply to a consumer"). There is no override.
+- A workflow runs the same check in a pull request that changes `package.json` and moves the version,
+  so a release that changes the declarations without the note fails before the tag. A pull request
+  that leaves the version alone skips it.
 
 ## [1.2.5] - 2026-11-01
 
