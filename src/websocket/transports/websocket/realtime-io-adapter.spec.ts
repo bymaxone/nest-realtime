@@ -150,44 +150,80 @@ describe('RealtimeIoAdapter', () => {
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Redis adapter registered'))
   })
 
-  it('tolerates a createAdapter failure — logs error, does NOT throw', () => {
-    // Broken adapter install degrades to single-instance; no uncaught exception.
-    const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as {
-      createAdapter: jest.Mock
+  describe('when the Redis adapter cannot be installed, the boot fails', () => {
+    const ADVICE = 'Install @socket.io/redis-adapter and pass an ioredis client as pubClient.'
+
+    function boot(pubClient: unknown): unknown {
+      superSpy.mockReturnValue(makeServer())
+      return new RealtimeIoAdapter(
+        makeApp({ websocket: { redisAdapter: { pubClient } } }) as never,
+      ).createIOServer(3000)
     }
-    createAdapter.mockImplementationOnce(() => {
-      throw new Error('Redis not available')
+
+    it('throws the typed error, with the cause and the remedy, when the adapter constructor throws', () => {
+      // A misconfiguration known at boot must not leave a server that drops cross-node messages.
+      const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as {
+        createAdapter: jest.Mock
+      }
+      const cause = new Error('adapter constructor exploded')
+      createAdapter.mockImplementationOnce(() => {
+        throw cause
+      })
+
+      let thrown: Error | undefined
+      try {
+        boot({ duplicate: jest.fn().mockReturnValue({}) })
+      } catch (err) {
+        thrown = err as Error
+      }
+
+      expect(thrown?.message).toBe(
+        '[RealtimeIoAdapter] REALTIME_REDIS_ADAPTER_FAILED: websocket.redisAdapter is set but the ' +
+          'Socket.IO Redis adapter could not be installed (adapter constructor exploded). ' +
+          ADVICE,
+      )
+      expect(thrown?.cause).toBe(cause)
+      expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('Redis adapter registered'))
     })
 
-    const pubClient = { duplicate: jest.fn().mockReturnValue({}) }
-    const server = makeServer()
-    superSpy.mockReturnValue(server)
-
-    const adapter = new RealtimeIoAdapter(
-      makeApp({ websocket: { redisAdapter: { pubClient } } }) as never,
-    )
-    expect(() => adapter.createIOServer(3000)).not.toThrow()
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Redis not available'))
-  })
-
-  it('error log contains "Falling back" when the Redis adapter installation throws', () => {
-    // Kills StringLiteral mutation that blanks out the fallback message.
-    const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as {
-      createAdapter: jest.Mock
-    }
-    createAdapter.mockImplementationOnce(() => {
-      throw new Error('Redis down')
+    it('throws when the client has no duplicate()', () => {
+      // The subscriber is a duplicate of the caller's client, so a client without one cannot back it.
+      expect(() => boot({})).toThrow(
+        /^\[RealtimeIoAdapter\] REALTIME_REDIS_ADAPTER_FAILED: .*\(.*duplicate.*\)\. Install @socket\.io\/redis-adapter/,
+      )
     })
 
-    const pubClient = { duplicate: jest.fn().mockReturnValue({}) }
-    const server = makeServer()
-    superSpy.mockReturnValue(server)
+    it('names a rejection that is not an Error by its string form', () => {
+      const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as {
+        createAdapter: jest.Mock
+      }
+      createAdapter.mockImplementationOnce(() => {
+        throw 'plain string'
+      })
+      expect(() => boot({ duplicate: jest.fn().mockReturnValue({}) })).toThrow(
+        'could not be installed (plain string). ' + ADVICE,
+      )
+    })
 
-    const adapter = new RealtimeIoAdapter(
-      makeApp({ websocket: { redisAdapter: { pubClient } } }) as never,
-    )
-    adapter.createIOServer(3000)
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Falling back'))
+    it('throws when the peer package cannot be loaded', () => {
+      // The peer is optional; a configuration that uses it without installing it is the failure.
+      // Reading the export is the part of the load that can throw once the module is mocked.
+      const peer = jest.requireMock('@socket.io/redis-adapter') as object
+      const original = Object.getOwnPropertyDescriptor(peer, 'createAdapter')
+      Object.defineProperty(peer, 'createAdapter', {
+        configurable: true,
+        get: () => {
+          throw new Error("Cannot find module '@socket.io/redis-adapter'")
+        },
+      })
+      try {
+        expect(() => boot({ duplicate: jest.fn() })).toThrow(
+          /REALTIME_REDIS_ADAPTER_FAILED: .*\(Cannot find module '@socket\.io\/redis-adapter'\)/,
+        )
+      } finally {
+        Object.defineProperty(peer, 'createAdapter', original as PropertyDescriptor)
+      }
+    })
   })
 
   describe('isRealtimeIoServer', () => {

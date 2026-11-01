@@ -125,7 +125,38 @@ const resolveAll = async (label, dynamicModule) => {
   }
 }
 
+// The optional Redis adapter is loaded at runtime, and a bundle that cannot load it does not fail:
+// it logs one line and serves a single instance. So the gate asks the server what it is using.
+const redisAdapterRegisters = async () => {
+  const Mock = IORedisMock.default ?? IORedisMock
+  const pubClient = new Mock()
+  const app = await NestFactory.create(
+    ws.BymaxRealtimeWebSocketModule.forRoot({
+      transport: 'websocket',
+      authenticator,
+      websocket: { redisAdapter: { pubClient } },
+    }),
+    { logger: false },
+  )
+  let server
+  try {
+    server = new ws.RealtimeIoAdapter(app).createIOServer(0)
+    const name = server.of('/').adapter.constructor.name
+    return name === 'Adapter' ? 'redis adapter not installed: the server kept the in-memory adapter' : ''
+  } finally {
+    server?.close()
+    pubClient.disconnect()
+    await app.close()
+  }
+}
+
 const main = async () => {
+  try {
+    const detail = await redisAdapterRegisters()
+    if (detail) failures.push('redisAdapter — ' + detail)
+  } catch (error) {
+    failures.push('redisAdapter — threw: ' + error.message)
+  }
   const cases = [
     ['websocket via ./websocket', () => ws.BymaxRealtimeWebSocketModule.forRoot(options('websocket'))],
     ['both via ./websocket', () => ws.BymaxRealtimeWebSocketModule.forRoot(options('both'))],
@@ -159,7 +190,7 @@ const main = async () => {
     for (const failure of failures) console.error('  ✗ ' + failure)
     process.exit(1)
   }
-  console.log('  ✓ ' + FORMAT + ': ' + cases.length + ' registrations, ' +
+  console.log('  ✓ ' + FORMAT + ': Redis adapter registers, ' + cases.length + ' registrations, ' +
     ${EXPORTED_TOKENS.length} + ' tokens each, resolved through the package root')
 }
 
@@ -173,6 +204,7 @@ const esmProbe = `import 'reflect-metadata'
 import { NestFactory } from '@nestjs/core'
 import * as root from '${packageName}'
 import * as ws from '${packageName}/websocket'
+import IORedisMock from 'ioredis-mock'
 const FORMAT = 'ESM'
 ${probeBody}`
 
@@ -180,6 +212,7 @@ const cjsProbe = `require('reflect-metadata')
 const { NestFactory } = require('@nestjs/core')
 const root = require('${packageName}')
 const ws = require('${packageName}/websocket')
+const IORedisMock = require('ioredis-mock')
 const FORMAT = 'CJS'
 ${probeBody}`
 

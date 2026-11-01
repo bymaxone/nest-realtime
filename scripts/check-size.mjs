@@ -14,7 +14,7 @@
  * Usage: `node scripts/check-size.mjs` (run after `pnpm build`).
  */
 import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -30,8 +30,9 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     stripping them takes it from 14.34 to 10.04 KB brotli — so headroom here is
 //     cheap to reclaim, and a loose ratchet would hide that a 30% reduction is
 //     available rather than force the question.
-//   websocket 6.63 KB →  6.9 KB (4% headroom — the Socket.IO stack alone, including the
-//     start-up message that names the fix when `RealtimeIoAdapter` is not installed)
+//   websocket 6.63 KB →  7.0 KB (1% headroom — the Socket.IO stack alone, including the
+//     start-up message that names the fix when `RealtimeIoAdapter` is not installed and the
+//     boot error that names the cause when the Redis adapter cannot be installed)
 //   shared    0.44 KB →  0.6 KB (37% headroom, kept slightly generous for future constants)
 //   react     2.26 KB →  2.4 KB (6% headroom)
 //
@@ -46,7 +47,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 500 },
   { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 15_700 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 6_900 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 7_000 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 600 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_400 },
 ]
@@ -142,6 +143,27 @@ for (const rule of REQUIRED_STATIC) {
     failed = true
   }
 }
+
+// An ES module has no `require`. A bundler that meets `require(...)` in source turns it into
+// `__require(...)`, which throws when the module is loaded as ESM, and the code around it usually
+// catches the throw: the optional Redis adapter was lost that way, silently. A call is fine only
+// where the bundle declares a real `require`.
+const esmFiles = readdirSync(join(rootDir, 'dist'), { recursive: true })
+  .filter((name) => String(name).endsWith('.mjs'))
+  .map(String)
+let undeclaredRequire = false
+for (const name of esmFiles) {
+  const contents = readFileSync(join(rootDir, 'dist', name), 'utf8')
+  if (/__require\(/.test(contents) && !/createRequire\(import\.meta\.url\)/.test(contents)) {
+    console.error(
+      `✗ DYNAMIC REQUIRE  dist/${name} calls \`__require(\` without declaring a \`require\`: in ESM it throws`,
+    )
+    failed = true
+    undeclaredRequire = true
+  }
+}
+if (!undeclaredRequire)
+  console.log(`✓ OK     ${esmFiles.length} ESM bundles call no undeclared \`require\``)
 
 if (failed) {
   console.error('\nBundle-size gate FAILED.')

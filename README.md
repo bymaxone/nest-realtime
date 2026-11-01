@@ -342,7 +342,7 @@ bootstrap()
 > [!IMPORTANT]
 > The `main.ts` line is not optional. `RealtimeIoAdapter` is what applies `websocket.cors`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`. Without it those options are ignored, the gateway's own CORS stays closed (`origin: false`) so a browser on another origin cannot connect, and the module logs an error at start-up that names this fix.
 
-With `redisAdapter`, the adapter registers `@socket.io/redis-adapter` and calls `pubClient.duplicate()` for the subscriber; the library never opens its own Redis connection. Socket.IO's polling fallback needs sticky sessions even then — see [docs/architecture/scaling-cheatsheet.md](./docs/architecture/scaling-cheatsheet.md). On the frontend, a `ws://` or `wss://` `url` selects WebSocket in `RealtimeProvider`. Replay through `Last-Event-ID` and the offline queue are SSE features: a WebSocket connection has neither.
+With `redisAdapter`, the adapter registers `@socket.io/redis-adapter` and calls `pubClient.duplicate()` for the subscriber; the library never opens its own Redis connection. If it cannot be installed (the package is missing, the client has no `duplicate()`), the boot fails with `REALTIME_REDIS_ADAPTER_FAILED` instead of serving a single instance; a Redis that is merely unreachable does not fail the boot. Socket.IO's polling fallback needs sticky sessions even then — see [docs/architecture/scaling-cheatsheet.md](./docs/architecture/scaling-cheatsheet.md). On the frontend, a `ws://` or `wss://` `url` selects WebSocket in `RealtimeProvider`. Replay through `Last-Event-ID` and the offline queue are SSE features: a WebSocket connection has neither.
 
 ---
 
@@ -830,6 +830,7 @@ These names belong to the library. Do not reuse them for application events. The
 | `REALTIME_TOO_MANY_CONNECTIONS`    | Raised as the reason an evicted connection is closed                |
 | `REALTIME_INVALID_TICKET`          | Reserved, never raised today: a ticket store is yours to write      |
 | `REALTIME_PUBSUB_UNAVAILABLE`      | Reserved, never raised today: a pub/sub failure is logged           |
+| `REALTIME_REDIS_ADAPTER_FAILED`    | Raised at bootstrap when the Redis adapter is configured and cannot be installed |
 | `REALTIME_PAYLOAD_TOO_LARGE`       | Reserved, never raised today                                        |
 | `REALTIME_REPLAY_BUFFER_MISS`      | Reserved, never raised today                                        |
 
