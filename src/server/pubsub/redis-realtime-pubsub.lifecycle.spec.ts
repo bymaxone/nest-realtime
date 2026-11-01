@@ -47,6 +47,15 @@ function traced<A extends unknown[]>(body: (...args: A) => Promise<void>) {
   }
 }
 
+/** The line the adapter logs for a refusal whose server message is `message`. */
+const refusalLine = (message: string): string =>
+  `REALTIME_PUBSUB_UNAVAILABLE: the server refused the subscription to "${CHANNEL}": ${message}`
+
+/** The warnings mentioning `token`. Waits and assertions name their own server message, because
+ * the logger spy is shared and another test's line must not satisfy them. */
+const linesAbout = (warn: jest.SpyInstance, token: string): string[] =>
+  warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes(token))
+
 const clients: Redis[] = []
 const unsubscribers: Array<() => Promise<void>> = []
 const servers: FakeRespServer[] = []
@@ -139,9 +148,13 @@ beforeEach(() => {
 
 afterEach(async () => {
   for (const unsubscribe of unsubscribers.splice(0)) await unsubscribe()
-  jest.restoreAllMocks()
   for (const redis of clients.splice(0)) redis.disconnect()
   for (const fake of servers.splice(0)) await fake.stop()
+  // A reply already read from a socket still reaches its handler after the teardown, and on a
+  // loaded runner that can be a poll later; let it land in this test's spies and not in the next
+  // test's.
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  jest.restoreAllMocks()
 })
 
 describe('RedisRealtimePubSub subscriber lifecycle', () => {
@@ -357,19 +370,13 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
       await subscribe(pubsub)
       behave(fake, (command, socket) =>
-        command[0] === 'SUBSCRIBE' ? '-NOPERM refused later\r\n' : healthyRedis(command, socket),
+        command[0] === 'SUBSCRIBE' ? '-NOPERM revoked later\r\n' : healthyRedis(command, socket),
       )
       await fake.start()
       servers.push(fake)
-      await until('the refusal to be reported', () =>
-        warn.mock.calls.some((call) => String(call[0]).includes('refused')),
-      )
+      await until('the refusal to be reported', () => linesAbout(warn, 'revoked later').length > 0)
       expect(pubsub.isSubscribed()).toBe(false)
-      expect(
-        warn.mock.calls.map((call) => String(call[0])).filter((l) => l.includes('refused'))[0],
-      ).toBe(
-        `REALTIME_PUBSUB_UNAVAILABLE: the server refused the subscription to "${CHANNEL}": NOPERM refused later`,
-      )
+      expect(linesAbout(warn, 'revoked later')[0]).toBe(refusalLine('NOPERM revoked later'))
     }),
   )
 
@@ -385,17 +392,12 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       behave(fake, (command, socket) =>
         command[0] === 'SUBSCRIBE' ? '-NOPERM acl changed\r\n' : healthyRedis(command, socket),
       )
+      // A refusal logged by another test's instance after its teardown, as CI delivered it.
+      new Logger('RedisRealtimePubSub').warn(refusalLine('NOPERM revoked later'))
       fake.drop()
-      await until('the refusal to be reported', () =>
-        warn.mock.calls.some((call) => String(call[0]).includes('refused')),
-      )
+      await until('the refusal to be reported', () => linesAbout(warn, 'acl changed').length > 0)
       expect(pubsub.isSubscribed()).toBe(false)
-      const refusals = warn.mock.calls
-        .map((call) => String(call[0]))
-        .filter((l) => l.includes('refused'))
-      expect(refusals).toEqual([
-        `REALTIME_PUBSUB_UNAVAILABLE: the server refused the subscription to "${CHANNEL}": NOPERM acl changed`,
-      ])
+      expect(linesAbout(warn, 'acl changed')).toEqual([refusalLine('NOPERM acl changed')])
     }),
   )
 
@@ -413,9 +415,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       )
       await fake.start()
       servers.push(fake)
-      await until('the refusal to be reported', () =>
-        warn.mock.calls.some((call) => String(call[0]).includes('refused')),
-      )
+      await until('the refusal to be reported', () => linesAbout(warn, 'rotated').length > 0)
       expect(pubsub.isSubscribed()).toBe(false)
       behave(fake, healthyRedis)
       await until('the instance to report subscribed', () => pubsub.isSubscribed())
