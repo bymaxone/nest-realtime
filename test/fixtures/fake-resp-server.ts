@@ -26,18 +26,51 @@ export function pushed(channel: string, payload: string): string {
   return `>3\r\n$7\r\nmessage\r\n$${channel.length}\r\n${channel}\r\n$${payload.length}\r\n${payload}\r\n`
 }
 
-/** Splits one TCP chunk into the commands it carries, upper-casing every word. */
-function commandsIn(chunk: Buffer | string): string[][] {
-  return chunk
-    .toString()
-    .split(/\*\d+\r\n/)
-    .filter((part) => part.length > 0)
-    .map((part) =>
-      part
-        .split('\r\n')
-        .filter((_word, index) => index % 2 === 1)
-        .map((word) => word.toUpperCase()),
-    )
+/**
+ * Reads RESP commands (arrays of bulk strings) out of a byte stream, however TCP cut it: a
+ * command split across chunks is held until it is complete, and several in one chunk come out
+ * together. Words are upper-cased, as the handlers expect.
+ */
+export class RespCommandParser {
+  private pending = Buffer.alloc(0)
+
+  /** Feed one chunk and get back every command it completed. */
+  push(chunk: Buffer | string): string[][] {
+    this.pending = Buffer.concat([this.pending, Buffer.from(chunk)])
+    const commands: string[][] = []
+    for (;;) {
+      const parsed = this.next()
+      if (parsed === null) return commands
+      commands.push(parsed.words)
+      this.pending = this.pending.subarray(parsed.consumed)
+    }
+  }
+
+  /** The first complete command in the buffer, or null while it is still partial. */
+  private next(): { words: string[]; consumed: number } | null {
+    const text = this.pending
+    let at = 0
+    const line = (): string | null => {
+      const end = text.indexOf('\r\n', at)
+      if (end < 0) return null
+      const value = text.toString('utf8', at, end)
+      at = end + 2
+      return value
+    }
+    const header = line()
+    if (header === null || !header.startsWith('*')) return null
+    const count = Number(header.slice(1))
+    const words: string[] = []
+    for (let index = 0; index < count; index++) {
+      const size = line()
+      if (size === null || !size.startsWith('$')) return null
+      const length = Number(size.slice(1))
+      if (text.length < at + length + 2) return null
+      words.push(text.toString('utf8', at, at + length).toUpperCase())
+      at += length + 2
+    }
+    return { words, consumed: at }
+  }
 }
 
 /** The default behaviour of a healthy Redis for the commands a subscriber connection sends. */
@@ -78,8 +111,9 @@ export class FakeRespServer {
         this.subscribers.delete(socket)
       })
       socket.on('error', () => undefined)
+      const parser = new RespCommandParser()
       socket.on('data', (chunk) => {
-        for (const command of commandsIn(chunk)) {
+        for (const command of parser.push(chunk)) {
           this.seen.push(command)
           if (command[0] === 'SUBSCRIBE') this.subscribers.add(socket)
           const reply = this.handler(command, socket)
