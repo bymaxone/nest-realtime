@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 **Apply before upgrading, if you set `websocket.redisAdapter`:** make sure `@socket.io/redis-adapter`
-is installed and that `pubClient` is an ioredis client. 1.2.2 and earlier silently served a single
+is installed and that `pubClient` is an ioredis client. 1.2.2 and earlier logged one error and served a single
 instance when the adapter could not be installed, and every ESM consumer was in that state, so
 WebSocket events did not cross instances. The boot now fails with `REALTIME_REDIS_ADAPTER_FAILED`
 instead. A Redis that is merely unreachable does not fail the boot.
