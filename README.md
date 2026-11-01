@@ -668,6 +668,21 @@ const hooks: IConnectionLifecycleHooks = {
 Like `roles`, it is a **connect-time snapshot**: a `revalidate` that keeps the connection alive
 does not refresh it. The library never reads a key.
 
+#### Client address versus peer address
+
+`authenticate` receives two addresses, and only one of them can be trusted on its own:
+
+| Field           | SSE                                          | WebSocket           | Forgeable by the client     |
+| --------------- | -------------------------------------------- | ------------------- | --------------------------- |
+| `ip`            | `X-Forwarded-For` first value, else `req.ip` | `handshake.address` | Yes on SSE, no on WebSocket |
+| `remoteAddress` | `req.socket.remoteAddress`                   | `handshake.address` | No                          |
+
+`remoteAddress` is the TCP peer, read from the socket and never from a header. Behind a reverse
+proxy it is the proxy's address. Use it to decide whether a forwarded header such as
+`X-Forwarded-Host` may be believed: read it only when `remoteAddress` is one of your proxies. It is
+`undefined` when the socket reports no address, and an IPv4 peer can arrive in its IPv4-mapped form
+(`::ffff:10.0.0.1`), which is passed through as reported.
+
 ### Rooms
 
 | Room ID                | Used for                                        | Auto-joined                   |
