@@ -244,7 +244,11 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       await subscribe(pubsub)
       expect(Date.now() - started).toBeLessThan(1000)
       expect(pubsub.isSubscribed()).toBe(false)
-      expect(linesAbout(warn, 'not subscribed to')).toHaveLength(1)
+      // The one line names the close as the reason; the Error the boot race resolves with does not
+      // reach the log.
+      expect(linesAbout(warn, 'not subscribed to')).toEqual([
+        `${DOWN_PREFIX}connection closed. Remote events and revocations will not reach this instance until it subscribes again`,
+      ])
     }),
   )
 

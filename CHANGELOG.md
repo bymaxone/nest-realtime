@@ -84,7 +84,7 @@ needs no change: `isSubscribed` is optional, and a bus without it counts as subs
   rejects when it cannot reach its connection, the report of a delivery path that failed and the
   subscriber's lifecycle state, a boot that ends when the server closes the connection without an
   error, and per-connection retirement: the `internal` budget goes from 17,400 B to 18,250 B for a
-  measured 18,220 B (it was 17,292 B before the subscriber lifecycle).
+  measured 18,232 B (it was 17,292 B before the subscriber lifecycle).
 - The workflow jobs that check out the repository and then run its scripts no longer keep the job's
   token in the git configuration: `persist-credentials: false` on the checkout wherever no later
   step pushes or tags.

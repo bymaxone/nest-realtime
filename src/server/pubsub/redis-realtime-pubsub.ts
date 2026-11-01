@@ -163,7 +163,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         if (err.name !== 'ReplyError') resolve({ unreachable: err })
       })
       sub.on('close', () => {
-        resolve({ unreachable: new Error('connection closed') })
+        resolve({ unreachable: new Error() })
         if (!this.#retired.has(sub)) this.markDown('connection closed')
       })
     })
