@@ -82,7 +82,7 @@ needs no change: `isSubscribed` is optional, and a bus without it counts as subs
 
 - The `internal` and `websocket` bundle budgets in `pnpm size` are raised to fit the revocation that
   rejects when it cannot reach its connection, the report of a delivery path that failed and the
-  subscriber's lifecycle state.
+  subscriber's lifecycle state: the internal budget is now 18,250 B for a measured 18,220 B.
 - The workflow jobs that check out the repository and then run its scripts no longer keep the job's
   token in the git configuration: `persist-credentials: false` on the checkout wherever no later
   step pushes or tags.

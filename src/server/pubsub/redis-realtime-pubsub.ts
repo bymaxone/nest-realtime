@@ -79,9 +79,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   /** Whether the current outage has been logged, so a retry loop adds no line. */
   // Stryker disable next-line BooleanLiteral: equivalent — createSubscriber sets it before any use
   #outageLogged = false
-  /** Set while the last handler is quitting the client on purpose, which is not an outage. */
-  // Stryker disable next-line BooleanLiteral: equivalent — createSubscriber sets it before any use
-  #quitting = false
+  /** Connections closed on purpose, whose `close` is not an outage and says nothing of a successor. */
+  readonly #retired = new WeakSet<Redis>()
 
   constructor(options: RedisRealtimePubSubOptions) {
     this.#pub = options.client
@@ -128,7 +127,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {
         this.#subInit = null
-        this.#quitting = true
+        this.#retired.add(sub)
         const connected = this.#subscribed
         this.#subscribed = false
         try {
@@ -150,7 +149,6 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   }
 
   private async createSubscriber(): Promise<Redis> {
-    this.#quitting = false
     this.#outageLogged = false
     // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
     // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it.
@@ -158,14 +156,16 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
     // An error reply is the server's answer and reaches the caller as the SUBSCRIBE's rejection;
-    // anything else is the connection failing, which ioredis retries on its own.
+    // anything else, an error or a close with no error at all, is the connection failing, which
+    // ioredis retries on its own.
     const unreachableFirst = new Promise<{ readonly unreachable: unknown }>((resolve) => {
       sub.on('error', (err: Error) => {
         if (err.name !== 'ReplyError') resolve({ unreachable: err })
       })
-    })
-    sub.on('close', () => {
-      if (!this.#quitting) this.markDown('connection closed')
+      sub.on('close', () => {
+        resolve({ unreachable: new Error('connection closed') })
+        if (!this.#retired.has(sub)) this.markDown('connection closed')
+      })
     })
     // After a reconnect the subscription is gone with the old connection; subscribing again is
     // what restores it, and its answer is what confirms it.
@@ -186,7 +186,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         first.catch((err: unknown) => this.refused(err))
       }
     } catch (err) {
-      this.#quitting = true
+      this.#retired.add(sub)
       sub.disconnect()
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
@@ -221,7 +221,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     this.#subscribed = true
     this.#outageLogged = false
     this.logger.log(
-      `Subscribed to "${this.channel}"; events and revocations from other instances reach this instance`,
+      `Subscribed to "${this.channel}"; remote events and revocations reach this instance`,
     )
   }
 
@@ -230,7 +230,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     if (this.#outageLogged) return
     this.#outageLogged = true
     this.logger.warn(
-      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: not subscribed to "${this.channel}": ${reason}. Events and revocations from other instances will not reach this instance until it is subscribed again`,
+      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: not subscribed to "${this.channel}": ${reason}. Remote events and revocations will not reach this instance until it subscribes again`,
     )
   }
 

@@ -4,6 +4,7 @@
  * reports itself subscribed through connection drops and recoveries.
  * @layer test
  */
+import type { Socket } from 'node:net'
 import { Logger } from '@nestjs/common'
 import Redis from 'ioredis'
 import {
@@ -22,7 +23,7 @@ jest.setTimeout(3_000)
 
 const CHANNEL = 'bymax:realtime'
 const DOWN_PREFIX = `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "${CHANNEL}": `
-const UP = `Subscribed to "${CHANNEL}"; events and revocations from other instances reach this instance`
+const UP = `Subscribed to "${CHANNEL}"; remote events and revocations reach this instance`
 
 // What happened, in order, with the time since the test began. A failure carries it in its
 // message, because the order of a close, a ready and a reply is what these cases are about and
@@ -221,9 +222,60 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       expect(lines).toHaveLength(1)
       expect(lines[0]).toMatch(
         new RegExp(
-          `^${DOWN_PREFIX}.*ECONNREFUSED.*\\. Events and revocations from other instances will not reach this instance until it is subscribed again$`,
+          `^${DOWN_PREFIX}.*ECONNREFUSED.*\\. Remote events and revocations will not reach this instance until it subscribes again$`,
         ),
       )
+    }),
+  )
+
+  // A server that takes the connection and closes it without an error event is as unreachable
+  // as a closed port: the boot must complete, unready, and not wait for a reply that never comes.
+  it(
+    'completes the boot, unready, when the server closes every connection without an error',
+    traced(async () => {
+      const { warn } = spies()
+      const fake = await server((command, socket) => {
+        if (command[0] !== 'SUBSCRIBE') return healthyRedis(command, socket)
+        socket.end()
+        return null
+      })
+      const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
+      const started = Date.now()
+      await subscribe(pubsub)
+      expect(Date.now() - started).toBeLessThan(1000)
+      expect(pubsub.isSubscribed()).toBe(false)
+      expect(linesAbout(warn, 'not subscribed to')).toHaveLength(1)
+    }),
+  )
+
+  // The connection a handler's unsubscribe retired closes after a replacement has been confirmed;
+  // that close belongs to the old connection and says nothing about the new one.
+  it(
+    'keeps a replacement subscriber subscribed when the retired one closes afterwards',
+    traced(async () => {
+      const { warn } = spies()
+      let retired: Socket | null = null
+      const fake = await server((command, socket) => {
+        // Only the first QUIT is held; the teardown's own is answered.
+        if (command[0] === 'QUIT' && retired === null) {
+          retired = socket
+          return null
+        }
+        return healthyRedis(command, socket)
+      })
+      const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
+      const first = await subscribe(pubsub)
+      // The unsubscribe is waiting for QUIT to be answered when a new handler subscribes.
+      const unsubscribing = first()
+      await until('QUIT to reach the server', () => retired !== null)
+      await subscribe(pubsub)
+      expect(pubsub.isSubscribed()).toBe(true)
+      ;(retired as Socket | null)?.write('+OK\r\n')
+      ;(retired as Socket | null)?.end()
+      await unsubscribing
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(pubsub.isSubscribed()).toBe(true)
+      expect(linesAbout(warn, 'not subscribed to')).toHaveLength(0)
     }),
   )
 
@@ -316,7 +368,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       fake.drop()
       await until('the instance to report subscribed again', () => pubsub.isSubscribed())
       expect(warn.mock.calls.map((call) => String(call[0]))).toEqual([
-        `${DOWN_PREFIX}connection closed. Events and revocations from other instances will not reach this instance until it is subscribed again`,
+        `${DOWN_PREFIX}connection closed. Remote events and revocations will not reach this instance until it subscribes again`,
       ])
       expect(log.mock.calls.map((call) => String(call[0]))).toEqual([UP, UP])
     }),

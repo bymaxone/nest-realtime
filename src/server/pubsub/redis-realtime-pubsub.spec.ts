@@ -174,7 +174,7 @@ describe('RedisRealtimePubSub', () => {
       handlers['error']!(Object.assign(new Error(fields.message), fields))
       await subscribing
       expect(warn).toHaveBeenCalledWith(
-        `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "bymax:realtime": ${reason}. Events and revocations from other instances will not reach this instance until it is subscribed again`,
+        `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "bymax:realtime": ${reason}. Remote events and revocations will not reach this instance until it subscribes again`,
       )
     } finally {
       warn.mockRestore()
