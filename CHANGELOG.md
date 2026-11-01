@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tests
+
+- **The README Quick Start is executed, not only type-checked.** Specs take the Quick Start
+  blocks from the README text, compile them and run them against a real Nest application over HTTP,
+  a real Socket.IO handshake and jsdom. A wrong option shape, a route that is never mounted, a missing `eventNames` entry or a
+  `main.ts` without the adapter now fails a test instead of reaching a reader. No source or
+  published-surface change, so there is nothing to apply.
+
+### Internal
+
+- The Release workflow takes the GitHub Release notes from the tag's CHANGELOG section before the
+  gates run, matching the heading literally, and fails the release when the section is missing or
+  blank instead of falling back to a pointer. The notes reach `gh release create` through a file.
+
 ## [1.2.5] - 2026-11-01
 
 ### Added
