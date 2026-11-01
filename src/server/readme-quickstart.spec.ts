@@ -261,6 +261,71 @@ describe('README Quick Start — SSE', () => {
   })
 })
 
+/**
+ * Run the README's `app.module.ts` and `main.ts` blocks as printed. `NestFactory.create` is wrapped
+ * only to hand the application to `onCreate` and to turn `listen(3000)` into a free port; the
+ * promise resolves with that port once the application is listening.
+ */
+async function startMainTs(onCreate: (app: INestApplication) => void): Promise<number> {
+  let started: INestApplication | undefined
+  const nestFactory = {
+    create: async (...args: Parameters<typeof nestCore.NestFactory.create>) => {
+      const app = await nestCore.NestFactory.create(...args)
+      started = app
+      onCreate(app)
+      const listenOn = app.listen.bind(app)
+      app.listen = ((_port: number | string, ...rest: unknown[]) =>
+        (listenOn as (...a: unknown[]) => Promise<unknown>)(0, ...rest)) as typeof app.listen
+      return app
+    },
+  }
+  const moduleExports = runBlock(block('BymaxRealtimeWebSocketModule.forRoot'), {
+    ...publicModules,
+    './auth/cookie-authenticator': { CookieAuthenticator: loadAuthenticator() },
+  })
+  runBlock(block('NestFactory.create'), {
+    ...publicModules,
+    '@nestjs/core': { ...nestCore, NestFactory: nestFactory },
+    './app.module': moduleExports,
+  })
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const address = started?.getHttpServer().address() as AddressInfo | null | undefined
+    if (address) return address.port
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error('main.ts never started listening')
+}
+
+/** Connect to `url` with the good cookie; resolves once `connection:established` arrives. */
+async function connectAccepted(url: string): Promise<void> {
+  const socket = io(url, {
+    transports: ['websocket'],
+    reconnection: false,
+    extraHeaders: { cookie: 'access_token=good-token' },
+  })
+  try {
+    await new Promise<void>((resolve, reject) => {
+      socket.on('connection:established', () => resolve())
+      socket.on('connect_error', reject)
+    })
+  } finally {
+    socket.close()
+  }
+}
+
+/** Connect to `url` without a cookie; resolves with the `err.data.code` of the refusal. */
+async function connectRefused(url: string): Promise<string | undefined> {
+  const socket = io(url, { transports: ['websocket'], reconnection: false })
+  try {
+    const refusal = await new Promise<{ data?: { code?: string } }>((resolve) => {
+      socket.on('connect_error', resolve)
+    })
+    return refusal.data?.code
+  } finally {
+    socket.close()
+  }
+}
+
 describe('README Quick Start — WebSocket', () => {
   let created: INestApplication | undefined
 
@@ -273,60 +338,19 @@ describe('README Quick Start — WebSocket', () => {
   it('boots main.ts with the adapter and accepts or refuses a handshake by cookie', async () => {
     /**
      * Guards the README section "Quick Start", step 7, and changes when it does: the
-     * `app.module.ts` and `main.ts` blocks are run as printed. `NestFactory.create` is wrapped
-     * only to keep the application and to turn `listen(3000)` into a free port. With
-     * `RealtimeIoAdapter` installed the module does not log the missing-adapter error, a
-     * handshake carrying the good cookie is established, one without a cookie is refused with
-     * `REALTIME_AUTH_FAILED`, and the CORS origin the block configures is the one answered.
+     * `app.module.ts` and `main.ts` blocks are run as printed. With `RealtimeIoAdapter`
+     * installed the module does not log the missing-adapter error, a handshake carrying the good
+     * cookie is established, one without a cookie is refused with `REALTIME_AUTH_FAILED`, and the
+     * CORS origin the block configures is the one answered.
      */
     const errorLog = jest.spyOn(Logger.prototype, 'error')
-    const nestFactory = {
-      create: async (...args: Parameters<typeof nestCore.NestFactory.create>) => {
-        const app = await nestCore.NestFactory.create(...args)
-        created = app
-        const listenOn = app.listen.bind(app)
-        app.listen = ((_port: number | string, ...rest: unknown[]) =>
-          (listenOn as (...a: unknown[]) => Promise<unknown>)(0, ...rest)) as typeof app.listen
-        return app
-      },
-    }
-    const moduleExports = runBlock(block('BymaxRealtimeWebSocketModule.forRoot'), {
-      ...publicModules,
-      './auth/cookie-authenticator': { CookieAuthenticator: loadAuthenticator() },
+    const port = await startMainTs((app) => {
+      created = app
     })
-    runBlock(block('NestFactory.create'), {
-      ...publicModules,
-      '@nestjs/core': { ...nestCore, NestFactory: nestFactory },
-      './app.module': moduleExports,
-    })
-    const listening = async (): Promise<number> => {
-      for (let attempt = 0; attempt < 100; attempt++) {
-        const address = created?.getHttpServer().address() as AddressInfo | null | undefined
-        if (address) return address.port
-        await new Promise((r) => setTimeout(r, 20))
-      }
-      throw new Error('main.ts never started listening')
-    }
-    const port = await listening()
     const url = `http://127.0.0.1:${port}`
 
-    const accepted = io(url, {
-      transports: ['websocket'],
-      reconnection: false,
-      extraHeaders: { cookie: 'access_token=good-token' },
-    })
-    await new Promise<void>((resolve, reject) => {
-      accepted.on('connection:established', () => resolve())
-      accepted.on('connect_error', reject)
-    })
-    accepted.close()
-
-    const refused = io(url, { transports: ['websocket'], reconnection: false })
-    const refusal = await new Promise<{ data?: { code?: string } }>((resolve) => {
-      refused.on('connect_error', resolve)
-    })
-    expect(refusal.data?.code).toBe('REALTIME_AUTH_FAILED')
-    refused.close()
+    await connectAccepted(url)
+    expect(await connectRefused(url)).toBe('REALTIME_AUTH_FAILED')
 
     const preflight = await request(url)
       .get('/socket.io/?EIO=4&transport=polling')
