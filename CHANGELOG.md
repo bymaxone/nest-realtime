@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A revocation that cannot reach its connection no longer answers success.** `disconnect()` on
+  `RealtimeService` resolved even when the revocation was never delivered: a failed cross-instance
+  publish was logged and swallowed, and in `transport: 'both'` a failure of either transport was
+  swallowed with no log at all, so a revoked client could stay connected while the caller was told it
+  was gone. It now rejects with `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the revocation and
+  with `REALTIME_TRANSPORT_UNAVAILABLE` when the transport that holds the connection fails or the
+  WebSocket server is not attached. It resolves when the connection was closed on this instance or the
+  revocation was handed to the bus. `joinRoom` and `leaveRoom` reject the same way when the
+  transport that holds the connection fails, in place of reporting a join or a leave that did not
+  happen, and they now change nothing for a connection the instance does not hold (they used to
+  record a room membership with no connection behind it). An emit stays at-most-once and still
+  resolves when its publish fails.
+- **A revocation that fails during re-authentication is retried.** The cycle kept the failure to
+  itself and stopped revalidating the remaining connections; it now logs it, goes on, and revalidates
+  the connection again on the next cycle. A rejected cycle no longer leaves an unhandled rejection.
+
+#### Apply to a derived backend
+
+Await `disconnect()` and handle its rejection where you revoke a connection: a rejection means the
+connection may still be connected, so retry or alert. A caller that ignored the returned promise now
+risks an unhandled rejection. `joinRoom` and `leaveRoom` can reject the same way, and are local to the
+instance that holds the connection. `REALTIME_ERROR_CODES` gains `TRANSPORT_UNAVAILABLE`.
+
+### Internal
+
+- The `internal` and `websocket` bundle budgets in `pnpm size` are raised to fit the revocation that
+  rejects when it cannot reach its connection.
+- The workflow jobs that check out the repository and then run its scripts no longer keep the job's
+  token in the git configuration: `persist-credentials: false` on the checkout wherever no later
+  step pushes or tags.
+
 ## [1.2.6] - 2026-11-01
 
 ### Fixed
@@ -50,9 +83,6 @@ the client.
 - A workflow runs the same check in a pull request that changes `package.json` and moves the version,
   so a release that changes the declarations without the note fails before the tag. A pull request
   that leaves the version alone skips it.
-- The workflow jobs that check out the repository and then run its scripts no longer keep the job's
-  token in the git configuration: `persist-credentials: false` on the checkout wherever no later
-  step pushes or tags.
 - The `internal` bundle budget in `pnpm size` is raised to fit the client-address validation.
 
 ## [1.2.5] - 2026-11-01

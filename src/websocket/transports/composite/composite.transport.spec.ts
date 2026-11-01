@@ -99,32 +99,54 @@ describe('CompositeTransport', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WS down'))
   })
 
-  it('joinRoom resolves when SSE rejects and WS succeeds', async () => {
-    // Only the owning transport succeeds; the other rejection is tolerated.
-    sseMock.joinRoom.mockRejectedValue(new Error('not SSE'))
-    await expect(composite.joinRoom('conn-1', 'room:x')).resolves.toBeUndefined()
+  it('joinRoom and leaveRoom reach both transports', async () => {
+    // Each transport decides whether it holds the connection; the composite asks both.
+    await composite.joinRoom('conn-1', 'room:x')
+    await composite.leaveRoom('conn-1', 'room:x')
+    expect(sseMock.joinRoom).toHaveBeenCalledWith('conn-1', 'room:x')
     expect(wsMock.joinRoom).toHaveBeenCalledWith('conn-1', 'room:x')
+    expect(sseMock.leaveRoom).toHaveBeenCalledWith('conn-1', 'room:x')
+    expect(wsMock.leaveRoom).toHaveBeenCalledWith('conn-1', 'room:x')
   })
 
-  it('joinRoom resolves even when both transports reject', async () => {
-    // Both failing is tolerated — the composite never throws from joinRoom.
-    sseMock.joinRoom.mockRejectedValue(new Error('sse fail'))
-    wsMock.joinRoom.mockRejectedValue(new Error('ws fail'))
-    await expect(composite.joinRoom('conn-1', 'room:x')).resolves.toBeUndefined()
+  it('joinRoom rejects with the failure of the transport that failed', async () => {
+    // A failing owner must reach the caller: a client left out of a room it was added to
+    // would otherwise be reported as joined.
+    wsMock.joinRoom.mockRejectedValue(new Error('ws join failed'))
+    await expect(composite.joinRoom('conn-1', 'room:x')).rejects.toThrow('ws join failed')
+    expect(sseMock.joinRoom).toHaveBeenCalledWith('conn-1', 'room:x')
   })
 
-  it('leaveRoom resolves when one side rejects', async () => {
-    // Tolerance applies to leaveRoom too.
-    wsMock.leaveRoom.mockRejectedValue(new Error('ws fail'))
-    await expect(composite.leaveRoom('conn-1', 'room:x')).resolves.toBeUndefined()
+  it('leaveRoom rejects with the failure of the transport that failed', async () => {
+    // A client that stays in a room it was removed from keeps receiving that room's events.
+    wsMock.leaveRoom.mockRejectedValue(new Error('ws leave failed'))
+    await expect(composite.leaveRoom('conn-1', 'room:x')).rejects.toThrow('ws leave failed')
     expect(sseMock.leaveRoom).toHaveBeenCalledWith('conn-1', 'room:x')
   })
 
-  it('disconnect resolves when one side rejects', async () => {
-    // Tolerance applies to disconnect.
+  it('disconnect asks both transports and resolves when neither fails', async () => {
+    // The transport that holds the connection closes it; the other is a no-op.
+    await expect(composite.disconnect('conn-1', 'revoked')).resolves.toBeUndefined()
+    expect(sseMock.disconnect).toHaveBeenCalledWith('conn-1', 'revoked')
+    expect(wsMock.disconnect).toHaveBeenCalledWith('conn-1', 'revoked')
+  })
+
+  it('disconnect rejects with the failure of the transport that failed', async () => {
+    // A revocation that did not reach the connection is not a success.
     sseMock.disconnect.mockRejectedValue(new Error('sse fail'))
-    await expect(composite.disconnect('conn-1')).resolves.toBeUndefined()
+    await expect(composite.disconnect('conn-1')).rejects.toThrow('sse fail')
     expect(wsMock.disconnect).toHaveBeenCalledWith('conn-1', undefined)
+  })
+
+  it('disconnect names both failures when both transports fail', async () => {
+    sseMock.disconnect.mockRejectedValue(new Error('sse fail'))
+    wsMock.disconnect.mockRejectedValue(new Error('ws fail'))
+    const failure = await composite.disconnect('conn-1').catch((error: unknown) => error)
+    expect((failure as Error).message).toContain('REALTIME_TRANSPORT_UNAVAILABLE')
+    expect(((failure as Error).cause as AggregateError).errors.map(String)).toEqual([
+      'Error: sse fail',
+      'Error: ws fail',
+    ])
   })
 
   it('fanOut logs warn using reason directly when rejected value has no .message', async () => {

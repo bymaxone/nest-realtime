@@ -499,7 +499,7 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 | Credential validation | Delegated entirely to consumer-supplied `IConnectionAuthenticator`             |
 | Auth library imports  | None — enforced by a CI grep over `src/`                                       |
 | Tenant isolation      | Room-scoped (`tenant:{id}`), resolved from the authenticated result            |
-| Connection revocation | `disconnect(connectionId)`, propagated cross-instance via `op: 'disconnect'`   |
+| Connection revocation | `disconnect(connectionId)`, propagated cross-instance via `op: 'disconnect'`; rejects when it cannot reach the connection |
 | Credential expiry     | Interval re-authentication with `disconnect` or event on failure               |
 | Connection flooding   | FIFO eviction per user — oldest closed, new admitted, never a 429              |
 | SSE transport headers | `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform` by default |
@@ -571,6 +571,10 @@ The unified emit API. Identical on every transport.
 | `disconnect(connectionId, reason?)`   | Revoke a connection, cross-instance aware |
 
 All methods return `Promise<void>`.
+
+**Revocation is never best-effort.** `disconnect(connectionId)` resolves when the connection was closed on this instance or when the revocation was handed to the bus (`IRealtimePubSub`). It **rejects** when it could not: `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the publish, `REALTIME_TRANSPORT_UNAVAILABLE` when the WebSocket server is not attached or its fan-out throws. A rejection means the connection may still be connected, so retry. An emit is different: `emitToUser`, `emitToTenant`, `emitToRoom` and `broadcast` stay at-most-once, and resolve even when the publish to the other instances failed.
+
+`joinRoom` and `leaveRoom` act on a connection **this instance holds**; for any other id they resolve and change nothing. A failure of the transport that holds the connection rejects the call.
 
 ### ConnectionRegistry
 
@@ -848,7 +852,8 @@ These names belong to the library. Do not reuse them for application events. The
 | `REALTIME_REAUTHENTICATION_FAILED` | Raised when a revalidation fails                                    |
 | `REALTIME_TOO_MANY_CONNECTIONS`    | Raised as the reason an evicted connection is closed                |
 | `REALTIME_INVALID_TICKET`          | Reserved, never raised today: a ticket store is yours to write      |
-| `REALTIME_PUBSUB_UNAVAILABLE`      | Reserved, never raised today: a pub/sub failure is logged           |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | Raised as the rejection of a disconnect when the bus refuses the revocation; an emit's publish failure is logged |
+| `REALTIME_TRANSPORT_UNAVAILABLE`   | Raised as the rejection of a disconnect, a join or a leave when the transport that holds the connection fails or has no server attached |
 | `REALTIME_REDIS_ADAPTER_FAILED`    | Raised at bootstrap when the Redis adapter is configured and cannot be installed |
 | `REALTIME_PAYLOAD_TOO_LARGE`       | Reserved, never raised today                                        |
 | `REALTIME_REPLAY_BUFFER_MISS`      | Reserved, never raised today                                        |

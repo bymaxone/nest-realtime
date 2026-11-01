@@ -402,9 +402,23 @@ describe('WebSocketTransport', () => {
     expect(server._inChain.disconnectSockets).toHaveBeenCalledWith(true)
   })
 
-  it('disconnect is a safe no-op when the server is unset', async () => {
-    // Without a wired server there is nothing to revoke; it must not throw.
-    await expect(transport.disconnect('sock-1')).resolves.toBeUndefined()
+  it('disconnect rejects with REALTIME_TRANSPORT_UNAVAILABLE when the server is unset', async () => {
+    // Without a wired server the revocation cannot reach any connection, here or on another
+    // node, so the caller is told instead of being answered with a success.
+    const failure = await transport.disconnect('sock-1').catch((error: unknown) => error)
+    expect((failure as Error).message).toContain('REALTIME_TRANSPORT_UNAVAILABLE')
+  })
+
+  it('disconnect rejects with REALTIME_TRANSPORT_UNAVAILABLE when the adapter throws', async () => {
+    // A failure of the adapter-aware fan-out is the owner transport failing: it propagates.
+    const server = makeServer()
+    server._inChain.disconnectSockets.mockImplementation(() => {
+      throw new Error('adapter down')
+    })
+    transport.setServer(server as never)
+    const failure = await transport.disconnect('remote-id').catch((error: unknown) => error)
+    expect((failure as Error).message).toContain('REALTIME_TRANSPORT_UNAVAILABLE')
+    expect(((failure as Error).cause as Error).message).toBe('adapter down')
   })
 
   // Under a configured websocket.namespace the gateway is wired to a Namespace,

@@ -235,17 +235,19 @@ describe('SseTransport', () => {
     expect(onDisconnect).toHaveBeenCalledWith(expect.objectContaining({ reason: 'revoked' }))
   })
 
-  // Disconnecting a connection not owned here publishes a cross-instance revocation.
-  it('publishes op:disconnect for a non-local connection', async () => {
+  // Disconnecting a connection this instance does not know publishes a cross-instance revocation;
+  // one it holds as a WebSocket is the WebSocket transport's to close, so nothing is published.
+  it('publishes op:disconnect only for a connection it does not hold', async () => {
     const { transport, connections, publish } = build()
     addConn(connections, { connectionId: 'ws1', userId: 'u1', transport: 'websocket' })
-    await transport.disconnect('missing')
     await transport.disconnect('ws1')
-    expect(publish).toHaveBeenCalledTimes(2)
+    expect(publish).not.toHaveBeenCalled()
+    await transport.disconnect('missing')
+    expect(publish).toHaveBeenCalledTimes(1)
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({
         op: 'disconnect',
-        args: expect.objectContaining({ connectionId: expect.any(String) }),
+        args: { connectionId: 'missing', reason: undefined },
       }),
     )
   })
@@ -256,9 +258,32 @@ describe('SseTransport', () => {
     await expect(transport.disconnectLocal('nope')).resolves.toBeUndefined()
   })
 
+  // A revocation that cannot be published has not reached the connection: it rejects with the
+  // pub/sub code, where an emit that cannot be published stays best-effort.
+  it('rejects a disconnect it cannot publish with REALTIME_PUBSUB_UNAVAILABLE', async () => {
+    const { transport, publish } = build()
+    publish.mockRejectedValueOnce(new Error('redis down'))
+    const failure = await transport.disconnect('held-elsewhere').catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(Error)
+    expect((failure as Error).message).toContain('REALTIME_PUBSUB_UNAVAILABLE')
+    expect(((failure as Error).cause as Error).message).toBe('redis down')
+  })
+
+  // Joining or leaving a room applies to a connection this instance holds; for any other id
+  // the call resolves without recording a membership nothing can deliver to.
+  it('does not record room membership for a connection this instance does not hold', async () => {
+    const { transport, rooms, connections } = build()
+    addConn(connections, { connectionId: 'ws1', userId: 'u1', transport: 'websocket' })
+    await transport.joinRoom('missing', 'room:x')
+    await transport.joinRoom('ws1', 'room:x')
+    expect(rooms.members('room:x')).toEqual([])
+    await expect(transport.leaveRoom('missing', 'room:x')).resolves.toBeUndefined()
+  })
+
   // joinRoom and leaveRoom delegate to the room registry.
   it('joins and leaves rooms', async () => {
-    const { transport, rooms } = build()
+    const { transport, rooms, connections } = build()
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
     await transport.joinRoom('c1', 'room:x')
     expect(rooms.members('room:x')).toEqual(['c1'])
     await transport.leaveRoom('c1', 'room:x')

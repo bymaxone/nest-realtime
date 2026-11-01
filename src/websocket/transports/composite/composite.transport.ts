@@ -3,7 +3,12 @@
  * @layer transport
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { describeError, SseTransport } from '@bymax-one/nest-realtime/internal'
+import {
+  describeError,
+  REALTIME_ERROR_CODES,
+  SseTransport,
+  unavailableError,
+} from '@bymax-one/nest-realtime/internal'
 import type { ITransport } from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from '../websocket/websocket.transport'
 
@@ -14,10 +19,12 @@ import { WebSocketTransport } from '../websocket/websocket.transport'
  * parallel via `Promise.allSettled` so a failure in one never aborts the other.
  * Failures are logged as warnings without rethrowing.
  *
- * `joinRoom`, `leaveRoom`, and `disconnect` attempt both transports tolerantly:
- * only the transport that owns the connection will succeed; the other's rejection
- * is swallowed. There is no double-delivery because each connection lives on
- * exactly one transport.
+ * `joinRoom`, `leaveRoom`, and `disconnect` ask both transports and settle both: each
+ * transport acts only on a connection it holds, and a connection neither holds is handed
+ * to the bus (SSE) and the adapter (WebSocket) for the instance that does. A failure of
+ * either one rejects the call, because a revocation or a room change that did not happen
+ * must not be reported as done. There is no double-delivery because each connection lives
+ * on exactly one transport.
  *
  * `kind` reports `'sse'` (the dominant transport); `ITransport.kind` is
  * `'sse' | 'websocket'` — `'both'` is a module-level `TransportMode`, not a
@@ -95,39 +102,64 @@ export class CompositeTransport implements ITransport {
   /**
    * Join a connection to a room.
    *
-   * Both transports are attempted; only the one that owns the connection
-   * succeeds. The other's failure is expected and swallowed.
+   * Both transports are asked; the one that holds the connection acts. Rejects with the
+   * failure of whichever transport failed.
    */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
-    await Promise.all([
-      this.sse.joinRoom(connectionId, roomId).catch(() => undefined),
-      this.ws.joinRoom(connectionId, roomId).catch(() => undefined),
+    await this.settleBoth('joinRoom', connectionId, [
+      () => this.sse.joinRoom(connectionId, roomId),
+      () => this.ws.joinRoom(connectionId, roomId),
     ])
   }
 
   /**
    * Remove a connection from a room.
    *
-   * Both transports are attempted tolerantly — one will succeed, the other
-   * may fail silently.
+   * Both transports are asked; the one that holds the connection acts. Rejects with the
+   * failure of whichever transport failed: a client left in a room it was removed from keeps
+   * receiving that room's events.
    */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
-    await Promise.all([
-      this.sse.leaveRoom(connectionId, roomId).catch(() => undefined),
-      this.ws.leaveRoom(connectionId, roomId).catch(() => undefined),
+    await this.settleBoth('leaveRoom', connectionId, [
+      () => this.sse.leaveRoom(connectionId, roomId),
+      () => this.ws.leaveRoom(connectionId, roomId),
     ])
   }
 
   /**
    * Disconnect a specific connection.
    *
-   * Both transports are attempted; the one owning the connection disconnects it.
+   * Both transports are asked; the one that holds the connection disconnects it. Rejects when
+   * either one could not: the revocation has not reached the connection.
    */
   async disconnect(connectionId: string, reason?: string): Promise<void> {
-    await Promise.all([
-      this.sse.disconnect(connectionId, reason).catch(() => undefined),
-      this.ws.disconnect(connectionId, reason).catch(() => undefined),
+    await this.settleBoth('disconnect', connectionId, [
+      () => this.sse.disconnect(connectionId, reason),
+      () => this.ws.disconnect(connectionId, reason),
     ])
+  }
+
+  /**
+   * Run a per-connection operation on both transports and reject if either failed.
+   *
+   * One failure is rethrown as it is; both are reported together under
+   * `REALTIME_TRANSPORT_UNAVAILABLE`, with every reason in `cause`.
+   */
+  private async settleBoth(
+    op: string,
+    connectionId: string,
+    tasks: Array<() => Promise<void>>,
+  ): Promise<void> {
+    const results = await Promise.allSettled(tasks.map((t) => t()))
+    const reasons = results.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []))
+    if (reasons.length === 0) return
+    if (reasons.length === 1) throw reasons[0]
+    throw unavailableError(
+      REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+      CompositeTransport.name,
+      `${op} of ${connectionId} failed on both transports`,
+      new AggregateError(reasons),
+    )
   }
 
   /**

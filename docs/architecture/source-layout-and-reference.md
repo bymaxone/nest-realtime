@@ -197,7 +197,8 @@ E2E tests use the `eventsource` npm package as a Node.js polyfill for `EventSour
 | `REALTIME_REAUTHENTICATION_FAILED` | `REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED` | `revalidate()` returned `false`                   |
 | `REALTIME_TOO_MANY_CONNECTIONS`    | `REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS`    | FIFO eviction of oldest connection                |
 | `REALTIME_INVALID_TICKET`          | `REALTIME_ERROR_CODES.INVALID_TICKET`          | Ticket not found / expired                        |
-| `REALTIME_PUBSUB_UNAVAILABLE`      | `REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE`      | Pub/sub backend unreachable (degrades gracefully) |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | `REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE`      | `disconnect()` rejects: the bus refused the revocation (an emit's publish failure is logged) |
+| `REALTIME_TRANSPORT_UNAVAILABLE`   | `REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE`   | `disconnect()`, `joinRoom()`, `leaveRoom()` reject: the holding transport failed or has no server |
 | `REALTIME_REDIS_ADAPTER_FAILED`    | `REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED`    | `websocket.redisAdapter` set, adapter not installable (boot fails) |
 | `REALTIME_PAYLOAD_TOO_LARGE`       | `REALTIME_ERROR_CODES.PAYLOAD_TOO_LARGE`       | Event data exceeds configured limit               |
 | `REALTIME_REPLAY_BUFFER_MISS`      | `REALTIME_ERROR_CODES.REPLAY_BUFFER_MISS`      | `Last-Event-ID` outside the replay window         |

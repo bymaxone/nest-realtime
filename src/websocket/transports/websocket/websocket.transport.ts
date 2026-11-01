@@ -12,6 +12,7 @@ import {
   REALTIME_OPTIONS_TOKEN,
   ROOM_PREFIXES,
   REALTIME_ERROR_CODES,
+  unavailableError,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   ITransport,
@@ -270,13 +271,31 @@ export class WebSocketTransport implements ITransport {
    *
    * @param connectionId - The socket `id` of the connection to disconnect.
    * @param _reason - Optional reason string (unused at the Socket.IO level; passed to `unregisterSocket`).
+   * @throws {Error} `REALTIME_TRANSPORT_UNAVAILABLE` when no server is attached or the
+   *   fan-out throws: the revocation did not leave this node.
    */
   async disconnect(connectionId: string, _reason?: string): Promise<void> {
     const server = this.server
-    if (!server) return
-    const local = this.localSockets()?.get(connectionId)
-    if (local) local.disconnect(true)
-    server.in(`${CONNECTION_ROOM_PREFIX}:${connectionId}`).disconnectSockets(true)
+    if (!server) {
+      throw unavailableError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        WebSocketTransport.name,
+        `the WebSocket server is not attached, so ${connectionId} cannot be revoked`,
+        new Error('server not attached'),
+      )
+    }
+    try {
+      const local = this.localSockets()?.get(connectionId)
+      if (local) local.disconnect(true)
+      server.in(`${CONNECTION_ROOM_PREFIX}:${connectionId}`).disconnectSockets(true)
+    } catch (error) {
+      throw unavailableError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        WebSocketTransport.name,
+        `the revocation of ${connectionId} could not be sent`,
+        error,
+      )
+    }
   }
 
   /**
