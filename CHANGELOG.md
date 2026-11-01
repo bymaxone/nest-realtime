@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   connection context's `ip` and the `ip` the hooks receive were the first raw entry of that header,
   which the client writes, with no check that it was an address and no regard for the application's
   `trust proxy` setting: with `trust proxy` set to `'loopback'` and the header `6.6.6.6, 203.0.113.9`,
-  Express reported `203.0.113.9` and the library reported `6.6.6.6`. On SSE `ip` is now the address `trust proxy` produced (`req.ip`, else the nearest trusted hop, else the socket
+  Express reported `203.0.113.9` and the library reported `6.6.6.6`. On SSE `ip` is now the address `trust proxy` produced (`req.ip`, else an address from `req.ips`, else the socket
   peer), `''` when no channel carries an address, and a header text that is not an address is never
   returned. WebSocket is unchanged: it reads the handshake's peer address. `SseRequest` gains an
   optional `ips`.
@@ -48,8 +48,7 @@ the client.
 - A workflow runs the same check in a pull request that changes `package.json` and moves the version,
   so a release that changes the declarations without the note fails before the tag. A pull request
   that leaves the version alone skips it.
-- The `internal` bundle budget in `pnpm size` is raised to fit the client-address validation, whose
-  zone and peer rules are code that cannot be trimmed.
+- The `internal` bundle budget in `pnpm size` is raised to fit the client-address validation.
 
 ## [1.2.5] - 2026-11-01
 
