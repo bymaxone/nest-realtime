@@ -8,17 +8,11 @@
  *
  * Environment: TRANSPORT=sse|websocket, PORT, REDIS_URL (optional; turns on the Redis fan-out).
  */
-import { createRequire } from 'node:module'
 import { NestFactory } from '@nestjs/core'
 import { Redis } from 'ioredis'
 import { performance } from 'node:perf_hooks'
 import { BymaxRealtimeModule, RealtimeService, RedisRealtimePubSub } from '@bymax-one/nest-realtime'
 import { BymaxRealtimeWebSocketModule, RealtimeIoAdapter } from '@bymax-one/nest-realtime/websocket'
-
-// The ESM bundle loads the optional Redis adapter with a bare `require`, which an ES module does not
-// have. BENCH_REQUIRE_SHIM=1 supplies one so the adapter can be measured; unset, the bundle is
-// measured exactly as a consumer receives it.
-if (process.env.BENCH_REQUIRE_SHIM === '1') globalThis.require = createRequire(import.meta.url)
 
 const transport = process.env.TRANSPORT === 'websocket' ? 'websocket' : 'sse'
 const port = Number(process.env.PORT)

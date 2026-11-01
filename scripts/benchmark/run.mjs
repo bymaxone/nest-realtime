@@ -321,7 +321,109 @@ if (only.has('redis')) {
   for (const t of transports) results.scenarios.redis.push(await benchRedisConnections(t))
 }
 
+/** Markdown tables for the scenarios that ran, so a results document is generated, not retyped. */
+function toMarkdown(report) {
+  const out = []
+  const row = (cells) => `| ${cells.join(' | ')} |`
+  const table = (head, rows) => [row(head), row(head.map(() => '---')), ...rows.map(row)].join('\n')
+  const ms = (s) => [s.p50, s.p95, s.p99, s.max]
+  const { connect, fanout, memory, cross, redis } = report.scenarios
+  if (connect) {
+    out.push(
+      '### Connect latency (ms)',
+      '',
+      table(
+        ['transport', 'p50', 'p95', 'p99', 'max'],
+        connect.map((r) => [r.transport, ...ms(r.connectMs)]),
+      ),
+      '',
+    )
+  }
+  if (fanout) {
+    out.push(
+      '### Fan-out latency, emit to client receipt (ms)',
+      '',
+      table(
+        [
+          'transport',
+          'clients',
+          'deliveries',
+          'p50',
+          'p95',
+          'p99',
+          'slowest recipient p50',
+          'slowest recipient p99',
+          'client loop lag p99',
+        ],
+        fanout.map((r) => [
+          r.transport,
+          r.clients,
+          `${r.received}/${r.expectedDeliveries}`,
+          r.deliveryMs.p50,
+          r.deliveryMs.p95,
+          r.deliveryMs.p99,
+          r.slowestRecipientMs.p50,
+          r.slowestRecipientMs.p99,
+          r.clientLoopDelayMs.p99,
+        ]),
+      ),
+      '',
+    )
+  }
+  if (memory) {
+    out.push(
+      '### Memory per idle connection',
+      '',
+      table(
+        ['transport', 'clients', 'RSS KiB/conn', 'heap KiB/conn', 'idle RSS MiB', 'loaded RSS MiB'],
+        memory.map((r) => [
+          r.transport,
+          r.clients,
+          r.rssPerConnectionKiB,
+          r.heapPerConnectionKiB,
+          r.idleRssMiB,
+          r.loadedRssMiB,
+        ]),
+      ),
+      '',
+    )
+  }
+  if (cross) {
+    out.push(
+      '### Cross-instance latency through Redis (ms)',
+      '',
+      table(
+        ['transport', 'clients on other instance', 'deliveries', 'p50', 'p95', 'p99', 'max'],
+        cross.map((r) => [
+          r.transport,
+          r.clientsOnOtherInstance,
+          `${r.received}/${r.expectedDeliveries}`,
+          ...ms(r.deliveryMs),
+        ]),
+      ),
+      '',
+    )
+  }
+  if (redis) {
+    out.push(
+      '### Redis connections per instance',
+      '',
+      table(
+        ['transport', 'after 1 instance', 'after 2 instances'],
+        redis.map((r) => [
+          r.transport,
+          r.connectionsAfterOneInstance,
+          r.connectionsAfterTwoInstances,
+        ]),
+      ),
+      '',
+    )
+  }
+  return `${out.join('\n')}\n`
+}
+
 mkdirSync(dirname(outFile), { recursive: true })
 writeFileSync(outFile, `${JSON.stringify(results, null, 2)}\n`)
+writeFileSync(outFile.replace(/\.json$/, '') + '.md', toMarkdown(results))
 console.log(JSON.stringify(results, null, 2))
 process.exit(0)
