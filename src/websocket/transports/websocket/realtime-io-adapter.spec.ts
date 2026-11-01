@@ -23,9 +23,9 @@ function makeApp(options: Partial<BymaxRealtimeModuleOptions> = {}) {
   }
 }
 
-/** Minimal server mock with an `adapter` method. */
+/** Minimal server mock with the `adapter` and `close` methods. */
 function makeServer() {
-  return { adapter: jest.fn() }
+  return { adapter: jest.fn(), close: jest.fn().mockResolvedValue(undefined) }
 }
 
 describe('RealtimeIoAdapter', () => {
@@ -191,6 +191,63 @@ describe('RealtimeIoAdapter', () => {
       expect(() => boot({})).toThrow(
         /^\[RealtimeIoAdapter\] REALTIME_REDIS_ADAPTER_FAILED: .*\(.*duplicate.*\)\. Install @socket\.io\/redis-adapter/,
       )
+    })
+
+    it('closes the server it created, so a failed boot leaves no listener behind', () => {
+      // With an explicit port the server listens by itself; a boot that failed must not keep the process alive.
+      const { createAdapter } = jest.requireMock('@socket.io/redis-adapter') as {
+        createAdapter: jest.Mock
+      }
+      createAdapter.mockImplementationOnce(() => {
+        throw new Error('adapter constructor exploded')
+      })
+      const server = { adapter: jest.fn(), close: jest.fn().mockResolvedValue(undefined) }
+      superSpy.mockReturnValue(server)
+
+      expect(() =>
+        new RealtimeIoAdapter(
+          makeApp({
+            websocket: {
+              redisAdapter: { pubClient: { duplicate: jest.fn().mockReturnValue({}) } },
+            },
+          }) as never,
+        ).createIOServer(3000),
+      ).toThrow('adapter constructor exploded')
+
+      expect(server.close).toHaveBeenCalledTimes(1)
+    })
+
+    it('still throws the install error when closing the server fails', async () => {
+      const server = {
+        adapter: jest.fn(),
+        close: jest.fn().mockRejectedValue(new Error('close failed')),
+      }
+      superSpy.mockReturnValue(server)
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+
+      expect(() =>
+        new RealtimeIoAdapter(
+          makeApp({ websocket: { redisAdapter: { pubClient: {} } } }) as never,
+        ).createIOServer(3000),
+      ).toThrow('REALTIME_REDIS_ADAPTER_FAILED')
+      await new Promise((resolve) => setImmediate(resolve))
+
+      process.off('unhandledRejection', unhandled)
+      expect(unhandled).not.toHaveBeenCalled()
+    })
+
+    it('does not close the server when the install succeeds', () => {
+      const server = { adapter: jest.fn(), close: jest.fn() }
+      superSpy.mockReturnValue(server)
+
+      new RealtimeIoAdapter(
+        makeApp({
+          websocket: { redisAdapter: { pubClient: { duplicate: jest.fn().mockReturnValue({}) } } },
+        }) as never,
+      ).createIOServer(3000)
+
+      expect(server.close).not.toHaveBeenCalled()
     })
 
     it('names a rejection that is not an Error by its string form', () => {

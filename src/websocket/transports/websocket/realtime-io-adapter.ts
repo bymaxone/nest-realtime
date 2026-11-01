@@ -94,10 +94,19 @@ export class RealtimeIoAdapter extends IoAdapter {
       maxHttpBufferSize: wsOpts.maxHttpBufferSize ?? 1_000_000,
     } as ServerOptions
 
-    const server = super.createIOServer(port, mergedOpts) as { adapter: (a: unknown) => void }
+    const server = super.createIOServer(port, mergedOpts) as {
+      adapter: (a: unknown) => void
+      close: () => Promise<void>
+    }
 
     if (wsOpts.redisAdapter?.pubClient) {
-      this.installRedisAdapter(server, wsOpts.redisAdapter.pubClient)
+      try {
+        this.installRedisAdapter(server, wsOpts.redisAdapter.pubClient)
+      } catch (err) {
+        // A server given its own port listens already; a failed boot must not keep the process alive.
+        server.close().catch(() => undefined)
+        throw err
+      }
     }
 
     realtimeServers.add(server)
