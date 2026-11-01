@@ -30,7 +30,7 @@ Each server instance is its own process (`scripts/benchmark/server.mjs`) booting
 | `@nestjs/core`                         | 11.2.8                                                                                                                              |
 | Redis                                  | 8.10.3, `redis:8-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537`, a container on loopback port 6392 |
 
-Load average (1, 5, 15 minutes) before run 1: 11.70, 15.72, 14.88; after run 2: 6.71, 12.26, 13.61. The machine was shared and still settling, so read the absolute latencies as upper-ish bounds. The client event-loop delay p99 was between 2.1 and 2.6 ms in every cell.
+Load average (1, 5, 15 minutes) before run 1: 11.70, 15.72, 14.88; after run 2: 6.71, 12.26, 13.61. The machine was shared and still settling, so read the absolute latencies as upper-ish bounds. The client event-loop delay p99 was between 2.1 and 2.7 ms in every cell.
 
 ## Scenarios
 
