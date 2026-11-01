@@ -25,6 +25,17 @@ describe('RealtimeService readiness', () => {
     expect(service.isPubSubReady()).toBe(state)
   })
 
+  // WebSocket-only wiring never subscribes to the bus, so a bus passed there is not a reason to
+  // report the instance unready.
+  it('is ready on the websocket transport even when the bus reports not subscribed', () => {
+    const transport = {
+      ...mockTransport(),
+      kind: 'websocket',
+    } as unknown as jest.Mocked<ITransport>
+    const service = new RealtimeService(transport, { isSubscribed: () => false } as never)
+    expect(service.isPubSubReady()).toBe(true)
+  })
+
   // A bus that reports no state (the in-memory one), or none at all, never holds the instance back.
   it.each([
     ['a bus without isSubscribed', {}],

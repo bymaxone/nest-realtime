@@ -27,7 +27,8 @@ export class RealtimeService {
   /**
    * Whether this instance hears the events and revocations other instances publish. False while
    * the bus is unreachable or its subscriber connection is down, so a readiness probe can take a
-   * deaf instance out of rotation. True for a bus that does not report a state.
+   * deaf instance out of rotation. True for a bus that does not report a state, and with
+   * `transport: 'websocket'`, which does not subscribe to the bus.
    *
    * @example
    * ```ts
@@ -36,6 +37,8 @@ export class RealtimeService {
    * ```
    */
   isPubSubReady(): boolean {
+    // Only the SSE wiring subscribes to the bus; WebSocket-only scaling goes through the adapter.
+    if (this.transport.kind === 'websocket') return true
     return this.pubsub?.isSubscribed?.() ?? true
   }
 

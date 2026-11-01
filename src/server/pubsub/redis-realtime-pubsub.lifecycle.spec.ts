@@ -275,6 +275,26 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
     )
   })
 
+  // A server that refuses after the boot has completed is not a reason to give up: ioredis keeps
+  // retrying the handshake, and the first one the server accepts makes the instance subscribed.
+  it('becomes subscribed once a server that refused after boot accepts the credentials', async () => {
+    const { warn } = spies()
+    const fake = await closedPort()
+    const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
+    await subscribe(pubsub)
+    fake.respond((command, socket) =>
+      command[0] === 'HELLO' ? '-WRONGPASS rotated\r\n' : healthyRedis(command, socket),
+    )
+    await fake.start()
+    servers.push(fake)
+    await until('the refusal to be reported', () =>
+      warn.mock.calls.some((call) => String(call[0]).includes('refused')),
+    )
+    expect(pubsub.isSubscribed()).toBe(false)
+    fake.respond(healthyRedis)
+    await until('the instance to report subscribed', () => pubsub.isSubscribed())
+  })
+
   // The last unsubscribe quits the client on purpose; that is not an outage and logs nothing.
   it('stays quiet when the last handler unsubscribes', async () => {
     const { warn } = spies()

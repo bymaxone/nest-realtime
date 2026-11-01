@@ -599,7 +599,7 @@ export class RealtimeHealthIndicator {
 }
 ```
 
-`isPubSubReady()` is true for a bus that reports no state, such as the default in-memory one.
+`isPubSubReady()` is true for a bus that reports no state, such as the default in-memory one, and with `transport: 'websocket'`, which does not use the bus.
 
 ### ConnectionRegistry
 
