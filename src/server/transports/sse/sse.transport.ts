@@ -15,7 +15,10 @@ import {
   REALTIME_OPTIONS_TOKEN,
   REALTIME_PUBSUB_TOKEN,
 } from '../../constants/injection-tokens.constants'
-import type { IOfflineQueueStorage } from '../../interfaces/offline-queue-storage.interface'
+import type {
+  IOfflineQueueStorage,
+  OfflineQueuedEvent,
+} from '../../interfaces/offline-queue-storage.interface'
 import type {
   AuthenticationResult,
   ConnectionAuthContext,
@@ -34,7 +37,9 @@ import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import { composeRoomId } from '../../utils/compose-room-id'
 import { describeError } from '../../utils/describe-error'
+import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
 import { unavailableError } from '../../utils/unavailable-error'
+import { InMemoryPubSub } from '../../pubsub/in-memory-pubsub'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
 
@@ -193,20 +198,63 @@ export class SseTransport implements ITransport {
     return this.connections.get(connectionId)
   }
 
+  /**
+   * Emit to a user: live here, to the other instances over the bus, and into the offline queue
+   * when the user has no live connection on this instance.
+   *
+   * A failed publish or a failed append is reported (log and `onDeliveryFailure`) and the call
+   * still resolves, since delivery to the other instances is at-most-once. It rejects only when
+   * the event has no delivery path left: the user is offline here, the queue could not keep it,
+   * and the bus either failed or cannot reach another instance (the in-memory bus).
+   */
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
     const id = this.idGen.next()
     this.emitToUserLocal(userId, event, data, id)
-    // Persist for a fully-offline user (no live connection on this instance) so the
-    // event can be replayed on reconnect. Fire-and-forget: a queue failure must never
-    // break the live emit path (graceful degradation).
-    if (this.offlineQueue && this.connections.byUser(userId, 'sse').length === 0) {
-      void this.offlineQueue
-        .append(userId, { id, event, data, emittedAt: new Date() })
-        .catch((error: unknown) =>
-          this.logger.warn(`Offline queue append failed: ${describeError(error)}`),
-        )
+    const queue = this.offlineQueue
+    const offline = queue !== undefined && this.connections.byUser(userId, 'sse').length === 0
+    const [queueFailure, published] = await Promise.all([
+      offline
+        ? this.appendOffline(queue, userId, { id, event, data, emittedAt: new Date() })
+        : undefined,
+      this.publish({ op: 'emitToUser', args: { userId, event, data, id } }),
+    ])
+    if (queueFailure !== undefined && !(published && this.busReachesOtherInstances())) {
+      throw unavailableError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        SseTransport.name,
+        `${event} for ${userId} has no delivery path: the user is offline here and the offline queue failed`,
+        queueFailure,
+      )
     }
-    await this.publish({ op: 'emitToUser', args: { userId, event, data, id } })
+  }
+
+  /** Append to the offline queue; resolves with the failure, or `undefined` once it is kept. */
+  private async appendOffline(
+    queue: IOfflineQueueStorage,
+    userId: string,
+    event: OfflineQueuedEvent,
+  ): Promise<unknown> {
+    try {
+      await queue.append(userId, event)
+      return undefined
+    } catch (error) {
+      reportDeliveryFailure(
+        this.logger,
+        this.hooks,
+        {
+          code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+          op: 'offlineAppend',
+          error,
+        },
+        'Offline queue append failed',
+      )
+      return error ?? new Error('offline queue append failed')
+    }
+  }
+
+  /** Whether the bus can carry an event to another instance (the in-memory bus cannot). */
+  private busReachesOtherInstances(): boolean {
+    return !(this.pubsub instanceof InMemoryPubSub)
   }
 
   async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
@@ -355,12 +403,26 @@ export class SseTransport implements ITransport {
     }
   }
 
-  /** Publish once to the bus; pub/sub failures never affect the live emit path. */
-  private async publish(message: Omit<RealtimePubSubMessage, 'origin'>): Promise<void> {
+  /**
+   * Publish once to the bus. A failure is reported and never fails the live emit path; the
+   * result says whether the bus accepted the message.
+   */
+  private async publish(message: Omit<RealtimePubSubMessage, 'origin'>): Promise<boolean> {
     try {
       await this.pubsub.publish({ ...message, origin: this.instanceId })
+      return true
     } catch (error) {
-      this.logger.warn(`pubsub.publish failed: ${describeError(error)}`)
+      reportDeliveryFailure(
+        this.logger,
+        this.hooks,
+        {
+          code: REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
+          op: message.op,
+          error,
+        },
+        'pubsub.publish failed',
+      )
+      return false
     }
   }
 

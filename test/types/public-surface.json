@@ -9,6 +9,7 @@
     "ConnectionEventMeta",
     "ConnectionRegistry",
     "CorsConfig",
+    "DeliveryFailure",
     "IConnectionAuthenticator",
     "IConnectionLifecycleHooks",
     "IOfflineQueueStorage",

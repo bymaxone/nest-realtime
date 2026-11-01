@@ -355,7 +355,7 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | **transport**              | `'sse'` \| `'websocket'` \| `'both'`                                                                                                        | — (**required**)                             |
 | **authenticator**          | `IConnectionAuthenticator`                                                                                                                  | — (**required**)                             |
 | **tenantResolver**         | `(auth) => string \| undefined \| null` — derives `tenantId` from the auth result, on **both** transports; `undefined` and `null` mean "no opinion" and fall back    | `auth.tenantId`                              |
-| **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed` (fire-and-forget)                                                        | —                                            |
+| **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed`, `onDeliveryFailure` (fire-and-forget)                                                        | —                                            |
 | **pubsub**                 | `IRealtimePubSub` — cross-instance fan-out for SSE                                                                                          | `InMemoryPubSub`                             |
 | **offlineQueue**           | `IOfflineQueueStorage` — events held while a user is away                                                                                   | — (disabled)                                 |
 | **presence**               | `IPresenceStorage` — contract for your own presence tracking; the library never calls it                                                                                                   | — (disabled)                                 |
@@ -572,7 +572,7 @@ The unified emit API. Identical on every transport.
 
 All methods return `Promise<void>`.
 
-**Revocation is never best-effort.** `disconnect(connectionId)` resolves when the connection was closed on this instance or when the revocation was handed to the bus (`IRealtimePubSub`). It **rejects** when it could not: `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the publish, `REALTIME_TRANSPORT_UNAVAILABLE` when the WebSocket server is not attached or its fan-out throws. A rejection means the connection may still be connected, so retry. An emit is different: `emitToUser`, `emitToTenant`, `emitToRoom` and `broadcast` stay at-most-once, and resolve even when the publish to the other instances failed.
+**Revocation is never best-effort.** `disconnect(connectionId)` resolves when the connection was closed on this instance or when the revocation was handed to the bus (`IRealtimePubSub`). It **rejects** when it could not: `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the publish, `REALTIME_TRANSPORT_UNAVAILABLE` when the WebSocket server is not attached or its fan-out throws. A rejection means the connection may still be connected, so retry. An emit is different: `emitToUser`, `emitToTenant`, `emitToRoom` and `broadcast` stay at-most-once, and **resolve even when the publish to the other instances failed**. That failure is not silent: it is logged with `REALTIME_PUBSUB_UNAVAILABLE` and the operation, and passed to the `onDeliveryFailure` hook, which is where to count it. `emitToUser` also resolves, with the same report, when the offline queue could not keep an event for a user who is offline here, because another instance may have delivered it live. It rejects only when the event has no delivery path left: the user is offline here, the queue failed, and the bus failed or cannot reach another instance (the default in-memory bus).
 
 `joinRoom` and `leaveRoom` act on a connection **this instance holds**; for any other id they resolve and change nothing. A failure of the transport that holds the connection rejects the call.
 
@@ -852,7 +852,7 @@ These names belong to the library. Do not reuse them for application events. The
 | `REALTIME_REAUTHENTICATION_FAILED` | Raised when a revalidation fails                                    |
 | `REALTIME_TOO_MANY_CONNECTIONS`    | Raised as the reason an evicted connection is closed                |
 | `REALTIME_INVALID_TICKET`          | Reserved, never raised today: a ticket store is yours to write      |
-| `REALTIME_PUBSUB_UNAVAILABLE`      | Raised as the rejection of a disconnect when the bus refuses the revocation; an emit's publish failure is logged |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | Raised as the rejection of a disconnect when the bus refuses the revocation; an emit's publish failure is logged and passed to the delivery-failure hook |
 | `REALTIME_TRANSPORT_UNAVAILABLE`   | Raised as the rejection of a disconnect, a join or a leave when the transport that holds the connection fails or has no server attached |
 | `REALTIME_REDIS_ADAPTER_FAILED`    | Raised at bootstrap when the Redis adapter is configured and cannot be installed |
 | `REALTIME_PAYLOAD_TOO_LARGE`       | Reserved, never raised today                                        |

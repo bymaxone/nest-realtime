@@ -61,6 +61,30 @@ describe('OfflineQueueDeliveryService', () => {
       expect(result).toEqual([])
     })
 
+    // The gap that could not be read is reported to the consumer's hook as well as logged: the
+    // reconnecting client receives an empty replay and has no other way to tell.
+    it('reports a retrieveSince failure to onDeliveryFailure', async () => {
+      const storage = mkStorage()
+      ;(storage.retrieveSince as jest.Mock).mockRejectedValueOnce(new Error('redis down'))
+      const onDeliveryFailure = jest.fn()
+      const service = new OfflineQueueDeliveryService(storage, { onDeliveryFailure })
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      try {
+        await service.retrieve('u1', 'last-1', new Set())
+        await new Promise((resolve) => setImmediate(resolve))
+        expect(warnSpy).toHaveBeenCalledWith(
+          'REALTIME_TRANSPORT_UNAVAILABLE op=offlineRetrieve: Offline queue retrieve failed: redis down',
+        )
+        expect(onDeliveryFailure).toHaveBeenCalledWith({
+          code: 'REALTIME_TRANSPORT_UNAVAILABLE',
+          op: 'offlineRetrieve',
+          error: expect.objectContaining({ message: 'redis down' }),
+        })
+      } finally {
+        warnSpy.mockRestore()
+      }
+    })
+
     // The retrieve-failure warn includes the error message so operators can diagnose it.
     it('logs the error message when retrieveSince fails', async () => {
       const storage = mkStorage()

@@ -11,6 +11,7 @@ export type {
 export type {
   IConnectionLifecycleHooks,
   ConnectionEventMeta,
+  DeliveryFailure,
 } from './connection-lifecycle-hooks.interface'
 export type { IRealtimePubSub, RealtimePubSubMessage } from './realtime-pubsub.interface'
 export type { IOfflineQueueStorage, OfflineQueuedEvent } from './offline-queue-storage.interface'

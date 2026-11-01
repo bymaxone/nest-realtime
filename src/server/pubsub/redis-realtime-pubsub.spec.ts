@@ -3,6 +3,7 @@
  * @layer infrastructure
  */
 import { inspect } from 'node:util'
+import { Logger } from '@nestjs/common'
 import RedisMock from 'ioredis-mock'
 import type { Redis } from 'ioredis'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
@@ -90,6 +91,32 @@ describe('RedisRealtimePubSub', () => {
     await client.publish('bymax:realtime', '{not json')
     await new Promise((r) => setTimeout(r, 0))
     expect(handler).not.toHaveBeenCalled()
+  })
+
+  // A payload the bus cannot parse is dropped but no longer silently: the log names the code, and
+  // a burst is reported once per minute with the count, so a version skew shows without flooding.
+  it('warns about malformed payloads once per minute with the count dropped', async () => {
+    const { pubsub, client } = build()
+    await pubsub.subscribe(jest.fn())
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const now = jest.spyOn(Date, 'now')
+    try {
+      now.mockReturnValue(1_000_000)
+      await client.publish('bymax:realtime', '{not json')
+      await client.publish('bymax:realtime', 'also not json')
+      await new Promise((r) => setTimeout(r, 0))
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('REALTIME_PUBSUB_UNAVAILABLE'))
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 malformed'))
+      now.mockReturnValue(1_000_000 + 60_000)
+      await client.publish('bymax:realtime', 'again')
+      await new Promise((r) => setTimeout(r, 0))
+      expect(warnSpy).toHaveBeenCalledTimes(2)
+      expect(warnSpy).toHaveBeenLastCalledWith(expect.stringContaining('2 malformed'))
+    } finally {
+      now.mockRestore()
+      warnSpy.mockRestore()
+    }
   })
 
   // A throwing handler does not block other handlers.

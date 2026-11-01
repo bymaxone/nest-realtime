@@ -135,6 +135,25 @@ describe('RealtimePubSubSubscriber', () => {
     expect(sse.disconnectLocal).toHaveBeenCalledWith('c1', 'revoked')
   })
 
+  // A remote disconnect that fails is logged: the dispatch must not leave a rejected promise behind.
+  it('logs a remote disconnect that rejects without an unhandled rejection', async () => {
+    const { subscriber, getHandler, sse } = build()
+    ;(sse.disconnectLocal as jest.Mock).mockRejectedValueOnce(new Error('close boom'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      await subscriber.onModuleInit()
+      getHandler()!({ op: 'disconnect', args: { connectionId: 'c1' }, origin: 'remote' })
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('close boom'))
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', unhandled)
+      warnSpy.mockRestore()
+    }
+  })
+
   // An unknown op is logged and does not throw.
   it('logs and swallows an unknown op', async () => {
     const { subscriber, getHandler } = build()

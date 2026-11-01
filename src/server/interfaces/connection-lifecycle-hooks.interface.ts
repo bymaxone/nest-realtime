@@ -3,6 +3,25 @@
  * @layer contracts
  */
 
+import type { RealtimeErrorCode } from '../../shared/constants/error-codes.constants'
+
+/**
+ * A delivery path that failed without failing the call that depended on it, such as an emit
+ * whose publish to the other instances was refused. The call still resolved; this is how the
+ * failure becomes visible.
+ */
+export interface DeliveryFailure {
+  /** The stable error code of the failure. */
+  readonly code: RealtimeErrorCode
+  /**
+   * What was being delivered: an emit (`emitToUser`, `emitToTenant`, `emitToRoom`,
+   * `broadcast`) or `offlineAppend` / `offlineRetrieve` for the offline queue.
+   */
+  readonly op: string
+  /** The failure underneath. */
+  readonly error: Error
+}
+
 /** Metadata describing a connection at a lifecycle transition. */
 export interface ConnectionEventMeta {
   readonly connectionId: string
@@ -75,4 +94,11 @@ export interface IConnectionLifecycleHooks {
 
   /** Called on re-authentication failure, before disconnect. */
   onReauthenticationFailed?(meta: ConnectionEventMeta): void | Promise<void>
+
+  /**
+   * Called when a delivery path fails but the call that used it still resolves: the publish of an
+   * emit to the other instances, or the offline queue. Count it to see cross-instance loss; it
+   * is also logged with the same code. A throwing hook is logged and ignored.
+   */
+  onDeliveryFailure?(failure: DeliveryFailure): void | Promise<void>
 }

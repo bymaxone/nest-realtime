@@ -40,6 +40,7 @@ export type {
   ConnectionAuthContext,
   ConnectionEventMeta,
   CorsConfig,
+  DeliveryFailure,
   IConnectionAuthenticator,
   IConnectionLifecycleHooks,
   IOfflineQueueStorage,

@@ -133,6 +133,23 @@ describe('WebSocketTransport', () => {
     await expect(transport.emitToUser('u-1', 'evt', {})).resolves.toBeUndefined()
   })
 
+  it('logs once that emits are dropped until the server is attached', async () => {
+    // An emit before the gateway attaches resolves and delivers nothing; that is said once per
+    // transport, not once per emit, and the code names the cause.
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await transport.emitToUser('u-1', 'evt', {})
+      await transport.broadcast('evt', {})
+      await transport.emitToRoom('room:r', 'evt', {})
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('REALTIME_TRANSPORT_UNAVAILABLE'),
+      )
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it('emitToUser calls server.to(user:{id}).emit(event, data)', async () => {
     // emitToUser targets the user:{userId} room.
     const server = makeServer()

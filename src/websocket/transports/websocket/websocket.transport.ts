@@ -49,6 +49,7 @@ export class WebSocketTransport implements ITransport {
   private readonly logger = new Logger(WebSocketTransport.name)
   /** Nullable until the gateway's afterInit wires the instance. */
   private server: Server | null = null
+  private warnedUnattached = false
 
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
@@ -69,6 +70,20 @@ export class WebSocketTransport implements ITransport {
   setServer(server: Server): void {
     this.server = server
     this.logger.log('Socket.IO server wired to WebSocketTransport')
+  }
+
+  /**
+   * The attached server, or `null` before the gateway attaches one. An emit made before
+   * then delivers nothing and still resolves; that is logged once, not once per emit.
+   */
+  private attached(op: string): Server | null {
+    if (!this.server && !this.warnedUnattached) {
+      this.warnedUnattached = true
+      this.logger.warn(
+        `${REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE} op=${op}: no WebSocket server is attached yet, so emits are dropped until the gateway initialises`,
+      )
+    }
+    return this.server
   }
 
   /**
@@ -196,7 +211,7 @@ export class WebSocketTransport implements ITransport {
    * @param data - Payload forwarded to all matching connections.
    */
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
-    this.server?.to(`${ROOM_PREFIXES.USER}:${userId}`).emit(event, data)
+    this.attached('emitToUser')?.to(`${ROOM_PREFIXES.USER}:${userId}`).emit(event, data)
   }
 
   /**
@@ -207,7 +222,7 @@ export class WebSocketTransport implements ITransport {
    * @param data - Payload forwarded to all matching connections.
    */
   async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
-    this.server?.to(`${ROOM_PREFIXES.TENANT}:${tenantId}`).emit(event, data)
+    this.attached('emitToTenant')?.to(`${ROOM_PREFIXES.TENANT}:${tenantId}`).emit(event, data)
   }
 
   /**
@@ -218,7 +233,7 @@ export class WebSocketTransport implements ITransport {
    * @param data - Payload forwarded to all connections in the room.
    */
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
-    this.server?.to(roomId).emit(event, data)
+    this.attached('emitToRoom')?.to(roomId).emit(event, data)
   }
 
   /**
@@ -228,7 +243,7 @@ export class WebSocketTransport implements ITransport {
    * @param data - Payload forwarded to every connected socket.
    */
   async broadcast(event: string, data: unknown): Promise<void> {
-    this.server?.emit(event, data)
+    this.attached('broadcast')?.emit(event, data)
   }
 
   /**
