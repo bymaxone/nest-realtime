@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   through one function that never throws, and a test fails if a source file goes back to the old
   patterns.
 
+### Internal
+
+- A local benchmark (`pnpm benchmark`, in `scripts/benchmark/`, not a CI gate) measures connect
+  latency, fan-out latency for 1, 100 and 1000 clients, cross-instance latency through Redis, memory
+  per idle connection and Redis connections per instance, and writes its tables as Markdown. The
+  first results, with the machine, versions and run-to-run noise, are in
+  `docs/benchmark_results_2026-10-31.md`.
+
 ## [1.2.3] - 2026-10-31
 
 **Apply before upgrading, if you set `websocket.redisAdapter`:** make sure `@socket.io/redis-adapter`
