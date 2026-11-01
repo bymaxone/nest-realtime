@@ -269,15 +269,13 @@ Where the timeouts sit:
 | `src/server/config/default-options.ts`                      | 0         | 1                       |
 | `src/server/services/reauthentication.service.ts`           | 1         | 1                       |
 
-Most are mutants that empty a block (`BlockStatement {}`) in code the SSE connection path runs.
 A mutant whose change makes the code hang is counted as detected, so the cost is run time and not
 correctness.
 
 **What is known.** The distribution is identical in the second and third run, so the waits in
-the real-request specs are not what stalls these mutants: the third run came after those waits
+the real-request specs do not account for the rise: the third run came after those waits
 were made to fail with a message within a second or two. The jump happened between `0048a20` and
-`672254c`, a range that added the client-address validation, the specs that boot a real SSE
-application and the declaration-gate files. Locally, emptying `register()` in the connection
+`672254c`; what in that range causes it is not known. Locally, emptying `register()` in the connection
 registry did not time out with either version of the request helper: it failed on an assertion
 in about a second.
 
