@@ -125,8 +125,8 @@ const resolveAll = async (label, dynamicModule) => {
   }
 }
 
-// The optional Redis adapter is loaded at runtime, and a bundle that cannot load it does not fail:
-// it logs one line and serves a single instance. So the gate asks the server what it is using.
+// The packed artifact must install the Redis adapter in both module formats. The assertion reads
+// the adapter the Socket.IO server ends up with: the in-memory default is a working server too.
 const redisAdapterRegisters = async () => {
   const Mock = IORedisMock.default ?? IORedisMock
   const pubClient = new Mock()

@@ -144,10 +144,9 @@ for (const rule of REQUIRED_STATIC) {
   }
 }
 
-// An ES module has no `require`. A bundler that meets `require(...)` in source turns it into
-// `__require(...)`, which throws when the module is loaded as ESM, and the code around it usually
-// catches the throw: the optional Redis adapter was lost that way, silently. A call is fine only
-// where the bundle declares a real `require`.
+// An ES module has no `require`. A bundler turns `require(...)` in source into `__require(...)`,
+// which throws when the bundle loads as ESM, so a call is allowed only where the bundle declares a
+// real `require`.
 const esmFiles = readdirSync(join(rootDir, 'dist'), { recursive: true })
   .filter((name) => String(name).endsWith('.mjs'))
   .map(String)
