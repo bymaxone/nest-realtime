@@ -392,7 +392,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       behave(fake, (command, socket) =>
         command[0] === 'SUBSCRIBE' ? '-NOPERM acl changed\r\n' : healthyRedis(command, socket),
       )
-      // A refusal logged by another test's instance after its teardown, as CI delivered it.
+      // A refusal logged by another test's instance after its teardown must not satisfy this wait.
       new Logger('RedisRealtimePubSub').warn(refusalLine('NOPERM revoked later'))
       fake.drop()
       await until('the refusal to be reported', () => linesAbout(warn, 'acl changed').length > 0)
