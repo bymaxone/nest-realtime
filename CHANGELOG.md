@@ -18,8 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Internal
 
-- The `internal` bundle budget in `pnpm size` rises from 15,700 to 15,750 B brotli. The one runtime
-  line that reads the peer address takes the bundle from 15,696 to 15,711 B.
+- The `internal` bundle budget in `pnpm size` is raised to make room for the line that reads the
+  peer address.
 
 ## [1.2.4] - 2026-11-01
 
