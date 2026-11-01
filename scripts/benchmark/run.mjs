@@ -85,19 +85,26 @@ async function startServer(transport, { redis = false } = {}) {
   children.add(child)
   child.once('exit', () => children.delete(child))
   const waiting = new Map()
+  // A server that exits settles every call still waiting on it, or the run hangs on the other server.
+  let exited = null
+  child.once('exit', (code) => {
+    exited = new Error(`server exited (${code})`)
+    for (const settle of waiting.values()) settle(null, exited)
+    waiting.clear()
+  })
   child.on('message', (msg) => {
     if (msg.cmd === 'ready') waiting.get('ready')?.(msg)
     else waiting.get(msg.id)?.(msg)
   })
   await new Promise((resolve, reject) => {
-    waiting.set('ready', resolve)
-    child.once('exit', (code) => reject(new Error(`server exited early (${code})`)))
+    waiting.set('ready', (msg, error) => (error ? reject(error) : resolve(msg)))
   })
   let seq = 0
   const call = (cmd, extra = {}) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
+      if (exited) return reject(exited)
       const id = `${cmd}-${seq++}`
-      waiting.set(id, resolve)
+      waiting.set(id, (msg, error) => (error ? reject(error) : resolve(msg)))
       child.send({ cmd, id, ...extra })
     })
   return {
@@ -106,6 +113,7 @@ async function startServer(transport, { redis = false } = {}) {
     memory: () => call('memory'),
     emit: (count, intervalMs) => call('emit', { count, intervalMs }),
     stop: async () => {
+      if (exited) return
       child.send({ cmd: 'stop' })
       await new Promise((resolve) => child.once('exit', resolve))
     },
