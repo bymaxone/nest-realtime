@@ -576,7 +576,7 @@ All methods return `Promise<void>`.
 
 `joinRoom` and `leaveRoom` act on a connection **this instance holds**; for any other id they resolve and change nothing. A failure of the transport that holds the connection rejects the call.
 
-**An instance must hear the others.** With `RedisRealtimePubSub`, a subscription the server refuses (a wrong password, a missing permission, a wrong database) **fails the boot**: retrying cannot fix it, and an instance that never hears a revocation must not look healthy. A Redis that is only unreachable does not block the boot. The instance starts, logs once that it is not subscribed, and subscribes when a connection succeeds. Until then, and again whenever the subscriber connection drops, `isPubSubReady()` is false. Put it in your readiness probe:
+**An instance must hear the others.** With `RedisRealtimePubSub`, a subscription the server refuses (a wrong password, a missing permission) **fails the boot**: retrying cannot fix it, and an instance that never hears a revocation must not look healthy. A Redis that is only unreachable does not block the boot. The instance starts, logs once that it is not subscribed, and subscribes when a connection succeeds. Until then, and again whenever the subscriber connection drops, `isPubSubReady()` is false. Put it in your readiness probe:
 
 ```ts
 import { Injectable } from '@nestjs/common'

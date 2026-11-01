@@ -37,8 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counted and reported at most once a minute instead of vanishing, and an emit made before the
   WebSocket gateway attaches its server says so once.
 - **An instance that cannot hear the others no longer comes up silently deaf.** When the Redis
-  pub/sub subscription at boot was refused (a wrong password, a missing permission, a wrong
-  database) the library logged a warning and started anyway, so the instance missed every
+  pub/sub subscription at boot was refused (a wrong password, a missing
+  permission) the library logged a warning and started anyway, so the instance missed every
   cross-instance revocation. A refusal now fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`. When
   Redis is merely unreachable the boot used to hang, waiting for a subscribe that ioredis keeps
   queued (measured above 40 s on a closed port); it now completes, logs
