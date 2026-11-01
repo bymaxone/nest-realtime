@@ -34,6 +34,7 @@ import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import { composeRoomId } from '../../utils/compose-room-id'
 import { describeError } from '../../utils/describe-error'
+import { unavailableError } from '../../utils/unavailable-error'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
 
@@ -226,22 +227,48 @@ export class SseTransport implements ITransport {
     await this.publish({ op: 'broadcast', args: { event, data, id } })
   }
 
+  /** Join a connection this instance holds to a room; any other id is left alone. */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
-    this.rooms.join(connectionId, roomId)
+    if (this.connections.get(connectionId)?.transport === 'sse')
+      this.rooms.join(connectionId, roomId)
   }
 
+  /** Remove a connection this instance holds from a room; any other id is left alone. */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
-    this.rooms.leave(connectionId, roomId)
+    if (this.connections.get(connectionId)?.transport === 'sse')
+      this.rooms.leave(connectionId, roomId)
   }
 
-  /** Disconnect a connection locally if owned here, otherwise revoke cross-instance. */
+  /**
+   * Disconnect a connection locally if owned here, otherwise revoke cross-instance.
+   *
+   * Resolves once the connection is closed here or the revocation has been handed to the bus. A
+   * connection held here as a WebSocket is left to the WebSocket transport and nothing is
+   * published. It rejects with `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses it: nothing has reached
+   * the connection, so the caller must not read the resolution as a revocation.
+   */
   async disconnect(connectionId: string, reason?: string): Promise<void> {
     const record = this.connections.get(connectionId)
-    if (record && record.transport === 'sse') {
+    if (record) {
+      // A connection held here as a WebSocket is the WebSocket transport's to close:
+      // `disconnectLocal` leaves it alone.
       await this.disconnectLocal(connectionId, reason)
       return
     }
-    await this.publish({ op: 'disconnect', args: { connectionId, reason } })
+    try {
+      await this.pubsub.publish({
+        op: 'disconnect',
+        args: { connectionId, reason },
+        origin: this.instanceId,
+      })
+    } catch (error) {
+      throw unavailableError(
+        REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
+        SseTransport.name,
+        `the revocation of ${connectionId} could not be published`,
+        error,
+      )
+    }
   }
 
   /**

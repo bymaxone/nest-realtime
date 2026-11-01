@@ -90,7 +90,11 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       this.logger.log('Authenticator does not implement revalidate() — reauthentication disabled')
       return
     }
-    this.timer = setInterval(() => void this.runCycle(), this.policy.intervalSeconds * 1000)
+    this.timer = setInterval(() => {
+      this.runCycle().catch((err: unknown) => {
+        this.logger.warn(`Reauthentication cycle failed: ${describeError(err)}`)
+      })
+    }, this.policy.intervalSeconds * 1000)
     this.timer.unref()
     this.logger.log(`Reauthentication scheduled every ${this.policy.intervalSeconds}s`)
   }
@@ -152,11 +156,26 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
           this.positiveCache.set(conn.connectionId, now)
           continue
         }
-        await this.handleFailure(conn)
+        await this.revoke(conn)
       } catch (err) {
         this.logger.warn(`Reauthentication errored for ${conn.connectionId}: ${describeError(err)}`)
-        await this.handleFailure(conn)
+        await this.revoke(conn)
       }
+    }
+  }
+
+  /**
+   * Revoke a connection whose revalidation failed, and keep the cycle going when the
+   * revocation itself is rejected. The positive-cache entry is already gone, so the next
+   * cycle revalidates the connection and tries again.
+   */
+  private async revoke(conn: ConnectionRecord): Promise<void> {
+    try {
+      await this.handleFailure(conn)
+    } catch (err) {
+      this.logger.warn(
+        `Revocation of ${conn.connectionId} failed, retrying next cycle: ${describeError(err)}`,
+      )
     }
   }
 

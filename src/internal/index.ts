@@ -69,6 +69,7 @@ export type { RedisOfflineQueueOptions } from '../server/offline-queue/redis-off
 export { assertIdentityIsNotBlank, resolveAuthTenant } from '../server/utils/assert-identity'
 export { composeRoomId } from '../server/utils/compose-room-id'
 export { describeError } from '../server/utils/describe-error'
+export { unavailableError } from '../server/utils/unavailable-error'
 export { parseCookieHeader } from '../server/utils/parse-cookie-header'
 export * from '../server/interfaces'
 export { ROOM_PREFIXES, RESERVED_EVENT_NAMES, REALTIME_ERROR_CODES } from '../shared'

@@ -99,33 +99,67 @@ describe('CompositeTransport', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WS down'))
   })
 
-  it('joinRoom resolves when SSE rejects and WS succeeds', async () => {
-    // Only the owning transport succeeds; the other rejection is tolerated.
-    sseMock.joinRoom.mockRejectedValue(new Error('not SSE'))
-    await expect(composite.joinRoom('conn-1', 'room:x')).resolves.toBeUndefined()
+  it('joinRoom and leaveRoom reach both transports', async () => {
+    // Each transport decides whether it holds the connection; the composite asks both.
+    await composite.joinRoom('conn-1', 'room:x')
+    await composite.leaveRoom('conn-1', 'room:x')
+    expect(sseMock.joinRoom).toHaveBeenCalledWith('conn-1', 'room:x')
     expect(wsMock.joinRoom).toHaveBeenCalledWith('conn-1', 'room:x')
+    expect(sseMock.leaveRoom).toHaveBeenCalledWith('conn-1', 'room:x')
+    expect(wsMock.leaveRoom).toHaveBeenCalledWith('conn-1', 'room:x')
   })
 
-  it('joinRoom resolves even when both transports reject', async () => {
-    // Both failing is tolerated — the composite never throws from joinRoom.
-    sseMock.joinRoom.mockRejectedValue(new Error('sse fail'))
-    wsMock.joinRoom.mockRejectedValue(new Error('ws fail'))
-    await expect(composite.joinRoom('conn-1', 'room:x')).resolves.toBeUndefined()
+  it('joinRoom rejects with the failure of the transport that failed', async () => {
+    // A failing owner must reach the caller: a client left out of a room it was added to
+    // would otherwise be reported as joined.
+    const failure = new Error('ws join failed')
+    wsMock.joinRoom.mockRejectedValue(failure)
+    await expect(composite.joinRoom('conn-1', 'room:x')).rejects.toBe(failure)
+    expect(sseMock.joinRoom).toHaveBeenCalledWith('conn-1', 'room:x')
   })
 
-  it('leaveRoom resolves when one side rejects', async () => {
-    // Tolerance applies to leaveRoom too.
-    wsMock.leaveRoom.mockRejectedValue(new Error('ws fail'))
-    await expect(composite.leaveRoom('conn-1', 'room:x')).resolves.toBeUndefined()
+  it('leaveRoom rejects with the failure of the transport that failed', async () => {
+    // A client that stays in a room it was removed from keeps receiving that room's events.
+    const failure = new Error('ws leave failed')
+    wsMock.leaveRoom.mockRejectedValue(failure)
+    await expect(composite.leaveRoom('conn-1', 'room:x')).rejects.toBe(failure)
     expect(sseMock.leaveRoom).toHaveBeenCalledWith('conn-1', 'room:x')
   })
 
-  it('disconnect resolves when one side rejects', async () => {
-    // Tolerance applies to disconnect.
-    sseMock.disconnect.mockRejectedValue(new Error('sse fail'))
-    await expect(composite.disconnect('conn-1')).resolves.toBeUndefined()
+  it('disconnect asks both transports and resolves when neither fails', async () => {
+    // The transport that holds the connection closes it; the other is a no-op.
+    await expect(composite.disconnect('conn-1', 'revoked')).resolves.toBeUndefined()
+    expect(sseMock.disconnect).toHaveBeenCalledWith('conn-1', 'revoked')
+    expect(wsMock.disconnect).toHaveBeenCalledWith('conn-1', 'revoked')
+  })
+
+  it('disconnect rejects with the failure of the transport that failed', async () => {
+    // A revocation that did not reach the connection is not a success.
+    const failure = new Error('sse fail')
+    sseMock.disconnect.mockRejectedValue(failure)
+    await expect(composite.disconnect('conn-1')).rejects.toBe(failure)
     expect(wsMock.disconnect).toHaveBeenCalledWith('conn-1', undefined)
   })
+
+  // Both transports failing is reported once, under the code, naming the operation and the
+  // connection and carrying every reason.
+  it.each(['joinRoom', 'leaveRoom', 'disconnect'] as const)(
+    '%s names both failures when both transports fail',
+    async (op) => {
+      sseMock[op].mockRejectedValue(new Error('sse fail'))
+      wsMock[op].mockRejectedValue(new Error('ws fail'))
+      const failure = await (
+        op === 'disconnect' ? composite.disconnect('conn-1') : composite[op]('conn-1', 'room:x')
+      ).catch((error: unknown) => error)
+      expect((failure as Error).message).toBe(
+        `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} of conn-1 failed on both transports (sse fail; ws fail)`,
+      )
+      expect(((failure as Error).cause as AggregateError).errors.map(String)).toEqual([
+        'Error: sse fail',
+        'Error: ws fail',
+      ])
+    },
+  )
 
   it('fanOut logs warn using reason directly when rejected value has no .message', async () => {
     // When the rejection reason is not an Error, the reason itself is used in the warn.

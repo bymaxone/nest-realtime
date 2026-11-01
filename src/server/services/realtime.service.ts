@@ -53,17 +53,34 @@ export class RealtimeService {
    * The room id is not checked. Never pass client-supplied input that could start
    * with the reserved `user:` or `tenant:` prefixes: joining `tenant:<other>`
    * receives that tenant's events.
+   *
+   * Acts on a connection this instance holds; for any other id it resolves and changes
+   * nothing. A failure of the transport that holds the connection rejects the call.
    */
   joinRoom(connectionId: string, roomId: string): Promise<void> {
     return this.transport.joinRoom(connectionId, roomId)
   }
 
-  /** Remove a specific connection from a room. */
+  /**
+   * Remove a specific connection from a room.
+   *
+   * Acts on a connection this instance holds; for any other id it resolves and changes
+   * nothing. A failure of the transport that holds the connection rejects the call.
+   */
   leaveRoom(connectionId: string, roomId: string): Promise<void> {
     return this.transport.leaveRoom(connectionId, roomId)
   }
 
-  /** Force-disconnect a specific connection (e.g. on auth revocation). */
+  /**
+   * Force-disconnect a specific connection (e.g. on auth revocation).
+   *
+   * Resolves once the connection is closed on this instance or the revocation has been handed
+   * to the bus for the instance that holds it.
+   *
+   * @throws {Error} `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the revocation, or
+   *   `REALTIME_TRANSPORT_UNAVAILABLE` when the transport that holds the connection fails.
+   *   The connection may still be connected: retry.
+   */
   disconnect(connectionId: string, reason?: string): Promise<void> {
     return this.transport.disconnect(connectionId, reason)
   }

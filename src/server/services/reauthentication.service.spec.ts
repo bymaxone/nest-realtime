@@ -286,6 +286,55 @@ describe('ReauthenticationService', () => {
     )
   })
 
+  // A revocation that could not reach its connection must not abort the cycle for the rest, and
+  // must be tried again: the cache entry is gone, so the next cycle revalidates the connection.
+  it('keeps going and retries next cycle when a revocation is rejected', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const connections = mkConnections([mkRecord('c1', 'u1'), mkRecord('c2', 'u2')])
+    const realtime = mkRealtime()
+    realtime.disconnect.mockRejectedValueOnce(new Error('REALTIME_PUBSUB_UNAVAILABLE'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const svc = build(
+        connections,
+        realtime,
+        mkAuth(revalidate),
+        mkOptions({ intervalSeconds: 60 }),
+      )
+      await expect(svc.runCycle()).resolves.toBeUndefined()
+      expect(realtime.disconnect).toHaveBeenCalledWith(
+        'c2',
+        REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
+      )
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('c1'))
+      await svc.runCycle()
+      expect(realtime.disconnect).toHaveBeenCalledTimes(4)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // The timer must never leave a rejected cycle unhandled: a failure is logged and the timer lives on.
+  it('logs a cycle that rejects and keeps the timer running', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const svc = build(
+        mkConnections([]),
+        mkRealtime(),
+        mkAuth(jest.fn()),
+        mkOptions({ intervalSeconds: 1 }),
+      )
+      const cycle = jest.spyOn(svc, 'runCycle').mockRejectedValue(new Error('cycle boom'))
+      svc.onModuleInit()
+      await jest.advanceTimersByTimeAsync(2_000)
+      expect(cycle).toHaveBeenCalledTimes(2)
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cycle boom'))
+      svc.onApplicationShutdown()
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   // A throwing revalidate disconnects the affected connection immediately (fail-closed).
   it('disconnects the connection when revalidate throws (fail-closed)', async () => {
     const revalidate = jest.fn().mockRejectedValue(new Error('auth backend down'))
