@@ -11,7 +11,7 @@ const SRC = join(__dirname, '..', '..')
 
 describe('describeError', () => {
   it('returns the message of an Error', () => {
-    // An Error is reported by its message, as the catch sites did before.
+    // An Error is described by its message.
     expect(describeError(new Error('connect ECONNREFUSED'))).toBe('connect ECONNREFUSED')
   })
 
