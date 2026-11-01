@@ -7,6 +7,7 @@ import type { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from '@n
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets'
 import type { Server, Socket } from 'socket.io'
 import {
+  describeError,
   REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
   RESERVED_EVENT_NAMES,
@@ -79,9 +80,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       this.authenticated.set(socket, resolvedAuth)
       next()
     } catch (err) {
-      this.logger.error(
-        `handshake refused for socket ${socket.id}: ${err instanceof Error ? err.message : String(err)}`,
-      )
+      this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
       next(new Error('Internal Server Error'))
     }
   }
@@ -193,7 +192,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       }
     } catch (err) {
       this.logger.error(
-        `handleConnection threw for socket ${socket.id} — disconnecting: ${err instanceof Error ? err.message : String(err)}`,
+        `handleConnection threw for socket ${socket.id} — disconnecting: ${describeError(err)}`,
       )
       socket.disconnect(true)
     }

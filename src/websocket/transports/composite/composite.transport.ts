@@ -3,7 +3,7 @@
  * @layer transport
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { SseTransport } from '@bymax-one/nest-realtime/internal'
+import { describeError, SseTransport } from '@bymax-one/nest-realtime/internal'
 import type { ITransport } from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from '../websocket/websocket.transport'
 
@@ -140,9 +140,7 @@ export class CompositeTransport implements ITransport {
     const results = await Promise.allSettled(tasks.map((t) => t()))
     for (const result of results) {
       if (result.status === 'rejected') {
-        this.logger.warn(
-          `Composite ${op} partially failed: ${(result.reason as Error).message ?? result.reason}`,
-        )
+        this.logger.warn(`Composite ${op} partially failed: ${describeError(result.reason)}`)
       }
     }
   }

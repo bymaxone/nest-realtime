@@ -33,6 +33,7 @@ import type { ConnectionRecord } from '../../services/connection-registry.servic
 import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import { composeRoomId } from '../../utils/compose-room-id'
+import { describeError } from '../../utils/describe-error'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
 
@@ -161,7 +162,7 @@ export class SseTransport implements ITransport {
         ...(reason !== undefined ? { reason } : {}),
       })
     } catch (error) {
-      this.logger.error(`onDisconnect hook failed: ${(error as Error).message}`)
+      this.logger.error(`onDisconnect hook failed: ${describeError(error)}`)
     }
   }
 
@@ -201,7 +202,7 @@ export class SseTransport implements ITransport {
       void this.offlineQueue
         .append(userId, { id, event, data, emittedAt: new Date() })
         .catch((error: unknown) =>
-          this.logger.warn(`Offline queue append failed: ${(error as Error).message}`),
+          this.logger.warn(`Offline queue append failed: ${describeError(error)}`),
         )
     }
     await this.publish({ op: 'emitToUser', args: { userId, event, data, id } })
@@ -323,7 +324,7 @@ export class SseTransport implements ITransport {
     try {
       conn.subject?.next(message)
     } catch (error) {
-      this.logger.warn(`SSE delivery failed for ${conn.connectionId}: ${(error as Error).message}`)
+      this.logger.warn(`SSE delivery failed for ${conn.connectionId}: ${describeError(error)}`)
     }
   }
 
@@ -332,7 +333,7 @@ export class SseTransport implements ITransport {
     try {
       await this.pubsub.publish({ ...message, origin: this.instanceId })
     } catch (error) {
-      this.logger.warn(`pubsub.publish failed: ${(error as Error).message}`)
+      this.logger.warn(`pubsub.publish failed: ${describeError(error)}`)
     }
   }
 

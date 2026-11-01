@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A rejection that is not an `Error` no longer makes the handler reporting it fail.** Handlers
+  that log a failure read `.message` from whatever was thrown, so a promise that rejected with
+  `null` or `undefined`, or with an object that has no prototype, made the `catch` itself throw. In
+  a fire-and-forget `.catch` that surfaced as an unhandled rejection. They now describe the reason
+  through one function that never throws, and a test fails if a source file goes back to the old
+  patterns.
+
 ## [1.2.3] - 2026-10-31
 
 **Apply before upgrading, if you set `websocket.redisAdapter`:** make sure `@socket.io/redis-adapter`

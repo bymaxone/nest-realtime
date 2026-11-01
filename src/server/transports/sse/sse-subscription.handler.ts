@@ -35,6 +35,7 @@ import type { SseRequest, SseResponse } from '../../interfaces/sse-http.interfac
 import { assertIdentityIsNotBlank, resolveAuthTenant } from '../../utils/assert-identity'
 import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
+import { describeError } from '../../utils/describe-error'
 import { SseTransport } from './sse.transport'
 import { HeartbeatService } from './heartbeat.service'
 
@@ -194,7 +195,7 @@ export class SseSubscriptionHandler {
     try {
       assertIdentityIsNotBlank(resolvedAuth)
     } catch (err) {
-      this.logger.error(`SSE connection refused — responding 500: ${(err as Error).message}`)
+      this.logger.error(`SSE connection refused — responding 500: ${describeError(err)}`)
       throw new InternalServerErrorException()
     }
     return resolvedAuth
@@ -309,9 +310,7 @@ export class SseSubscriptionHandler {
   }
 
   private serverError(err: unknown, what: string): HttpException {
-    this.logger.error(
-      `${what} — responding 500: ${err instanceof Error ? err.message : String(err)}`,
-    )
+    this.logger.error(`${what} — responding 500: ${describeError(err)}`)
     return new InternalServerErrorException()
   }
 
@@ -427,7 +426,7 @@ export class SseSubscriptionHandler {
    */
   private fireHook(invoke: () => void | Promise<void>): void {
     void Promise.resolve(invoke()).catch((err: unknown) => {
-      this.logger.warn(`Lifecycle hook failed: ${(err as Error).message}`)
+      this.logger.warn(`Lifecycle hook failed: ${describeError(err)}`)
     })
   }
 }
