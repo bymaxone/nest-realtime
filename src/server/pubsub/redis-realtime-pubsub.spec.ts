@@ -156,6 +156,7 @@ describe('RedisRealtimePubSub', () => {
     ],
     ['a code and no message', { code: 'ETIMEDOUT', message: '' }, 'ETIMEDOUT'],
     ['a message and no code', { message: 'socket hang up' }, 'socket hang up'],
+    ['a code that is not text', { code: 111, message: 'socket hang up' }, 'socket hang up'],
     ['neither', { message: '' }, 'Error'],
   ])('states the connection failure with %s', async (_label, fields, reason) => {
     const handlers: Record<string, (value: unknown) => void> = {}

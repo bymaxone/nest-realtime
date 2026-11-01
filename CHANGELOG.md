@@ -46,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   succeeds. The state follows the connection for the life of the process: a drop makes it unready
   again, logged once per outage rather than once per retry, and it is ready only once the SUBSCRIBE
   is confirmed, whether or not the client has `autoResubscribe` on.
+  The subscriber client no longer relies on ioredis replaying its subscription after a reconnect:
+  that replay had no handler for a refusal, so a re-subscribe the server refused (an ACL changed
+  while the instance ran) surfaced as an unhandled rejection that can end the Node process. The
+  library now sends its own `SUBSCRIBE` on every reconnect and reports a refusal in the log.
 
 #### Apply to a derived backend
 

@@ -15,6 +15,10 @@ import {
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
+// A mutant that leaves the instance stuck must fail here, well inside the mutation runner's own
+// timeout, and not be counted as a timeout after the default five seconds per test.
+jest.setTimeout(3_000)
+
 const CHANNEL = 'bymax:realtime'
 const DOWN_PREFIX = `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "${CHANNEL}": `
 const UP = `Subscribed to "${CHANNEL}"; events and revocations from other instances reach this instance`
@@ -50,7 +54,7 @@ async function closedPort(): Promise<FakeRespServer> {
   return fake
 }
 
-async function until(what: string, condition: () => boolean, ms = 3000): Promise<void> {
+async function until(what: string, condition: () => boolean, ms = 1500): Promise<void> {
   const deadline = Date.now() + ms
   while (!condition()) {
     if (Date.now() > deadline) throw new Error(`timed out after ${ms} ms waiting for ${what}`)
