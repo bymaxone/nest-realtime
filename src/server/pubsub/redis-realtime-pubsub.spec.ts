@@ -181,6 +181,34 @@ describe('RedisRealtimePubSub', () => {
     }
   })
 
+  // A SUBSCRIBE that ioredis resent after a drop and the one sent on ready can both be answered,
+  // so a second success while the instance is already subscribed is normal, and it says nothing:
+  // one line per recovery, not one per answer. Driven by hand, so no network order is involved.
+  it('logs the subscription once when a second confirmation arrives while subscribed', async () => {
+    const handlers: Record<string, () => void> = {}
+    const sub = {
+      subscribe: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn((event: string, handler: () => void) => {
+        handlers[event] = handler
+      }),
+    }
+    const pub = { duplicate: jest.fn().mockReturnValue(sub) }
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
+      await pubsub.subscribe(jest.fn())
+      expect(log).toHaveBeenCalledTimes(1)
+      handlers['ready']!()
+      handlers['ready']!()
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(sub.subscribe).toHaveBeenCalledTimes(3)
+      expect(pubsub.isSubscribed()).toBe(true)
+      expect(log).toHaveBeenCalledTimes(1)
+    } finally {
+      log.mockRestore()
+    }
+  })
+
   // When subscriber init fails, the handler is rolled back and subInit is cleared so the
   // next subscribe() retries with a fresh client instead of re-awaiting the rejected promise.
   it('rolls back handler and clears subInit when subscriber init fails', async () => {
