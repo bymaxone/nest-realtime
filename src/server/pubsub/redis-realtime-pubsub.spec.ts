@@ -146,6 +146,40 @@ describe('RedisRealtimePubSub', () => {
     expect(received).toHaveLength(1)
   })
 
+  // The outage line names why the connection failed. ioredis wraps a refused connect in an error
+  // that can have a code and no message, or a message and no code, or neither.
+  it.each([
+    [
+      'a code and a message',
+      { code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 10.0.0.1:6379' },
+      'ECONNREFUSED connect ECONNREFUSED 10.0.0.1:6379',
+    ],
+    ['a code and no message', { code: 'ETIMEDOUT', message: '' }, 'ETIMEDOUT'],
+    ['a message and no code', { message: 'socket hang up' }, 'socket hang up'],
+    ['neither', { message: '' }, 'Error'],
+  ])('states the connection failure with %s', async (_label, fields, reason) => {
+    const handlers: Record<string, (value: unknown) => void> = {}
+    const sub = {
+      subscribe: jest.fn().mockReturnValue(new Promise(() => undefined)),
+      on: jest.fn((event: string, handler: (value: unknown) => void) => {
+        handlers[event] = handler
+      }),
+    }
+    const pub = { duplicate: jest.fn().mockReturnValue(sub) }
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
+      const subscribing = pubsub.subscribe(jest.fn())
+      handlers['error']!(Object.assign(new Error(fields.message), fields))
+      await subscribing
+      expect(warn).toHaveBeenCalledWith(
+        `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "bymax:realtime": ${reason}. Events and revocations from other instances will not reach this instance until it is subscribed again`,
+      )
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   // When subscriber init fails, the handler is rolled back and subInit is cleared so the
   // next subscribe() retries with a fresh client instead of re-awaiting the rejected promise.
   it('rolls back handler and clears subInit when subscriber init fails', async () => {

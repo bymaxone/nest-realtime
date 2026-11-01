@@ -108,7 +108,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
 
   // A rejected subscribe must not leave a subscriber connection retrying in the background.
   it('closes the subscriber connection after a rejected subscribe', async () => {
-    spies()
+    const { warn } = spies()
     const fake = await server((command) =>
       command[0] === 'SUBSCRIBE' ? '-NOPERM refused\r\n' : healthyRedis(command, null as never),
     )
@@ -117,6 +117,8 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
     // A subscriber left retrying would send SUBSCRIBE again after every reconnect.
     await new Promise((resolve) => setTimeout(resolve, 300))
     expect(fake.seen.filter((c) => c[0] === 'SUBSCRIBE')).toHaveLength(1)
+    // Closing it on purpose is not an outage, so nothing is logged for the closed connection.
+    expect(warn).not.toHaveBeenCalled()
   })
 
   // An unreachable Redis does not answer at all; the boot must not wait for it.
@@ -142,11 +144,14 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
 
   // Shutdown awaits the unsubscribe; QUIT to a Redis that never answered would block it forever.
   it('unsubscribes at once when Redis was never reachable', async () => {
-    spies()
+    const { warn } = spies()
     const fake = await closedPort()
     const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
     const unsubscribe = await subscribe(pubsub)
     await expect(unsubscribe()).resolves.toBeUndefined()
+    // The queued SUBSCRIBE is rejected because the connection closed, which is not a refusal.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(warn.mock.calls.map((call) => String(call[0]))).toHaveLength(1)
   })
 
   // Redis arriving later must make the instance subscribed, with one line saying so, and the
@@ -273,6 +278,29 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
     ).toBe(
       `REALTIME_PUBSUB_UNAVAILABLE: the server refused the subscription to "${CHANNEL}": NOPERM refused later`,
     )
+  })
+
+  // A refusal of the SUBSCRIBE that follows a reconnect is the confirmation's to report: the
+  // original SUBSCRIBE succeeded long ago, so nothing else sees it.
+  it('stays unsubscribed and reports a refusal of the SUBSCRIBE after a reconnect', async () => {
+    const { warn } = spies()
+    const fake = await server()
+    const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
+    await subscribe(pubsub)
+    fake.respond((command, socket) =>
+      command[0] === 'SUBSCRIBE' ? '-NOPERM acl changed\r\n' : healthyRedis(command, socket),
+    )
+    fake.drop()
+    await until('the refusal to be reported', () =>
+      warn.mock.calls.some((call) => String(call[0]).includes('refused')),
+    )
+    expect(pubsub.isSubscribed()).toBe(false)
+    const refusals = warn.mock.calls
+      .map((call) => String(call[0]))
+      .filter((l) => l.includes('refused'))
+    expect(refusals).toEqual([
+      `REALTIME_PUBSUB_UNAVAILABLE: the server refused the subscription to "${CHANNEL}": NOPERM acl changed`,
+    ])
   })
 
   // A server that refuses after the boot has completed is not a reason to give up: ioredis keeps

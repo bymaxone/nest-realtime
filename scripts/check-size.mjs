@@ -22,14 +22,14 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 // Budgets calibrated against measured brotli sizes, with per-bundle headroom:
 //   server    0.24 KB →  0.5 KB (a re-export facade over the shared runtime)
-//   internal 17.29 KB → 18.2 KB (18,146 B measured, 0.3% headroom — the bulk of an SSE install,
+//   internal 17.29 KB → 18.2 KB (18,197 B measured, under 0.1% headroom — the bulk of an SSE install,
 //     including the route guard that authenticates before the SSE response is committed, the
 //     handling that keeps an error's message out of the stream, the peer address handed to the
 //     authenticator, the client address validated against the trusted-proxy chain, the
 //     revocation that rejects when it cannot reach its connection and the report of a delivery
 //     path that failed without failing its call, and the subscriber's lifecycle state (the
 //     refusal that fails the boot, the unreachable Redis that does not, the readiness that follows
-//     the connection and its once-per-transition logs; +854 B over 17,292), all of which are code
+//     the connection and its once-per-transition logs; +905 B over 17,292), all of which are code
 //     that cannot be trimmed)
 //     Tighter than the 7% the other ratchets carry, on purpose: this bundle ships
 //     roughly 15.8 KB raw of comments —

@@ -77,8 +77,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   /** Whether the subscriber connection holds a confirmed SUBSCRIBE right now. */
   #subscribed = false
   /** Whether the current outage has been logged, so a retry loop adds no line. */
+  // Stryker disable next-line BooleanLiteral: equivalent — createSubscriber sets it before any use
   #outageLogged = false
   /** Set while the last handler is quitting the client on purpose, which is not an outage. */
+  // Stryker disable next-line BooleanLiteral: equivalent — createSubscriber sets it before any use
   #quitting = false
 
   constructor(options: RedisRealtimePubSubOptions) {
@@ -150,23 +152,23 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   private async createSubscriber(): Promise<Redis> {
     this.#quitting = false
     this.#outageLogged = false
-    const sub = this.#pub.duplicate()
+    // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
+    // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it.
+    const sub = this.#pub.duplicate({ autoResubscribe: false })
     let attached = false
-    let unreachable: (reason: unknown) => void = () => undefined
-    const unreachableFirst = new Promise<{ readonly unreachable: unknown }>((resolve) => {
-      unreachable = (reason) => resolve({ unreachable: reason })
-    })
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
     // An error reply is the server's answer and reaches the caller as the SUBSCRIBE's rejection;
     // anything else is the connection failing, which ioredis retries on its own.
-    sub.on('error', (err: Error) => {
-      if (err.name !== 'ReplyError') unreachable(err)
+    const unreachableFirst = new Promise<{ readonly unreachable: unknown }>((resolve) => {
+      sub.on('error', (err: Error) => {
+        if (err.name !== 'ReplyError') resolve({ unreachable: err })
+      })
     })
     sub.on('close', () => {
       if (!this.#quitting) this.markDown('connection closed')
     })
-    // ioredis re-sends SUBSCRIBE after a reconnect without telling anyone; asking again is
-    // harmless to the server and is what confirms it, whether or not that option is on.
+    // After a reconnect the subscription is gone with the old connection; subscribing again is
+    // what restores it, and its answer is what confirms it.
     sub.on('ready', () => {
       if (attached) this.confirm(sub)
     })
@@ -180,10 +182,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         this.markUp()
       } else {
         this.markDown(connectionReason(outcome.unreachable))
-        first.then(
-          () => this.markUp(),
-          (err: unknown) => this.refused(err),
-        )
+        // A confirmation needs no handler here: the connection's first `ready` sends its own.
+        first.catch((err: unknown) => this.refused(err))
       }
     } catch (err) {
       this.#quitting = true
