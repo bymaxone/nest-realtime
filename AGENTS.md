@@ -287,7 +287,9 @@ hook signatures, the test patterns and the error-code table are in
   `SseSubscriptionHandler` replays what follows `Last-Event-ID` before the live stream.
 - The Redis adapter is wired in `RealtimeIoAdapter` when `websocket.redisAdapter.pubClient` is given; it
   calls `.duplicate()` on that client for the subscriber, and the library never opens its own Redis
-  connection.
+  connection. An adapter that cannot be installed fails the boot (`REALTIME_REDIS_ADAPTER_FAILED`); an
+  unreachable Redis does not. The ESM bundle declares its own `require` for this load; `pnpm size` and
+  `pnpm check:runtime` fail if that is lost.
 
 ---
 

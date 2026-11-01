@@ -79,7 +79,7 @@ Three concrete implementations:
 - Built on Socket.IO 4.x via `@nestjs/websockets` + `@nestjs/platform-socket.io`.
 - `RealtimeIoAdapter` extends `IoAdapter` and registers the Socket.IO server on the configured `namespace`.
 - `RealtimeGateway` handles `connection` and `disconnect` Socket.IO events; authentication runs in a connection middleware.
-- The Redis adapter (`@socket.io/redis-adapter`) is wired in `RealtimeIoAdapter` when `websocket.redisAdapter.pubClient` is provided. It calls `.duplicate()` on the supplied ioredis client to create a subscriber client — the library never creates its own Redis connection.
+- The Redis adapter (`@socket.io/redis-adapter`) is wired in `RealtimeIoAdapter` when `websocket.redisAdapter.pubClient` is provided. It calls `.duplicate()` on the supplied ioredis client to create a subscriber client — the library never creates its own Redis connection. If the adapter cannot be installed, the boot fails with `REALTIME_REDIS_ADAPTER_FAILED`.
 
 ## `ConnectionRegistry` and `RoomRegistry`
 
@@ -198,5 +198,6 @@ E2E tests use the `eventsource` npm package as a Node.js polyfill for `EventSour
 | `REALTIME_TOO_MANY_CONNECTIONS`    | `REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS`    | FIFO eviction of oldest connection                |
 | `REALTIME_INVALID_TICKET`          | `REALTIME_ERROR_CODES.INVALID_TICKET`          | Ticket not found / expired                        |
 | `REALTIME_PUBSUB_UNAVAILABLE`      | `REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE`      | Pub/sub backend unreachable (degrades gracefully) |
+| `REALTIME_REDIS_ADAPTER_FAILED`    | `REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED`    | `websocket.redisAdapter` set, adapter not installable (boot fails) |
 | `REALTIME_PAYLOAD_TOO_LARGE`       | `REALTIME_ERROR_CODES.PAYLOAD_TOO_LARGE`       | Event data exceeds configured limit               |
 | `REALTIME_REPLAY_BUFFER_MISS`      | `REALTIME_ERROR_CODES.REPLAY_BUFFER_MISS`      | `Last-Event-ID` outside the replay window         |

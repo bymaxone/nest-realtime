@@ -73,6 +73,16 @@ export default defineConfig([
     outDir: 'dist',
     outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
     external: externalAll,
+    // `RealtimeIoAdapter` loads the optional Redis adapter with a bare `require`, which an ES
+    // module does not have: esbuild turns it into a call that throws, so the adapter can never
+    // install. The ESM bundle gets a real `require` that resolves from the package's own
+    // location, the way the CommonJS bundle already does.
+    banner: ({ format }) =>
+      format === 'esm'
+        ? {
+            js: 'import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);',
+          }
+        : {},
     target: 'node24',
     clean: false,
     splitting: false,

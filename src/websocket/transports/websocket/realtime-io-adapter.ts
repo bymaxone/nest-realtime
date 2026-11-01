@@ -7,7 +7,7 @@ import type { INestApplicationContext } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
 import type { Server, ServerOptions } from 'socket.io'
-import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
+import { REALTIME_ERROR_CODES, REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions } from '@bymax-one/nest-realtime/internal'
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
@@ -82,8 +82,7 @@ export class RealtimeIoAdapter extends IoAdapter {
    * Create the Socket.IO server with merged WebSocket options.
    *
    * When `websocket.redisAdapter.pubClient` is set, installs the
-   * `@socket.io/redis-adapter` lazily (so the package stays an optional peer
-   * dep — its absence does not crash the lib).
+   * `@socket.io/redis-adapter` lazily: the optional peer is needed only then.
    */
   override createIOServer(port: number, opts?: ServerOptions): unknown {
     const wsOpts = this.options.websocket ?? {}
@@ -95,10 +94,19 @@ export class RealtimeIoAdapter extends IoAdapter {
       maxHttpBufferSize: wsOpts.maxHttpBufferSize ?? 1_000_000,
     } as ServerOptions
 
-    const server = super.createIOServer(port, mergedOpts) as { adapter: (a: unknown) => void }
+    const server = super.createIOServer(port, mergedOpts) as {
+      adapter: (a: unknown) => void
+      close: () => Promise<void>
+    }
 
     if (wsOpts.redisAdapter?.pubClient) {
-      this.installRedisAdapter(server, wsOpts.redisAdapter.pubClient)
+      try {
+        this.installRedisAdapter(server, wsOpts.redisAdapter.pubClient)
+      } catch (err) {
+        // A server given its own port listens already; a failed boot must not keep the process alive.
+        server.close().catch(() => undefined)
+        throw err
+      }
     }
 
     realtimeServers.add(server)
@@ -106,11 +114,9 @@ export class RealtimeIoAdapter extends IoAdapter {
   }
 
   /**
-   * Lazily load and install `@socket.io/redis-adapter`.
-   *
-   * Uses a dynamic `require` so the package stays optional — absent peers do
-   * not crash the lib. A load or install failure is logged and tolerated;
-   * the lib degrades gracefully to single-instance mode.
+   * Install `@socket.io/redis-adapter`. A deterministic failure fails the boot: a
+   * silent single-instance server drops cross-node messages. An unreachable Redis
+   * is not one; reconnecting stays with the client.
    */
   private installRedisAdapter(server: { adapter: (a: unknown) => void }, pubClient: unknown): void {
     try {
@@ -118,14 +124,17 @@ export class RealtimeIoAdapter extends IoAdapter {
       const pub = pubClient as { duplicate: () => unknown }
       const sub = pub.duplicate()
       server.adapter(createAdapter(pub as never, sub as never))
-      this.adapterLogger.log(
-        'Socket.IO Redis adapter registered — cross-instance WebSocket fan-out enabled',
-      )
     } catch (err) {
-      this.adapterLogger.error(
-        `Failed to register @socket.io/redis-adapter: ${(err as Error).message}. ` +
-          'Falling back to single-instance mode.',
+      const reason = err instanceof Error ? err.message : String(err)
+      throw new Error(
+        `[${RealtimeIoAdapter.name}] ${REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED}: ` +
+          `websocket.redisAdapter is set but the Socket.IO Redis adapter could not be installed (${reason}). ` +
+          'Install @socket.io/redis-adapter and pass an ioredis client as pubClient.',
+        { cause: err },
       )
     }
+    this.adapterLogger.log(
+      'Socket.IO Redis adapter registered — cross-instance WebSocket fan-out enabled',
+    )
   }
 }

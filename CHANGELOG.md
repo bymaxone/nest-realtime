@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Apply before upgrading, if you set `websocket.redisAdapter`:** make sure `@socket.io/redis-adapter`
+is installed and that `pubClient` is an ioredis client. 1.2.2 and earlier logged one error and served a single
+instance when the adapter could not be installed, and every ESM consumer was in that state, so
+WebSocket events did not cross instances. The boot now fails with `REALTIME_REDIS_ADAPTER_FAILED`
+instead. A Redis that is merely unreachable does not fail the boot.
+
 ### Fixed
+
+- **The WebSocket Redis adapter now installs in the ES module build.** The adapter loaded
+  `@socket.io/redis-adapter` with a bare `require`, which an ES module does not have, so for every
+  consumer importing the package as ESM the load threw, one error line was logged, and the server
+  stayed single-instance: an emit on one instance never reached a client on another. Measured on the
+  published bundle with two instances and a real Redis, 0 of 5000 messages crossed; with the adapter
+  installed, 5000 of 5000 did. CommonJS consumers were not affected. The ESM bundle now declares a
+  `require` that resolves from the package, `pnpm size` fails when an ESM bundle calls a `require`
+  it does not declare, and `pnpm check:runtime` boots the packed tarball in ESM and CommonJS and
+  asserts the adapter registers.
 
 - **A WebSocket authenticator that rejects with a value that is not an `Error` no longer leaves the
   socket connected.** The catch in `handleConnection` read `.message` from whatever was thrown, so a
