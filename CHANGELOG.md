@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-11-01
+
+### Added
+
+- Throwaway proof of the pull-request declaration check; this branch is never merged.
+
 ### Tests
 
 - **The README Quick Start is executed, not only type-checked.** Specs take the Quick Start
@@ -655,7 +661,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.5...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.6...HEAD
+[1.2.6]: https://github.com/bymaxone/nest-realtime/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/bymaxone/nest-realtime/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/bymaxone/nest-realtime/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/bymaxone/nest-realtime/compare/v1.2.2...v1.2.3

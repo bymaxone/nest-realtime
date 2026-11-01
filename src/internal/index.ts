@@ -80,3 +80,6 @@ export type {
   RoomPrefix,
   TransportMode,
 } from '../shared'
+
+/** Throwaway: proves the pull-request declaration check. Never merged. */
+export type ThrowawayApiSurfaceProof = string
