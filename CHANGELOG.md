@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself and stopped revalidating the remaining connections; it now logs it, goes on, and revalidates
   the connection again on the next cycle. A rejected cycle no longer leaves an unhandled rejection.
 
+- **A failed publish or a failed offline-queue write is no longer silent.** An emit whose publish
+  to the other instances was refused still resolves, as before, but the failure is now logged with
+  `REALTIME_PUBSUB_UNAVAILABLE` and the operation and passed to the new `onDeliveryFailure` hook,
+  which is where to count it. `emitToUser` now waits for the offline queue instead of firing and
+  forgetting it, reports a failed write the same way, and rejects with
+  `REALTIME_TRANSPORT_UNAVAILABLE` only when the event has no delivery path left: the user is
+  offline here, the queue could not keep it, and the bus failed or cannot reach another instance
+  (the default in-memory bus). A failed offline-queue read on reconnect is reported too. A remote
+  `disconnect` that fails no longer leaves an unhandled rejection, an unparsable bus payload is
+  counted and reported at most once a minute instead of vanishing, and an emit made before the
+  WebSocket gateway attaches its server says so once.
+
 #### Apply to a derived backend
 
 Await `disconnect()` and handle its rejection where you revoke a connection: a rejection means the
@@ -32,10 +44,21 @@ connection may still be connected, so retry or alert. A caller that ignored the 
 risks an unhandled rejection. `joinRoom` and `leaveRoom` can reject the same way, and are local to the
 instance that holds the connection. `REALTIME_ERROR_CODES` gains `TRANSPORT_UNAVAILABLE`.
 
+`emitToUser` can now reject, with `REALTIME_TRANSPORT_UNAVAILABLE`, when an offline queue is
+configured, the user is offline on this instance, the queue could not keep the event and no other
+instance can have delivered it. Count `onDeliveryFailure` (new, optional, nothing to implement) to see
+the publishes and queue writes that failed without failing the call.
+
+### Added
+
+- `IConnectionLifecycleHooks.onDeliveryFailure(failure)`, with the exported `DeliveryFailure` type
+  (`code`, `op`, `error`), called when a delivery path fails but the call that used it still
+  resolves.
+
 ### Internal
 
 - The `internal` and `websocket` bundle budgets in `pnpm size` are raised to fit the revocation that
-  rejects when it cannot reach its connection.
+  rejects when it cannot reach its connection and the report of a delivery path that failed.
 - The workflow jobs that check out the repository and then run its scripts no longer keep the job's
   token in the git configuration: `persist-credentials: false` on the checkout wherever no later
   step pushes or tags.

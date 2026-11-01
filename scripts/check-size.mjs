@@ -22,21 +22,22 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 // Budgets calibrated against measured brotli sizes, with per-bundle headroom:
 //   server    0.24 KB →  0.5 KB (a re-export facade over the shared runtime)
-//   internal 16.34 KB → 16.4 KB (16,337 B measured, 0.4% headroom — the bulk of an SSE install,
+//   internal 17.29 KB → 17.4 KB (17,292 B measured, 0.6% headroom — the bulk of an SSE install,
 //     including the route guard that authenticates before the SSE response is committed, the
 //     handling that keeps an error's message out of the stream, the peer address handed to the
-//     authenticator, the client address validated against the trusted-proxy chain and the
-//     revocation that rejects when it cannot reach its connection, all of which are code that
-//     cannot be trimmed)
+//     authenticator, the client address validated against the trusted-proxy chain, the
+//     revocation that rejects when it cannot reach its connection and the report of a delivery
+//     path that failed without failing its call, all of which are code that cannot be trimmed)
 //     Tighter than the 7% the other ratchets carry, on purpose: this bundle ships
 //     roughly 15.8 KB raw of comments —
 //     stripping them takes it from 14.34 to 10.04 KB brotli — so headroom here is
 //     cheap to reclaim, and a loose ratchet would hide that a 30% reduction is
 //     available rather than force the question.
-//   websocket 7.31 KB →  7.4 KB (7,311 B measured, 1.2% headroom — the Socket.IO stack alone,
+//   websocket 7.48 KB →  7.55 KB (7,476 B measured, 1.0% headroom — the Socket.IO stack alone,
 //     including the start-up message that names the fix when `RealtimeIoAdapter` is not installed,
-//     the boot error that names the cause when the Redis adapter cannot be installed and the
-//     revocation that rejects when the server is not attached or its fan-out throws)
+//     the boot error that names the cause when the Redis adapter cannot be installed, the
+//     revocation that rejects when the server is not attached or its fan-out throws and the
+//     one-time warning for an emit made before the server is attached)
 //   shared    0.44 KB →  0.6 KB (37% headroom, kept slightly generous for future constants)
 //   react     2.26 KB →  2.4 KB (6% headroom)
 //
@@ -50,8 +51,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 500 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 16_400 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 7_400 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 17_400 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 7_550 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 600 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_400 },
 ]

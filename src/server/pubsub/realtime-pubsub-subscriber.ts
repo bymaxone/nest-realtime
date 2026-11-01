@@ -112,7 +112,14 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
         }
         case 'disconnect': {
           const a = msg.args as DisconnectArgs
-          void this.sse.disconnectLocal(a.connectionId, a.reason)
+          // Not awaited (the handler is synchronous), so its rejection is handled here.
+          Promise.resolve(this.sse.disconnectLocal(a.connectionId, a.reason)).catch(
+            (err: unknown) => {
+              this.logger.warn(
+                `Remote disconnect of ${a.connectionId} failed: ${describeError(err)}`,
+              )
+            },
+          )
           break
         }
         default: {

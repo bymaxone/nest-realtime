@@ -2,11 +2,16 @@
  * @fileoverview Redis-backed pub/sub for cross-instance SSE fan-out.
  * @layer infrastructure
  */
+import { Logger } from '@nestjs/common'
 import type { Redis } from 'ioredis'
+import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type {
   IRealtimePubSub,
   RealtimePubSubMessage,
 } from '../interfaces/realtime-pubsub.interface'
+
+/** The shortest time between two reports of dropped malformed payloads. */
+const MALFORMED_REPORT_INTERVAL_MS = 60_000
 
 /** Options for RedisRealtimePubSub. */
 export interface RedisRealtimePubSubOptions {
@@ -23,7 +28,8 @@ export interface RedisRealtimePubSubOptions {
  * `SUBSCRIBE` (a lazily-duplicated clone). The subscriber clone is created on
  * the first `subscribe()` call and quit on the last `unsubscribe()`.
  *
- * Messages are JSON-encoded. Malformed payloads are silently dropped.
+ * Messages are JSON-encoded. A malformed payload is dropped and counted, and the count is
+ * reported at most once a minute.
  *
  * @example
  * ```ts
@@ -49,6 +55,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   /** The lazily created subscriber connection, which carries the same credentials. */
   #subInit: Promise<Redis> | null = null
   private readonly handlers = new Set<(message: RealtimePubSubMessage) => void>()
+  private readonly logger = new Logger(RedisRealtimePubSub.name)
+  /** Payloads dropped as unparsable since the last report, and when that report was made. */
+  private malformedDropped = 0
+  private malformedReportedAt = 0
 
   constructor(options: RedisRealtimePubSubOptions) {
     this.#pub = options.client
@@ -64,7 +74,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * Lazily creates the single shared subscribe client on first call; returns an async
    * unsubscribe that quits the client when the last handler is removed. Concurrent
    * subscribe calls are idempotent — only one client is ever created. Malformed
-   * payloads are dropped silently.
+   * payloads are dropped, and reported at most once a minute with their count.
    *
    * If the subscriber client cannot be created (e.g. Redis temporarily unavailable),
    * the handler registration is rolled back and the cached init promise is cleared so
@@ -109,12 +119,27 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     return sub
   }
 
+  /**
+   * Count a payload dropped as unparsable and report the count at most once per minute, so a
+   * producer on an incompatible version is visible without flooding the log.
+   */
+  private reportMalformed(): void {
+    this.malformedDropped++
+    const now = Date.now()
+    if (now - this.malformedReportedAt < MALFORMED_REPORT_INTERVAL_MS) return
+    this.logger.warn(
+      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: dropped ${this.malformedDropped} malformed payload(s) on "${this.channel}" since the last report`,
+    )
+    this.malformedDropped = 0
+    this.malformedReportedAt = now
+  }
+
   private dispatch(payload: string): void {
     let msg: RealtimePubSubMessage
     try {
       msg = JSON.parse(payload) as RealtimePubSubMessage
     } catch {
-      // Silently drop malformed payloads.
+      this.reportMalformed()
       return
     }
     for (const h of this.handlers) {

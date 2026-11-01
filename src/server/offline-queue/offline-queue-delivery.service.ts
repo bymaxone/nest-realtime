@@ -3,12 +3,18 @@
  * @layer application
  */
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
-import { REALTIME_OFFLINE_QUEUE_TOKEN } from '../constants/injection-tokens.constants'
+import {
+  REALTIME_HOOKS_TOKEN,
+  REALTIME_OFFLINE_QUEUE_TOKEN,
+} from '../constants/injection-tokens.constants'
+import type { IConnectionLifecycleHooks } from '../interfaces/connection-lifecycle-hooks.interface'
 import type {
   IOfflineQueueStorage,
   OfflineQueuedEvent,
 } from '../interfaces/offline-queue-storage.interface'
+import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { describeError } from '../utils/describe-error'
+import { reportDeliveryFailure } from '../utils/report-delivery-failure'
 
 const RETRIEVE_LIMIT = 200
 
@@ -32,6 +38,9 @@ export class OfflineQueueDeliveryService {
     @Optional()
     @Inject(REALTIME_OFFLINE_QUEUE_TOKEN)
     private readonly storage?: IOfflineQueueStorage,
+    @Optional()
+    @Inject(REALTIME_HOOKS_TOKEN)
+    private readonly hooks?: IConnectionLifecycleHooks,
   ) {}
 
   /**
@@ -58,7 +67,16 @@ export class OfflineQueueDeliveryService {
     try {
       events = await this.storage.retrieveSince(userId, lastEventId, RETRIEVE_LIMIT)
     } catch (err) {
-      this.logger.warn(`Offline queue retrieve failed: ${describeError(err)}`)
+      reportDeliveryFailure(
+        this.logger,
+        this.hooks,
+        {
+          code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+          op: 'offlineRetrieve',
+          error: err,
+        },
+        'Offline queue retrieve failed',
+      )
       return []
     }
 

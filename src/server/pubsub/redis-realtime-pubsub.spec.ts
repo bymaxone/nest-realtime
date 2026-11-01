@@ -3,6 +3,7 @@
  * @layer infrastructure
  */
 import { inspect } from 'node:util'
+import { Logger } from '@nestjs/common'
 import RedisMock from 'ioredis-mock'
 import type { Redis } from 'ioredis'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
@@ -81,8 +82,8 @@ describe('RedisRealtimePubSub', () => {
     expect(b).toHaveBeenCalledTimes(1)
   })
 
-  // Malformed JSON from Redis is silently dropped.
-  it('drops malformed JSON payloads silently', async () => {
+  // A malformed JSON payload from Redis never reaches a handler.
+  it('does not deliver malformed JSON payloads to a handler', async () => {
     const { pubsub, client } = build()
     const handler = jest.fn()
     await pubsub.subscribe(handler)
@@ -90,6 +91,35 @@ describe('RedisRealtimePubSub', () => {
     await client.publish('bymax:realtime', '{not json')
     await new Promise((r) => setTimeout(r, 0))
     expect(handler).not.toHaveBeenCalled()
+  })
+
+  // A payload the bus cannot parse is dropped and reported: the log names the code, and a burst is
+  // reported once per minute with the count, so a version skew shows without flooding.
+  it('warns about malformed payloads once per minute with the count dropped', async () => {
+    const { pubsub, client } = build()
+    await pubsub.subscribe(jest.fn())
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const now = jest.spyOn(Date, 'now')
+    try {
+      now.mockReturnValue(1_000_000)
+      await client.publish('bymax:realtime', '{not json')
+      await client.publish('bymax:realtime', 'also not json')
+      await new Promise((r) => setTimeout(r, 0))
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith(
+        'REALTIME_PUBSUB_UNAVAILABLE: dropped 1 malformed payload(s) on "bymax:realtime" since the last report',
+      )
+      now.mockReturnValue(1_000_000 + 60_000)
+      await client.publish('bymax:realtime', 'again')
+      await new Promise((r) => setTimeout(r, 0))
+      expect(warnSpy).toHaveBeenCalledTimes(2)
+      expect(warnSpy).toHaveBeenLastCalledWith(
+        'REALTIME_PUBSUB_UNAVAILABLE: dropped 2 malformed payload(s) on "bymax:realtime" since the last report',
+      )
+    } finally {
+      now.mockRestore()
+      warnSpy.mockRestore()
+    }
   })
 
   // A throwing handler does not block other handlers.

@@ -665,7 +665,9 @@ describe('SseTransport', () => {
         const { transport } = build({ offlineQueue })
         await transport.emitToUser('u1', 'foo', {})
         await new Promise((resolve) => setImmediate(resolve))
-        expect(warnSpy).toHaveBeenCalledWith(`Offline queue append failed: ${logged}`)
+        expect(warnSpy).toHaveBeenCalledWith(
+          `REALTIME_TRANSPORT_UNAVAILABLE op=offlineAppend: Offline queue append failed: ${logged}`,
+        )
         expect(unhandled).not.toHaveBeenCalled()
       } finally {
         process.off('unhandledRejection', unhandled)

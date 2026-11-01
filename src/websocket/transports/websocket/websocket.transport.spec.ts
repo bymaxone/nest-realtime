@@ -133,6 +133,41 @@ describe('WebSocketTransport', () => {
     await expect(transport.emitToUser('u-1', 'evt', {})).resolves.toBeUndefined()
   })
 
+  it('logs once that emits are dropped until the server is attached', async () => {
+    // An emit before the gateway attaches resolves and delivers nothing; that is said once per
+    // transport, not once per emit, and the code names the cause.
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await transport.emitToUser('u-1', 'evt', {})
+      await transport.broadcast('evt', {})
+      await transport.emitToRoom('room:r', 'evt', {})
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith(
+        'REALTIME_TRANSPORT_UNAVAILABLE op=emitToUser: no WebSocket server is attached yet, so emits are dropped until the gateway initialises',
+      )
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // The one warning names the operation that hit the unattached transport first.
+  it.each([
+    ['emitToUser', (t: WebSocketTransport) => t.emitToUser('u-1', 'evt', {})],
+    ['emitToTenant', (t: WebSocketTransport) => t.emitToTenant('t-1', 'evt', {})],
+    ['emitToRoom', (t: WebSocketTransport) => t.emitToRoom('room:r', 'evt', {})],
+    ['broadcast', (t: WebSocketTransport) => t.broadcast('evt', {})],
+  ])('names %s in the unattached warning', async (op, call) => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await call(transport)
+      expect(warnSpy).toHaveBeenCalledWith(
+        `REALTIME_TRANSPORT_UNAVAILABLE op=${op}: no WebSocket server is attached yet, so emits are dropped until the gateway initialises`,
+      )
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it('emitToUser calls server.to(user:{id}).emit(event, data)', async () => {
     // emitToUser targets the user:{userId} room.
     const server = makeServer()
