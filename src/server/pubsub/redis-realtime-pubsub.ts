@@ -73,7 +73,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * Lazily creates the single shared subscribe client on first call; returns an async
    * unsubscribe that quits the client when the last handler is removed. Concurrent
    * subscribe calls are idempotent — only one client is ever created. Malformed
-   * payloads are dropped silently.
+   * payloads are dropped, and reported at most once a minute with their count.
    *
    * If the subscriber client cannot be created (e.g. Redis temporarily unavailable),
    * the handler registration is rolled back and the cached init promise is cleared so
