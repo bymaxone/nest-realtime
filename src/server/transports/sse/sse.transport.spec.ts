@@ -678,6 +678,18 @@ describe('SseTransport', () => {
     },
   )
 
+  // The user-targeted emit names its own operation when its publish fails behind a resolved call.
+  it('reports a failed emitToUser publish with its own operation', async () => {
+    const onDeliveryFailure = jest.fn()
+    const { transport, publish } = build({ hooks: { onDeliveryFailure } })
+    publish.mockRejectedValueOnce(new Error('redis down'))
+    await expect(transport.emitToUser('u1', 'foo', {})).resolves.toBeUndefined()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(onDeliveryFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'REALTIME_PUBSUB_UNAVAILABLE', op: 'emitToUser' }),
+    )
+  })
+
   // A failed publish of an emit stays best-effort and visible: the log line carries the stable code
   // and the operation, and the consumer's hook receives the failure.
   it('reports a failed emit publish to the log and to onDeliveryFailure', async () => {
@@ -722,9 +734,7 @@ describe('SseTransport', () => {
       try {
         await expect(transport.emitToUser('u1', 'foo', {})).resolves.toBeUndefined()
         await new Promise((resolve) => setImmediate(resolve))
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('onDeliveryFailure hook failed: hook boom'),
-        )
+        expect(warnSpy).toHaveBeenCalledWith('onDeliveryFailure hook failed: hook boom')
         expect(unhandled).not.toHaveBeenCalled()
       } finally {
         process.off('unhandledRejection', unhandled)
@@ -772,7 +782,9 @@ describe('SseTransport', () => {
     const { transport } = build({ offlineQueue, pubsub: new InMemoryPubSub() })
     const failure = await transport.emitToUser('u1', 'foo', {}).catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(Error)
-    expect((failure as Error).message).toContain('REALTIME_TRANSPORT_UNAVAILABLE')
+    expect((failure as Error).message).toBe(
+      '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed (queue down)',
+    )
     expect(((failure as Error).cause as Error).message).toBe('queue down')
   })
 
@@ -785,7 +797,7 @@ describe('SseTransport', () => {
     const { transport, publish } = build({ offlineQueue })
     publish.mockRejectedValueOnce(new Error('redis down'))
     await expect(transport.emitToUser('u1', 'foo', {})).rejects.toThrow(
-      'REALTIME_TRANSPORT_UNAVAILABLE',
+      '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed (queue down)',
     )
   })
 
@@ -808,7 +820,7 @@ describe('SseTransport', () => {
     })
     if (bus === 'failed') publish.mockRejectedValueOnce(new Error('redis down'))
     await expect(transport.emitToUser('u1', 'foo', {})).rejects.toThrow(
-      'REALTIME_TRANSPORT_UNAVAILABLE',
+      '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed (queue down)',
     )
     await new Promise((resolve) => setImmediate(resolve))
     expect(onDeliveryFailure).not.toHaveBeenCalled()

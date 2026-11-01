@@ -143,7 +143,25 @@ describe('WebSocketTransport', () => {
       await transport.emitToRoom('room:r', 'evt', {})
       expect(warnSpy).toHaveBeenCalledTimes(1)
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('REALTIME_TRANSPORT_UNAVAILABLE'),
+        'REALTIME_TRANSPORT_UNAVAILABLE op=emitToUser: no WebSocket server is attached yet, so emits are dropped until the gateway initialises',
+      )
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // The one warning names the operation that hit the unattached transport first.
+  it.each([
+    ['emitToUser', (t: WebSocketTransport) => t.emitToUser('u-1', 'evt', {})],
+    ['emitToTenant', (t: WebSocketTransport) => t.emitToTenant('t-1', 'evt', {})],
+    ['emitToRoom', (t: WebSocketTransport) => t.emitToRoom('room:r', 'evt', {})],
+    ['broadcast', (t: WebSocketTransport) => t.broadcast('evt', {})],
+  ])('names %s in the unattached warning', async (op, call) => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      await call(transport)
+      expect(warnSpy).toHaveBeenCalledWith(
+        `REALTIME_TRANSPORT_UNAVAILABLE op=${op}: no WebSocket server is attached yet, so emits are dropped until the gateway initialises`,
       )
     } finally {
       warnSpy.mockRestore()

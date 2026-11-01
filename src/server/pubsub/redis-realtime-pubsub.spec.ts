@@ -106,13 +106,16 @@ describe('RedisRealtimePubSub', () => {
       await client.publish('bymax:realtime', 'also not json')
       await new Promise((r) => setTimeout(r, 0))
       expect(warnSpy).toHaveBeenCalledTimes(1)
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('REALTIME_PUBSUB_UNAVAILABLE'))
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 malformed'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        'REALTIME_PUBSUB_UNAVAILABLE: dropped 1 malformed payload(s) on "bymax:realtime" since the last report',
+      )
       now.mockReturnValue(1_000_000 + 60_000)
       await client.publish('bymax:realtime', 'again')
       await new Promise((r) => setTimeout(r, 0))
       expect(warnSpy).toHaveBeenCalledTimes(2)
-      expect(warnSpy).toHaveBeenLastCalledWith(expect.stringContaining('2 malformed'))
+      expect(warnSpy).toHaveBeenLastCalledWith(
+        'REALTIME_PUBSUB_UNAVAILABLE: dropped 2 malformed payload(s) on "bymax:realtime" since the last report',
+      )
     } finally {
       now.mockRestore()
       warnSpy.mockRestore()

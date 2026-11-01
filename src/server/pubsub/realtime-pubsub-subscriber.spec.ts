@@ -146,7 +146,7 @@ describe('RealtimePubSubSubscriber', () => {
       await subscriber.onModuleInit()
       getHandler()!({ op: 'disconnect', args: { connectionId: 'c1' }, origin: 'remote' })
       await new Promise((resolve) => setImmediate(resolve))
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('close boom'))
+      expect(warnSpy).toHaveBeenCalledWith('Remote disconnect of c1 failed: close boom')
       expect(unhandled).not.toHaveBeenCalled()
     } finally {
       process.off('unhandledRejection', unhandled)
