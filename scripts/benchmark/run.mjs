@@ -10,7 +10,7 @@
  * Each server instance is a separate process (`server.mjs`) so that its memory is its own and the
  * load generator does not share a heap with it. Clients all live in this process, which is a
  * limitation: at high client counts the event loop here can lag, so the loop-delay p99 is reported
- * beside every latency table and a latency that tracks it is a client artefact, not a server one.
+ * beside the fan-out and cross-instance latencies and a latency that tracks it is a client artefact, not a server one.
  *
  * Latency is receipt time minus the timestamp the server wrote into the payload, both taken from
  * `performance.timeOrigin + performance.now()`, which is comparable between local processes.
