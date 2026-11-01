@@ -118,9 +118,32 @@ interface SseStream {
   close(): void
 }
 
+/** Resolves once `read()` includes `needle`; after 1500 ms it rejects with what the stream carried. */
+function waitForText(read: () => string, waiting: Set<() => void>, needle: string): Promise<void> {
+  return new Promise((done, fail) => {
+    const timer = setTimeout(() => {
+      waiting.delete(check)
+      fail(new Error(`Stream never carried "${needle}"; it carried:\n${read()}`))
+    }, 1500)
+    const check = (): void => {
+      if (!read().includes(needle)) return
+      clearTimeout(timer)
+      waiting.delete(check)
+      done()
+    }
+    waiting.add(check)
+    check()
+  })
+}
+
 /** Open `GET /realtime/sse` on `port` with an optional cookie, as a browser `EventSource` would. */
 function openStream(port: number, cookie?: string): Promise<SseStream> {
   return new Promise((resolve, reject) => {
+    // A request that connects but is never answered rejects with a message, not at the test timeout.
+    const answered = setTimeout(() => {
+      req.destroy()
+      reject(new Error('GET /realtime/sse received no response within 1500 ms'))
+    }, 1500)
     const req = get(
       {
         host: '127.0.0.1',
@@ -130,6 +153,7 @@ function openStream(port: number, cookie?: string): Promise<SseStream> {
         agent: false,
       },
       (res) => {
+        clearTimeout(answered)
         let text = ''
         const waiting = new Set<() => void>()
         res.setEncoding('utf8')
@@ -141,26 +165,15 @@ function openStream(port: number, cookie?: string): Promise<SseStream> {
           status: res.statusCode,
           contentType: res.headers['content-type'],
           text: () => text,
-          waitFor: (needle) =>
-            new Promise((done, fail) => {
-              const timer = setTimeout(() => {
-                waiting.delete(check)
-                fail(new Error(`Stream never carried "${needle}"; it carried:\n${text}`))
-              }, 1500)
-              const check = (): void => {
-                if (!text.includes(needle)) return
-                clearTimeout(timer)
-                waiting.delete(check)
-                done()
-              }
-              waiting.add(check)
-              check()
-            }),
+          waitFor: (needle) => waitForText(() => text, waiting, needle),
           close: () => req.destroy(),
         })
       },
     )
-    req.on('error', reject)
+    req.on('error', (error) => {
+      clearTimeout(answered)
+      reject(error)
+    })
   })
 }
 

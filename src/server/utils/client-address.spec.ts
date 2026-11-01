@@ -6,6 +6,7 @@
  */
 import { isIP } from 'node:net'
 import { get } from 'node:http'
+import type { ClientRequest } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Test } from '@nestjs/testing'
 import type { NestExpressApplication } from '@nestjs/platform-express'
@@ -214,40 +215,50 @@ describe('resolveClientAddress', () => {
       return { app, port: (app.getHttpServer().address() as AddressInfo).port, hookRan }
     }
 
+    /** Open the SSE stream; `firstChunk` settles when its first chunk arrives or the stream ends first. */
+    function openStream(
+      port: number,
+      forwardedFor: string | undefined,
+    ): { readonly req: ClientRequest; readonly firstChunk: Promise<void> } {
+      const headers = {
+        accept: 'text/event-stream',
+        ...(forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor }),
+      }
+      let settle: { resolve: () => void; reject: (error: Error) => void } | undefined
+      const firstChunk = new Promise<void>((resolve, reject) => {
+        settle = { resolve, reject }
+      })
+      const req = get(
+        { host: '127.0.0.1', port, path: '/realtime/sse', headers, agent: false },
+        (res) => {
+          res.once('data', () => settle?.resolve())
+          res.once('close', () =>
+            settle?.reject(new Error('the stream closed before its first chunk')),
+          )
+        },
+      )
+      req.on('error', (error) => settle?.reject(error))
+      return { req, firstChunk }
+    }
+
     /**
-     * Open the SSE stream, wait for the first chunk and, when `hookRan` is given, for the hook,
-     * then drop the stream. A test that reads only what the authenticator saw passes no hook
-     * signal, because the authenticator has run before the first chunk is written.
+     * Open the stream, wait for its first chunk and, when `hookRan` is given, for the hook, then
+     * drop it. Each wait is bounded on its own and names itself when it expires; the request is
+     * dropped whichever way the exchange ends. A test that reads only what the authenticator saw
+     * passes no hook signal, because the authenticator has run before the first chunk is written.
      */
-    function openAndDrop(
+    async function openAndDrop(
       port: number,
       forwardedFor: string | undefined,
       hookRan: Promise<void> | undefined,
     ): Promise<void> {
-      return new Promise<void>((resolve, reject) => {
-        const headers = {
-          accept: 'text/event-stream',
-          ...(forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor }),
-        }
-        const req = get(
-          { host: '127.0.0.1', port, path: '/realtime/sse', headers, agent: false },
-          (res) => {
-            let chunked = false
-            res.once('data', () => {
-              chunked = true
-              const settled =
-                hookRan === undefined ? Promise.resolve() : within(hookRan, 'the onConnect hook')
-              settled.then(resolve, reject).finally(() => req.destroy())
-            })
-            res.once('close', () => {
-              if (!chunked) reject(new Error('the stream closed before its first chunk'))
-            })
-          },
-        )
-        req.on('error', (error: NodeJS.ErrnoException) =>
-          error.code === 'ECONNRESET' ? resolve() : reject(error),
-        )
-      })
+      const { req, firstChunk } = openStream(port, forwardedFor)
+      try {
+        await within(firstChunk, 'the first chunk of the stream')
+        if (hookRan !== undefined) await within(hookRan, 'the onConnect hook')
+      } finally {
+        req.destroy()
+      }
     }
 
     async function connectBehind(
@@ -259,10 +270,7 @@ describe('resolveClientAddress', () => {
       const seen: Seen = {}
       const { app, port, hookRan } = await startApp(trustProxy, seen, hookDelayMs)
       try {
-        await within(
-          openAndDrop(port, forwardedFor, awaitHook ? hookRan : undefined),
-          'the SSE stream',
-        )
+        await openAndDrop(port, forwardedFor, awaitHook ? hookRan : undefined)
       } finally {
         await app.close()
       }
