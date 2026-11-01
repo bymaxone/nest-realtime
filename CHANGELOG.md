@@ -33,7 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   forgetting it, reports a failed write the same way, and rejects with
   `REALTIME_TRANSPORT_UNAVAILABLE` only when the event has no delivery path left: the user is
   offline here, the queue could not keep it, and the bus failed or cannot reach another instance
-  (the default in-memory bus). A failed offline-queue read on reconnect is reported too. A remote
+  (the default in-memory bus). With `transport: 'both'` that rejection is logged as a warning and
+  the call resolves. A failed offline-queue read on reconnect is reported too. A remote
   `disconnect` that fails no longer leaves an unhandled rejection, an unparsable bus payload is
   counted and reported at most once a minute instead of vanishing, and an emit made before the
   WebSocket gateway attaches its server says so once.
@@ -58,9 +59,9 @@ connection may still be connected, so retry or alert. A caller that ignored the 
 risks an unhandled rejection. `joinRoom` and `leaveRoom` can reject the same way, and are local to the
 instance that holds the connection. `REALTIME_ERROR_CODES` gains `TRANSPORT_UNAVAILABLE`.
 
-`emitToUser` can now reject, with `REALTIME_TRANSPORT_UNAVAILABLE`, when an offline queue is
-configured, the user is offline on this instance, the queue could not keep the event and no other
-instance can have delivered it. Count `onDeliveryFailure` (new, optional, nothing to implement) to see
+With `transport: 'sse'`, `emitToUser` can now reject, with `REALTIME_TRANSPORT_UNAVAILABLE`, when an
+offline queue is configured, the user is offline on this instance, the queue could not keep the event
+and no other instance can have delivered it. Count `onDeliveryFailure` (new, optional, nothing to implement) to see
 the publishes and queue writes that failed without failing the call.
 
 A Redis that refuses the pub/sub subscription (a wrong password, a missing permission) now fails
