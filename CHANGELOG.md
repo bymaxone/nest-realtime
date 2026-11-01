@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-11-01
+
 ### Fixed
 
 - **A revocation that cannot reach its connection no longer answers success.** `disconnect()` on
@@ -24,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A revocation that fails during re-authentication is retried.** The cycle kept the failure to
   itself and stopped revalidating the remaining connections; it now logs it, goes on, and revalidates
   the connection again on the next cycle. A rejected cycle no longer leaves an unhandled rejection.
-
 - **A failed publish or a failed offline-queue write is no longer silent.** An emit whose publish
   to the other instances was refused still resolves, as before, but the failure is now logged with
   `REALTIME_PUBSUB_UNAVAILABLE` and the operation and passed to the new `onDeliveryFailure` hook,
@@ -32,13 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   forgetting it, reports a failed write the same way, and rejects with
   `REALTIME_TRANSPORT_UNAVAILABLE` only when the event has no delivery path left: the user is
   offline here, the queue could not keep it, and the bus failed or cannot reach another instance
-  (the default in-memory bus). A failed offline-queue read on reconnect is reported too. A remote
-  `disconnect` that fails no longer leaves an unhandled rejection, an unparsable bus payload is
-  counted and reported at most once a minute instead of vanishing, and an emit made before the
-  WebSocket gateway attaches its server says so once.
+  (the default in-memory bus). With `transport: 'both'`, a rejection from either path, or from
+  both, is logged as a warning and the call resolves; `onDeliveryFailure` is not called for that
+  rejection. A failed offline-queue read on reconnect is reported too. A remote `disconnect` that
+  fails no longer leaves an unhandled rejection, an unparsable bus payload is counted and reported
+  at most once a minute instead of vanishing, and an emit made before the WebSocket gateway attaches
+  its server says so once.
 - **An instance that cannot hear the others no longer comes up silently deaf.** When the Redis
-  pub/sub subscription at boot was refused (a wrong password, a missing
-  permission) the library logged a warning and started anyway, so the instance missed every
+  pub/sub subscription at boot was refused (a wrong password, a missing permission) the library logged a warning and started anyway, so the instance missed every
   cross-instance revocation. A refusal now fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`. When
   Redis is merely unreachable the boot used to hang, waiting for a subscribe that ioredis keeps
   queued (measured above 40 s on a closed port); it now completes, logs
@@ -58,16 +60,18 @@ connection may still be connected, so retry or alert. A caller that ignored the 
 risks an unhandled rejection. `joinRoom` and `leaveRoom` can reject the same way, and are local to the
 instance that holds the connection. `REALTIME_ERROR_CODES` gains `TRANSPORT_UNAVAILABLE`.
 
-`emitToUser` can now reject, with `REALTIME_TRANSPORT_UNAVAILABLE`, when an offline queue is
-configured, the user is offline on this instance, the queue could not keep the event and no other
-instance can have delivered it. Count `onDeliveryFailure` (new, optional, nothing to implement) to see
+With `transport: 'sse'`, `emitToUser` can now reject, with `REALTIME_TRANSPORT_UNAVAILABLE`, when an
+offline queue is configured, the user is offline on this instance, the queue could not keep the event
+and no other instance can have delivered it. Count `onDeliveryFailure` (new, optional, nothing to implement) to see
 the publishes and queue writes that failed without failing the call.
 
-A bus that refuses the subscription now fails the application's boot instead of logging and
-continuing: a misconfigured Redis password or ACL surfaces at startup. Wire `isPubSubReady()` into
-the readiness probe so an instance that is up but cannot hear the others (Redis unreachable, or the
-subscriber connection dropped) is taken out of rotation; see the README. A custom `IRealtimePubSub`
-needs no change: `isSubscribed` is optional, and a bus without it counts as subscribed.
+A Redis that refuses the pub/sub subscription (a wrong password, a missing permission) now fails
+the application's boot instead of logging and continuing, so a misconfigured credential or ACL
+surfaces at startup. A Redis that is only unreachable no longer hangs the boot: the instance boots
+unready and subscribes when a connection succeeds. Wire `isPubSubReady()` into the readiness probe
+so an instance that is up but cannot hear the others (Redis unreachable, or the subscriber
+connection dropped) is taken out of rotation; see the README. A custom `IRealtimePubSub` needs no
+change: `isSubscribed` is optional, and a bus without it counts as subscribed.
 
 ### Added
 
@@ -83,8 +87,9 @@ needs no change: `isSubscribed` is optional, and a bus without it counts as subs
 - The `internal` and `websocket` bundle budgets in `pnpm size` are raised to fit the revocation that
   rejects when it cannot reach its connection, the report of a delivery path that failed and the
   subscriber's lifecycle state, a boot that ends when the server closes the connection without an
-  error, and per-connection retirement: the `internal` budget goes from 17,400 B to 18,250 B for a
-  measured 18,232 B (it was 17,292 B before the subscriber lifecycle).
+  error, and per-connection retirement: the `internal` budget goes from 15,900 B to 18,250 B for a
+  measured 18,232 B (15,868 B in 1.2.6) and the `websocket` budget from 7,000 B to 7,550 B for a
+  measured 7,477 B.
 - The workflow jobs that check out the repository and then run its scripts no longer keep the job's
   token in the git configuration: `persist-credentials: false` on the checkout wherever no later
   step pushes or tags.
@@ -761,7 +766,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.6...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.7...HEAD
+[1.2.7]: https://github.com/bymaxone/nest-realtime/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/bymaxone/nest-realtime/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/bymaxone/nest-realtime/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/bymaxone/nest-realtime/compare/v1.2.3...v1.2.4
