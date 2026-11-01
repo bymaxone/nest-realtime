@@ -33,11 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   forgetting it, reports a failed write the same way, and rejects with
   `REALTIME_TRANSPORT_UNAVAILABLE` only when the event has no delivery path left: the user is
   offline here, the queue could not keep it, and the bus failed or cannot reach another instance
-  (the default in-memory bus). With `transport: 'both'` that rejection is logged as a warning and
-  the call resolves. A failed offline-queue read on reconnect is reported too. A remote
-  `disconnect` that fails no longer leaves an unhandled rejection, an unparsable bus payload is
-  counted and reported at most once a minute instead of vanishing, and an emit made before the
-  WebSocket gateway attaches its server says so once.
+  (the default in-memory bus). With `transport: 'both'`, a rejection from either path, or from
+  both, is logged as a warning and the call resolves; `onDeliveryFailure` is not called for that
+  rejection. A failed offline-queue read on reconnect is reported too. A remote `disconnect` that
+  fails no longer leaves an unhandled rejection, an unparsable bus payload is counted and reported
+  at most once a minute instead of vanishing, and an emit made before the WebSocket gateway attaches
+  its server says so once.
 - **An instance that cannot hear the others no longer comes up silently deaf.** When the Redis
   pub/sub subscription at boot was refused (a wrong password, a missing permission) the library logged a warning and started anyway, so the instance missed every
   cross-instance revocation. A refusal now fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`. When
