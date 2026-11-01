@@ -181,9 +181,9 @@ describe('RedisRealtimePubSub', () => {
     }
   })
 
-  // A SUBSCRIBE that ioredis resent after a drop and the one sent on ready can both be answered,
-  // so a second success while the instance is already subscribed is normal, and it says nothing:
-  // one line per recovery, not one per answer. Driven by hand, so no network order is involved.
+  // More than one confirmation can be answered while the instance is already subscribed; each
+  // extra one must log nothing, so a recovery is one line. The ready handler is fired by hand, so
+  // no network order is involved.
   it('logs the subscription once when a second confirmation arrives while subscribed', async () => {
     const handlers: Record<string, () => void> = {}
     const sub = {
