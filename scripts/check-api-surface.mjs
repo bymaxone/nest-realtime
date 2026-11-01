@@ -12,10 +12,11 @@
  * never count, while the triple-slash reference directives (which decide what the file
  * type-checks against) and every member, signature, modifier and the order of declarations,
  * members and overloads does. One bundler artifact is normalized away on purpose: the
- * top-level `export { … }` lists with no `from`. A combined list (`export { A, type B }`) and
- * separate value and type lists (`export { A }; export type { B }`) with identical specifiers
- * must normalize identically. Those lists are flattened to `[type ]local[ as exported]`, sorted and printed once, so
- * the exported names, their aliases and their type-only-ness still count.
+ * top-level `export { … }` lists with no `from`. A bundler may spell the same exports as
+ * `export { A, type B }` or as `export { A }; export type { B }`; both export the same names, so
+ * both must normalize identically. The lists are flattened to `[type ]local[ as exported]`,
+ * sorted and printed once, so the exported names, their aliases and their type-only-ness still
+ * count.
  *
  * A change of major or minor is allowed through: the differences are printed as
  * information and the exit code stays 0. There is deliberately no override flag. A failing
