@@ -12,9 +12,9 @@
  * never count, while the triple-slash reference directives (which decide what the file
  * type-checks against) and every member, signature, modifier and the order of declarations,
  * members and overloads does. One bundler artifact is normalized away on purpose: the
- * top-level `export { … }` lists with no `from`. Between two releases the bundler
- * re-emitted the same names as `export { A, type B }` and as `export { A }; export type { B }`.
- * Those lists are flattened to `[type ]local[ as exported]`, sorted and printed once, so
+ * top-level `export { … }` lists with no `from`. A combined list (`export { A, type B }`) and
+ * separate value and type lists (`export { A }; export type { B }`) with identical specifiers
+ * must normalize identically. Those lists are flattened to `[type ]local[ as exported]`, sorted and printed once, so
  * the exported names, their aliases and their type-only-ness still count.
  *
  * A change of major or minor is allowed through: the differences are printed as
