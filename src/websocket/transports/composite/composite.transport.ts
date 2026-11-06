@@ -17,7 +17,8 @@ import { WebSocketTransport } from '../websocket/websocket.transport'
  *
  * Every `emitTo*` and `broadcast` invokes both SSE and WebSocket transports in
  * parallel via `Promise.allSettled` so a failure in one never aborts the other.
- * Failures are logged as warnings without rethrowing.
+ * A failure of one is logged as a warning and the call resolves; a failure of both
+ * rejects.
  *
  * `joinRoom`, `leaveRoom`, and `disconnect` ask both transports and settle both: each
  * transport acts only on a connection it holds, and a connection neither holds is handed
@@ -154,26 +155,31 @@ export class CompositeTransport implements ITransport {
     const reasons = results.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []))
     if (reasons.length === 0) return
     if (reasons.length === 1) throw reasons[0]
-    throw unavailableError(
-      REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
-      CompositeTransport.name,
-      `${op} of ${connectionId} failed on both transports`,
-      new AggregateError(reasons, reasons.map(describeError).join('; ')),
-    )
+    throw this.allFailed(`${op} of ${connectionId}`, reasons)
   }
 
   /**
    * Run two transport tasks in parallel via `Promise.allSettled`.
    *
-   * A rejection in either task is logged as a warning and does not propagate,
-   * ensuring one failing transport never blocks delivery on the other.
+   * One task failing is logged as a warning and the call resolves, so one failing transport
+   * never blocks delivery on the other. Every task failing rejects.
    */
   private async fanOut(op: string, ...tasks: Array<() => Promise<void>>): Promise<void> {
     const results = await Promise.allSettled(tasks.map((t) => t()))
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        this.logger.warn(`Composite ${op} partially failed: ${describeError(result.reason)}`)
-      }
+    const reasons = results.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []))
+    if (reasons.length === tasks.length) throw this.allFailed(op, reasons)
+    for (const reason of reasons) {
+      this.logger.warn(`Composite ${op} partially failed: ${describeError(reason)}`)
     }
+  }
+
+  /** The rejection for an operation that failed on every transport, with every reason in `cause`. */
+  private allFailed(what: string, reasons: unknown[]): Error {
+    return unavailableError(
+      REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+      CompositeTransport.name,
+      `${what} failed on both transports`,
+      new AggregateError(reasons, reasons.map(describeError).join('; ')),
+    )
   }
 }

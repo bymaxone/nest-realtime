@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **With `transport: 'both'`, an emit that fails on both transports now rejects.** `emitToUser`,
+  `emitToTenant`, `emitToRoom` and `broadcast` on the composite transport run on SSE and WebSocket
+  and logged a failure of either without ever rethrowing, so an emit that failed on both still
+  resolved. A failure of one transport is still logged and resolves; a failure of both now rejects
+  with `REALTIME_TRANSPORT_UNAVAILABLE` (`error.code`), naming the operation and carrying both
+  reasons in `cause`, the way `joinRoom`, `leaveRoom` and `disconnect` already do. A rejected emit
+  is not proof that no client received it, so retry only where a duplicate is acceptable.
+
 ### Added
 
 - **Errors carry their code as a `code` property.** The `Error`s this library builds with a
@@ -17,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `data.code`.
 
 ### Fixed
+
+- **A failed re-authentication now disconnects the connection without waiting for its
+  notification.** With `reauthenticationPolicy.onFailure: 'event'` the service emitted
+  `connection:reauthentication-failed` and waited for it before disconnecting, so an emit that
+  rejected left the connection open until the next cycle, and one that never settled left it open
+  for good. The emit is now started first and not awaited: a rejection is logged
+  (`Reauthentication notification for <id> failed, disconnecting anyway`) and the connection is
+  disconnected in the same cycle. A rejected disconnect is still a failed revocation and is retried
+  on the next cycle.
 
 - **A publish no longer waits behind a Redis client that is not ready, and readiness now says
   whether the instance can publish.** `RedisRealtimePubSub.publish` refused a client that was
@@ -33,6 +52,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answers nothing in that time is left unready and the application still starts.
 
 #### Apply to a derived backend
+
+If you set `reauthenticationPolicy.onFailure: 'event'`, nothing needs to change: a connection whose
+credentials failed is now disconnected in the same cycle whether or not the notification can be
+sent, where it used to stay open until the next cycle. The failure to send is logged as a warning.
+
+If you use `transport: 'both'`, an emit that fails on both transports now rejects instead of
+resolving. An emit you await inside a `try` is now caught; one you call without awaiting or without
+a `.catch` becomes an unhandled rejection when both transports fail, so add the `.catch` or await
+it. A failure of only one transport still resolves, as before.
 
 Nothing needs to change for the `code` property: it is added to errors you already catch, and
 their messages are the same. Where you match on the message text to tell a bus failure from a

@@ -162,6 +162,58 @@ describe('CompositeTransport', () => {
     },
   )
 
+  // An emit goes to the connections each transport holds, so one transport failing is logged and
+  // resolved, and both failing rejects under the code with both reasons.
+  describe.each([
+    ['emitToUser', (c: CompositeTransport) => c.emitToUser('u-1', 'evt', {})],
+    ['emitToTenant', (c: CompositeTransport) => c.emitToTenant('t-1', 'evt', {})],
+    ['emitToRoom', (c: CompositeTransport) => c.emitToRoom('room:x', 'evt', {})],
+    ['broadcast', (c: CompositeTransport) => c.broadcast('evt', {})],
+  ] as const)('%s', (op, call) => {
+    it('resolves, logging nothing, when both transports succeed', async () => {
+      await expect(call(composite)).resolves.toBeUndefined()
+
+      expect(warnSpy).not.toHaveBeenCalled()
+      expect(sseMock[op]).toHaveBeenCalledTimes(1)
+      expect(wsMock[op]).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['sse', 'sse fail'],
+      ['ws', 'ws fail'],
+    ] as const)('resolves and logs once when only %s fails', async (which, reason) => {
+      ;(which === 'sse' ? sseMock : wsMock)[op].mockRejectedValue(new Error(reason))
+
+      await expect(call(composite)).resolves.toBeUndefined()
+
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith(`Composite ${op} partially failed: ${reason}`)
+      expect(sseMock[op]).toHaveBeenCalledTimes(1)
+      expect(wsMock[op]).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects under the code, with both reasons, when both transports fail', async () => {
+      sseMock[op].mockRejectedValue(new Error('sse fail'))
+      wsMock[op].mockRejectedValue(new Error('ws fail'))
+
+      const failure = await call(composite).catch((error: unknown) => error)
+
+      expect(failure).toBeInstanceOf(Error)
+      expect((failure as Error).message).toBe(
+        `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} failed on both transports (sse fail; ws fail)`,
+      )
+      expect((failure as { code?: unknown }).code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+      expect(((failure as Error).cause as AggregateError).errors.map(String)).toEqual([
+        'Error: sse fail',
+        'Error: ws fail',
+      ])
+      // The error carries both reasons, so they are not also logged as a partial failure.
+      expect(warnSpy).not.toHaveBeenCalled()
+      expect(sseMock[op]).toHaveBeenCalledTimes(1)
+      expect(wsMock[op]).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('fanOut logs warn using reason directly when rejected value has no .message', async () => {
     // When the rejection reason is not an Error, the reason itself is used in the warn.
     sseMock.emitToUser.mockRejectedValue('raw-string-reason')

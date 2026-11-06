@@ -5,6 +5,8 @@
 import { Logger } from '@nestjs/common'
 import { RESERVED_EVENT_NAMES } from '../../shared/constants/reserved-events.constants'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { describeError } from '../utils/describe-error'
+import { unavailableError } from '../utils/unavailable-error'
 import { ReauthenticationService } from './reauthentication.service'
 import type { ConnectionRecord } from './connection-registry.service'
 
@@ -260,6 +262,139 @@ describe('ReauthenticationService', () => {
       'c1',
       REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
     )
+  })
+
+  // A revocation never waits on the notification that precedes it. The emit may reject with whatever
+  // the transport rejects with (SSE with no delivery path left, the composite with both transports
+  // failed, a bare Socket.IO error), throw before it returns a promise, or never settle. In each the
+  // connection is still disconnected in the same cycle and the failure hook still fires; a failure
+  // of the emit is logged and is not mistaken for a failed revocation that waits for the next cycle.
+  const compositeFailure = unavailableError(
+    REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+    'CompositeTransport',
+    'emitToUser failed on both transports',
+    new AggregateError([new Error('sse fail'), new Error('ws fail')], 'sse fail; ws fail'),
+  )
+  describe.each([
+    ['sse', 'SSE has no delivery path', () => new Error('REALTIME_TRANSPORT_UNAVAILABLE: no path')],
+    ['websocket', 'a websocket emit threw', () => new Error('socket.io error')],
+    ['sse', 'the composite failed on both transports', () => compositeFailure],
+  ] as const)(
+    'when the failure event for a %s connection is rejected (%s)',
+    (transport, _label, failure) => {
+      it('still disconnects, fires the hook and logs the notification failure', async () => {
+        const revalidate = jest.fn().mockResolvedValue(false)
+        const record = { ...mkRecord(), transport }
+        const realtime = mkRealtime()
+        realtime.emitToUser.mockRejectedValue(failure())
+        const hooks = { onReauthenticationFailed: jest.fn().mockResolvedValue(undefined) }
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+        try {
+          const svc = build(
+            { allByTransport: jest.fn((t: string) => (t === transport ? [record] : [])) },
+            realtime,
+            mkAuth(revalidate),
+            mkOptions({ intervalSeconds: 60, onFailure: 'event' }),
+            hooks,
+          )
+
+          await svc.runCycle()
+          await flush()
+
+          expect(realtime.disconnect).toHaveBeenCalledTimes(1)
+          expect(realtime.disconnect).toHaveBeenCalledWith(
+            'c1',
+            REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
+          )
+          expect(hooks.onReauthenticationFailed).toHaveBeenCalledTimes(1)
+          expect(warnSpy).toHaveBeenCalledTimes(1)
+          expect(warnSpy).toHaveBeenCalledWith(
+            `Reauthentication notification for c1 failed, disconnecting anyway: ${describeError(failure())}`,
+          )
+        } finally {
+          warnSpy.mockRestore()
+        }
+      })
+    },
+  )
+
+  // An emit that throws before it returns a promise is a failed notification like any other.
+  it('still disconnects when the failure event throws before it returns a promise', async () => {
+    const realtime = mkRealtime()
+    realtime.emitToUser.mockImplementation(() => {
+      throw new Error('sync throw')
+    })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const svc = build(
+        mkConnections([mkRecord()]),
+        realtime,
+        mkAuth(jest.fn().mockResolvedValue(false)),
+        mkOptions({ intervalSeconds: 60, onFailure: 'event' }),
+      )
+
+      await svc.runCycle()
+
+      expect(realtime.disconnect).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Reauthentication notification for c1 failed, disconnecting anyway: sync throw',
+      )
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  // The revocation does not wait for a notification that never settles, and the event is still
+  // started first so that its local delivery precedes the disconnect.
+  it('disconnects without waiting for a failure event that never settles', async () => {
+    const order: string[] = []
+    const realtime = mkRealtime()
+    realtime.emitToUser.mockImplementation(() => {
+      order.push('emit')
+      return new Promise<void>(() => undefined)
+    })
+    realtime.disconnect.mockImplementation(async () => {
+      order.push('disconnect')
+    })
+    const svc = build(
+      mkConnections([mkRecord()]),
+      realtime,
+      mkAuth(jest.fn().mockResolvedValue(false)),
+      mkOptions({ intervalSeconds: 60, onFailure: 'event' }),
+    )
+
+    const cycle = svc.runCycle()
+    await flush()
+
+    expect(order).toEqual(['emit', 'disconnect'])
+    await cycle
+  })
+
+  // A rejected disconnect is still a failed revocation: it is logged as one and retried.
+  it('still treats a rejected disconnect as a failed revocation when the emit also failed', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const realtime = mkRealtime()
+    realtime.emitToUser.mockRejectedValue(new Error('emit down'))
+    realtime.disconnect.mockRejectedValueOnce(new Error('REALTIME_PUBSUB_UNAVAILABLE'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const svc = build(
+        mkConnections([mkRecord()]),
+        realtime,
+        mkAuth(revalidate),
+        mkOptions({ intervalSeconds: 60, onFailure: 'event' }),
+      )
+
+      await svc.runCycle()
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Revocation of c1 failed, retrying next cycle: REALTIME_PUBSUB_UNAVAILABLE',
+      )
+      await svc.runCycle()
+      expect(realtime.disconnect).toHaveBeenCalledTimes(2)
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   // A throwing revalidate disconnects the connection (fail-closed) and the cycle continues for others.
