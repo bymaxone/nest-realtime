@@ -1,6 +1,7 @@
 /**
  * @fileoverview Shared doubles for the ReauthenticationService specs: a connection record, the
- * registry, the realtime service, the authenticator and the module options it reads.
+ * registry, the realtime service, the authenticator and the module options it reads, the service
+ * built from them, and a helper that drains the microtask queue.
  * @layer test
  */
 import { ReauthenticationService } from '../../../src/server/services/reauthentication.service'

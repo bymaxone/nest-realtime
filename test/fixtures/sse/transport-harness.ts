@@ -21,7 +21,7 @@ import { HeartbeatService } from '../../../src/server/transports/sse/heartbeat.s
 import { EventReplayBuffer } from '../../../src/server/transports/sse/event-replay-buffer'
 import { SseTransport } from '../../../src/server/transports/sse/sse.transport'
 
-export function makeOptions(sse?: SseOptions): BymaxRealtimeModuleOptions {
+function makeOptions(sse?: SseOptions): BymaxRealtimeModuleOptions {
   return {
     transport: 'sse',
     authenticator: { authenticate: async () => null },
