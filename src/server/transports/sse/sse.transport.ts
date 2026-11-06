@@ -120,12 +120,12 @@ export class SseTransport implements ITransport {
     await this.beforeApplicationShutdown()
   }
 
-  /** The resolved heartbeat interval for this transport. */
   /** Whether shutdown has begun, after which a new stream is refused because nothing would end it. */
   get shuttingDown(): boolean {
     return this.#shuttingDown
   }
 
+  /** The resolved heartbeat interval for this transport. */
   get heartbeatMs(): number {
     return this.options.sse?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
   }
