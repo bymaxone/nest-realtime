@@ -246,6 +246,33 @@ describe('RedisRealtimePubSub', () => {
     }
   })
 
+  // ioredis queues a command issued while the client is reconnecting and sends it when the
+  // connection returns, so a revocation or an emit would wait out the whole outage and then be sent
+  // late. The publish is refused at once instead, and never queued.
+  it.each(['reconnecting', 'close', 'end'])(
+    'rejects a publish at once while the client is %s, without handing it to the client',
+    async (status) => {
+      const publish = jest.fn()
+      const pubsub = new RedisRealtimePubSub({ client: { status, publish } as unknown as Redis })
+      await expect(pubsub.publish(msg)).rejects.toThrow(
+        `[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is ${status})`,
+      )
+      expect(publish).not.toHaveBeenCalled()
+    },
+  )
+
+  // A client that has not connected yet, or that is connected, takes the publish: a lazyConnect
+  // client starts in 'wait' and connects on its first command.
+  it.each(['wait', 'connecting', 'connect', 'ready'])(
+    'hands a publish to the client while it is %s',
+    async (status) => {
+      const publish = jest.fn().mockResolvedValue(1)
+      const pubsub = new RedisRealtimePubSub({ client: { status, publish } as unknown as Redis })
+      await expect(pubsub.publish(msg)).resolves.toBeUndefined()
+      expect(publish).toHaveBeenCalledWith('bymax:realtime', JSON.stringify(msg))
+    },
+  )
+
   // When subscriber init fails, the handler is rolled back and subInit is cleared so the
   // next subscribe() retries with a fresh client instead of re-awaiting the rejected promise.
   it('rolls back handler and clears subInit when subscriber init fails', async () => {

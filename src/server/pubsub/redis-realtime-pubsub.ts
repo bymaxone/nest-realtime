@@ -96,8 +96,21 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     return this.#subscribed
   }
 
-  /** JSON-encodes the message and PUBLISHes it to the configured channel. */
+  /**
+   * JSON-encodes the message and PUBLISHes it to the configured channel. While the client is
+   * reconnecting or closed it rejects at once: ioredis would queue the command and send it, late,
+   * when the connection returns, so a revocation would wait out the whole outage.
+   */
   async publish(message: RealtimePubSubMessage): Promise<void> {
+    const status = this.#pub.status
+    if (status === 'reconnecting' || status === 'close' || status === 'end') {
+      throw unavailableError(
+        REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
+        RedisRealtimePubSub.name,
+        `cannot publish to "${this.channel}"`,
+        new Error(`the Redis client is ${status}`),
+      )
+    }
     await this.#pub.publish(this.channel, JSON.stringify(message))
   }
 

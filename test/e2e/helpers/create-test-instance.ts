@@ -93,7 +93,7 @@ export function createTestInstances(
         connectedAt: new Date(),
         subject,
         close$,
-        originalAuth: { userId, tenantId, roles: undefined },
+        originalAuth: { userId, tenantId, roles: undefined, metadata: undefined },
       })
       return received
     }
