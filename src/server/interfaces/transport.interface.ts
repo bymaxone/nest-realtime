@@ -53,6 +53,13 @@ export interface ITransport {
   /** Lifecycle hook — called on NestJS bootstrap. */
   onModuleInit?(): Promise<void>
 
+  /**
+   * Lifecycle hook — called before NestJS closes the HTTP server on shutdown. A transport that
+   * holds open responses ends them here, since the server does not finish closing while one
+   * is open.
+   */
+  beforeApplicationShutdown?(): Promise<void>
+
   /** Lifecycle hook — called on NestJS shutdown. */
   onApplicationShutdown?(): Promise<void>
 }

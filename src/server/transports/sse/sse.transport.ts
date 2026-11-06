@@ -93,15 +93,26 @@ export class SseTransport implements ITransport {
     private readonly offlineQueue?: IOfflineQueueStorage,
   ) {}
 
-  /** Tear down every SSE connection and stop heartbeat on process shutdown. */
-  async onApplicationShutdown(): Promise<void> {
+  /**
+   * Tear down every SSE connection and stop heartbeat before the HTTP server closes.
+   *
+   * Nest awaits the HTTP server's close before it runs `onApplicationShutdown`, and the server
+   * does not finish closing while a response is open, so streams ended only in that hook would
+   * keep the close pending for ever and skip every later shutdown hook.
+   */
+  async beforeApplicationShutdown(): Promise<void> {
     this.heartbeat.stopAll()
     // Await each teardown so onDisconnect hooks complete within the shutdown window
-    // (RxJS finalize cannot await an async callback). disconnectLocal removes the
-    // record first, so the stream's own finalize cleanup is then a harmless no-op.
+    // (RxJS finalize cannot await an async callback). disconnectLocal removes the record
+    // first, so the stream's own finalize cleanup is then a harmless no-op.
     for (const conn of this.connections.allByTransport('sse')) {
       await this.disconnectLocal(conn.connectionId)
     }
+  }
+
+  /** The same teardown, for a caller that runs only this hook; it finds nothing left to close. */
+  async onApplicationShutdown(): Promise<void> {
+    await this.beforeApplicationShutdown()
   }
 
   /** The resolved heartbeat interval for this transport. */
