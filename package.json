@@ -93,7 +93,7 @@
     }
   },
   "scripts": {
-    "build": "pnpm clean && tsup",
+    "build": "pnpm clean && tsup && node scripts/strip-bundle-comments.mjs",
     "check:exports": "attw --pack . --profile strict",
     "check:mutants": "node scripts/check-mutation-directives.mjs",
     "check:api": "node scripts/check-api-surface.mjs",
