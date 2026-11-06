@@ -16,7 +16,8 @@
  * - a file on it that is now at or under the limit fails until the entry is removed;
  * - a file on it that shrank fails until its ceiling is lowered to the new count;
  * - an entry for a file that no longer exists fails until it is removed;
- * - a baseline that is not an object of positive integers, or a tree with no file in it, fails.
+ * - a baseline that is not an object of positive integers, a missing scanned directory, a tree
+ * with no file in it, and a repeated option all fail.
  *
  * Usage: `node scripts/check-file-size.mjs [--root <dir>] [--limit <lines>]`. The root defaults to
  * the repository and the limit to 800; the options exist so the gate can be run over a small tree.
@@ -42,7 +43,9 @@ function parseArgs(argv) {
         `usage: check-file-size.mjs [--root <dir>] [--limit <lines>] (got ${argv[i]})`,
       )
     }
-    options[argv[i].slice(2)] = argv[i + 1]
+    const name = argv[i].slice(2)
+    if (name in options) throw new Error(`repeated option ${argv[i]}`)
+    options[name] = argv[i + 1]
   }
   return options
 }
@@ -88,12 +91,12 @@ function readBaseline(path) {
   return parsed
 }
 
-/** The number of lines, counted the way `wc -l` counts them. */
+/** The number of lines: every newline, and a last line that has none. */
 function lineCount(path) {
   const text = readFileSync(path, 'utf8')
   let lines = 0
   for (let i = 0; i < text.length; i++) if (text[i] === '\n') lines++
-  return lines
+  return text.length > 0 && !text.endsWith('\n') ? lines + 1 : lines
 }
 
 /**
@@ -139,6 +142,11 @@ function main() {
   const baseline = readBaseline(join(root, 'scripts', 'file-size-baseline.json'))
   const sizes = new Map()
   for (const directory of SCANNED) {
+    if (!existsSync(join(root, directory))) {
+      throw new Error(
+        `the ${directory} directory is missing under ${root}; a gate that skips it checks less`,
+      )
+    }
     for (const path of walk(root, join(root, directory)))
       sizes.set(path, lineCount(join(root, path)))
   }

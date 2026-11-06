@@ -24,12 +24,12 @@ afterAll(() => {
 function tree(files: Record<string, number>, baseline?: Record<string, number>): string {
   const root = mkdtempSync(join(tmpdir(), 'file-size-spec-'))
   roots.push(root)
+  for (const directory of ['src', 'test', 'scripts']) mkdirSync(join(root, directory))
   for (const [path, lines] of Object.entries(files)) {
     mkdirSync(dirname(join(root, path)), { recursive: true })
     writeFileSync(join(root, path), 'x\n'.repeat(lines))
   }
   if (baseline) {
-    mkdirSync(join(root, 'scripts'), { recursive: true })
     writeFileSync(join(root, 'scripts', 'file-size-baseline.json'), JSON.stringify(baseline))
   }
   return root
@@ -152,7 +152,6 @@ describe('scripts/check-file-size.mjs', () => {
     ['has a ceiling below one', '{"src/big.ts":0}', 'ceiling for src/big.ts'],
   ])('fails a baseline that %s', (_label, content, message) => {
     const root = tree({ 'src/big.ts': 20 })
-    mkdirSync(join(root, 'scripts'), { recursive: true })
     writeFileSync(join(root, 'scripts', 'file-size-baseline.json'), content)
 
     const result = check(root)
@@ -164,10 +163,55 @@ describe('scripts/check-file-size.mjs', () => {
   // Scenario: nothing was scanned, because the root is wrong or the directories were renamed. Expected:
   // it fails: a gate that finds no files has not checked any.
   it('fails when it finds no file to check', () => {
-    const result = check(join(tmpdir(), 'file-size-spec-no-such-directory'))
+    const result = check(tree({}))
 
     expect(result.status).toBe(1)
     expect(result.output).toContain('no file found under src, test or scripts')
+  })
+
+  // Scenario: one scanned directory is gone, as when src is renamed, while the others still hold
+  // files. Expected: it fails and names the directory: a gate that skips a directory checks less.
+  it.each(['src', 'test', 'scripts'])('fails when the %s directory is missing', (missing) => {
+    const root = tree({ 'src/a.ts': 1, 'test/b.ts': 1, 'scripts/c.mjs': 1 })
+    rmSync(join(root, missing), { recursive: true, force: true })
+
+    const result = check(root)
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain(`the ${missing} directory is missing`)
+  })
+
+  // Scenario: a root that does not exist. Expected: it fails, naming a missing directory.
+  it('fails for a root that does not exist', () => {
+    const result = check(join(tmpdir(), 'file-size-spec-no-such-directory'))
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain('directory is missing')
+  })
+
+  // Scenario: a last line with no terminating newline. Expected: it counts, since the rule talks
+  // about lines and not about newline characters.
+  it('counts a last line that has no terminating newline', () => {
+    const root = tree({})
+    writeFileSync(join(root, 'src', 'a.ts'), 'x\n'.repeat(5) + 'last')
+
+    const result = check(root)
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain('src/a.ts: 6 lines')
+  })
+
+  // Scenario: an option given twice. Expected: it is refused, not resolved to the last one.
+  it.each([['--root'], ['--limit']])('refuses a repeated %s', (option) => {
+    const root = tree({ 'src/a.ts': 1 })
+    const run = spawnSync(
+      process.execPath,
+      [SCRIPT, '--root', root, '--limit', '5', option, option === '--root' ? root : '9'],
+      { encoding: 'utf8' },
+    )
+
+    expect(run.status).toBe(1)
+    expect(run.stderr).toContain(`repeated option ${option}`)
   })
 
   // Scenario: a bad limit. Expected: it refuses it.
