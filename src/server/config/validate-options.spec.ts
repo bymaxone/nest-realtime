@@ -24,7 +24,7 @@ describe('validateOptions', () => {
       validateOptions({
         transport: 'sse',
         authenticator,
-        sse: { heartbeatMs: 1_000, replayBufferSize: 0, maxConnectionsPerUser: 5 },
+        sse: { heartbeatMs: 5_000, replayBufferSize: 0, maxConnectionsPerUser: 5 },
       }),
     ).not.toThrow()
   })
@@ -60,6 +60,37 @@ describe('validateOptions', () => {
     expect(() =>
       validateOptions({ transport: 'sse', authenticator, sse: { heartbeatMs: 0 } }),
     ).toThrow(/heartbeatMs/)
+  })
+
+  // The interval is checked at boot against the range the heartbeat service enforces for every
+  // connection, so a value outside it stops the application starting and does not answer each
+  // connection with a 500 later. A number that is not finite, and anything that is not a number,
+  // is outside the range.
+  it.each([4_999, 1_000, 1, 0, -1, 90_001, Number.NaN, Infinity, -Infinity, '5000', null])(
+    'rejects sse.heartbeatMs %p at boot, naming the range',
+    (value) => {
+      expect(() =>
+        validateOptions(
+          asOptions({ transport: 'sse', authenticator, sse: { heartbeatMs: value } }),
+        ),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.heartbeatMs must be between 5000 and 90000 ms (got ${String(value)})`,
+      )
+    },
+  )
+
+  // The ends of the range, and the default, are accepted; so is leaving the option out.
+  it.each([5_000, 30_000, 90_000])('accepts sse.heartbeatMs %p', (value) => {
+    expect(() =>
+      validateOptions({ transport: 'sse', authenticator, sse: { heartbeatMs: value } }),
+    ).not.toThrow()
+  })
+
+  // An sse block without the option is accepted: the default applies.
+  it('accepts an sse block without heartbeatMs', () => {
+    expect(() =>
+      validateOptions({ transport: 'sse', authenticator, sse: { replayBufferSize: 10 } }),
+    ).not.toThrow()
   })
 
   // A negative replay buffer size is rejected.

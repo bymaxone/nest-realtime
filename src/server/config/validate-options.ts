@@ -4,6 +4,7 @@
  */
 import { Logger } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { HEARTBEAT_MAX_MS, HEARTBEAT_MIN_MS } from '../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 
 // Format-level validation only: 'websocket' and 'both' are accepted config values,
@@ -53,9 +54,17 @@ function validateReauthPolicy(options: BymaxRealtimeModuleOptions): void {
 
 function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
   const sse = options.sse
-  if (sse?.heartbeatMs !== undefined && sse.heartbeatMs <= 0) {
+  const heartbeatMs: unknown = sse?.heartbeatMs
+  if (
+    heartbeatMs !== undefined &&
+    !(
+      typeof heartbeatMs === 'number' &&
+      heartbeatMs >= HEARTBEAT_MIN_MS &&
+      heartbeatMs <= HEARTBEAT_MAX_MS
+    )
+  ) {
     throw new Error(
-      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options.sse.heartbeatMs must be > 0`,
+      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options.sse.heartbeatMs must be between ${HEARTBEAT_MIN_MS} and ${HEARTBEAT_MAX_MS} ms (got ${String(heartbeatMs)})`,
     )
   }
   if (sse?.replayBufferSize !== undefined && sse.replayBufferSize < 0) {

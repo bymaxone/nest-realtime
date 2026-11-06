@@ -363,6 +363,8 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | **websocket**              | `namespace`, `cors`, `maxHttpBufferSize`, `pingIntervalMs`, `pingTimeoutMs`, `maxConnectionsPerUser`, `emitConnectionEvent`, `redisAdapter`                       | `'/'`, — (Socket.IO defaults)                |
 | **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`                                                                                        | `300`, `'disconnect'`, `60000`               |
 
+`sse.heartbeatMs` must be between 5,000 and 90,000 ms. Any other value, including `NaN` and a non-number, stops the application at start-up with `REALTIME_INVALID_OPTIONS`.
+
 > [!NOTE]
 > `websocket.maxConnectionsPerUser` is **opt-in** and unlimited unless set to a positive number, while `sse.maxConnectionsPerUser` defaults to `5`. The two transports differ here on purpose: an SSE stream holds an HTTP connection open, a Socket.IO client multiplexes.
 

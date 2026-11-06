@@ -4,26 +4,10 @@
  */
 import { Injectable } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
+import { HEARTBEAT_MAX_MS, HEARTBEAT_MIN_MS } from '../../constants/injection-tokens.constants'
 
 /** The raw SSE comment line written as a keepalive (not a named event). */
 const KEEPALIVE_COMMENT = ': keepalive\n\n'
-
-/**
- * Minimum acceptable heartbeat interval in milliseconds.
- *
- * Five seconds is the practical floor — an interval shorter than this is likely
- * a misconfiguration and would generate unnecessary network traffic.
- */
-const HEARTBEAT_MIN_MS = 5_000
-
-/**
- * Maximum acceptable heartbeat interval in milliseconds.
- *
- * Ninety seconds is the safe ceiling: nginx defaults to a 60 s idle timeout and
- * Cloudflare caps at 100 s on free plans.  Staying at or below 90 s ensures
- * keepalives reach both before the proxy drops the connection.
- */
-const HEARTBEAT_MAX_MS = 90_000
 
 /** Minimal response surface the heartbeat needs — a writable text stream. */
 export interface HeartbeatWritable {

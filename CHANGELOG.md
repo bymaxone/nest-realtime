@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **An `sse.heartbeatMs` outside the allowed range now stops the application at start-up.** The
+  boot check only rejected a value of zero or less, while the heartbeat service refuses anything
+  outside 5,000 to 90,000 ms each time a connection opens. A value such as `1000` or `100000`
+  therefore started the application and then answered every SSE connection with a 500.
+  `NaN`, which comes from `Number(process.env.HEARTBEAT_MS)` when the variable is unset, passed
+  both checks and made the keepalive timer fire about every millisecond on every connection.
+  `validateOptions` now applies the same range, for `forRoot` and `forRootAsync`, and the error
+  names it: `options.sse.heartbeatMs must be between 5000 and 90000 ms (got 1000)`.
+
+#### Apply to a derived backend
+
+If your configuration sets `sse.heartbeatMs`, check it is between 5,000 and 90,000 ms. A value
+outside it already failed every connection, except `NaN`, which flooded each connection with
+keepalives; now every one of them fails when the application starts.
+
 ## [1.2.7] - 2026-11-01
 
 ### Fixed

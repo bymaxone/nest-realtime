@@ -121,6 +121,23 @@ describe('BymaxRealtimeModule.forRootAsync SSE endpoint', () => {
     expect(options.sse?.endpoint).toBe('/stream')
   })
 
+  // The options a factory returns are validated when the module resolves them, so an interval
+  // outside the range fails the compile of the application and not each connection later.
+  it('rejects an out-of-range sse.heartbeatMs returned by the factory', async () => {
+    await expect(
+      resolvedOptions({
+        transport: 'sse',
+        useFactory: async () => ({
+          transport: 'sse' as const,
+          authenticator,
+          sse: { heartbeatMs: 100_000 },
+        }),
+      }),
+    ).rejects.toThrow(
+      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.heartbeatMs must be between 5000 and 90000 ms (got 100000)',
+    )
+  })
+
   // The rest of the sse block must survive the endpoint being rewritten.
   it('preserves the other sse options while binding the endpoint', async () => {
     const options = await resolvedOptions({
@@ -129,10 +146,10 @@ describe('BymaxRealtimeModule.forRootAsync SSE endpoint', () => {
       useFactory: async () => ({
         transport: 'sse' as const,
         authenticator,
-        sse: { heartbeatMs: 1234 },
+        sse: { heartbeatMs: 6_000 },
       }),
     })
-    expect(options.sse?.heartbeatMs).toBe(1234)
+    expect(options.sse?.heartbeatMs).toBe(6_000)
     expect(options.sse?.endpoint).toBe('/stream')
   })
 })
