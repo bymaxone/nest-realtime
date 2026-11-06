@@ -19,10 +19,11 @@ function raised(call: () => unknown): (Error & { code?: unknown }) | undefined {
   return undefined
 }
 
-// Each case pins the whole message, the raiser's name included, and the code as a property. The
-// message is what an operator reads at start-up and the code is what tooling branches on; a test
-// that matched only a fragment would let either lose its raiser or its text unnoticed.
-describe('configuration errors name their raiser, their reason and their code', () => {
+// Each case pins the whole message, the raiser's name wherever the message has one, and the code
+// as a property. The message is what an operator reads at start-up and the code is what tooling
+// branches on; a test that matched only a fragment would let either lose its raiser or its text
+// unnoticed.
+describe('configuration errors carry their exact message and their code', () => {
   const module = 'BymaxRealtimeModule'
   it.each([
     [
