@@ -15,6 +15,29 @@ import { unavailableError } from '../utils/unavailable-error'
 /** The shortest time between two reports of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
 
+/**
+ * The states in which an ioredis client cannot publish. A client that reports none of them, a
+ * connected one or a test double with no status at all, is taken to be able to.
+ */
+const CANNOT_PUBLISH: ReadonlySet<string> = new Set([
+  'wait',
+  'connecting',
+  'connect',
+  'reconnecting',
+  'close',
+  'end',
+])
+
+/**
+ * How long subscribing waits for the publishing client's first connection. The wait only spares a
+ * start-up emit a refusal, so a client that stays silent past it is left unready rather than
+ * allowed to block the boot.
+ */
+const PUBLISHER_WAIT_MS = 2_000
+
+/** The events that name a status other than connecting: each ends a first connection attempt. */
+const CONNECTION_OVER = ['ready', 'close', 'reconnecting', 'end'] as const
+
 /** A connection failure as text: ioredis wraps a refused connect in an error with no message. */
 function connectionReason(err: unknown): string {
   const code = (err as { code?: unknown } | null)?.code
@@ -93,25 +116,63 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * while the subscriber connection is down, and after the last handler has unsubscribed.
    */
   isSubscribed(): boolean {
-    return this.#subscribed
+    return this.#subscribed && !CANNOT_PUBLISH.has(this.#pub.status)
   }
 
   /**
-   * JSON-encodes the message and PUBLISHes it to the configured channel. While the client is
-   * reconnecting or closed it rejects at once: ioredis would queue the command and send it, late,
-   * when the connection returns, so a revocation would wait out the whole outage.
+   * JSON-encodes the message and PUBLISHes it to the configured channel, if the client can publish.
+   * ioredis queues a command issued while it cannot and sends it, late, when the connection
+   * returns, and never gives up on one waiting behind a peer that does not answer, so a revocation
+   * would wait out the whole outage and then be sent after its caller was told it failed. It is
+   * refused at once instead, and never handed to the client.
    */
   async publish(message: RealtimePubSubMessage): Promise<void> {
     const status = this.#pub.status
-    if (status === 'reconnecting' || status === 'close' || status === 'end') {
-      throw unavailableError(
-        REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
-        RedisRealtimePubSub.name,
-        `cannot publish to "${this.channel}"`,
-        new Error(`the Redis client is ${status}`),
-      )
+    if (CANNOT_PUBLISH.has(status)) {
+      this.connectLazyClient()
+      throw this.cannotPublish(`the Redis client is ${status}`)
     }
     await this.#pub.publish(this.channel, JSON.stringify(message))
+  }
+
+  /**
+   * A host client built with lazyConnect waits for its first command to connect, and that command
+   * would be refused; connecting it is what the command would have done. Its failures show as its
+   * status.
+   */
+  private connectLazyClient(): void {
+    if (this.#pub.status === 'wait') this.#pub.connect().catch(() => undefined)
+  }
+
+  /**
+   * Resolves once the publishing client's first connection attempt is over, however it ended:
+   * ready, closed (to retry or to give up), or ended with no close when its connector fails. The
+   * client is created just before the application boots, so for its first milliseconds it is still
+   * connecting, and an emit from another provider's start-up hook would be refused for it. A
+   * client that answers nothing is given up on after the deadline.
+   */
+  private publisherSettled(): Promise<void> {
+    const pub = this.#pub
+    if (pub.status !== 'connecting' && pub.status !== 'connect') return Promise.resolve()
+    return new Promise((resolve) => {
+      const settle = (): void => {
+        clearTimeout(deadline)
+        for (const event of CONNECTION_OVER) pub.off(event, settle)
+        resolve()
+      }
+      const deadline = setTimeout(settle, PUBLISHER_WAIT_MS)
+      deadline.unref()
+      for (const event of CONNECTION_OVER) pub.once(event, settle)
+    })
+  }
+
+  private cannotPublish(reason: string): Error {
+    return unavailableError(
+      REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
+      RedisRealtimePubSub.name,
+      `cannot publish to "${this.channel}"`,
+      new Error(reason),
+    )
   }
 
   /**
@@ -136,6 +197,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.#subInit = null
       throw err
     }
+    // Only now: the subscriber is attached, so it recovers from a reconnect while this waits.
+    await this.publisherSettled()
     return async () => {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {
@@ -163,6 +226,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
 
   private async createSubscriber(): Promise<Redis> {
     this.#outageLogged = false
+    this.connectLazyClient()
     // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
     // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it. The offline queue
     // is forced on, whatever the host client chose: the first SUBSCRIBE is issued before the

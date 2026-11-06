@@ -2,6 +2,7 @@
  * @fileoverview Unit tests for RedisRealtimePubSub using ioredis-mock.
  * @layer infrastructure
  */
+import { EventEmitter } from 'node:events'
 import { inspect } from 'node:util'
 import { Logger } from '@nestjs/common'
 import RedisMock from 'ioredis-mock'
@@ -166,7 +167,7 @@ describe('RedisRealtimePubSub', () => {
         handlers[event] = handler
       }),
     }
-    const pub = { duplicate: jest.fn().mockReturnValue(sub) }
+    const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
@@ -192,7 +193,7 @@ describe('RedisRealtimePubSub', () => {
         handlers[event] = handler
       }),
     }
-    const pub = { duplicate: jest.fn().mockReturnValue(sub) }
+    const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     try {
       const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
@@ -241,37 +242,266 @@ describe('RedisRealtimePubSub', () => {
       expect(warn).toHaveBeenCalledWith(
         `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "bymax:realtime": Stream isn't writeable and enableOfflineQueue options is false. Remote events and revocations will not reach this instance until it subscribes again`,
       )
+      // The rejection is the connection failing, which was just reported: it is not also a refusal.
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(warn).toHaveBeenCalledTimes(1)
     } finally {
       warn.mockRestore()
     }
   })
 
-  // ioredis queues a command issued while the client is reconnecting and sends it when the
+  // The SUBSCRIBE sent when the subscriber is ready again can be rejected because the connection
+  // closed under it, which is an outage that 'close' reports: it must not read as the server
+  // refusing, and it must not take away a subscription the instance still holds. The ready handler
+  // is fired by hand, so no network order is involved.
+  it('does not read a SUBSCRIBE rejected by a closing connection as a refusal', async () => {
+    const handlers: Record<string, () => void> = {}
+    const sub = {
+      subscribe: jest
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('Connection is closed.')),
+      on: jest.fn((event: string, handler: () => void) => {
+        handlers[event] = handler
+      }),
+    }
+    const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
+      await pubsub.subscribe(jest.fn())
+      expect(pubsub.isSubscribed()).toBe(true)
+
+      handlers['ready']!()
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(sub.subscribe).toHaveBeenCalledTimes(2)
+      expect(pubsub.isSubscribed()).toBe(true)
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  // ioredis queues a command issued while the client is not ready and sends it, late, when the
   // connection returns, so a revocation or an emit would wait out the whole outage and then be sent
-  // late. The publish is refused at once instead, and never queued.
-  it.each(['reconnecting', 'close', 'end'])(
+  // after its caller was told it failed. The publish is refused at once instead, and never queued.
+  it.each(['wait', 'connecting', 'connect', 'reconnecting', 'close', 'end'])(
     'rejects a publish at once while the client is %s, without handing it to the client',
     async (status) => {
       const publish = jest.fn()
-      const pubsub = new RedisRealtimePubSub({ client: { status, publish } as unknown as Redis })
+      const connect = jest.fn().mockResolvedValue(undefined)
+      const pubsub = new RedisRealtimePubSub({
+        client: { status, publish, connect } as unknown as Redis,
+      })
       await expect(pubsub.publish(msg)).rejects.toThrow(
         `[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is ${status})`,
       )
       expect(publish).not.toHaveBeenCalled()
+      // Only a client that was told to wait for its first command is connected on its behalf.
+      expect(connect).toHaveBeenCalledTimes(status === 'wait' ? 1 : 0)
     },
   )
 
-  // A client that has not connected yet, or that is connected, takes the publish: a lazyConnect
-  // client starts in 'wait' and connects on its first command.
-  it.each(['wait', 'connecting', 'connect', 'ready'])(
-    'hands a publish to the client while it is %s',
-    async (status) => {
-      const publish = jest.fn().mockResolvedValue(1)
-      const pubsub = new RedisRealtimePubSub({ client: { status, publish } as unknown as Redis })
-      await expect(pubsub.publish(msg)).resolves.toBeUndefined()
-      expect(publish).toHaveBeenCalledWith('bymax:realtime', JSON.stringify(msg))
-    },
-  )
+  // A test double such as ioredis-mock reports no status at all; it is taken to be able to publish.
+  it.each(['ready', ''])('hands a publish to the client whose status is %p', async (status) => {
+    const publish = jest.fn().mockResolvedValue(1)
+    const pubsub = new RedisRealtimePubSub({
+      client: { status, publish } as unknown as Redis,
+    })
+    await expect(pubsub.publish(msg)).resolves.toBeUndefined()
+    expect(publish).toHaveBeenCalledWith('bymax:realtime', JSON.stringify(msg))
+  })
+
+  // Readiness is the ability to carry traffic both ways: a confirmed subscription is not enough
+  // when the connection that publishes cannot publish.
+  it.each([
+    ['ready', true],
+    ['', true],
+    ['wait', false],
+    ['reconnecting', false],
+  ])('reports %s publisher as subscribed=%s', async (status, expected) => {
+    const sub = { subscribe: jest.fn().mockResolvedValue(undefined), on: jest.fn() }
+    const pub = {
+      duplicate: jest.fn().mockReturnValue(sub),
+      status,
+      connect: jest.fn().mockResolvedValue(undefined),
+    }
+    const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
+    await pubsub.subscribe(jest.fn())
+    expect(pubsub.isSubscribed()).toBe(expected)
+  })
+
+  // Subscribing waits for the publishing client to answer its first connection, ready or closed, so
+  // an emit from another provider's start-up hook is not refused for the client's first milliseconds.
+  // The events are fired by hand, so no network order is involved.
+  describe('waiting for the publishing client', () => {
+    function publisher(status: string) {
+      const sub = { subscribe: jest.fn().mockResolvedValue(undefined), on: jest.fn() }
+      return Object.assign(new EventEmitter(), {
+        status,
+        duplicate: jest.fn().mockReturnValue(sub),
+        connect: jest.fn().mockResolvedValue(undefined),
+      })
+    }
+    const pending = async (promise: Promise<unknown>): Promise<boolean> => {
+      let done = false
+      void promise.then(() => (done = true))
+      await new Promise((resolve) => setImmediate(resolve))
+      return !done
+    }
+
+    it('does not wait for a client that is already ready', async () => {
+      const pub = publisher('ready')
+      const subscribing = new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(
+        jest.fn(),
+      )
+      expect(await pending(subscribing)).toBe(false)
+      expect(pub.listenerCount('ready')).toBe(0)
+      expect(pub.listenerCount('close')).toBe(0)
+    })
+
+    // Every way ioredis ends a first connection: it is ready, it closes (and retries, or gives
+    // up), or its connector fails and it ends with no close at all.
+    it.each(
+      ['connecting', 'connect'].flatMap((status) =>
+        ['ready', 'close', 'reconnecting', 'end'].map((event) => [status, event]),
+      ),
+    )(
+      'waits for a client that is %s until it is %s, then stops listening',
+      async (status, event) => {
+        const pub = publisher(status)
+        const subscribing = new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(
+          jest.fn(),
+        )
+        expect(await pending(subscribing)).toBe(true)
+        pub.emit(event)
+        expect(await pending(subscribing)).toBe(false)
+        for (const name of ['ready', 'close', 'reconnecting', 'end']) {
+          expect(pub.listenerCount(name)).toBe(0)
+        }
+      },
+    )
+
+    // The wait starts only once the subscriber is attached: a subscriber that reconnects while the
+    // publisher is still connecting must re-subscribe, and a boot that fails never starts the wait.
+    it('re-subscribes when the subscriber reconnects while the publisher is still connecting', async () => {
+      const handlers: Record<string, () => void> = {}
+      const pub = publisher('connecting')
+      const sub = {
+        subscribe: jest.fn().mockResolvedValue(undefined),
+        on: jest.fn((event: string, handler: () => void) => {
+          handlers[event] = handler
+        }),
+      }
+      pub.duplicate.mockReturnValue(sub)
+      const subscribing = new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(
+        jest.fn(),
+      )
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(sub.subscribe).toHaveBeenCalledTimes(1)
+
+      handlers['ready']!()
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(sub.subscribe).toHaveBeenCalledTimes(2)
+
+      pub.emit('ready')
+      await subscribing
+    })
+
+    it('never starts the wait when the subscription is refused', async () => {
+      const pub = publisher('connecting')
+      pub.duplicate.mockReturnValue({
+        subscribe: jest
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('NOPERM'), { name: 'ReplyError' })),
+        on: jest.fn(),
+        disconnect: jest.fn(),
+      })
+      await expect(
+        new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(jest.fn()),
+      ).rejects.toThrow('could not subscribe')
+      for (const name of ['ready', 'close', 'reconnecting', 'end']) {
+        expect(pub.listenerCount(name)).toBe(0)
+      }
+    })
+
+    // The wait can never block the boot: a client that stays connecting is given up on at the
+    // deadline, which leaves nothing listening and no timer behind.
+    describe('with a client that never answers', () => {
+      beforeEach(() => jest.useFakeTimers())
+      afterEach(() => jest.useRealTimers())
+
+      it('gives up at the deadline, and not before', async () => {
+        const pub = publisher('connecting')
+        let done = false
+        void new RedisRealtimePubSub({ client: pub as unknown as Redis })
+          .subscribe(jest.fn())
+          .then(() => (done = true))
+        await jest.advanceTimersByTimeAsync(1_999)
+        expect(done).toBe(false)
+        await jest.advanceTimersByTimeAsync(1)
+        expect(done).toBe(true)
+        for (const name of ['ready', 'close', 'reconnecting', 'end']) {
+          expect(pub.listenerCount(name)).toBe(0)
+        }
+        expect(jest.getTimerCount()).toBe(0)
+      })
+
+      it('leaves no timer behind when the client answers first, and never keeps the process alive', async () => {
+        const pub = publisher('connecting')
+        // Wrapped by hand and put back in `finally`: the fake clock owns `setTimeout` here, and a
+        // spy that jest restores later would put the fake one back for the tests that follow.
+        const fake = globalThis.setTimeout
+        const created: NodeJS.Timeout[] = []
+        globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+          const timer = fake(...args)
+          created.push(timer)
+          return timer
+        }) as typeof setTimeout
+        try {
+          const subscribing = new RedisRealtimePubSub({
+            client: pub as unknown as Redis,
+          }).subscribe(jest.fn())
+          await jest.advanceTimersByTimeAsync(10)
+          pub.emit('ready')
+          await subscribing
+        } finally {
+          globalThis.setTimeout = fake
+        }
+        expect(jest.getTimerCount()).toBe(0)
+        expect(created.some((timer) => timer.hasRef() === false)).toBe(true)
+      })
+    })
+
+    it.each(['reconnecting', 'close', 'end'])(
+      'does not wait for a client that is %s, which has already answered',
+      async (status) => {
+        const pub = publisher(status)
+        const subscribing = new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(
+          jest.fn(),
+        )
+        expect(await pending(subscribing)).toBe(false)
+        expect(pub.listenerCount('ready')).toBe(0)
+      },
+    )
+
+    // A lazy client leaves 'wait' for 'connecting' as soon as it is told to connect.
+    it('waits for a lazy client that the adapter has just connected', async () => {
+      const pub = publisher('wait')
+      pub.connect.mockImplementation(() => {
+        pub.status = 'connecting'
+        return Promise.resolve()
+      })
+      const subscribing = new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(
+        jest.fn(),
+      )
+      expect(await pending(subscribing)).toBe(true)
+      expect(pub.connect).toHaveBeenCalledTimes(1)
+      pub.emit('ready')
+      expect(await pending(subscribing)).toBe(false)
+    })
+  })
 
   // When subscriber init fails, the handler is rolled back and subInit is cleared so the
   // next subscribe() retries with a fresh client instead of re-awaiting the rejected promise.
@@ -291,6 +521,7 @@ describe('RedisRealtimePubSub', () => {
       quit: jest.fn().mockResolvedValue(undefined),
     }
     const fakePub = {
+      status: 'ready',
       publish: jest.fn().mockResolvedValue(undefined),
       duplicate: jest
         .fn()
@@ -331,6 +562,7 @@ describe('RedisRealtimePubSub', () => {
 
     let callCount = 0
     const fakePub = {
+      status: 'ready',
       publish: jest.fn().mockResolvedValue(undefined),
       duplicate: jest
         .fn()
@@ -353,7 +585,7 @@ describe('RedisRealtimePubSub', () => {
   })
   // The default channel must be the 'bymax:realtime' string, not an empty string.
   it('publishes to the bymax:realtime channel when no channel option is provided', async () => {
-    const client = new RedisMock() as unknown as Redis
+    const { client } = build()
     const publishSpy = jest.spyOn(client as unknown as { publish: jest.Mock }, 'publish')
     const pubsub = new RedisRealtimePubSub({ client })
     await pubsub.publish(msg)
@@ -384,6 +616,7 @@ describe('RedisRealtimePubSub', () => {
       quit: quitMock,
     }
     const fakePub = {
+      status: 'ready',
       publish: jest.fn().mockResolvedValue(undefined),
       duplicate: jest.fn().mockReturnValue(fakeSub),
     }
@@ -403,6 +636,7 @@ describe('RedisRealtimePubSub', () => {
       quit: quitMock,
     }
     const fakePub = {
+      status: 'ready',
       publish: jest.fn().mockResolvedValue(undefined),
       duplicate: jest.fn().mockReturnValue(fakeSub),
     }
