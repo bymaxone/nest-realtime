@@ -13,19 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whether the instance can publish.** `RedisRealtimePubSub.publish` refused a client that was
   reconnecting or closed, but still handed the command to ioredis in `wait`, `connecting` and
   `connect`. A client whose server accepts the connection and does not answer the handshake kept
-  the command pending for more than 12 s. It now rejects with `REALTIME_PUBSUB_UNAVAILABLE` at once
+  the command pending. It now rejects with `REALTIME_PUBSUB_UNAVAILABLE` at once
   unless the client can publish, and never hands the command to ioredis otherwise. A client built
   with `lazyConnect` was left in `wait`, so `isPubSubReady()` reported true and the first emit was
   lost; the adapter now connects it when it subscribes, and a publish made before any subscribe
-  connects it too (that publish is refused, the next one goes through). `isPubSubReady()` is true
+  connects it too (that publish is refused). `isPubSubReady()` is true
   only while the subscription is confirmed and the publishing client can publish.
 
 #### Apply to a derived backend
 
 If you pass `RedisRealtimePubSub` a client built with `lazyConnect: true`, the adapter now
-connects it when the application starts; connect it yourself only if you need it before then. An
+connects it when it subscribes; connect it yourself only if you need it before then. An
 emit made while the publishing client is `wait`, `connecting` or `connect` is now refused at once,
-like one made while it reconnects, and a `disconnect()` rejects with
+like one made while it reconnects, and a `disconnect()` of a connection held on another instance rejects with
 `REALTIME_PUBSUB_UNAVAILABLE`. `isPubSubReady()` also turns false while the publishing
 client cannot publish, so a readiness probe that took the instance out of rotation only on a lost
 subscription now takes it out for a lost publisher as well. A client that reports no status, such
