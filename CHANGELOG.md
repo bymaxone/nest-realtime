@@ -35,7 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `the server refused the subscription` warnings, and a server that accepted it saw two
   `SUBSCRIBE`s. The queued one is now the only one sent for that connection and its answer is the
   one that reports readiness or the refusal; a queued one rejected because the connection closed
-  is replaced by the `ready` handler's, and every later reconnect still re-subscribes.
+  is replaced by the `ready` handler's, and every later reconnect still re-subscribes, even when a
+  queued one was sent and then never answered because the connection dropped and the client does
+  not resend unfulfilled commands.
 - **Closing the application no longer hangs while an SSE stream is open.** Nest awaits the HTTP
   server's close before it runs `onApplicationShutdown`, and the server does not finish closing
   while a response is open, but the streams were ended only in that hook. One open stream therefore
