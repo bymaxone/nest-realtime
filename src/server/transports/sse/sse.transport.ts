@@ -99,8 +99,8 @@ export class SseTransport implements ITransport {
    * Tear down every SSE connection and stop heartbeat before the HTTP server closes.
    *
    * Nest awaits the HTTP server's close before it runs `onApplicationShutdown`, and the server
-   * does not finish closing while a response is open, so streams ended only in that hook would
-   * keep the close pending for ever and skip every later shutdown hook.
+   * does not finish closing while a response is open, so the streams have to be ended here, before
+   * the close, for the later shutdown hooks to run.
    */
   async beforeApplicationShutdown(): Promise<void> {
     // Before anything is awaited, so that a handshake that finishes from here on is refused and

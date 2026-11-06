@@ -122,8 +122,8 @@ describe('closing an application with SSE connections', () => {
     await expect(closeWithin(app, CLOSE_WITHIN_MS)).resolves.toBeUndefined()
   })
 
-  // The defect: Nest awaits the HTTP server's close before it runs onApplicationShutdown, and the
-  // streams were ended only by that hook, so one open stream kept the close pending for ever.
+  // Nest awaits the HTTP server's close before it runs onApplicationShutdown, and the server does not
+  // finish closing while a response is open, so an open stream has to be ended before the close.
   it('closes within the bound, and ends the stream, while a stream is open', async () => {
     stream = await openStream(port)
 

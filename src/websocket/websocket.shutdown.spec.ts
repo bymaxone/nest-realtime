@@ -79,7 +79,7 @@ describe('closing an application with WebSocket connections', () => {
   })
 })
 
-// transport 'both' also serves SSE, whose open streams are what kept the close pending.
+// transport 'both' also serves SSE, whose open streams have to end before the HTTP server can close.
 describe("closing an application on transport 'both' with an open SSE stream", () => {
   let app: INestApplication
   let request: ClientRequest | undefined
@@ -132,9 +132,9 @@ describe("closing an application on transport 'both' with an open SSE stream", (
   })
 })
 
-// A connection opened while a slow shutdown hook still holds the close back, which is the window in
-// which an SSE stream used to keep the HTTP server open: Socket.IO disconnects every socket when the
-// server closes, so a late connection cannot hold the close.
+// A connection opened while a slow shutdown hook still holds the close back is the window in which an
+// SSE stream would hold the HTTP server open; Socket.IO disconnects every socket when the server
+// closes, so a late WebSocket connection cannot hold the close.
 describe('a WebSocket connection opened while a slow shutdown hook holds the close back', () => {
   let app: INestApplication
   let url: string
