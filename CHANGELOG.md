@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its streams and stops its heartbeats in `beforeApplicationShutdown`, which runs before the server
   closes, and its `onApplicationShutdown` stays and runs the same teardown, which finds nothing
   left. A stream requested once shutdown has begun is refused with a `503`, since nothing would end
-  it. `ITransport` gains the optional `beforeApplicationShutdown` hook. An open WebSocket
+  it, and one that was past the handshake when shutdown began is ended as soon as it is opened. `ITransport` gains the optional `beforeApplicationShutdown` hook. An open WebSocket
   connection, including one opened while shutdown is under way, did not hang the close.
 - **A failed re-authentication now disconnects the connection without waiting for its
   notification.** With `reauthenticationPolicy.onFailure: 'event'` the service emitted
