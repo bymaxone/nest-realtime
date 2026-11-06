@@ -179,14 +179,24 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     }
   }
 
-  /** Evict the positive-cache entry, optionally emit the failure event, then disconnect. */
+  /**
+   * Evict the positive-cache entry, optionally emit the failure event, then disconnect. The
+   * event is a notification: a revocation never waits on it, so a rejected emit is logged and
+   * the connection is disconnected all the same.
+   */
   private async handleFailure(conn: ConnectionRecord): Promise<void> {
     this.positiveCache.delete(conn.connectionId)
 
     if (this.policy.onFailure === 'event') {
-      await this.realtime.emitToUser(conn.userId, RESERVED_EVENT_NAMES.CONNECTION_REAUTH_FAILED, {
-        reason: REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
-      })
+      try {
+        await this.realtime.emitToUser(conn.userId, RESERVED_EVENT_NAMES.CONNECTION_REAUTH_FAILED, {
+          reason: REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
+        })
+      } catch (err) {
+        this.logger.warn(
+          `Reauthentication notification for ${conn.connectionId} failed, disconnecting anyway: ${describeError(err)}`,
+        )
+      }
     }
 
     // Fire the hook best-effort — a throwing hook must not block the disconnect.

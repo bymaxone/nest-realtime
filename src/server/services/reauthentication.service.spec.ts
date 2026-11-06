@@ -262,6 +262,81 @@ describe('ReauthenticationService', () => {
     )
   })
 
+  // A revocation never waits on the notification that precedes it. A rejected emit is whatever the
+  // transport rejects with: SSE with no delivery path left, the composite with both transports
+  // failed, or a bare Socket.IO error. In each the connection is still disconnected in the same
+  // cycle, the failure hook still fires, and the emit's failure is logged and not mistaken for a
+  // failed revocation that waits for the next cycle.
+  describe.each([
+    ['sse', 'SSE has no delivery path', 'REALTIME_TRANSPORT_UNAVAILABLE'],
+    ['websocket', 'websocket emit threw', 'socket.io error'],
+    ['sse', 'composite failed on both transports', 'REALTIME_TRANSPORT_UNAVAILABLE'],
+  ] as const)(
+    'when the failure event for a %s connection is rejected (%s)',
+    (transport, label, code) => {
+      it('still disconnects, fires the hook and logs the notification failure', async () => {
+        const revalidate = jest.fn().mockResolvedValue(false)
+        const record = { ...mkRecord(), transport }
+        const realtime = mkRealtime()
+        realtime.emitToUser.mockRejectedValue(new Error(`${code}: ${label}`))
+        const hooks = { onReauthenticationFailed: jest.fn().mockResolvedValue(undefined) }
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+        try {
+          const svc = build(
+            { allByTransport: jest.fn((t: string) => (t === transport ? [record] : [])) },
+            realtime,
+            mkAuth(revalidate),
+            mkOptions({ intervalSeconds: 60, onFailure: 'event' }),
+            hooks,
+          )
+
+          await svc.runCycle()
+          await flush()
+
+          expect(realtime.disconnect).toHaveBeenCalledTimes(1)
+          expect(realtime.disconnect).toHaveBeenCalledWith(
+            'c1',
+            REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
+          )
+          expect(hooks.onReauthenticationFailed).toHaveBeenCalledTimes(1)
+          expect(warnSpy).toHaveBeenCalledTimes(1)
+          expect(warnSpy).toHaveBeenCalledWith(
+            `Reauthentication notification for c1 failed, disconnecting anyway: ${code}: ${label}`,
+          )
+        } finally {
+          warnSpy.mockRestore()
+        }
+      })
+    },
+  )
+
+  // A rejected disconnect is still a failed revocation: it is logged as one and retried.
+  it('still treats a rejected disconnect as a failed revocation when the emit also failed', async () => {
+    const revalidate = jest.fn().mockResolvedValue(false)
+    const realtime = mkRealtime()
+    realtime.emitToUser.mockRejectedValue(new Error('emit down'))
+    realtime.disconnect.mockRejectedValueOnce(new Error('REALTIME_PUBSUB_UNAVAILABLE'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const svc = build(
+        mkConnections([mkRecord()]),
+        realtime,
+        mkAuth(revalidate),
+        mkOptions({ intervalSeconds: 60, onFailure: 'event' }),
+      )
+
+      await svc.runCycle()
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Revocation of c1 failed, retrying next cycle: REALTIME_PUBSUB_UNAVAILABLE',
+      )
+      await svc.runCycle()
+      expect(realtime.disconnect).toHaveBeenCalledTimes(2)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   // A throwing revalidate disconnects the connection (fail-closed) and the cycle continues for others.
   it('continues processing other connections when one revalidate throws', async () => {
     const revalidate = jest
