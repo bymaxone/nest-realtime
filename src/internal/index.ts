@@ -70,6 +70,8 @@ export { assertIdentityIsNotBlank, resolveAuthTenant } from '../server/utils/ass
 export { composeRoomId } from '../server/utils/compose-room-id'
 export { describeError } from '../server/utils/describe-error'
 export { unavailableError } from '../server/utils/unavailable-error'
+export { realtimeError } from '../server/utils/realtime-error'
+export type { CodedError } from '../server/utils/realtime-error'
 export { reportDeliveryFailure } from '../server/utils/report-delivery-failure'
 export { parseCookieHeader } from '../server/utils/parse-cookie-header'
 export * from '../server/interfaces'

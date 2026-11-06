@@ -5,6 +5,7 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { realtimeError } from './realtime-error'
 
 /**
  * True when a trait carries no identity.
@@ -70,16 +71,18 @@ export function resolveAuthTenant(
  */
 export function assertIdentityIsNotBlank(auth: AuthenticationResult): void {
   if (isBlank(auth.userId)) {
-    throw new Error(
-      `${REALTIME_ERROR_CODES.AUTH_FAILED}: the authenticator returned a userId that is not a ` +
+    throw realtimeError(
+      REALTIME_ERROR_CODES.AUTH_FAILED,
+      `the authenticator returned a userId that is not a ` +
         `non-empty string. A blank identity indexes every such connection under one key and ` +
         `joins them to the same room; return a real userId, or reject the connection by ` +
         `returning null.`,
     )
   }
   if (auth.tenantId !== undefined && isBlank(auth.tenantId)) {
-    throw new Error(
-      `${REALTIME_ERROR_CODES.AUTH_FAILED}: the authenticator returned a tenantId that is ` +
+    throw realtimeError(
+      REALTIME_ERROR_CODES.AUTH_FAILED,
+      `the authenticator returned a tenantId that is ` +
         `present but not a non-empty string. Omit it, or return undefined or null, for a ` +
         `connection that belongs to no tenant — that is indexed under none and joins no tenant ` +
         `room, which an empty string is not.`,
