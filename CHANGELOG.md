@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-11-06
+
 ### Changed
 
 - **With `transport: 'both'`, an emit that fails on both transports now rejects.** `emitToUser`,
@@ -911,7 +913,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.8...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.9...HEAD
+[1.2.9]: https://github.com/bymaxone/nest-realtime/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/bymaxone/nest-realtime/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/bymaxone/nest-realtime/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/bymaxone/nest-realtime/compare/v1.2.5...v1.2.6
