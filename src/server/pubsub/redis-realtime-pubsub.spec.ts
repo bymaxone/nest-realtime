@@ -371,17 +371,27 @@ describe('RedisRealtimePubSub', () => {
 
       it('leaves no timer behind when the client answers first, and never keeps the process alive', async () => {
         const pub = publisher('connecting')
-        const timer = jest.spyOn(globalThis, 'setTimeout')
-        const subscribing = new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(
-          jest.fn(),
-        )
-        await jest.advanceTimersByTimeAsync(10)
-        pub.emit('ready')
-        await subscribing
+        // Wrapped by hand and put back in `finally`: the fake clock owns `setTimeout` here, and a
+        // spy that jest restores later would put the fake one back for the tests that follow.
+        const fake = globalThis.setTimeout
+        const created: NodeJS.Timeout[] = []
+        globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+          const timer = fake(...args)
+          created.push(timer)
+          return timer
+        }) as typeof setTimeout
+        try {
+          const subscribing = new RedisRealtimePubSub({
+            client: pub as unknown as Redis,
+          }).subscribe(jest.fn())
+          await jest.advanceTimersByTimeAsync(10)
+          pub.emit('ready')
+          await subscribing
+        } finally {
+          globalThis.setTimeout = fake
+        }
         expect(jest.getTimerCount()).toBe(0)
-        const deadline = timer.mock.results.map((r) => r.value as NodeJS.Timeout)
-        expect(deadline.some((t) => t.hasRef() === false)).toBe(true)
-        timer.mockRestore()
+        expect(created.some((timer) => timer.hasRef() === false)).toBe(true)
       })
     })
 
