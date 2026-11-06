@@ -180,24 +180,14 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   }
 
   /**
-   * Evict the positive-cache entry, optionally emit the failure event, then disconnect. The
-   * event is a notification: a revocation never waits on it, so a rejected emit is logged and
-   * the connection is disconnected all the same.
+   * Evict the positive-cache entry, optionally start the failure event, then disconnect. The
+   * event is a notification: it is started first, so its local delivery precedes the disconnect,
+   * but the revocation never waits for it. A failure to send it is logged.
    */
   private async handleFailure(conn: ConnectionRecord): Promise<void> {
     this.positiveCache.delete(conn.connectionId)
 
-    if (this.policy.onFailure === 'event') {
-      try {
-        await this.realtime.emitToUser(conn.userId, RESERVED_EVENT_NAMES.CONNECTION_REAUTH_FAILED, {
-          reason: REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
-        })
-      } catch (err) {
-        this.logger.warn(
-          `Reauthentication notification for ${conn.connectionId} failed, disconnecting anyway: ${describeError(err)}`,
-        )
-      }
-    }
+    if (this.policy.onFailure === 'event') this.notify(conn)
 
     // Fire the hook best-effort — a throwing hook must not block the disconnect.
     void Promise.resolve(
@@ -217,5 +207,23 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     })
 
     await this.realtime.disconnect(conn.connectionId, REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED)
+  }
+
+  /** Send the failure event without waiting for it; a rejection, or a throw, is only logged. */
+  private notify(conn: ConnectionRecord): void {
+    const failed = (err: unknown): void => {
+      this.logger.warn(
+        `Reauthentication notification for ${conn.connectionId} failed, disconnecting anyway: ${describeError(err)}`,
+      )
+    }
+    try {
+      this.realtime
+        .emitToUser(conn.userId, RESERVED_EVENT_NAMES.CONNECTION_REAUTH_FAILED, {
+          reason: REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
+        })
+        .catch(failed)
+    } catch (err) {
+      failed(err)
+    }
   }
 }
