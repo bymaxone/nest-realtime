@@ -4,10 +4,10 @@
  * @layer test
  */
 import Redis from 'ioredis'
+import { createTestInstances } from '../../../test/e2e/helpers/create-test-instance'
 import { FakeRespServer } from '../../../test/fixtures/fake-resp-server'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
-import { createTestInstances } from '../../../test/e2e/helpers/create-test-instance'
 
 jest.setTimeout(5_000)
 
