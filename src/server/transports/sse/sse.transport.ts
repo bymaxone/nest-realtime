@@ -76,6 +76,8 @@ interface Failure {
 export class SseTransport implements ITransport {
   readonly kind = 'sse' as const
   private readonly logger = new Logger(SseTransport.name)
+  /** Set when shutdown begins; from then on a new stream is refused. */
+  #shuttingDown = false
 
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
@@ -93,15 +95,34 @@ export class SseTransport implements ITransport {
     private readonly offlineQueue?: IOfflineQueueStorage,
   ) {}
 
-  /** Tear down every SSE connection and stop heartbeat on process shutdown. */
-  async onApplicationShutdown(): Promise<void> {
+  /**
+   * Tear down every SSE connection and stop heartbeat before the HTTP server closes.
+   *
+   * Nest awaits the HTTP server's close before it runs `onApplicationShutdown`, and the server
+   * does not finish closing while a response is open, so the streams have to be ended here, before
+   * the close, for the later shutdown hooks to run.
+   */
+  async beforeApplicationShutdown(): Promise<void> {
+    // Before anything is awaited, so that a handshake that finishes from here on is refused and
+    // does not open a stream the teardown below would not see.
+    this.#shuttingDown = true
     this.heartbeat.stopAll()
     // Await each teardown so onDisconnect hooks complete within the shutdown window
-    // (RxJS finalize cannot await an async callback). disconnectLocal removes the
-    // record first, so the stream's own finalize cleanup is then a harmless no-op.
+    // (RxJS finalize cannot await an async callback). disconnectLocal removes the record
+    // first, so the stream's own finalize cleanup is then a harmless no-op.
     for (const conn of this.connections.allByTransport('sse')) {
       await this.disconnectLocal(conn.connectionId)
     }
+  }
+
+  /** The same teardown, for a caller that runs only this hook; it finds nothing left to close. */
+  async onApplicationShutdown(): Promise<void> {
+    await this.beforeApplicationShutdown()
+  }
+
+  /** Whether shutdown has begun, after which a new stream is refused because nothing would end it. */
+  get shuttingDown(): boolean {
+    return this.#shuttingDown
   }
 
   /** The resolved heartbeat interval for this transport. */

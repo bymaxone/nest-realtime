@@ -28,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Closing the application no longer hangs while an SSE stream is open.** Nest awaits the HTTP
+  server's close before it runs `onApplicationShutdown`, and the server does not finish closing
+  while a response is open, but the streams were ended only in that hook. One open stream therefore
+  kept `app.close()` pending, so a `SIGTERM` was ignored until the orchestrator's `SIGKILL` and
+  every `onApplicationShutdown` hook was skipped, a tracing flush included. `SseTransport` now ends
+  its streams and stops its heartbeats in `beforeApplicationShutdown`, which runs before the server
+  closes, and its `onApplicationShutdown` stays and runs the same teardown, which finds nothing
+  left. A stream requested once shutdown has begun is refused with a `503`, since nothing would end
+  it, and one that was past the handshake when shutdown began is ended as soon as it is opened. `ITransport` gains the optional `beforeApplicationShutdown` hook. An open WebSocket
+  connection, including one opened while shutdown is under way, did not hang the close.
 - **A failed re-authentication now disconnects the connection without waiting for its
   notification.** With `reauthenticationPolicy.onFailure: 'event'` the service emitted
   `connection:reauthentication-failed` and waited for it before disconnecting, so an emit that
@@ -52,6 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answers nothing in that time is left unready and the application still starts.
 
 #### Apply to a derived backend
+
+Nothing needs to change for the shutdown fix: an application that closes with an SSE stream open
+now finishes closing and runs its `onApplicationShutdown` hooks. A client that requests the SSE
+route while the application is closing now gets a `503`. If you set `forceCloseConnections`
+only to get past this hang, it is no longer needed for SSE streams.
 
 If you set `reauthenticationPolicy.onFailure: 'event'`, nothing needs to change: a connection whose
 credentials failed is now disconnected in the same cycle whether or not the notification can be

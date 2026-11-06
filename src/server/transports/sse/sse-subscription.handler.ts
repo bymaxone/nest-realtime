@@ -8,6 +8,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  ServiceUnavailableException,
   Logger,
   Optional,
   UnauthorizedException,
@@ -216,6 +217,9 @@ export class SseSubscriptionHandler {
     res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('X-Accel-Buffering', 'no')
 
+    // A stream opened once shutdown has begun would keep the HTTP server from closing.
+    this.refuseDuringShutdown()
+
     // The route guard normally authenticated already.
     const done = this.authenticated.get(req)
     this.authenticated.delete(req)
@@ -225,10 +229,21 @@ export class SseSubscriptionHandler {
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
+    let stream: Observable<MessageEvent>
     try {
-      return await this.openStream(req, res, authenticated)
+      stream = await this.openStream(req, res, authenticated)
     } catch (err) {
       throw this.serverError(err, 'SSE handshake failed')
+    }
+    // Authentication is asynchronous, so shutdown may have begun while this request waited.
+    this.refuseDuringShutdown()
+    return stream
+  }
+
+  /** Refuse a new stream with a 503 once shutdown has begun. */
+  private refuseDuringShutdown(): void {
+    if (this.transport.shuttingDown) {
+      throw new ServiceUnavailableException(REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE)
     }
   }
 
@@ -322,6 +337,13 @@ export class SseSubscriptionHandler {
    */
   private buildStream(p: StreamParams): Observable<MessageEvent> {
     return new Observable<MessageEvent>((subscriber) => {
+      // The connection is registered only now, after the handshake returned this stream. Shutdown
+      // may have begun in between: its snapshot of the connections was taken without this one, so
+      // nothing would end it. Nothing has been read from the pipeline or registered yet.
+      if (this.transport.shuttingDown) {
+        subscriber.complete()
+        return undefined
+      }
       // Subscribe the pipeline first: subject has a listener before registration can emit.
       const inner = this.subscribePipeline(p, subscriber)
       // The offline-queue events were pushed synchronously during the subscribe above.
