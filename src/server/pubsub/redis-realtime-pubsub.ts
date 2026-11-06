@@ -153,7 +153,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
     // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it. The offline queue
     // is forced on, whatever the host client chose: the first SUBSCRIBE is issued before the
-    // connection exists, and every later one waits for `ready`.
+    // connection exists.
     const sub = this.#pub.duplicate({ autoResubscribe: false, enableOfflineQueue: true })
     let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
