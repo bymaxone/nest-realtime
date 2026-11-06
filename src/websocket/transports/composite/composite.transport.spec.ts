@@ -163,8 +163,7 @@ describe('CompositeTransport', () => {
   )
 
   // An emit goes to the connections each transport holds, so one transport failing is logged and
-  // resolved, and both failing rejects under the code with both reasons. Four operations, four
-  // outcomes each.
+  // resolved, and both failing rejects under the code with both reasons.
   describe.each([
     ['emitToUser', (c: CompositeTransport) => c.emitToUser('u-1', 'evt', {})],
     ['emitToTenant', (c: CompositeTransport) => c.emitToTenant('t-1', 'evt', {})],
