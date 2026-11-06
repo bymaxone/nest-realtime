@@ -325,12 +325,13 @@ describe('RedisRealtimePubSub', () => {
       expect(pub.listenerCount('close')).toBe(0)
     })
 
-    it.each([
-      ['connecting', 'ready'],
-      ['connect', 'ready'],
-      ['connecting', 'close'],
-      ['connect', 'close'],
-    ])(
+    // Every way ioredis ends a first connection: it is ready, it closes (and retries, or gives
+    // up), or its connector fails and it ends with no close at all.
+    it.each(
+      ['connecting', 'connect'].flatMap((status) =>
+        ['ready', 'close', 'reconnecting', 'end'].map((event) => [status, event]),
+      ),
+    )(
       'waits for a client that is %s until it is %s, then stops listening',
       async (status, event) => {
         const pub = publisher(status)
@@ -340,8 +341,9 @@ describe('RedisRealtimePubSub', () => {
         expect(await pending(subscribing)).toBe(true)
         pub.emit(event)
         expect(await pending(subscribing)).toBe(false)
-        expect(pub.listenerCount('ready')).toBe(0)
-        expect(pub.listenerCount('close')).toBe(0)
+        for (const name of ['ready', 'close', 'reconnecting', 'end']) {
+          expect(pub.listenerCount(name)).toBe(0)
+        }
       },
     )
 

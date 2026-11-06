@@ -28,6 +28,9 @@ const CANNOT_PUBLISH: ReadonlySet<string> = new Set([
   'end',
 ])
 
+/** The events that name a status other than connecting: each ends a first connection attempt. */
+const CONNECTION_OVER = ['ready', 'close', 'reconnecting', 'end'] as const
+
 /** A connection failure as text: ioredis wraps a refused connect in an error with no message. */
 function connectionReason(err: unknown): string {
   const code = (err as { code?: unknown } | null)?.code
@@ -135,7 +138,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   }
 
   /**
-   * Resolves once the publishing client has answered its first connection, ready or closed. The
+   * Resolves once the publishing client's first connection attempt is over, however it ended:
+   * ready, closed (to retry or to give up), or ended with no close when its connector fails. The
    * client is created just before the application boots, so for its first milliseconds it is still
    * connecting, and an emit from another provider's start-up hook would be refused for it.
    */
@@ -144,12 +148,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     if (pub.status !== 'connecting' && pub.status !== 'connect') return Promise.resolve()
     return new Promise((resolve) => {
       const settle = (): void => {
-        pub.off('ready', settle)
-        pub.off('close', settle)
+        for (const event of CONNECTION_OVER) pub.off(event, settle)
         resolve()
       }
-      pub.once('ready', settle)
-      pub.once('close', settle)
+      for (const event of CONNECTION_OVER) pub.once(event, settle)
     })
   }
 

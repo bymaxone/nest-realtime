@@ -93,6 +93,29 @@ describe('RedisRealtimePubSub publishing connection', () => {
     expect(slowed).toBe(true)
   })
 
+  // ioredis ends a first connection in one of several ways: ready, a close that it retries or gives
+  // up on, or, when the connector itself fails (a sentinel client with no reachable sentinel), an
+  // 'end' with no 'close' at all. Subscribing must not wait on the publisher for ever in any of them.
+  it('completes the boot, unready, when the publisher ends without ever closing', async () => {
+    const gone = new FakeRespServer()
+    await gone.start()
+    const port = gone.port
+    await gone.stop()
+    const redis = client(port, {
+      host: undefined,
+      sentinels: [{ host: '127.0.0.1', port }],
+      name: 'primary',
+      sentinelRetryStrategy: () => null,
+      retryStrategy: () => null,
+    })
+    const pubsub = new RedisRealtimePubSub({ client: redis })
+
+    await pubsub.subscribe(() => undefined)
+
+    expect(redis.status).toBe('end')
+    expect(pubsub.isSubscribed()).toBe(false)
+  })
+
   // A lazy host client that nobody subscribes through is connected by its first publish, which is
   // refused: the command it would have been is not sent, and the next publish goes through.
   it('connects a lazy host client on a publish made before any subscribe', async () => {
