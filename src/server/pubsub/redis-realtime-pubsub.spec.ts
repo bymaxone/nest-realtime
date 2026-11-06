@@ -503,6 +503,109 @@ describe('RedisRealtimePubSub', () => {
     })
   })
 
+  // After a boot that found Redis unreachable, the first SUBSCRIBE is still waiting in the offline
+  // queue and ioredis sends it itself when the connection first becomes ready. The `ready` handler
+  // therefore must not send a second one for that connection, and the answer to the queued one is
+  // handled once. The events are fired by hand, so no network order is involved.
+  describe('the first SUBSCRIBE of a boot that found Redis unreachable', () => {
+    function unreachableBoot() {
+      const handlers: Record<string, (value?: unknown) => void> = {}
+      let settle!: { resolve: () => void; reject: (error: Error) => void }
+      const first = new Promise<void>((resolve, reject) => (settle = { resolve, reject }))
+      const sub = {
+        subscribe: jest.fn().mockReturnValueOnce(first).mockResolvedValue(undefined),
+        on: jest.fn((event: string, handler: (value?: unknown) => void) => {
+          handlers[event] = handler
+        }),
+      }
+      const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
+      const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
+      const booted = pubsub.subscribe(jest.fn())
+      handlers['error']!(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }))
+      return { handlers, settle, sub, pubsub, booted }
+    }
+    const flush = () => new Promise((resolve) => setImmediate(resolve))
+
+    it('is not repeated by the ready handler while it is still queued, and its answer reports readiness once', async () => {
+      const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      try {
+        const { handlers, settle, sub, pubsub, booted } = unreachableBoot()
+        await booted
+        expect(pubsub.isSubscribed()).toBe(false)
+
+        handlers['ready']!()
+        await flush()
+        expect(sub.subscribe).toHaveBeenCalledTimes(1)
+
+        settle.resolve()
+        await flush()
+        expect(pubsub.isSubscribed()).toBe(true)
+        expect(log).toHaveBeenCalledTimes(1)
+        expect(warn).toHaveBeenCalledTimes(1)
+      } finally {
+        log.mockRestore()
+        warn.mockRestore()
+      }
+    })
+
+    it('reports a refusal once, whichever of the queued SUBSCRIBE and the ready handler would have seen it', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      try {
+        const { handlers, settle, sub, pubsub, booted } = unreachableBoot()
+        await booted
+
+        handlers['ready']!()
+        settle.reject(Object.assign(new Error('NOPERM revoked'), { name: 'ReplyError' }))
+        await flush()
+
+        expect(sub.subscribe).toHaveBeenCalledTimes(1)
+        expect(pubsub.isSubscribed()).toBe(false)
+        expect(warn.mock.calls.filter(([line]) => String(line).includes('refused'))).toHaveLength(1)
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('is replaced by the ready handler once the queued one was rejected because the connection closed', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+      try {
+        const { handlers, settle, sub, pubsub, booted } = unreachableBoot()
+        await booted
+
+        settle.reject(new Error('Connection is closed.'))
+        await flush()
+        handlers['ready']!()
+        await flush()
+
+        expect(sub.subscribe).toHaveBeenCalledTimes(2)
+        expect(pubsub.isSubscribed()).toBe(true)
+        expect(warn.mock.calls.filter(([line]) => String(line).includes('refused'))).toHaveLength(0)
+        expect(log).toHaveBeenCalledTimes(1)
+      } finally {
+        warn.mockRestore()
+        log.mockRestore()
+      }
+    })
+
+    it('is followed by a SUBSCRIBE from the ready handler on every later reconnect', async () => {
+      const { handlers, settle, sub, booted } = unreachableBoot()
+      jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      await booted
+      handlers['ready']!()
+      settle.resolve()
+      await flush()
+      expect(sub.subscribe).toHaveBeenCalledTimes(1)
+
+      handlers['ready']!()
+      await flush()
+
+      expect(sub.subscribe).toHaveBeenCalledTimes(2)
+    })
+  })
+
   // When subscriber init fails, the handler is rolled back and subInit is cleared so the
   // next subscribe() retries with a fresh client instead of re-awaiting the rejected promise.
   it('rolls back handler and clears subInit when subscriber init fails', async () => {

@@ -104,6 +104,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   #outageLogged = false
   /** Connections closed on purpose, whose `close` is not an outage and says nothing of a successor. */
   readonly #retired = new WeakSet<Redis>()
+  /** Connections whose first SUBSCRIBE is still queued, which ioredis sends when they first become ready. */
+  readonly #queuedFirst = new WeakSet<Redis>()
 
   constructor(options: RedisRealtimePubSubOptions) {
     this.#pub = options.client
@@ -249,7 +251,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // After a reconnect the subscription is gone with the old connection; subscribing again is
     // what restores it, and its answer is what confirms it.
     sub.on('ready', () => {
-      if (attached) this.confirm(sub)
+      if (attached && !this.#queuedFirst.has(sub)) this.confirm(sub)
     })
     await this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst)
     attached = true
@@ -281,8 +283,16 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         this.markUp()
       } else {
         this.markDown(connectionReason(outcome.unreachable))
-        // A confirmation needs no handler here: the connection's first `ready` sends its own.
-        first.catch((err: unknown) => this.refused(err))
+        // Still queued: ioredis sends it when the connection first becomes ready, so the `ready`
+        // handler sends none until this one is answered, and its answer is the confirmation. One
+        // rejected because the connection closed leaves the next `ready` to send a new one.
+        this.#queuedFirst.add(sub)
+        first
+          .then(
+            () => this.markUp(),
+            (err: unknown) => this.refused(err),
+          )
+          .finally(() => this.#queuedFirst.delete(sub))
       }
     } catch (err) {
       this.#retired.add(sub)
