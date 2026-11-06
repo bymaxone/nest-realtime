@@ -44,6 +44,7 @@ describe('RedisRealtimePubSub.publish during an outage', () => {
     redis.on('error', () => undefined)
     clients.push(redis)
     const pubsub = new RedisRealtimePubSub({ client: redis })
+    await until('the client to be ready', () => redis.status === 'ready')
     await pubsub.publish(message)
     expect(fake.seen.filter((command) => command[0] === 'PUBLISH')).toHaveLength(1)
 
