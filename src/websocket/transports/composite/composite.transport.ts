@@ -18,7 +18,7 @@ import { WebSocketTransport } from '../websocket/websocket.transport'
  * Every `emitTo*` and `broadcast` invokes both SSE and WebSocket transports in
  * parallel via `Promise.allSettled` so a failure in one never aborts the other.
  * A failure of one is logged as a warning and the call resolves; a failure of both
- * rejects, since the emit reached no one.
+ * rejects.
  *
  * `joinRoom`, `leaveRoom`, and `disconnect` ask both transports and settle both: each
  * transport acts only on a connection it holds, and a connection neither holds is handed
@@ -161,9 +161,8 @@ export class CompositeTransport implements ITransport {
   /**
    * Run two transport tasks in parallel via `Promise.allSettled`.
    *
-   * One task failing is a partial delivery: it is logged as a warning and the call resolves,
-   * so one failing transport never blocks delivery on the other. Every task failing is a
-   * delivery that reached no one, and rejects.
+   * One task failing is logged as a warning and the call resolves, so one failing transport
+   * never blocks delivery on the other. Every task failing rejects.
    */
   private async fanOut(op: string, ...tasks: Array<() => Promise<void>>): Promise<void> {
     const results = await Promise.allSettled(tasks.map((t) => t()))

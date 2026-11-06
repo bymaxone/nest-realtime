@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **With `transport: 'both'`, an emit that fails on both transports now rejects.** `emitToUser`,
   `emitToTenant`, `emitToRoom` and `broadcast` on the composite transport run on SSE and WebSocket
-  and logged a failure of either without ever rethrowing, so an emit that reached no one still
-  resolved. A failure of one transport is still logged and resolves, since the other delivered it;
-  a failure of both now rejects with `REALTIME_TRANSPORT_UNAVAILABLE` (`error.code`), naming the
-  operation and carrying both reasons in `cause`, the way `joinRoom`, `leaveRoom` and `disconnect`
-  already do.
+  and logged a failure of either without ever rethrowing, so an emit that failed on both still
+  resolved. A failure of one transport is still logged and resolves; a failure of both now rejects
+  with `REALTIME_TRANSPORT_UNAVAILABLE` (`error.code`), naming the operation and carrying both
+  reasons in `cause`, the way `joinRoom`, `leaveRoom` and `disconnect` already do. A rejected emit
+  is not proof that no client received it, so retry only where a duplicate is acceptable.
 
 ### Added
 
