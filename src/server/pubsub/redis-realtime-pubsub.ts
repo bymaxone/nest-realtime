@@ -104,6 +104,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   #outageLogged = false
   /** Connections closed on purpose, whose `close` is not an outage and says nothing of a successor. */
   readonly #retired = new WeakSet<Redis>()
+  /** The reason of the refusal last logged, until the instance next subscribes, so a repeat adds no line. */
+  #lastRefusal: string | undefined
 
   constructor(options: RedisRealtimePubSubOptions) {
     this.#pub = options.client
@@ -226,6 +228,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
 
   private async createSubscriber(): Promise<Redis> {
     this.#outageLogged = false
+    this.#lastRefusal = undefined
     this.connectLazyClient()
     // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
     // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it. The offline queue
@@ -308,8 +311,12 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // A command rejected because the connection closed is an outage, which 'close' reports.
     if ((err as { name?: unknown } | null)?.name !== 'ReplyError') return
     this.#subscribed = false
+    // The same refusal can answer more than one SUBSCRIBE around a boot; it is one fact.
+    const reason = describeError(err)
+    if (reason === this.#lastRefusal) return
+    this.#lastRefusal = reason
     this.logger.warn(
-      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: the server refused the subscription to "${this.channel}": ${describeError(err)}`,
+      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: the server refused the subscription to "${this.channel}": ${reason}`,
     )
   }
 
@@ -317,6 +324,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     if (this.#subscribed) return
     this.#subscribed = true
     this.#outageLogged = false
+    this.#lastRefusal = undefined
     this.logger.log(
       `Subscribed to "${this.channel}"; remote events and revocations reach this instance`,
     )
