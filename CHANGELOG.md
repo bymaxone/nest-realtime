@@ -28,13 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **A failed re-authentication now disconnects the connection even when its notification cannot be
-  sent.** With `reauthenticationPolicy.onFailure: 'event'` the service emitted
+- **A failed re-authentication now disconnects the connection without waiting for its
+  notification.** With `reauthenticationPolicy.onFailure: 'event'` the service emitted
   `connection:reauthentication-failed` and waited for it before disconnecting, so an emit that
-  rejected left the connection open until the next cycle. The emit is now best-effort: a rejection
-  is logged (`Reauthentication notification for <id> failed, disconnecting anyway`) and the
-  connection is disconnected in the same cycle. A rejected disconnect is still a failed revocation
-  and is retried on the next cycle.
+  rejected left the connection open until the next cycle, and one that never settled left it open
+  for good. The emit is now started first and not awaited: a rejection is logged
+  (`Reauthentication notification for <id> failed, disconnecting anyway`) and the connection is
+  disconnected in the same cycle. A rejected disconnect is still a failed revocation and is retried
+  on the next cycle.
 
 - **A publish no longer waits behind a Redis client that is not ready, and readiness now says
   whether the instance can publish.** `RedisRealtimePubSub.publish` refused a client that was
@@ -53,8 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Apply to a derived backend
 
 If you set `reauthenticationPolicy.onFailure: 'event'`, nothing needs to change: a connection whose
-credentials failed is now disconnected in the same cycle even when the notification cannot be sent,
-where it used to stay open until the next cycle. The failure to send is logged as a warning.
+credentials failed is now disconnected in the same cycle whether or not the notification can be
+sent, where it used to stay open until the next cycle. The failure to send is logged as a warning.
 
 If you use `transport: 'both'`, an emit that fails on both transports now rejects instead of
 resolving. An emit you await inside a `try` is now caught; one you call without awaiting or without
