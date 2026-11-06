@@ -162,9 +162,9 @@ describe('CompositeTransport', () => {
     },
   )
 
-  // An emit reaches the connections each transport holds, so one transport failing is a partial
-  // delivery that is logged and resolved, and both failing is an emit that reached no one, which
-  // rejects under the code with both reasons. Four operations, four outcomes each.
+  // An emit goes to the connections each transport holds, so one transport failing is logged and
+  // resolved, and both failing rejects under the code with both reasons. Four operations, four
+  // outcomes each.
   describe.each([
     ['emitToUser', (c: CompositeTransport) => c.emitToUser('u-1', 'evt', {})],
     ['emitToTenant', (c: CompositeTransport) => c.emitToTenant('t-1', 'evt', {})],
