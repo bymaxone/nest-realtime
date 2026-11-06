@@ -23,7 +23,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // Budgets are the measured brotli sizes of the bundles as they ship, comments stripped by
 // `scripts/strip-bundle-comments.mjs` (run by `pnpm build`), plus about 11% headroom:
 //   server       239 B →    265 B (a re-export facade over the shared runtime)
-//   internal  12,152 B → 13,500 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  12,293 B → 13,500 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
