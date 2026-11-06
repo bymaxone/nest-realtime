@@ -589,6 +589,26 @@ describe('RedisRealtimePubSub', () => {
       }
     })
 
+    // ioredis sends the queued command when the connection first becomes ready; if the connection
+    // then drops before the reply and the client does not resend unfulfilled commands, the command
+    // is dropped without being rejected, so it never settles. The next ready must still subscribe.
+    it('does not hold back the SUBSCRIBE of a later ready when the queued one never settles', async () => {
+      jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      const { handlers, sub, pubsub, booted } = unreachableBoot()
+      await booted
+
+      handlers['ready']!()
+      await flush()
+      expect(sub.subscribe).toHaveBeenCalledTimes(1)
+
+      handlers['ready']!()
+      await flush()
+
+      expect(sub.subscribe).toHaveBeenCalledTimes(2)
+      expect(pubsub.isSubscribed()).toBe(true)
+    })
+
     it('is followed by a SUBSCRIBE from the ready handler on every later reconnect', async () => {
       const { handlers, settle, sub, booted } = unreachableBoot()
       jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)

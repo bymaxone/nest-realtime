@@ -251,7 +251,11 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // After a reconnect the subscription is gone with the old connection; subscribing again is
     // what restores it, and its answer is what confirms it.
     sub.on('ready', () => {
-      if (attached && !this.#queuedFirst.has(sub)) this.confirm(sub)
+      // The first ready of a connection whose SUBSCRIBE is queued is the one at which ioredis sends
+      // it, so only that ready sends none. The record is consumed there: a connection that drops
+      // after the send, with no resend of unfulfilled commands, leaves the command unanswered.
+      if (this.#queuedFirst.delete(sub)) return
+      if (attached) this.confirm(sub)
     })
     await this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst)
     attached = true
@@ -284,8 +288,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       } else {
         this.markDown(connectionReason(outcome.unreachable))
         // Still queued: ioredis sends it when the connection first becomes ready, so the `ready`
-        // handler sends none until this one is answered, and its answer is the confirmation. One
-        // rejected because the connection closed leaves the next `ready` to send a new one.
+        // handler sends none for that ready, and its answer is the confirmation. One rejected
+        // before any ready, because the connection closed, leaves the next `ready` to send a new one.
         this.#queuedFirst.add(sub)
         first
           .then(
