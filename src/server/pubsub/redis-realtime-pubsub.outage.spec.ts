@@ -35,7 +35,7 @@ afterEach(async () => {
 
 describe('RedisRealtimePubSub.publish during an outage', () => {
   // The client is left on ioredis's defaults: its offline queue is on and a command waits for the
-  // reconnect, which is what held a revocation for the whole outage.
+  // reconnect, so the adapter must refuse at once or a revocation is held for the whole outage.
   it('rejects at once and never sends the publish when the connection returns', async () => {
     const fake = new FakeRespServer()
     await fake.start()
