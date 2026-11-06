@@ -21,6 +21,7 @@ const config: Config = {
     {
       displayName: 'server',
       testMatch: [
+        '<rootDir>/src/*.spec.ts',
         '<rootDir>/src/server/**/*.spec.ts',
         '<rootDir>/src/shared/**/*.spec.ts',
         '<rootDir>/src/websocket/**/*.spec.ts',

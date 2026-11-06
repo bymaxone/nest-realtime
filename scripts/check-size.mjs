@@ -20,30 +20,21 @@ import { dirname, join } from 'node:path'
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// Budgets calibrated against measured brotli sizes, with per-bundle headroom:
-//   server    0.24 KB →  0.5 KB (a re-export facade over the shared runtime)
-//   internal 17.29 KB → 18.25 KB (18,232 B measured, 0.1% headroom — the bulk of an SSE install,
-//     including the route guard that authenticates before the SSE response is committed, the
-//     handling that keeps an error's message out of the stream, the peer address handed to the
-//     authenticator, the client address validated against the trusted-proxy chain, the
-//     revocation that rejects when it cannot reach its connection and the report of a delivery
-//     path that failed without failing its call, and the subscriber's lifecycle state (the
-//     refusal that fails the boot, the unreachable Redis that does not, the readiness that follows
-//     the connection and its once-per-transition logs, a boot that ends when the server closes the
-//     connection without an error, and the retirement of a closed connection tracked per
-//     connection; +940 B over 17,292), all of which are code that cannot be trimmed)
-//     Tighter than the 7% the other ratchets carry, on purpose: this bundle ships
-//     roughly 15.8 KB raw of comments —
-//     stripping them takes it from 14.34 to 10.04 KB brotli — so headroom here is
-//     cheap to reclaim, and a loose ratchet would hide that a 30% reduction is
-//     available rather than force the question.
-//   websocket 7.48 KB →  7.55 KB (7,477 B measured, 1.0% headroom — the Socket.IO stack alone,
-//     including the start-up message that names the fix when `RealtimeIoAdapter` is not installed,
-//     the boot error that names the cause when the Redis adapter cannot be installed, the
-//     revocation that rejects when the server is not attached or its fan-out throws and the
-//     one-time warning for an emit made before the server is attached)
-//   shared    0.44 KB →  0.6 KB (37% headroom, kept slightly generous for future constants)
-//   react     2.26 KB →  2.4 KB (6% headroom)
+// Budgets are the measured brotli sizes of the bundles as they ship, comments stripped by
+// `scripts/strip-bundle-comments.mjs` (run by `pnpm build`), plus about 11% headroom:
+//   server       239 B →    265 B (a re-export facade over the shared runtime)
+//   internal  12,152 B → 13,500 B (the bulk of an SSE install: the route guard that authenticates
+//     before the SSE response is committed, the handling that keeps an error's message out of the
+//     stream, the peer address and the client address validated against the trusted-proxy chain,
+//     the revocation that rejects when it cannot reach its connection, the report of a delivery
+//     path that failed without failing its call, and the Redis subscriber's lifecycle state)
+//   websocket  4,381 B →  4,850 B (the Socket.IO stack alone: the start-up message that names the
+//     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
+//     Redis adapter cannot be installed, the revocation that rejects when the server is not
+//     attached or its fan-out throws, and the one-time warning for an emit made before the server
+//     is attached)
+//   shared       460 B →    510 B (types and constants)
+//   react      2,171 B →  2,400 B
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
@@ -54,10 +45,10 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // SSE-only React bundle (4 KiB brotli — see CLAUDE.md). Raise a ratchet only for
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
-  { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 500 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 18_250 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 7_550 },
-  { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 600 },
+  { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 13_500 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 4_850 },
+  { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 510 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_400 },
 ]
 
