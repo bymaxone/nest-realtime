@@ -28,16 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **A start-up that found Redis unreachable no longer subscribes twice when it comes up.** The
-  first `SUBSCRIBE` waits in the client's offline queue and ioredis sends it when the connection
-  first becomes ready, but the adapter's own `ready` handler sent a second one for the same
-  connection. A server that refused it was therefore reported twice, with two identical
-  `the server refused the subscription` warnings, and a server that accepted it saw two
-  `SUBSCRIBE`s. The queued one is now the only one sent for that connection and its answer is the
-  one that reports readiness or the refusal; a queued one rejected because the connection closed
-  is replaced by the `ready` handler's, and every later reconnect still re-subscribes, even when a
-  queued one was sent and then never answered because the connection dropped and the client was
-  configured not to resend unfulfilled commands (`autoResendUnfulfilledCommands: false`).
+- **A refusal of the subscription is logged once.** After a start-up that found Redis unreachable,
+  the same refusal can answer two `SUBSCRIBE`s when the connection comes up: the one queued while
+  Redis was unreachable, which ioredis sends when the connection first becomes ready, and the one
+  the adapter sends on `ready`. The adapter logged `the server refused the subscription` once for
+  each, so a refusing server produced two identical warnings. It now logs a refusal once until the
+  instance next subscribes, and again if the reason changes. The wire may still carry two
+  `SUBSCRIBE`s at that first `ready`; a repeat is harmless.
 - **Closing the application no longer hangs while an SSE stream is open.** Nest awaits the HTTP
   server's close before it runs `onApplicationShutdown`, and the server does not finish closing
   while a response is open, but the streams were ended only in that hook. One open stream therefore
