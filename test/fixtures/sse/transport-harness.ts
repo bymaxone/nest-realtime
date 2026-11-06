@@ -29,6 +29,7 @@ function makeOptions(sse?: SseOptions): BymaxRealtimeModuleOptions {
   }
 }
 
+/** An `SseTransport` over real collaborators; `opts` overrides the options, hooks and instance id. */
 export function build(opts?: {
   sse?: SseOptions
   hooks?: IConnectionLifecycleHooks
@@ -74,6 +75,7 @@ export function build(opts?: {
   }
 }
 
+/** Registers a connection and returns the events it receives and the subject that closes it. */
 export function addConn(
   connections: ConnectionRegistry,
   params: {

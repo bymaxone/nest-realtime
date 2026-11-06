@@ -12,6 +12,7 @@ export async function flush(n = 10): Promise<void> {
   for (let i = 0; i < n; i++) await Promise.resolve()
 }
 
+/** A connection record for user `userId` with id `id`, as the registry stores it. */
 export function mkRecord(id = 'c1', userId = 'u1'): ConnectionRecord {
   return {
     connectionId: id,
@@ -42,6 +43,7 @@ export function mkConnections(records: ConnectionRecord[]) {
   }
 }
 
+/** A realtime service double whose `emitToUser` and `disconnect` resolve at once. */
 export function mkRealtime() {
   return {
     emitToUser: jest.fn().mockResolvedValue(undefined),
@@ -49,12 +51,14 @@ export function mkRealtime() {
   }
 }
 
+/** An authenticator double; it carries `revalidate` only when one is given. */
 export function mkAuth(revalidate?: jest.Mock) {
   const auth: Record<string, unknown> = { authenticate: jest.fn() }
   if (revalidate) auth['revalidate'] = revalidate
   return auth
 }
 
+/** Module options with the SSE transport and the given re-authentication policy. */
 export function mkOptions(policy?: {
   intervalSeconds?: number
   onFailure?: 'disconnect' | 'event'
@@ -63,6 +67,7 @@ export function mkOptions(policy?: {
   return { transport: 'sse', authenticator: {}, reauthenticationPolicy: policy }
 }
 
+/** The service under test wired to the given doubles. */
 export function build(
   connections: ReturnType<typeof mkConnections>,
   realtime: ReturnType<typeof mkRealtime>,

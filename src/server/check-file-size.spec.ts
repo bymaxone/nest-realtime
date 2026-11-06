@@ -143,7 +143,7 @@ describe('scripts/check-file-size.mjs', () => {
   })
 
   // Scenario: a baseline the script cannot trust. Expected: each fails loudly and names the problem,
-  // and none lets an over-limit file pass, which a ceiling that is not a number used to do.
+  // and none lets an over-limit file pass: an unusable ceiling must never make a comparison false.
   it.each([
     ['is not valid JSON', '{ nope', 'is not valid JSON'],
     ['is not an object', '[1, 2]', 'must be an object'],
