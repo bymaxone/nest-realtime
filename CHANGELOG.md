@@ -65,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing needs to change for the shutdown fix: an application that closes with an SSE stream open
 now finishes closing and runs its `onApplicationShutdown` hooks. A client that requests the SSE
-route while the application is closing now gets a `503`, which a reconnecting `EventSource` retries. If you set `forceCloseConnections`
+route while the application is closing now gets a `503`. If you set `forceCloseConnections`
 only to get past this hang, it is no longer needed for SSE streams.
 
 If you set `reauthenticationPolicy.onFailure: 'event'`, nothing needs to change: a connection whose
