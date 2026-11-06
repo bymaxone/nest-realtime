@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Errors carry their code as a `code` property.** Every error this library raises with a
-  `REALTIME_*` code in its message now also has that code as `error.code`, one of
-  `RealtimeErrorCode`. The messages are unchanged. They are plain `Error`s, so match
-  on `error.code`, not `instanceof`.
+- **Errors carry their code as a `code` property.** The `Error`s this library builds with a
+  `REALTIME_*` code in their message now also have that code as `error.code`, one of
+  `RealtimeErrorCode`. The messages are unchanged. They are plain `Error`s, so match on
+  `error.code`, not `instanceof`. The HTTP `UnauthorizedException` for a refused SSE connection and
+  the Socket.IO refusal of a WebSocket connection keep their shape; the refusal carries its code as
+  `data.code`.
 
 ### Fixed
 
