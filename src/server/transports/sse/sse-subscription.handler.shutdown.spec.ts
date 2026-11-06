@@ -63,8 +63,7 @@ describe('SseSubscriptionHandler — shutdown', () => {
 
   // The stream is only registered when it is subscribed, after the handshake returned it. If shutdown
   // began in between, the teardown's snapshot of the connections was taken without it, so nothing
-  // would end it: it completes at once, before it registers or emits anything, and the events it
-  // had read from the offline queue are left unacknowledged.
+  // would end it: it completes at once, before it registers or emits anything.
   it('completes a stream at once when shutdown began after the handshake returned it', async () => {
     const transport = mkTransport({ shuttingDown: false })
     const handler = build(transport, mkHeartbeat(), mkOptions())
