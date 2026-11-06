@@ -493,6 +493,19 @@ describe('SseTransport', () => {
     await expect(transport.onApplicationShutdown()).resolves.toBeUndefined()
   })
 
+  // Shutdown is flagged before the teardown awaits anything, so a handshake that finishes from then
+  // on is refused; the flag is not set before shutdown begins.
+  it('flags shutdown before it awaits the first teardown', async () => {
+    const { transport, connections } = build()
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    expect(transport.shuttingDown).toBe(false)
+
+    const tearingDown = transport.beforeApplicationShutdown()
+
+    expect(transport.shuttingDown).toBe(true)
+    await tearingDown
+  })
+
   // The heartbeat interval getter honors config and falls back to the default.
   it('resolves the heartbeat interval', () => {
     expect(build({ sse: { heartbeatMs: 5_000 } }).transport.heartbeatMs).toBe(5_000)

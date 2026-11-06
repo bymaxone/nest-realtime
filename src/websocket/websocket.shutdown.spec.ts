@@ -131,3 +131,60 @@ describe("closing an application on transport 'both' with an open SSE stream", (
     await expect(closeWithin(app, CLOSE_WITHIN_MS)).resolves.toBeUndefined()
   })
 })
+
+// A connection opened while a slow shutdown hook still holds the close back, which is the window in
+// which an SSE stream used to keep the HTTP server open: Socket.IO disconnects every socket when the
+// server closes, so a late connection cannot hold the close.
+describe('a WebSocket connection opened while a slow shutdown hook holds the close back', () => {
+  let app: INestApplication
+  let url: string
+  let socket: Socket | undefined
+  let release: () => void
+  let entered: Promise<void>
+
+  beforeEach(async () => {
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    const hold = new Promise<void>((resolve) => (release = resolve))
+    let enter: () => void
+    entered = new Promise<void>((resolve) => (enter = resolve))
+    class SlowToShutDown {
+      async beforeApplicationShutdown(): Promise<void> {
+        enter()
+        await hold
+      }
+    }
+    const realtime = BymaxRealtimeWebSocketModule.forRoot({
+      transport: 'websocket',
+      authenticator: { authenticate: async () => ({ userId: 'u1' }) },
+    })
+    realtime.providers = [...(realtime.providers ?? []), SlowToShutDown]
+    const module = await Test.createTestingModule({ imports: [realtime] }).compile()
+    app = module.createNestApplication()
+    app.useWebSocketAdapter(new RealtimeIoAdapter(app))
+    await app.listen(0)
+    url = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`
+  })
+
+  afterEach(() => {
+    socket?.close()
+    socket = undefined
+    jest.restoreAllMocks()
+  })
+
+  it('closes within the bound, and disconnects the client', async () => {
+    const closing = app.close()
+    await entered
+    socket = io(url, { transports: ['websocket'], reconnection: false })
+    await new Promise<void>((resolve, reject) => {
+      socket?.on('connection:established', () => resolve())
+      socket?.on('connect_error', reject)
+    })
+    const disconnected = new Promise<void>((resolve) => socket?.on('disconnect', () => resolve()))
+    release()
+
+    await expect(
+      closeWithin({ close: () => closing } as INestApplication, CLOSE_WITHIN_MS),
+    ).resolves.toBeUndefined()
+    await expect(disconnected).resolves.toBeUndefined()
+  })
+})

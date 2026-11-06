@@ -76,6 +76,8 @@ interface Failure {
 export class SseTransport implements ITransport {
   readonly kind = 'sse' as const
   private readonly logger = new Logger(SseTransport.name)
+  /** Set when shutdown begins; from then on a new stream is refused. */
+  #shuttingDown = false
 
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
@@ -101,6 +103,9 @@ export class SseTransport implements ITransport {
    * keep the close pending for ever and skip every later shutdown hook.
    */
   async beforeApplicationShutdown(): Promise<void> {
+    // Before anything is awaited, so that a handshake that finishes from here on is refused and
+    // does not open a stream the teardown below would not see.
+    this.#shuttingDown = true
     this.heartbeat.stopAll()
     // Await each teardown so onDisconnect hooks complete within the shutdown window
     // (RxJS finalize cannot await an async callback). disconnectLocal removes the record
@@ -116,6 +121,11 @@ export class SseTransport implements ITransport {
   }
 
   /** The resolved heartbeat interval for this transport. */
+  /** Whether shutdown has begun, after which a new stream is refused because nothing would end it. */
+  get shuttingDown(): boolean {
+    return this.#shuttingDown
+  }
+
   get heartbeatMs(): number {
     return this.options.sse?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
   }

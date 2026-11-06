@@ -8,6 +8,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  ServiceUnavailableException,
   Logger,
   Optional,
   UnauthorizedException,
@@ -216,6 +217,9 @@ export class SseSubscriptionHandler {
     res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('X-Accel-Buffering', 'no')
 
+    // A stream opened once shutdown has begun would keep the HTTP server from closing.
+    this.refuseDuringShutdown()
+
     // The route guard normally authenticated already.
     const done = this.authenticated.get(req)
     this.authenticated.delete(req)
@@ -225,10 +229,21 @@ export class SseSubscriptionHandler {
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
+    let stream: Observable<MessageEvent>
     try {
-      return await this.openStream(req, res, authenticated)
+      stream = await this.openStream(req, res, authenticated)
     } catch (err) {
       throw this.serverError(err, 'SSE handshake failed')
+    }
+    // Authentication is asynchronous, so shutdown may have begun while this request waited.
+    this.refuseDuringShutdown()
+    return stream
+  }
+
+  /** Refuse a new stream with a 503 once shutdown has begun. */
+  private refuseDuringShutdown(): void {
+    if (this.transport.shuttingDown) {
+      throw new ServiceUnavailableException(REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE)
     }
   }
 

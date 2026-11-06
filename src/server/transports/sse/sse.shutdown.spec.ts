@@ -8,6 +8,7 @@ import type { AddressInfo } from 'node:net'
 import { Logger } from '@nestjs/common'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import type { TestingModule } from '@nestjs/testing'
 import { BymaxRealtimeModule } from '../../realtime.module'
 
 const CLOSE_WITHIN_MS = 5_000
@@ -45,6 +46,23 @@ function openStream(port: number): Promise<OpenStream> {
           if (text.includes('connection:established')) resolve({ req, res, ended })
         })
       },
+    )
+    req.on('error', reject)
+  })
+}
+
+/** The status of a request to the SSE route, and the request itself so that it can be dropped. */
+function requestStream(port: number): Promise<{ status: number | undefined; req: ClientRequest }> {
+  return new Promise((resolve, reject) => {
+    const req = get(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/realtime/sse',
+        headers: { accept: 'text/event-stream' },
+        agent: false,
+      },
+      (res) => resolve({ status: res.statusCode, req }),
     )
     req.on('error', reject)
   })
@@ -112,5 +130,62 @@ describe('closing an application with SSE connections', () => {
     await expect(closeWithin(app, CLOSE_WITHIN_MS)).resolves.toBeUndefined()
 
     await expect(stream.ended).resolves.toBeUndefined()
+  })
+})
+
+// Hooks run in parallel, so a provider whose beforeApplicationShutdown is slow keeps the close from
+// reaching the HTTP server while the transport's own hook has already run: the window in which a
+// new stream can still be opened.
+describe('a stream opened after the transport tore its streams down and before the server closes', () => {
+  let app: INestApplication
+  let port: number
+  let late: ClientRequest | undefined
+  let release: () => void
+  let entered: Promise<void>
+
+  beforeEach(async () => {
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    const hold = new Promise<void>((resolve) => (release = resolve))
+    let enter: () => void
+    entered = new Promise<void>((resolve) => (enter = resolve))
+    class SlowToShutDown {
+      async beforeApplicationShutdown(): Promise<void> {
+        enter()
+        await hold
+      }
+    }
+    // The slow provider joins the realtime module itself: the hooks of one module's providers run
+    // in parallel, so the transport's hook finishes while this one is still held.
+    const realtime = BymaxRealtimeModule.forRoot({
+      transport: 'sse',
+      authenticator: { authenticate: async () => ({ userId: 'u1' }) },
+    })
+    realtime.providers = [...(realtime.providers ?? []), SlowToShutDown]
+    const module: TestingModule = await Test.createTestingModule({ imports: [realtime] }).compile()
+    app = module.createNestApplication()
+    await app.listen(0)
+    port = (app.getHttpServer().address() as AddressInfo).port
+  })
+
+  afterEach(() => {
+    late?.destroy()
+    late = undefined
+    jest.restoreAllMocks()
+  })
+
+  it('is refused with a 503, and does not keep the close pending', async () => {
+    const closing = app.close()
+    await entered
+    // The transport's own hook ran in parallel and has finished by now.
+    await new Promise((resolve) => setImmediate(resolve))
+
+    const refusal = await requestStream(port)
+    late = refusal.req
+    release()
+
+    expect(refusal.status).toBe(503)
+    await expect(
+      closeWithin({ close: () => closing } as INestApplication, CLOSE_WITHIN_MS),
+    ).resolves.toBeUndefined()
   })
 })
