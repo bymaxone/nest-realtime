@@ -242,6 +242,42 @@ describe('RedisRealtimePubSub', () => {
       expect(warn).toHaveBeenCalledWith(
         `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "bymax:realtime": Stream isn't writeable and enableOfflineQueue options is false. Remote events and revocations will not reach this instance until it subscribes again`,
       )
+      // The rejection is the connection failing, which was just reported: it is not also a refusal.
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(warn).toHaveBeenCalledTimes(1)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  // The SUBSCRIBE sent when the subscriber is ready again can be rejected because the connection
+  // closed under it, which is an outage that 'close' reports: it must not read as the server
+  // refusing, and it must not take away a subscription the instance still holds. The ready handler
+  // is fired by hand, so no network order is involved.
+  it('does not read a SUBSCRIBE rejected by a closing connection as a refusal', async () => {
+    const handlers: Record<string, () => void> = {}
+    const sub = {
+      subscribe: jest
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('Connection is closed.')),
+      on: jest.fn((event: string, handler: () => void) => {
+        handlers[event] = handler
+      }),
+    }
+    const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
+      await pubsub.subscribe(jest.fn())
+      expect(pubsub.isSubscribed()).toBe(true)
+
+      handlers['ready']!()
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(sub.subscribe).toHaveBeenCalledTimes(2)
+      expect(pubsub.isSubscribed()).toBe(true)
+      expect(warn).not.toHaveBeenCalled()
     } finally {
       warn.mockRestore()
     }
