@@ -504,8 +504,11 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       await fake.start()
       servers.push(fake)
       await until('the refusal to be reported', () => linesAbout(warn, 'revoked later').length > 0)
+      // A second line would come from a second SUBSCRIBE answered after the first.
+      await new Promise((resolve) => setTimeout(resolve, 300))
       expect(pubsub.isSubscribed()).toBe(false)
-      expect(linesAbout(warn, 'revoked later')[0]).toBe(refusalLine('NOPERM revoked later'))
+      expect(linesAbout(warn, 'revoked later')).toEqual([refusalLine('NOPERM revoked later')])
+      expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(1)
     }),
   )
 
