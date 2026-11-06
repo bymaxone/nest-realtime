@@ -508,7 +508,6 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       await new Promise((resolve) => setTimeout(resolve, 300))
       expect(pubsub.isSubscribed()).toBe(false)
       expect(linesAbout(warn, 'revoked later')).toEqual([refusalLine('NOPERM revoked later')])
-      expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(1)
     }),
   )
 

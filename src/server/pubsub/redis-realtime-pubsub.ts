@@ -104,8 +104,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   #outageLogged = false
   /** Connections closed on purpose, whose `close` is not an outage and says nothing of a successor. */
   readonly #retired = new WeakSet<Redis>()
-  /** Connections whose first SUBSCRIBE is still queued, which ioredis sends when they first become ready. */
-  readonly #queuedFirst = new WeakSet<Redis>()
+  /** The reason of the refusal last logged, until the instance next subscribes, so a repeat adds no line. */
+  #lastRefusal: string | undefined
 
   constructor(options: RedisRealtimePubSubOptions) {
     this.#pub = options.client
@@ -228,6 +228,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
 
   private async createSubscriber(): Promise<Redis> {
     this.#outageLogged = false
+    this.#lastRefusal = undefined
     this.connectLazyClient()
     // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
     // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it. The offline queue
@@ -251,10 +252,6 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // After a reconnect the subscription is gone with the old connection; subscribing again is
     // what restores it, and its answer is what confirms it.
     sub.on('ready', () => {
-      // The first ready of a connection whose SUBSCRIBE is queued is the one at which ioredis sends
-      // it, so only that ready sends none. The record is consumed there: a connection that drops
-      // after the send, with no resend of unfulfilled commands, leaves the command unanswered.
-      if (this.#queuedFirst.delete(sub)) return
       if (attached) this.confirm(sub)
     })
     await this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst)
@@ -287,16 +284,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         this.markUp()
       } else {
         this.markDown(connectionReason(outcome.unreachable))
-        // Still queued: ioredis sends it when the connection first becomes ready, so the `ready`
-        // handler sends none for that ready, and its answer is the confirmation. One rejected
-        // before any ready, because the connection closed, leaves the next `ready` to send a new one.
-        this.#queuedFirst.add(sub)
-        first
-          .then(
-            () => this.markUp(),
-            (err: unknown) => this.refused(err),
-          )
-          .finally(() => this.#queuedFirst.delete(sub))
+        // A confirmation needs no handler here: the connection's first `ready` sends its own.
+        first.catch((err: unknown) => this.refused(err))
       }
     } catch (err) {
       this.#retired.add(sub)
@@ -322,8 +311,12 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // A command rejected because the connection closed is an outage, which 'close' reports.
     if ((err as { name?: unknown } | null)?.name !== 'ReplyError') return
     this.#subscribed = false
+    // The same refusal can answer more than one SUBSCRIBE around a boot; it is one fact.
+    const reason = describeError(err)
+    if (reason === this.#lastRefusal) return
+    this.#lastRefusal = reason
     this.logger.warn(
-      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: the server refused the subscription to "${this.channel}": ${describeError(err)}`,
+      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: the server refused the subscription to "${this.channel}": ${reason}`,
     )
   }
 
@@ -331,6 +324,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     if (this.#subscribed) return
     this.#subscribed = true
     this.#outageLogged = false
+    this.#lastRefusal = undefined
     this.logger.log(
       `Subscribed to "${this.channel}"; remote events and revocations reach this instance`,
     )
