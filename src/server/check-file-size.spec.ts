@@ -142,6 +142,55 @@ describe('scripts/check-file-size.mjs', () => {
     expect(result.output).toContain('usage: check-file-size.mjs')
   })
 
+  // Scenario: a baseline the script cannot trust. Expected: each fails loudly and names the problem,
+  // and none lets an over-limit file pass, which a ceiling that is not a number used to do.
+  it.each([
+    ['is not valid JSON', '{ nope', 'is not valid JSON'],
+    ['is not an object', '[1, 2]', 'must be an object'],
+    ['has a ceiling that is not a number', '{"src/big.ts":"abc"}', 'ceiling for src/big.ts'],
+    ['has a ceiling that is not an integer', '{"src/big.ts":9.5}', 'ceiling for src/big.ts'],
+    ['has a ceiling below one', '{"src/big.ts":0}', 'ceiling for src/big.ts'],
+  ])('fails a baseline that %s', (_label, content, message) => {
+    const root = tree({ 'src/big.ts': 20 })
+    mkdirSync(join(root, 'scripts'), { recursive: true })
+    writeFileSync(join(root, 'scripts', 'file-size-baseline.json'), content)
+
+    const result = check(root)
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain(message)
+  })
+
+  // Scenario: nothing was scanned, because the root is wrong or the directories were renamed. Expected:
+  // it fails: a gate that finds no files has not checked any.
+  it('fails when it finds no file to check', () => {
+    const result = check(join(tmpdir(), 'file-size-spec-no-such-directory'))
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain('no file found under src, test or scripts')
+  })
+
+  // Scenario: a bad limit. Expected: it refuses it.
+  it.each(['0', 'many', '-3'])('refuses the limit %s', (limit) => {
+    const root = tree({ 'src/a.ts': 1 })
+    const run = spawnSync(process.execPath, [SCRIPT, '--root', root, '--limit', limit], {
+      encoding: 'utf8',
+    })
+
+    expect(run.status).not.toBe(0)
+    expect(run.stderr).toContain('invalid --limit')
+  })
+
+  // Scenario: a directory named like a build output inside the scanned code. Expected: still scanned,
+  // since only vendored packages are skipped.
+  it('scans a directory named dist or coverage inside src', () => {
+    const result = check(tree({ 'src/dist/a.ts': 8, 'src/coverage/b.ts': 8 }))
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain('src/dist/a.ts: 8 lines')
+    expect(result.output).toContain('src/coverage/b.ts: 8 lines')
+  })
+
   // Scenario: this repository. Expected: the gate passes on the real tree with the real baseline, so
   // a file pushed past 800 lines fails the unit suite and not only the CI step.
   it('passes on this repository', () => {

@@ -15,7 +15,8 @@
  * - a file on it that grew past its ceiling fails;
  * - a file on it that is now at or under the limit fails until the entry is removed;
  * - a file on it that shrank fails until its ceiling is lowered to the new count;
- * - an entry for a file that no longer exists fails until it is removed.
+ * - an entry for a file that no longer exists fails until it is removed;
+ * - a baseline that is not an object of positive integers, or a tree with no file in it, fails.
  *
  * Usage: `node scripts/check-file-size.mjs [--root <dir>] [--limit <lines>]`. The root defaults to
  * the repository and the limit to 800; the options exist so the gate can be run over a small tree.
@@ -28,7 +29,8 @@ const DEFAULT_LIMIT = 800
 /** The directories the repository's own code lives in. */
 const SCANNED = ['src', 'test', 'scripts']
 const EXTENSIONS = /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/
-const SKIPPED = new Set(['node_modules', 'dist', 'coverage', 'reports', '.stryker-tmp'])
+/** Vendored packages are not the repository's own code. */
+const SKIPPED = new Set(['node_modules'])
 
 /** Reads `--name value` options, rejecting anything it does not know. */
 function parseArgs(argv) {
@@ -56,6 +58,34 @@ function walk(root, dir) {
     else if (EXTENSIONS.test(name)) found.push(relative(root, path).split(sep).join('/'))
   }
   return found
+}
+
+/**
+ * Reads the baseline, refusing one it cannot trust: a ceiling that is not a positive integer would
+ * make every comparison false and let an over-limit file pass.
+ *
+ * @param {string} path - Absolute path of the baseline file; a missing file is an empty baseline.
+ * @returns {Record<string, number>} Ceiling by relative path.
+ */
+function readBaseline(path) {
+  if (!existsSync(path)) return {}
+  let parsed
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    throw new Error(`${path} is not valid JSON: ${error.message}`)
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${path} must be an object mapping a path to its line ceiling`)
+  }
+  for (const [file, ceiling] of Object.entries(parsed)) {
+    if (!Number.isInteger(ceiling) || ceiling < 1) {
+      throw new Error(
+        `the ceiling for ${file} in ${path} must be a positive integer (got ${JSON.stringify(ceiling)})`,
+      )
+    }
+  }
+  return parsed
 }
 
 /** The number of lines, counted the way `wc -l` counts them. */
@@ -106,12 +136,17 @@ function main() {
   const limit = Number(options.limit ?? DEFAULT_LIMIT)
   if (!Number.isInteger(limit) || limit < 1) throw new Error(`invalid --limit: ${options.limit}`)
 
-  const baselinePath = join(root, 'scripts', 'file-size-baseline.json')
-  const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {}
+  const baseline = readBaseline(join(root, 'scripts', 'file-size-baseline.json'))
   const sizes = new Map()
   for (const directory of SCANNED) {
     for (const path of walk(root, join(root, directory)))
       sizes.set(path, lineCount(join(root, path)))
+  }
+
+  if (sizes.size === 0) {
+    throw new Error(
+      `no file found under src, test or scripts in ${root}; a gate that finds none checks none`,
+    )
   }
 
   const problems = violations(sizes, baseline, limit)
@@ -126,4 +161,11 @@ function main() {
   process.exitCode = 1
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main()
+  } catch (error) {
+    console.error(`File-size gate: ${error.message}`)
+    process.exitCode = 1
+  }
+}
