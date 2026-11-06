@@ -34,7 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   kept `app.close()` pending, so a `SIGTERM` was ignored until the orchestrator's `SIGKILL` and
   every `onApplicationShutdown` hook was skipped, a tracing flush included. `SseTransport` now ends
   its streams and stops its heartbeats in `beforeApplicationShutdown`, which runs before the server
-  closes, and its `onApplicationShutdown` stays as a no-op that finds nothing left. `ITransport`
+  closes, and its `onApplicationShutdown` stays and runs the same teardown, which finds nothing
+  left. `ITransport`
   gains the optional `beforeApplicationShutdown` hook. An open WebSocket connection did not hang
   the close.
 - **A failed re-authentication now disconnects the connection without waiting for its
