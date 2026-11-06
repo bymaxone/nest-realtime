@@ -24,8 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every emit, waited out the whole outage and was then sent late. It now rejects at once with
   `REALTIME_PUBSUB_UNAVAILABLE` (`cannot publish to "<channel>" (the Redis client is reconnecting)`)
   while the client is reconnecting, closed or ended, and never queues the command. `disconnect()`
-  rejects with that code so the caller can retry, and an emit resolves at once with the failure
-  reported through `onDeliveryFailure`.
+  rejects with that code so the caller can retry, and an emit no longer waits for the outage.
 - **An `sse.heartbeatMs` outside the allowed range now stops the application at start-up.** The
   boot check only rejected a value of zero or less, while the heartbeat service refuses anything
   outside 5,000 to 90,000 ms each time a connection opens. A value such as `1000` or `100000`
@@ -48,10 +47,9 @@ Cross-instance fan-out disabled` once at start-up and then ran without cross-ins
 if you ran one of them with such a client, revocations and emits from your other instances may
 never have reached it. Nothing needs to change in your configuration.
 
-A `disconnect()` made during a Redis outage now rejects immediately instead of after the
+A `disconnect()` made during a Redis outage now rejects immediately instead of waiting for the
 reconnect, so the retry you already need for a rejected `disconnect()` happens sooner. An emit made
-during an outage is no longer held and delivered late: it resolves at once and the failure goes to
-`onDeliveryFailure`.
+during an outage is no longer held and delivered late.
 
 ## [1.2.7] - 2026-11-01
 
