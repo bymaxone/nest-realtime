@@ -61,6 +61,26 @@ describe('SseSubscriptionHandler — shutdown', () => {
     expect((thrown as ServiceUnavailableException).getStatus()).not.toBe(500)
   })
 
+  // The stream is only registered when it is subscribed, after the handshake returned it. If shutdown
+  // began in between, the teardown's snapshot of the connections was taken without it, so nothing
+  // would end it: it completes at once, before it registers or emits anything, and the events it
+  // had read from the offline queue are left unacknowledged.
+  it('completes a stream at once when shutdown began after the handshake returned it', async () => {
+    const transport = mkTransport({ shuttingDown: false })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const stream = await handler.handle(mkReq(), mkRes())
+    Object.defineProperty(transport, 'shuttingDown', { value: true })
+    const events: unknown[] = []
+    let completed = false
+
+    stream.subscribe({ next: (event) => events.push(event), complete: () => (completed = true) })
+    await Promise.resolve()
+
+    expect(completed).toBe(true)
+    expect(events).toEqual([])
+    expect(transport.registerConnection).not.toHaveBeenCalled()
+  })
+
   // Outside shutdown the handshake is unchanged.
   it('opens the stream when shutdown has not begun', async () => {
     const handler = build(mkTransport({ shuttingDown: false }), mkHeartbeat(), mkOptions())

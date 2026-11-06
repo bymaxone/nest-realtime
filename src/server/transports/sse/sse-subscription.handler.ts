@@ -337,6 +337,13 @@ export class SseSubscriptionHandler {
    */
   private buildStream(p: StreamParams): Observable<MessageEvent> {
     return new Observable<MessageEvent>((subscriber) => {
+      // The connection is registered only now, after the handshake returned this stream. Shutdown
+      // may have begun in between: its snapshot of the connections was taken without this one, so
+      // nothing would end it. Nothing has been read from the pipeline or registered yet.
+      if (this.transport.shuttingDown) {
+        subscriber.complete()
+        return undefined
+      }
       // Subscribe the pipeline first: subject has a listener before registration can emit.
       const inner = this.subscribePipeline(p, subscriber)
       // The offline-queue events were pushed synchronously during the subscribe above.
