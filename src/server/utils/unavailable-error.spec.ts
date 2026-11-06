@@ -19,6 +19,7 @@ describe('unavailableError', () => {
     )
 
     expect(error).toBeInstanceOf(Error)
+    expect(error.code).toBe('REALTIME_PUBSUB_UNAVAILABLE')
     expect(error.message).toBe(
       '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of c1 could not be published (redis down)',
     )

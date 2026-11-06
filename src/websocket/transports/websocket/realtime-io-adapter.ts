@@ -11,6 +11,7 @@ import {
   describeError,
   REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
+  realtimeError,
 } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions } from '@bymax-one/nest-realtime/internal'
 
@@ -130,11 +131,11 @@ export class RealtimeIoAdapter extends IoAdapter {
       server.adapter(createAdapter(pub as never, sub as never))
     } catch (err) {
       const reason = describeError(err)
-      throw new Error(
-        `[${RealtimeIoAdapter.name}] ${REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED}: ` +
-          `websocket.redisAdapter is set but the Socket.IO Redis adapter could not be installed (${reason}). ` +
+      throw realtimeError(
+        REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED,
+        `websocket.redisAdapter is set but the Socket.IO Redis adapter could not be installed (${reason}). ` +
           'Install @socket.io/redis-adapter and pass an ioredis client as pubClient.',
-        { cause: err },
+        { who: RealtimeIoAdapter.name, cause: err },
       )
     }
     this.adapterLogger.log(

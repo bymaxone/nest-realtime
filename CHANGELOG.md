@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Errors carry their code as a `code` property.** The `Error`s this library builds with a
+  `REALTIME_*` code in their message now also have that code as `error.code`, one of
+  `RealtimeErrorCode`. The messages are unchanged. They are plain `Error`s, so match on
+  `error.code`, not `instanceof`. The HTTP `UnauthorizedException` for a refused SSE connection and
+  the Socket.IO refusal of a WebSocket connection keep their shape; the refusal carries its code as
+  `data.code`.
+
 ### Fixed
 
 - **A publish no longer waits behind a Redis client that is not ready, and readiness now says
@@ -24,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answers nothing in that time is left unready and the application still starts.
 
 #### Apply to a derived backend
+
+Nothing needs to change for the `code` property: it is added to errors you already catch, and
+their messages are the same. Where you match on the message text to tell a bus failure from a
+transport failure, `error.code` is the stable way to do it.
 
 If you pass `RedisRealtimePubSub` a client built with `lazyConnect: true`, the adapter now
 connects it when it subscribes; connect it yourself only if you need it before then. An

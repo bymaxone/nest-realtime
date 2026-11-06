@@ -183,6 +183,7 @@ describe('RealtimeIoAdapter', () => {
           ADVICE,
       )
       expect(thrown?.cause).toBe(cause)
+      expect((thrown as { code?: unknown }).code).toBe('REALTIME_REDIS_ADAPTER_FAILED')
       expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('Redis adapter registered'))
     })
 

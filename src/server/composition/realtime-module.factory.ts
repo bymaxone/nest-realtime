@@ -33,6 +33,7 @@ import { RoomRegistry } from '../services/room-registry.service'
 import { EventReplayBuffer } from '../transports/sse/event-replay-buffer'
 import { HeartbeatService } from '../transports/sse/heartbeat.service'
 import { normalizeEndpointPath } from '../utils/normalize-endpoint-path'
+import { realtimeError } from '../utils/realtime-error'
 import type { TransportWiring } from './transport-wiring.interface'
 
 /**
@@ -86,9 +87,11 @@ function assertModeSupported(
     mode === 'sse'
       ? "'BymaxRealtimeModule' from '@bymax-one/nest-realtime'"
       : "'BymaxRealtimeWebSocketModule' from '@bymax-one/nest-realtime/websocket'"
-  throw new Error(
-    `[${moduleName}] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: transport '${mode}' is not served ` +
+  throw realtimeError(
+    REALTIME_ERROR_CODES.INVALID_OPTIONS,
+    `transport '${mode}' is not served ` +
       `by this module (it serves ${wiring.modes.map((m) => `'${m}'`).join(', ')}). Use ${alternative}.`,
+    { who: moduleName },
   )
 }
 
@@ -173,9 +176,11 @@ function assertSseEndpointApplies(
   moduleName: string,
 ): void {
   if (asyncOptions.sseEndpoint === undefined || asyncOptions.transport !== 'websocket') return
-  throw new Error(
-    `[${moduleName}] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: sseEndpoint '${asyncOptions.sseEndpoint}' ` +
+  throw realtimeError(
+    REALTIME_ERROR_CODES.INVALID_OPTIONS,
+    `sseEndpoint '${asyncOptions.sseEndpoint}' ` +
       `was set but transport 'websocket' registers no SSE controller — use 'both' to serve SSE too`,
+    { who: moduleName },
   )
 }
 
@@ -196,11 +201,13 @@ function bindSseEndpoint(
   moduleName: string,
 ): ResolvedRealtimeOptions {
   if (declared !== undefined && normalizeEndpointPath(declared) !== normalizeEndpointPath(bound)) {
-    throw new Error(
-      `[${moduleName}] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: the factory resolved sse.endpoint ` +
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `the factory resolved sse.endpoint ` +
         `'${declared}' but forRootAsync bound the SSE route to '${bound}' — controllers are ` +
         `registered before the factory runs, so declare the path as 'sseEndpoint' on the ` +
         `forRootAsync registration itself`,
+      { who: moduleName },
     )
   }
   return Object.freeze({ ...resolved, sse: { ...resolved.sse, endpoint: bound } })
@@ -221,13 +228,15 @@ function resolveAsyncOptions(
   moduleName: string,
 ): ResolvedRealtimeOptions {
   if (!raw) {
-    throw new Error(`${REALTIME_ERROR_CODES.INVALID_OPTIONS}: ${source} returned nothing`)
+    throw realtimeError(REALTIME_ERROR_CODES.INVALID_OPTIONS, `${source} returned nothing`)
   }
   validateOptions(raw)
   if (raw.transport !== declaredMode) {
-    throw new Error(
-      `[${moduleName}] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: forRootAsync was registered for ` +
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `forRootAsync was registered for ` +
         `transport '${declaredMode}' but the factory resolved '${raw.transport}'`,
+      { who: moduleName },
     )
   }
   const resolved = applyDefaults(raw)
@@ -259,8 +268,10 @@ export function composeForRootAsync(
     asyncOptions.useExisting,
   ].filter((pattern) => pattern !== undefined)
   if (patterns.length !== 1) {
-    throw new Error(
-      `[${moduleName}] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: forRootAsync requires exactly one of useFactory, useClass, or useExisting (received ${patterns.length})`,
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `forRootAsync requires exactly one of useFactory, useClass, or useExisting (received ${patterns.length})`,
+      { who: moduleName },
     )
   }
   assertModeSupported(wiring, asyncOptions.transport, moduleName)

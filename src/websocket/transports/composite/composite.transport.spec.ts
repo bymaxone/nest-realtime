@@ -154,6 +154,7 @@ describe('CompositeTransport', () => {
       expect((failure as Error).message).toBe(
         `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} of conn-1 failed on both transports (sse fail; ws fail)`,
       )
+      expect((failure as { code?: unknown }).code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
       expect(((failure as Error).cause as AggregateError).errors.map(String)).toEqual([
         'Error: sse fail',
         'Error: ws fail',

@@ -6,6 +6,7 @@ import { Logger } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { HEARTBEAT_MAX_MS, HEARTBEAT_MIN_MS } from '../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { realtimeError } from '../utils/realtime-error'
 
 // Format-level validation only: 'websocket' and 'both' are accepted config values,
 // but the module rejects them at bootstrap until those transports are implemented.
@@ -20,18 +21,24 @@ const VALID_TRANSPORTS = new Set<string>(['sse', 'websocket', 'both'])
  */
 export function validateOptions(options: BymaxRealtimeModuleOptions): void {
   if (!options.transport || !VALID_TRANSPORTS.has(options.transport)) {
-    throw new Error(
-      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options.transport must be one of 'sse' | 'websocket' | 'both' (got: ${String(options.transport)})`,
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `options.transport must be one of 'sse' | 'websocket' | 'both' (got: ${String(options.transport)})`,
+      { who: 'BymaxRealtimeModule' },
     )
   }
   if (!options.authenticator) {
-    throw new Error(
-      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.NO_AUTHENTICATOR}: options.authenticator is required — the library never ships a default authenticator`,
+    throw realtimeError(
+      REALTIME_ERROR_CODES.NO_AUTHENTICATOR,
+      `options.authenticator is required — the library never ships a default authenticator`,
+      { who: 'BymaxRealtimeModule' },
     )
   }
   if (typeof options.authenticator.authenticate !== 'function') {
-    throw new Error(
-      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.NO_AUTHENTICATOR}: options.authenticator must implement IConnectionAuthenticator.authenticate(context)`,
+    throw realtimeError(
+      REALTIME_ERROR_CODES.NO_AUTHENTICATOR,
+      `options.authenticator must implement IConnectionAuthenticator.authenticate(context)`,
+      { who: 'BymaxRealtimeModule' },
     )
   }
   validateSseOptions(options)
@@ -63,18 +70,24 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
       heartbeatMs <= HEARTBEAT_MAX_MS
     )
   ) {
-    throw new Error(
-      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options.sse.heartbeatMs must be between ${HEARTBEAT_MIN_MS} and ${HEARTBEAT_MAX_MS} ms (got ${String(heartbeatMs)})`,
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `options.sse.heartbeatMs must be between ${HEARTBEAT_MIN_MS} and ${HEARTBEAT_MAX_MS} ms (got ${String(heartbeatMs)})`,
+      { who: 'BymaxRealtimeModule' },
     )
   }
   if (sse?.replayBufferSize !== undefined && sse.replayBufferSize < 0) {
-    throw new Error(
-      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options.sse.replayBufferSize must be >= 0`,
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `options.sse.replayBufferSize must be >= 0`,
+      { who: 'BymaxRealtimeModule' },
     )
   }
   if (sse?.maxConnectionsPerUser !== undefined && sse.maxConnectionsPerUser < 0) {
-    throw new Error(
-      `[BymaxRealtimeModule] ${REALTIME_ERROR_CODES.INVALID_OPTIONS}: options.sse.maxConnectionsPerUser must be >= 0 (0 disables the per-user connection cap)`,
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `options.sse.maxConnectionsPerUser must be >= 0 (0 disables the per-user connection cap)`,
+      { who: 'BymaxRealtimeModule' },
     )
   }
 }

@@ -12,6 +12,26 @@ function asOptions(value: unknown): BymaxRealtimeModuleOptions {
   return value as BymaxRealtimeModuleOptions
 }
 
+describe('validateOptions error codes', () => {
+  // The code a caller branches on is a property of the error, not only text in its message.
+  it.each([
+    [
+      'an unknown transport',
+      { transport: 'carrier-pigeon' as never, authenticator },
+      'REALTIME_INVALID_OPTIONS',
+    ],
+    ['a missing authenticator', { transport: 'sse' as const }, 'REALTIME_NO_AUTHENTICATOR'],
+  ])('carries the code of %s', (_label, options, code) => {
+    let thrown: unknown
+    try {
+      validateOptions(options as never)
+    } catch (error) {
+      thrown = error
+    }
+    expect((thrown as { code?: unknown }).code).toBe(code)
+  })
+})
+
 describe('validateOptions', () => {
   // Minimal valid options pass validation.
   it('accepts minimal valid options', () => {

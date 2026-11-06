@@ -80,6 +80,9 @@ describe('RedisRealtimePubSub.publish during an outage', () => {
     await fake.stop()
     await until('the client to start reconnecting', () => redis.status === 'reconnecting')
     const started = Date.now()
+    await expect(instance!.transport.disconnect('c-remote', 'revoked')).rejects.toMatchObject({
+      code: 'REALTIME_PUBSUB_UNAVAILABLE',
+    })
     await expect(instance!.transport.disconnect('c-remote', 'revoked')).rejects.toThrow(
       '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of c-remote could not be published ([RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is reconnecting))',
     )
