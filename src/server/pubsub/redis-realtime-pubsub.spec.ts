@@ -347,6 +347,44 @@ describe('RedisRealtimePubSub', () => {
       },
     )
 
+    // The wait can never block the boot: a client that stays connecting is given up on at the
+    // deadline, which leaves nothing listening and no timer behind.
+    describe('with a client that never answers', () => {
+      beforeEach(() => jest.useFakeTimers())
+      afterEach(() => jest.useRealTimers())
+
+      it('gives up at the deadline, and not before', async () => {
+        const pub = publisher('connecting')
+        let done = false
+        void new RedisRealtimePubSub({ client: pub as unknown as Redis })
+          .subscribe(jest.fn())
+          .then(() => (done = true))
+        await jest.advanceTimersByTimeAsync(1_999)
+        expect(done).toBe(false)
+        await jest.advanceTimersByTimeAsync(1)
+        expect(done).toBe(true)
+        for (const name of ['ready', 'close', 'reconnecting', 'end']) {
+          expect(pub.listenerCount(name)).toBe(0)
+        }
+        expect(jest.getTimerCount()).toBe(0)
+      })
+
+      it('leaves no timer behind when the client answers first, and never keeps the process alive', async () => {
+        const pub = publisher('connecting')
+        const timer = jest.spyOn(globalThis, 'setTimeout')
+        const subscribing = new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(
+          jest.fn(),
+        )
+        await jest.advanceTimersByTimeAsync(10)
+        pub.emit('ready')
+        await subscribing
+        expect(jest.getTimerCount()).toBe(0)
+        const deadline = timer.mock.results.map((r) => r.value as NodeJS.Timeout)
+        expect(deadline.some((t) => t.hasRef() === false)).toBe(true)
+        timer.mockRestore()
+      })
+    })
+
     it.each(['reconnecting', 'close', 'end'])(
       'does not wait for a client that is %s, which has already answered',
       async (status) => {

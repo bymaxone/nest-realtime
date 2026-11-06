@@ -116,6 +116,33 @@ describe('RedisRealtimePubSub publishing connection', () => {
     expect(pubsub.isSubscribed()).toBe(false)
   })
 
+  // Waiting for the publisher is a convenience for start-up emits and must never be able to block the
+  // boot: when only the publisher's connection stays silent (a proxy stalling one of two
+  // connections), subscribing gives up on it after the deadline and the instance starts unready.
+  it('completes the boot, unready, when only the publisher never answers its handshake', async () => {
+    let silent: Socket | undefined
+    const fake = new FakeRespServer((command, socket) => {
+      silent ??= socket
+      return socket === silent ? null : healthyRedis(command, socket)
+    })
+    await fake.start()
+    servers.push(fake)
+    const redis = client(fake.port)
+    const pubsub = new RedisRealtimePubSub({ client: redis })
+    const listeners = () =>
+      ['ready', 'close', 'reconnecting', 'end'].map((e) => redis.listenerCount(e))
+    await until('the publisher to connect its socket', () => redis.status === 'connect')
+    const before = listeners()
+
+    const started = Date.now()
+    await pubsub.subscribe(() => undefined)
+
+    expect(Date.now() - started).toBeLessThan(3_000)
+    expect(redis.status).toBe('connect')
+    expect(pubsub.isSubscribed()).toBe(false)
+    expect(listeners()).toEqual(before)
+  })
+
   // A lazy host client that nobody subscribes through is connected by its first publish, which is
   // refused: the command it would have been is not sent, and the next publish goes through.
   it('connects a lazy host client on a publish made before any subscribe', async () => {

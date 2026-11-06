@@ -28,6 +28,13 @@ const CANNOT_PUBLISH: ReadonlySet<string> = new Set([
   'end',
 ])
 
+/**
+ * How long subscribing waits for the publishing client's first connection. The wait only spares a
+ * start-up emit a refusal, so a client that stays silent past it is left unready rather than
+ * allowed to block the boot.
+ */
+const PUBLISHER_WAIT_MS = 2_000
+
 /** The events that name a status other than connecting: each ends a first connection attempt. */
 const CONNECTION_OVER = ['ready', 'close', 'reconnecting', 'end'] as const
 
@@ -141,16 +148,20 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * Resolves once the publishing client's first connection attempt is over, however it ended:
    * ready, closed (to retry or to give up), or ended with no close when its connector fails. The
    * client is created just before the application boots, so for its first milliseconds it is still
-   * connecting, and an emit from another provider's start-up hook would be refused for it.
+   * connecting, and an emit from another provider's start-up hook would be refused for it. A
+   * client that answers nothing is given up on after the deadline.
    */
   private publisherSettled(): Promise<void> {
     const pub = this.#pub
     if (pub.status !== 'connecting' && pub.status !== 'connect') return Promise.resolve()
     return new Promise((resolve) => {
       const settle = (): void => {
+        clearTimeout(deadline)
         for (const event of CONNECTION_OVER) pub.off(event, settle)
         resolve()
       }
+      const deadline = setTimeout(settle, PUBLISHER_WAIT_MS)
+      deadline.unref()
       for (const event of CONNECTION_OVER) pub.once(event, settle)
     })
   }

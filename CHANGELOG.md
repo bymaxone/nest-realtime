@@ -19,8 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lost; the adapter now connects it when it subscribes, and a publish made before any subscribe
   connects it too (that publish is refused). `isPubSubReady()` is true
   only while the subscription is confirmed and the publishing client can publish. Subscribing waits
-  for the publishing client to answer its first connection, so an emit from another provider's
-  start-up hook is not refused for the client's first milliseconds.
+  up to 2 seconds for the publishing client to answer its first connection, so an emit from another
+  provider's start-up hook is not refused for the client's first milliseconds; a client that
+  answers nothing in that time is left unready and the application still starts.
 
 #### Apply to a derived backend
 
