@@ -55,6 +55,15 @@ describe('BymaxRealtimeModule.forRoot', () => {
     )
   })
 
+  // An interval outside the range every connection enforces stops the application starting.
+  it('throws at bootstrap when sse.heartbeatMs is out of range', () => {
+    expect(() =>
+      BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator, sse: { heartbeatMs: 1_000 } }),
+    ).toThrow(
+      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.heartbeatMs must be between 5000 and 90000 ms (got 1000)',
+    )
+  })
+
   // When sse.endpoint is explicitly set, it is used instead of the '/realtime/sse' default.
   it('uses a custom sse endpoint for transport sse', () => {
     const dynamic = BymaxRealtimeModule.forRoot({

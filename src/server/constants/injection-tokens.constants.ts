@@ -25,3 +25,20 @@ export const REALTIME_INSTANCE_ID_TOKEN = Symbol('BYMAX_REALTIME_INSTANCE_ID')
  * `SseSubscriptionHandler` (fallback when `sse.heartbeatMs` is unset).
  */
 export const DEFAULT_HEARTBEAT_MS = 30_000
+
+/**
+ * Minimum acceptable heartbeat interval in milliseconds.
+ *
+ * Five seconds is the practical floor — an interval shorter than this is likely
+ * a misconfiguration and would generate unnecessary network traffic.
+ */
+export const HEARTBEAT_MIN_MS = 5_000
+
+/**
+ * Maximum acceptable heartbeat interval in milliseconds.
+ *
+ * Ninety seconds is the safe ceiling: nginx defaults to a 60 s idle timeout and
+ * Cloudflare caps at 100 s on free plans.  Staying at or below 90 s ensures
+ * keepalives reach both before the proxy drops the connection.
+ */
+export const HEARTBEAT_MAX_MS = 90_000
