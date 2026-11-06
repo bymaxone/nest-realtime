@@ -4,6 +4,7 @@
  * publish, and a publish is never queued behind a connection that is not ready.
  * @layer test
  */
+import type { Socket } from 'node:net'
 import Redis from 'ioredis'
 import { FakeRespServer, healthyRedis } from '../../../test/fixtures/fake-resp-server'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
@@ -61,6 +62,35 @@ describe('RedisRealtimePubSub publishing connection', () => {
 
     await expect(pubsub.publish(message)).resolves.toBeUndefined()
     expect(published(fake)).toBe(1)
+  })
+
+  // The host client is created just before the application boots, so for its first milliseconds it
+  // is still connecting; the publisher here is the first connection the scripted server sees and it
+  // answers that one late. An emit from another provider's start-up hook right after the module
+  // initialises must not be refused for it, so subscribing waits for the publisher as well.
+  it('waits for the publisher while subscribing, so a start-up emit is not refused', async () => {
+    let slowed = false
+    let first: Socket | undefined
+    const fake = new FakeRespServer((command, socket) => {
+      first ??= socket
+      const reply = healthyRedis(command, socket)
+      if (socket !== first || reply === null) return reply
+      slowed = true
+      setTimeout(() => socket.write(reply), 200)
+      return null
+    })
+    await fake.start()
+    servers.push(fake)
+    const redis = client(fake.port)
+    const pubsub = new RedisRealtimePubSub({ client: redis })
+
+    await pubsub.subscribe(() => undefined)
+
+    expect(redis.status).toBe('ready')
+    await expect(pubsub.publish(message)).resolves.toBeUndefined()
+    expect(published(fake)).toBe(1)
+    // The publisher's answers were in fact held back, so the wait above is what made it ready.
+    expect(slowed).toBe(true)
   })
 
   // A lazy host client that nobody subscribes through is connected by its first publish, which is

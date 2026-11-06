@@ -134,6 +134,25 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     if (this.#pub.status === 'wait') this.#pub.connect().catch(() => undefined)
   }
 
+  /**
+   * Resolves once the publishing client has answered its first connection, ready or closed. The
+   * client is created just before the application boots, so for its first milliseconds it is still
+   * connecting, and an emit from another provider's start-up hook would be refused for it.
+   */
+  private publisherSettled(): Promise<void> {
+    const pub = this.#pub
+    if (pub.status !== 'connecting' && pub.status !== 'connect') return Promise.resolve()
+    return new Promise((resolve) => {
+      const settle = (): void => {
+        pub.off('ready', settle)
+        pub.off('close', settle)
+        resolve()
+      }
+      pub.once('ready', settle)
+      pub.once('close', settle)
+    })
+  }
+
   private cannotPublish(reason: string): Error {
     return unavailableError(
       REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
@@ -217,7 +236,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     sub.on('ready', () => {
       if (attached) this.confirm(sub)
     })
-    await this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst)
+    await Promise.all([
+      this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst),
+      this.publisherSettled(),
+    ])
     attached = true
     return sub
   }
