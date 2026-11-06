@@ -15,8 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Stream isn't writeable and enableOfflineQueue options is false`. Since 1.2.7 that rejection was
   treated as the server refusing the subscription and failed the boot with
   `REALTIME_PUBSUB_UNAVAILABLE`, while Redis was healthy; before 1.2.7 the same combination logged a
-  warning and left the instance without cross-instance delivery. nest-cache builds its clients this
-  way by default. The subscriber connection now keeps its own offline queue on, and only an error
+  warning and left the instance without cross-instance delivery. The subscriber connection now keeps its own offline queue on, and only an error
   reply from the server counts as a refusal: any other rejection of the first `SUBSCRIBE` is the
   connection failing, so the boot completes unready and recovers like any outage.
 - **An `sse.heartbeatMs` outside the allowed range now stops the application at start-up.** The
@@ -34,8 +33,8 @@ If your configuration sets `sse.heartbeatMs`, check it is between 5,000 and 90,0
 outside it already failed every connection, except `NaN`, which flooded each connection with
 keepalives; now every one of them fails when the application starts.
 
-If you pass `RedisRealtimePubSub` a client created with `enableOfflineQueue: false`, as nest-cache's
-default client is, upgrade to this release. 1.2.7 fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`
+If you pass `RedisRealtimePubSub` a client created with `enableOfflineQueue: false`,
+upgrade to this release. 1.2.7 fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`
 on such a client. Earlier versions did not fail: they logged `Failed to subscribe to pub/sub ...
 Cross-instance fan-out disabled` once at start-up and then ran without cross-instance delivery, so
 if you ran one of them with such a client, revocations and emits from your other instances may
