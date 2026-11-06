@@ -209,12 +209,52 @@ describe('RedisRealtimePubSub', () => {
     }
   })
 
+  // The subscriber is the adapter's own connection: it keeps its offline queue so the first
+  // SUBSCRIBE can wait for the connection whatever the host client was built with, and it leaves
+  // the re-subscribing to the adapter.
+  it('duplicates the host client with the offline queue on and ioredis resubscribe off', async () => {
+    const sub = { subscribe: jest.fn().mockResolvedValue(undefined), on: jest.fn() }
+    const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
+    const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
+    await pubsub.subscribe(jest.fn())
+    expect(pub.duplicate).toHaveBeenCalledWith({ autoResubscribe: false, enableOfflineQueue: true })
+  })
+
+  // Only an error reply is the server refusing the subscription. Any other rejection of the first
+  // SUBSCRIBE is the connection failing (ioredis rejects at once when it cannot write, and gives up
+  // after its retries), so the boot completes unready and the reason is logged.
+  it('treats a rejection that is not an error reply as the connection failing', async () => {
+    const sub = {
+      subscribe: jest
+        .fn()
+        .mockRejectedValue(
+          new Error("Stream isn't writeable and enableOfflineQueue options is false"),
+        ),
+      on: jest.fn(),
+    }
+    const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
+      await expect(pubsub.subscribe(jest.fn())).resolves.toEqual(expect.any(Function))
+      expect(pubsub.isSubscribed()).toBe(false)
+      expect(warn).toHaveBeenCalledWith(
+        `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "bymax:realtime": Stream isn't writeable and enableOfflineQueue options is false. Remote events and revocations will not reach this instance until it subscribes again`,
+      )
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   // When subscriber init fails, the handler is rolled back and subInit is cleared so the
   // next subscribe() retries with a fresh client instead of re-awaiting the rejected promise.
   it('rolls back handler and clears subInit when subscriber init fails', async () => {
     let duplicateCall = 0
     const failingSub = {
-      subscribe: jest.fn().mockRejectedValue(new Error('redis down')),
+      // Only an error reply is the server refusing; anything else is the connection failing.
+      subscribe: jest
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('redis down'), { name: 'ReplyError' })),
       on: jest.fn(),
       disconnect: jest.fn(),
     }

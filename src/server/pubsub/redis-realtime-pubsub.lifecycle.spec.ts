@@ -283,6 +283,79 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
     }),
   )
 
+  // The subscriber connection is the adapter's own, so it does not inherit the host client's choice
+  // to refuse commands before it is connected: nest-cache builds its clients with
+  // enableOfflineQueue false, and the first SUBSCRIBE is issued before the connection exists.
+  it(
+    'subscribes and delivers when the host client was built with enableOfflineQueue false',
+    traced(async () => {
+      spies()
+      const fake = await server()
+      const pubsub = new RedisRealtimePubSub({
+        client: client(fake.port, { enableOfflineQueue: false }),
+      })
+      const received: RealtimePubSubMessage[] = []
+      await subscribe(pubsub, (message) => received.push(message))
+      expect(pubsub.isSubscribed()).toBe(true)
+      const message: RealtimePubSubMessage = {
+        op: 'disconnect',
+        args: { connectionId: 'c1' },
+        origin: 'other',
+      }
+      fake.broadcast(pushed(CHANNEL, JSON.stringify(message)))
+      await until('the pushed message', () => received.length === 1)
+      expect(received[0]).toEqual(message)
+    }),
+  )
+
+  // The same host client against a Redis that is not there is an outage like any other: the boot
+  // completes, unready, and does not fail as if the server had refused the subscription.
+  it(
+    'completes the boot, unready, when the host client has enableOfflineQueue false and Redis is down',
+    traced(async () => {
+      const { warn } = spies()
+      const fake = await closedPort()
+      const pubsub = new RedisRealtimePubSub({
+        client: client(fake.port, { enableOfflineQueue: false }),
+      })
+      await subscribe(pubsub)
+      expect(pubsub.isSubscribed()).toBe(false)
+      expect(linesAbout(warn, 'not subscribed to')).toHaveLength(1)
+    }),
+  )
+
+  // After the boot left the instance unready because Redis was not there, a host client that
+  // refuses commands before it is connected must recover like any other: when the connection comes
+  // up the subscriber subscribes, readiness flips to up, and what the bus pushes is delivered.
+  it(
+    'recovers and delivers once Redis comes up, for a host client with enableOfflineQueue false',
+    traced(async () => {
+      const { warn, log } = spies()
+      const fake = await closedPort()
+      const pubsub = new RedisRealtimePubSub({
+        client: client(fake.port, { enableOfflineQueue: false }),
+      })
+      const received: RealtimePubSubMessage[] = []
+      await subscribe(pubsub, (message) => received.push(message))
+      expect(pubsub.isSubscribed()).toBe(false)
+      expect(linesAbout(warn, 'not subscribed to')).toHaveLength(1)
+
+      behave(fake, healthyRedis)
+      await fake.start()
+      servers.push(fake)
+      await until('the instance to report subscribed', () => pubsub.isSubscribed())
+      const message: RealtimePubSubMessage = {
+        op: 'disconnect',
+        args: { connectionId: 'c1' },
+        origin: 'other',
+      }
+      fake.broadcast(pushed(CHANNEL, JSON.stringify(message)))
+      await until('the pushed message', () => received.length === 1)
+      expect(received[0]).toEqual(message)
+      expect(linesAbout(log, 'Subscribed to')).toEqual([UP])
+    }),
+  )
+
   // Shutdown awaits the unsubscribe; QUIT to a Redis that never answered would block it forever.
   it(
     'unsubscribes at once when Redis was never reachable',
