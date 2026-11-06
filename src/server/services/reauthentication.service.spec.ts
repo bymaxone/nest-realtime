@@ -3,11 +3,6 @@
  * @layer application
  */
 import { Logger } from '@nestjs/common'
-import { RESERVED_EVENT_NAMES } from '../../shared/constants/reserved-events.constants'
-import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
-import { describeError } from '../utils/describe-error'
-import { unavailableError } from '../utils/unavailable-error'
-import type { ConnectionRecord } from './connection-registry.service'
 import {
   flush,
   mkRecord,
@@ -17,6 +12,11 @@ import {
   mkOptions,
   build,
 } from '../../../test/fixtures/reauthentication/harness'
+import { RESERVED_EVENT_NAMES } from '../../shared/constants/reserved-events.constants'
+import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { describeError } from '../utils/describe-error'
+import { unavailableError } from '../utils/unavailable-error'
+import type { ConnectionRecord } from './connection-registry.service'
 
 describe('ReauthenticationService', () => {
   beforeEach(() => jest.useFakeTimers())

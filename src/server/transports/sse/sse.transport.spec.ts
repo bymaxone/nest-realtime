@@ -5,8 +5,8 @@
 import { Logger } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import { Subject } from 'rxjs'
-import type { IOfflineQueueStorage } from '../../interfaces/offline-queue-storage.interface'
 import { build, addConn } from '../../../../test/fixtures/sse/transport-harness'
+import type { IOfflineQueueStorage } from '../../interfaces/offline-queue-storage.interface'
 
 describe('SseTransport', () => {
   // The transport reports a fixed kind of 'sse'.
