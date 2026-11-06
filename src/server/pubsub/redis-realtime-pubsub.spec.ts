@@ -347,6 +347,49 @@ describe('RedisRealtimePubSub', () => {
       },
     )
 
+    // The wait starts only once the subscriber is attached: a subscriber that reconnects while the
+    // publisher is still connecting must re-subscribe, and a boot that fails never starts the wait.
+    it('re-subscribes when the subscriber reconnects while the publisher is still connecting', async () => {
+      const handlers: Record<string, () => void> = {}
+      const pub = publisher('connecting')
+      const sub = {
+        subscribe: jest.fn().mockResolvedValue(undefined),
+        on: jest.fn((event: string, handler: () => void) => {
+          handlers[event] = handler
+        }),
+      }
+      pub.duplicate.mockReturnValue(sub)
+      const subscribing = new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(
+        jest.fn(),
+      )
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(sub.subscribe).toHaveBeenCalledTimes(1)
+
+      handlers['ready']!()
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(sub.subscribe).toHaveBeenCalledTimes(2)
+
+      pub.emit('ready')
+      await subscribing
+    })
+
+    it('never starts the wait when the subscription is refused', async () => {
+      const pub = publisher('connecting')
+      pub.duplicate.mockReturnValue({
+        subscribe: jest
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('NOPERM'), { name: 'ReplyError' })),
+        on: jest.fn(),
+        disconnect: jest.fn(),
+      })
+      await expect(
+        new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(jest.fn()),
+      ).rejects.toThrow('could not subscribe')
+      for (const name of ['ready', 'close', 'reconnecting', 'end']) {
+        expect(pub.listenerCount(name)).toBe(0)
+      }
+    })
+
     // The wait can never block the boot: a client that stays connecting is given up on at the
     // deadline, which leaves nothing listening and no timer behind.
     describe('with a client that never answers', () => {

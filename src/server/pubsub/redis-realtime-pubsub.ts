@@ -197,6 +197,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.#subInit = null
       throw err
     }
+    // Only now: the subscriber is attached, so it recovers from a reconnect while this waits.
+    await this.publisherSettled()
     return async () => {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {
@@ -249,10 +251,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     sub.on('ready', () => {
       if (attached) this.confirm(sub)
     })
-    await Promise.all([
-      this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst),
-      this.publisherSettled(),
-    ])
+    await this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst)
     attached = true
     return sub
   }
