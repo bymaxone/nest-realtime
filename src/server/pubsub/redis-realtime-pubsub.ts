@@ -151,8 +151,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   private async createSubscriber(): Promise<Redis> {
     this.#outageLogged = false
     // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
-    // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it.
-    const sub = this.#pub.duplicate({ autoResubscribe: false })
+    // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it. The offline queue
+    // stays on whatever the host client chose: the first SUBSCRIBE is issued before the connection
+    // exists, and every later one waits for `ready`.
+    const sub = this.#pub.duplicate({ autoResubscribe: false, enableOfflineQueue: true })
     let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
     // An error reply is the server's answer and reaches the caller as the SUBSCRIBE's rejection;
@@ -172,10 +174,30 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     sub.on('ready', () => {
       if (attached) this.confirm(sub)
     })
-    const first = sub.subscribe(this.channel)
+    await this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst)
+    attached = true
+    return sub
+  }
+
+  /**
+   * Settles the boot against the first SUBSCRIBE. An error reply is the server refusing, which
+   * fails the boot; any other failure, an error event or a close or a rejection that is not an
+   * error reply, is the connection failing, which lets the boot go on unready.
+   */
+  private async negotiate(
+    sub: Redis,
+    first: Promise<unknown>,
+    unreachableFirst: Promise<{ readonly unreachable: unknown }>,
+  ): Promise<void> {
     try {
       const outcome = await Promise.race([
-        first.then(() => 'subscribed' as const),
+        first.then(
+          () => 'subscribed' as const,
+          (err: Error) => {
+            if (err.name === 'ReplyError') throw err
+            return { unreachable: err }
+          },
+        ),
         unreachableFirst,
       ])
       if (outcome === 'subscribed') {
@@ -195,8 +217,6 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         err,
       )
     }
-    attached = true
-    return sub
   }
 
   private confirm(sub: Redis): void {

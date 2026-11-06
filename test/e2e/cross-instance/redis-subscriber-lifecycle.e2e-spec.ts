@@ -35,27 +35,37 @@ afterAll(() => {
 describe('RedisRealtimePubSub against a real Redis', () => {
   // The revocation crosses a real bus: A has never held the connection, so the only way B's
   // connection closes is the message through Redis.
-  it('delivers a revocation from instance A to the connection held by instance B', async () => {
-    const channel = `bymax:realtime:e2e:${Date.now()}`
-    const { instances } = createTestInstances(
-      2,
-      () => new RedisRealtimePubSub({ client: client(REDIS_URL), channel }),
-    )
-    const [a, b] = instances as [(typeof instances)[0], (typeof instances)[0]]
-    await a.subscriber.onModuleInit()
-    await b.subscriber.onModuleInit()
-    const received = b.addConnection('c-remote', 'u1')
-    expect(received).toHaveLength(0)
+  // The second row is how nest-cache builds its clients: the subscriber connection must not
+  // inherit the host's refusal to take commands before it is connected.
+  it.each([
+    ['ioredis defaults', {}],
+    ['enableOfflineQueue false', { enableOfflineQueue: false }],
+  ])(
+    'delivers a revocation from instance A to the connection held by instance B (%s)',
+    async (_label, options) => {
+      const channel = `bymax:realtime:e2e:${Date.now()}`
+      const { instances } = createTestInstances(
+        2,
+        () => new RedisRealtimePubSub({ client: client(REDIS_URL, options), channel }),
+      )
+      const [a, b] = instances as [(typeof instances)[0], (typeof instances)[0]]
+      await a.subscriber.onModuleInit()
+      await b.subscriber.onModuleInit()
+      // A client that refuses commands before it is connected must be connected before it publishes.
+      await waitFor('every client to be ready', () => clients.every((c) => c.status === 'ready'))
+      const received = b.addConnection('c-remote', 'u1')
+      expect(received).toHaveLength(0)
 
-    await a.transport.disconnect('c-remote', 'revoked')
+      await a.transport.disconnect('c-remote', 'revoked')
 
-    await waitFor(
-      'the connection on B to close',
-      () => b.transport.getConnection('c-remote') === undefined,
-    )
-    await a.shutdown()
-    await b.shutdown()
-  })
+      await waitFor(
+        'the connection on B to close',
+        () => b.transport.getConnection('c-remote') === undefined,
+      )
+      await a.shutdown()
+      await b.shutdown()
+    },
+  )
 
   // A server that is reached and refuses is a refusal, not an outage: the boot fails.
   it('fails the boot when the server refuses the credentials', async () => {

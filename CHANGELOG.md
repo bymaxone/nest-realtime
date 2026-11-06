@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A host Redis client built with `enableOfflineQueue: false` no longer fails the boot of `RedisRealtimePubSub`.**
+  The subscriber connection is a copy of the host client and inherited that option, so its first
+  `SUBSCRIBE`, issued before the connection exists, was refused by ioredis at once with
+  `Stream isn't writeable and enableOfflineQueue options is false`. Since 1.2.7 that rejection was
+  treated as the server refusing the subscription and failed the boot with
+  `REALTIME_PUBSUB_UNAVAILABLE`, while Redis was healthy; before 1.2.7 the same combination logged a
+  warning and left the instance without cross-instance delivery. nest-cache builds its clients this
+  way by default. The subscriber connection now keeps its own offline queue on, and only an error
+  reply from the server counts as a refusal: any other rejection of the first `SUBSCRIBE` is the
+  connection failing, so the boot completes unready and recovers like any outage.
 - **An `sse.heartbeatMs` outside the allowed range now stops the application at start-up.** The
   boot check only rejected a value of zero or less, while the heartbeat service refuses anything
   outside 5,000 to 90,000 ms each time a connection opens. A value such as `1000` or `100000`
@@ -23,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 If your configuration sets `sse.heartbeatMs`, check it is between 5,000 and 90,000 ms. A value
 outside it already failed every connection, except `NaN`, which flooded each connection with
 keepalives; now every one of them fails when the application starts.
+
+If you pass `RedisRealtimePubSub` a client created with `enableOfflineQueue: false`, as nest-cache's
+default client is, upgrade to this release: 1.2.7 fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`
+on such a client, and earlier versions did not subscribe at all. Nothing needs to change in your
+configuration.
 
 ## [1.2.7] - 2026-11-01
 
