@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warning and left the instance without cross-instance delivery. The subscriber connection now keeps its own offline queue on, and only an error
   reply from the server counts as a refusal: any other rejection of the first `SUBSCRIBE` is the
   connection failing, so the boot completes unready and recovers like any outage.
+- **`disconnect()` no longer hangs through a Redis outage.** `RedisRealtimePubSub.publish` handed
+  the command to ioredis even while the client was reconnecting, and ioredis queued it until the
+  connection returned (still pending after 30 s with its default options), so a revocation, and
+  every emit, waited out the whole outage and was then sent late. It now rejects at once with
+  `REALTIME_PUBSUB_UNAVAILABLE` (`cannot publish to "<channel>" (the Redis client is reconnecting)`)
+  while the client is reconnecting, closed or ended, and never queues the command. `disconnect()`
+  rejects with that code so the caller can retry, and an emit no longer waits for the outage.
 - **An `sse.heartbeatMs` outside the allowed range now stops the application at start-up.** The
   boot check only rejected a value of zero or less, while the heartbeat service refuses anything
   outside 5,000 to 90,000 ms each time a connection opens. A value such as `1000` or `100000`
@@ -39,6 +46,10 @@ on such a client. Earlier versions did not fail: they logged `Failed to subscrib
 Cross-instance fan-out disabled` once at start-up and then ran without cross-instance delivery, so
 if you ran one of them with such a client, revocations and emits from your other instances may
 never have reached it. Nothing needs to change in your configuration.
+
+A `disconnect()` made during a Redis outage now rejects immediately instead of waiting for the
+reconnect, so the retry you already need for a rejected `disconnect()` happens sooner. An emit made
+during an outage is no longer held and delivered late.
 
 ## [1.2.7] - 2026-11-01
 
