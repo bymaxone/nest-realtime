@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-11-06
+
+### Changed
+
+- **Built with tsup 9; the shipped bundles no longer carry comments.** The build now strips the
+  comments from `dist/**/index.mjs` and `dist/**/index.cjs` after bundling, keeping legal comments,
+  `__PURE__` annotations and region markers, and checks that the program is unchanged. The
+  declarations keep their comments. The public surface is the same. The `internal` bundle is
+  12,293 B brotli, inside its 13,500 B budget; the other budgets were reset to the stripped size
+  plus about 11%.
+
 ### Fixed
 
 - **A host Redis client built with `enableOfflineQueue: false` no longer fails the boot of `RedisRealtimePubSub`.**
@@ -36,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Apply to a derived backend
 
+A `disconnect()` made during a Redis outage now rejects immediately instead of waiting for the
+reconnect, so the retry you already need for a rejected `disconnect()` happens sooner. An emit made
+during an outage is no longer held and delivered late.
+
 If your configuration sets `sse.heartbeatMs`, check it is between 5,000 and 90,000 ms. A value
 outside it already failed every connection, except `NaN`, which flooded each connection with
 keepalives; now every one of them fails when the application starts.
@@ -46,10 +61,6 @@ on such a client. Earlier versions did not fail: they logged `Failed to subscrib
 Cross-instance fan-out disabled` once at start-up and then ran without cross-instance delivery, so
 if you ran one of them with such a client, revocations and emits from your other instances may
 never have reached it. Nothing needs to change in your configuration.
-
-A `disconnect()` made during a Redis outage now rejects immediately instead of waiting for the
-reconnect, so the retry you already need for a rejected `disconnect()` happens sooner. An emit made
-during an outage is no longer held and delivered late.
 
 ## [1.2.7] - 2026-11-01
 
@@ -810,7 +821,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.7...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.8...HEAD
+[1.2.8]: https://github.com/bymaxone/nest-realtime/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/bymaxone/nest-realtime/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/bymaxone/nest-realtime/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/bymaxone/nest-realtime/compare/v1.2.4...v1.2.5
