@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A start-up that found Redis unreachable no longer subscribes twice when it comes up.** The
+  first `SUBSCRIBE` waits in the client's offline queue and ioredis sends it when the connection
+  first becomes ready, but the adapter's own `ready` handler sent a second one for the same
+  connection. A server that refused it was therefore reported twice, with two identical
+  `the server refused the subscription` warnings, and a server that accepted it saw two
+  `SUBSCRIBE`s. The queued one is now the only one sent for that connection and its answer is the
+  one that reports readiness or the refusal; a queued one rejected because the connection closed
+  is replaced by the `ready` handler's, and every later reconnect still re-subscribes.
 - **Closing the application no longer hangs while an SSE stream is open.** Nest awaits the HTTP
   server's close before it runs `onApplicationShutdown`, and the server does not finish closing
   while a response is open, but the streams were ended only in that hook. One open stream therefore
