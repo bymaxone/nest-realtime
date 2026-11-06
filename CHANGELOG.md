@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **With `transport: 'both'`, an emit that fails on both transports now rejects.** `emitToUser`,
+  `emitToTenant`, `emitToRoom` and `broadcast` on the composite transport run on SSE and WebSocket
+  and logged a failure of either without ever rethrowing, so an emit that reached no one still
+  resolved. A failure of one transport is still logged and resolves, since the other delivered it;
+  a failure of both now rejects with `REALTIME_TRANSPORT_UNAVAILABLE` (`error.code`), naming the
+  operation and carrying both reasons in `cause`, the way `joinRoom`, `leaveRoom` and `disconnect`
+  already do.
+
 ### Added
 
 - **Errors carry their code as a `code` property.** The `Error`s this library builds with a
@@ -33,6 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answers nothing in that time is left unready and the application still starts.
 
 #### Apply to a derived backend
+
+If you use `transport: 'both'`, an emit that fails on both transports now rejects instead of
+resolving. An emit you await inside a `try` is now caught; one you call without awaiting or without
+a `.catch` becomes an unhandled rejection when both transports fail, so add the `.catch` or await
+it. A failure of only one transport still resolves, as before.
 
 Nothing needs to change for the `code` property: it is added to errors you already catch, and
 their messages are the same. Where you match on the message text to tell a bus failure from a
