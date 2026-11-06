@@ -479,7 +479,7 @@ A complete `@bymax-one/nest-auth` bridge is in [docs/examples/nest-auth-bridge.m
 
 ### Re-Authentication
 
-Long-lived connections outlive short-lived tokens. `reauthenticationPolicy` revalidates on an interval and either drops the connection or emits `connection:reauthentication-failed`, depending on `onFailure`. Successful checks are cached for `cacheTtlMs` so a busy connection is not revalidated on every event.
+Long-lived connections outlive short-lived tokens. `reauthenticationPolicy` revalidates on an interval and either drops the connection or emits `connection:reauthentication-failed` and then drops it, depending on `onFailure`. The connection is dropped even when that event cannot be sent: the event is a notification, and the failure to send it is logged. Successful checks are cached for `cacheTtlMs` so a busy connection is not revalidated on every event.
 
 ### Security Checklist
 
