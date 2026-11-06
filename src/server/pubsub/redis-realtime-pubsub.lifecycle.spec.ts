@@ -324,6 +324,38 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
     }),
   )
 
+  // After the boot left the instance unready because Redis was not there, a host client that
+  // refuses commands before it is connected must recover like any other: when the connection comes
+  // up the subscriber subscribes, readiness flips to up, and what the bus pushes is delivered.
+  it(
+    'recovers and delivers once Redis comes up, for a host client with enableOfflineQueue false',
+    traced(async () => {
+      const { warn, log } = spies()
+      const fake = await closedPort()
+      const pubsub = new RedisRealtimePubSub({
+        client: client(fake.port, { enableOfflineQueue: false }),
+      })
+      const received: RealtimePubSubMessage[] = []
+      await subscribe(pubsub, (message) => received.push(message))
+      expect(pubsub.isSubscribed()).toBe(false)
+      expect(linesAbout(warn, 'not subscribed to')).toHaveLength(1)
+
+      behave(fake, healthyRedis)
+      await fake.start()
+      servers.push(fake)
+      await until('the instance to report subscribed', () => pubsub.isSubscribed())
+      const message: RealtimePubSubMessage = {
+        op: 'disconnect',
+        args: { connectionId: 'c1' },
+        origin: 'other',
+      }
+      fake.broadcast(pushed(CHANNEL, JSON.stringify(message)))
+      await until('the pushed message', () => received.length === 1)
+      expect(received[0]).toEqual(message)
+      expect(linesAbout(log, 'Subscribed to')).toEqual([UP])
+    }),
+  )
+
   // Shutdown awaits the unsubscribe; QUIT to a Redis that never answered would block it forever.
   it(
     'unsubscribes at once when Redis was never reachable',

@@ -35,9 +35,11 @@ outside it already failed every connection, except `NaN`, which flooded each con
 keepalives; now every one of them fails when the application starts.
 
 If you pass `RedisRealtimePubSub` a client created with `enableOfflineQueue: false`, as nest-cache's
-default client is, upgrade to this release: 1.2.7 fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`
-on such a client, and earlier versions did not subscribe at all. Nothing needs to change in your
-configuration.
+default client is, upgrade to this release. 1.2.7 fails the boot with `REALTIME_PUBSUB_UNAVAILABLE`
+on such a client. Earlier versions did not fail: they logged `Failed to subscribe to pub/sub ...
+Cross-instance fan-out disabled` once at start-up and then ran without cross-instance delivery, so
+if you ran one of them with such a client, revocations and emits from your other instances may
+never have reached it. Nothing needs to change in your configuration.
 
 ## [1.2.7] - 2026-11-01
 
