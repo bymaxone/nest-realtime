@@ -132,17 +132,19 @@ describe("closing an application on transport 'both' with an open SSE stream", (
   })
 })
 
-// A connection opened while a slow shutdown hook still holds the close back is the window in which an
-// SSE stream would hold the HTTP server open; Socket.IO disconnects every socket when the server
-// closes, so a late WebSocket connection cannot hold the close.
-describe('a WebSocket connection opened while a slow shutdown hook holds the close back', () => {
+// A handshake that arrives while a slow shutdown hook still holds the close back is one nothing would
+// end before the sockets are closed, and a host store may already be closed under its authenticator.
+// Socket.IO disconnects every socket when the server closes, so the close does not hang either way.
+describe('a WebSocket handshake that arrives while a slow shutdown hook holds the close back', () => {
   let app: INestApplication
   let url: string
   let socket: Socket | undefined
   let release: () => void
   let entered: Promise<void>
+  const authenticate = jest.fn(async () => ({ userId: 'u1' }))
 
   beforeEach(async () => {
+    authenticate.mockClear()
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     const hold = new Promise<void>((resolve) => (release = resolve))
     let enter: () => void
@@ -153,9 +155,11 @@ describe('a WebSocket connection opened while a slow shutdown hook holds the clo
         await hold
       }
     }
+    // The slow provider joins the realtime module itself: the hooks of one module's providers run
+    // in the same turn, so the transport's hook has run while this one is held.
     const realtime = BymaxRealtimeWebSocketModule.forRoot({
       transport: 'websocket',
-      authenticator: { authenticate: async () => ({ userId: 'u1' }) },
+      authenticator: { authenticate },
     })
     realtime.providers = [...(realtime.providers ?? []), SlowToShutDown]
     const module = await Test.createTestingModule({ imports: [realtime] }).compile()
@@ -166,25 +170,29 @@ describe('a WebSocket connection opened while a slow shutdown hook holds the clo
   })
 
   afterEach(() => {
+    // A failed assertion must not leave the close held back.
+    release()
     socket?.close()
     socket = undefined
     jest.restoreAllMocks()
   })
 
-  it('closes within the bound, and disconnects the client', async () => {
+  it('is refused with REALTIME_TRANSPORT_UNAVAILABLE before the authenticator runs, and the close finishes', async () => {
     const closing = app.close()
     await entered
     socket = io(url, { transports: ['websocket'], reconnection: false })
-    await new Promise<void>((resolve, reject) => {
-      socket?.on('connection:established', () => resolve())
-      socket?.on('connect_error', reject)
-    })
-    const disconnected = new Promise<void>((resolve) => socket?.on('disconnect', () => resolve()))
+    const refusal = await new Promise<{ message: string; data?: { code?: string } }>(
+      (resolve, reject) => {
+        socket?.on('connection:established', () => reject(new Error('the handshake was accepted')))
+        socket?.on('connect_error', resolve)
+      },
+    )
     release()
 
+    expect(refusal.data?.code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+    expect(authenticate).not.toHaveBeenCalled()
     await expect(
       closeWithin({ close: () => closing } as INestApplication, CLOSE_WITHIN_MS),
     ).resolves.toBeUndefined()
-    await expect(disconnected).resolves.toBeUndefined()
   })
 })

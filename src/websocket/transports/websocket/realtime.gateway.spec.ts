@@ -51,7 +51,7 @@ describe('RealtimeGateway', () => {
   let gateway: RealtimeGateway
   let transportMock: jest.Mocked<
     Pick<WebSocketTransport, 'setServer' | 'authenticator' | 'registerSocket' | 'unregisterSocket'>
-  >
+  > & { shuttingDown: boolean }
   let authenticator: jest.Mocked<IConnectionAuthenticator>
   const validAuth: AuthenticationResult = { userId: 'u-1', tenantId: 't-1', roles: ['admin'] }
 
@@ -75,6 +75,7 @@ describe('RealtimeGateway', () => {
       authenticator: jest.fn().mockReturnValue(authenticator),
       registerSocket: jest.fn().mockResolvedValue(undefined),
       unregisterSocket: jest.fn().mockResolvedValue(undefined),
+      shuttingDown: false,
     }
 
     const module: TestingModule = await buildModule()
@@ -244,6 +245,16 @@ describe('RealtimeGateway', () => {
     } finally {
       errorSpy.mockRestore()
     }
+  })
+
+  it('handleConnection disconnects without authenticating once shutdown has begun', async () => {
+    // The path for a socket the handshake middleware did not authenticate.
+    transportMock.shuttingDown = true
+    const socket = makeSocket()
+    await gateway.handleConnection(socket as never)
+    expect(authenticator.authenticate).not.toHaveBeenCalled()
+    expect(socket.disconnect).toHaveBeenCalledWith(true)
+    expect(transportMock.registerSocket).not.toHaveBeenCalled()
   })
 
   it('handleConnection calls registerSocket on valid auth', async () => {
@@ -561,6 +572,39 @@ describe('RealtimeGateway', () => {
       const err = next.mock.calls[0]?.[0] as Error & { data?: { code?: string } }
       expect(err.message).toBe('REALTIME_AUTH_FAILED')
       expect(err.data).toEqual({ code: 'REALTIME_AUTH_FAILED' })
+    })
+
+    it('refuses a handshake with REALTIME_TRANSPORT_UNAVAILABLE, without authenticating, once shutdown has begun', async () => {
+      // A host store may already be closed under the authenticator, and nothing would end the socket.
+      transportMock.shuttingDown = true
+      const next = jest.fn()
+
+      await installMiddleware()(makeSocket(), next)
+
+      expect(authenticator.authenticate).not.toHaveBeenCalled()
+      expect(next).toHaveBeenCalledTimes(1)
+      const err = next.mock.calls[0]?.[0] as Error & { data?: { code?: string } }
+      expect(err.message).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+      expect(err.data).toEqual({ code: 'REALTIME_TRANSPORT_UNAVAILABLE' })
+    })
+
+    it('refuses a handshake whose authentication finished after shutdown began', async () => {
+      authenticator.authenticate.mockImplementation(async () => {
+        transportMock.shuttingDown = true
+        return validAuth
+      })
+      const socket = makeSocket()
+      const next = jest.fn()
+
+      await installMiddleware()(socket, next)
+      await gateway.handleConnection(socket as never)
+
+      expect(next).toHaveBeenCalledTimes(1)
+      const err = next.mock.calls[0]?.[0] as Error & { data?: { code?: string } }
+      expect(err.data).toEqual({ code: 'REALTIME_TRANSPORT_UNAVAILABLE' })
+      // The identity was not kept, so handleConnection has nothing to register and does not authenticate again.
+      expect(authenticator.authenticate).toHaveBeenCalledTimes(1)
+      expect(transportMock.registerSocket).not.toHaveBeenCalled()
     })
 
     it('lets an accepted handshake through and keeps its identity for handleConnection', async () => {
