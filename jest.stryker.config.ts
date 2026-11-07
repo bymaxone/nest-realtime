@@ -20,8 +20,10 @@ const config: Config = {
   /**
    * Stryker's Jest runner runs one flat configuration and does not honour `projects`, so the
    * environment is chosen per test file: jsdom for a spec under `react/`, node for the rest.
+   * Stryker resolves this path itself, without Jest's `<rootDir>` substitution, so it is built
+   * from the working directory, which is the repository root for both Jest and Stryker.
    */
-  testEnvironment: '<rootDir>/../test/setup/stryker-environment.cjs',
+  testEnvironment: `${process.cwd()}/test/setup/stryker-environment.cjs`,
   moduleFileExtensions: ['tsx', 'ts', 'js', 'json'],
   testRegex: '.*\\.spec\\.tsx?$',
   setupFiles: ['reflect-metadata'],
