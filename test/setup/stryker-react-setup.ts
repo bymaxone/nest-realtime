@@ -5,6 +5,6 @@
  * needs `window`, which only the jsdom environment of a `react/` spec provides.
  */
 if (typeof window !== 'undefined') {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- loaded conditionally, after the environment exists
+  // Loaded conditionally, after the environment exists, so it cannot be a static import.
   require('./react-setup')
 }
