@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `beforeApplicationShutdown` on, the middleware refuses it with a `connect_error` whose
   `data.code` is `REALTIME_TRANSPORT_UNAVAILABLE`, before the authenticator runs and again if
   shutdown began while the authenticator was running; this is the refusal SSE gives with a 503.
-  Apply to a derived backend: a client that reconnects on `connect_error` should treat that code as
-  "try another instance", not as a credential failure.
+  The code differs from `REALTIME_AUTH_FAILED`, which the same middleware uses for a refused
+  credential, so a client can tell the two apart.
 
 ## [1.2.9] - 2026-11-06
 
