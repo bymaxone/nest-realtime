@@ -111,6 +111,7 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
   // Tear down the current socket (remove listeners + disconnect) and clear the ref.
   // Removing listeners first prevents the abandoned socket's `disconnect` handler from
   // mutating state after a new socket has taken its place.
+  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
   const disposeSocket = useCallback(() => {
     const sock = socketRef.current as SocketLike | null
     if (sock) {
@@ -118,9 +119,9 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
       sock.disconnect()
     }
     socketRef.current = null
-    // Stryker disable next-line ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
   }, [])
 
+  // Stryker restore ArrayDeclaration
   // Depend on the credential VALUES, never on the `auth` object identity. A consumer
   // that writes `auth={{ token }}` inline builds a new object on every render; keying
   // `connect` on that object rebuilt it every render, and the effect below then tore
@@ -169,8 +170,8 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
     }
   }, [opts.enabled, opts.url, authTicket, authToken, opts.path, disposeSocket])
 
-  // Stryker disable next-line ConditionalExpression: equivalent — `connect` returns at once when `enabled` is false and `disposeSocket` is idempotent, so a disabled hook behaves the same without this guard; measured by running the React specs without it
   useEffect(() => {
+    // Stryker disable next-line ConditionalExpression: equivalent — `connect` returns at once when `enabled` is false and `disposeSocket` is idempotent, so a disabled hook behaves the same without this guard; measured by running the React specs without it
     if (opts.enabled === false) return
     void connect()
     // Unmount cleanup disconnects exactly once — `disposeSocket` is idempotent and
@@ -178,12 +179,13 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
     return () => disposeSocket()
   }, [connect, opts.enabled, disposeSocket])
 
+  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
   const emit = useCallback((event: string, data: unknown): void => {
     const sock = socketRef.current as SocketLike | null
     sock?.emit(event, data)
-    // Stryker disable next-line ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
   }, [])
 
+  // Stryker restore ArrayDeclaration
   const reconnect = useCallback(() => {
     void connect()
   }, [connect])
