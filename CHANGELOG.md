@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A WebSocket handshake that arrives while the application is closing is refused.** The handshake
+  middleware authenticated every handshake and accepted it, however late it came, so a handshake
+  that arrived once shutdown had begun reached an authenticator whose store the host may already
+  have closed, and was accepted into a server that was about to close. From
+  `beforeApplicationShutdown` on, the middleware refuses it with a `connect_error` whose
+  `data.code` is `REALTIME_TRANSPORT_UNAVAILABLE`, before the authenticator runs and again if
+  shutdown began while the authenticator was running; this is the refusal SSE gives with a 503.
+  Apply to a derived backend: a client that reconnects on `connect_error` should treat that code as
+  "try another instance", not as a credential failure.
+
 ## [1.2.9] - 2026-11-06
 
 ### Changed

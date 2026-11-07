@@ -68,7 +68,16 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     next: (err?: Error) => void,
   ): Promise<void> => {
     try {
+      if (this.transport.shuttingDown) {
+        next(this.unavailable())
+        return
+      }
       const auth = await this.transport.authenticator().authenticate(this.buildAuthContext(socket))
+      // Authentication is asynchronous, so shutdown may have begun while this handshake waited.
+      if (this.transport.shuttingDown) {
+        next(this.unavailable())
+        return
+      }
       if (!auth) {
         const refusal = new Error(REALTIME_ERROR_CODES.AUTH_FAILED) as Error & { data: unknown }
         refusal.data = { code: REALTIME_ERROR_CODES.AUTH_FAILED }
@@ -83,6 +92,15 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
       next(new Error('Internal Server Error'))
     }
+  }
+
+  /** The refusal for a handshake that arrives once shutdown has begun: a `connect_error` carrying `data.code`. */
+  private unavailable(): Error {
+    const refusal = new Error(REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE) as Error & {
+      data: unknown
+    }
+    refusal.data = { code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE }
+    return refusal
   }
 
   /** Wire the resolved Socket.IO server to the transport after gateway init. */
@@ -168,6 +186,10 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       let resolvedAuth = this.authenticated.get(socket)
       this.authenticated.delete(socket)
       if (!resolvedAuth) {
+        if (this.transport.shuttingDown) {
+          socket.disconnect(true)
+          return
+        }
         const auth = await this.transport
           .authenticator()
           .authenticate(this.buildAuthContext(socket))

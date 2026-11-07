@@ -110,6 +110,13 @@ describe('WebSocketTransport', () => {
     expect(transport.kind).toBe('websocket')
   })
 
+  it('refuses handshakes only from beforeApplicationShutdown on', async () => {
+    // The gateway reads this to refuse a handshake that arrives while the application closes.
+    expect(transport.shuttingDown).toBe(false)
+    await transport.beforeApplicationShutdown()
+    expect(transport.shuttingDown).toBe(true)
+  })
+
   it('setServer logs the wiring message', () => {
     const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     try {

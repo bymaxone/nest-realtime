@@ -50,6 +50,8 @@ export class WebSocketTransport implements ITransport {
   /** Nullable until the gateway's afterInit wires the instance. */
   private server: Server | null = null
   private warnedUnattached = false
+  /** Set once shutdown begins; a handshake that arrives from then on is refused. */
+  #shuttingDown = false
 
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
@@ -58,6 +60,22 @@ export class WebSocketTransport implements ITransport {
     @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks: IConnectionLifecycleHooks,
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
   ) {}
+
+  /**
+   * Mark shutdown as begun, so the gateway refuses a handshake from here on.
+   *
+   * Socket.IO closes every connection that is open when the server closes, so no connection is
+   * torn down here; a socket accepted after this point would only be closed a moment later, and
+   * its authenticator may already depend on a store the host has closed.
+   */
+  async beforeApplicationShutdown(): Promise<void> {
+    this.#shuttingDown = true
+  }
+
+  /** Whether shutdown has begun, after which a new handshake is refused. */
+  get shuttingDown(): boolean {
+    return this.#shuttingDown
+  }
 
   /**
    * Wire the Socket.IO server. Called by `RealtimeGateway.afterInit`.
