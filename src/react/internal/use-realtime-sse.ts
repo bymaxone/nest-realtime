@@ -170,6 +170,7 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
   // recovered, closing a healthy `EventSource` and losing the `Last-Event-ID` state
   // the browser keeps per object. Called before arming a new timer, on a successful
   // open, and on teardown.
+  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
   const clearReconnectTimer = useCallback(() => {
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current)
@@ -177,6 +178,7 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
     }
   }, [])
 
+  // Stryker restore ArrayDeclaration
   const connect = useCallback(() => {
     if (opts.enabled === false) return
 
@@ -268,6 +270,7 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
   ])
 
   useEffect(() => {
+    // Stryker disable next-line ConditionalExpression: equivalent — `connect` returns at once when `enabled` is false and the cleanup then finds no source, so a disabled hook behaves the same without this guard; measured by running the React specs without it
     if (opts.enabled === false) return
     connect()
     return () => {

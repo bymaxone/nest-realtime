@@ -162,3 +162,27 @@ describe('useRealtime — transport detection', () => {
     expect(result.current.reconnectAttempts).toBe(0)
   })
 })
+
+describe('useRealtime — option forwarding', () => {
+  it('treats transport: auto on a ws:// URL as detection, not as a transport name', () => {
+    // `auto` must fall through to URL detection; taken literally it would match no transport and
+    // silently select SSE for a WebSocket URL.
+    const { result } = renderHook(() => useRealtime({ url: 'ws://localhost', transport: 'auto' }))
+    expect(result.current.transport).toBe('websocket')
+    expect(mockWs).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }))
+  })
+
+  it('omits withCredentials from the SSE hook when the caller did not set it', () => {
+    // An explicit `undefined` would override the SSE hook's own default.
+    renderHook(() => useRealtime({ url: '/realtime/sse' }))
+    expect(mockSse.mock.calls[0]?.[0]).not.toHaveProperty('withCredentials')
+  })
+
+  it('omits auth and path from the WebSocket hook when the caller did not set them', () => {
+    // An explicit `undefined` would override the WebSocket hook's own defaults.
+    renderHook(() => useRealtime({ url: 'ws://localhost' }))
+    const passed = mockWs.mock.calls[0]?.[0]
+    expect(passed).not.toHaveProperty('auth')
+    expect(passed).not.toHaveProperty('path')
+  })
+})

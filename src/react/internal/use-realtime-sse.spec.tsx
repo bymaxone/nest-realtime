@@ -604,4 +604,87 @@ describe('useRealtimeSse', () => {
 
     jest.useRealTimers()
   })
+
+  it('subscribes to the reserved and presence names and to nothing else when none are given', () => {
+    // An empty list must add no listener: a stray entry would subscribe to a name nobody sends.
+    renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
+    expect([...lastInstance().listeners.keys()].sort()).toEqual(
+      [
+        'connection:established',
+        'connection:reauthentication-failed',
+        'connection:credential-expiring',
+        'room:joined',
+        'room:left',
+        'presence:online',
+        'presence:offline',
+      ].sort(),
+    )
+  })
+
+  it('opens the stream without credentials unless asked to', () => {
+    renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
+    expect(lastInstance().withCredentials).toBe(false)
+  })
+
+  it('reports a connection error with its own message', () => {
+    jest.useFakeTimers()
+    const { result } = renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
+    act(() => {
+      emitError(lastInstance())
+    })
+    expect(result.current.error?.message).toBe('SSE connection error')
+  })
+
+  it('doubles the retry delay after each failure, exactly, up to the cap', () => {
+    // The delays are 2x, 4x, then the cap; a retry that fires early or late is a different policy.
+    jest.useFakeTimers()
+    renderHook(() =>
+      useRealtimeSse({ url: '/realtime/sse', reconnectInitialMs: 1_000, reconnectMaxMs: 3_000 }),
+    )
+    const opened = (): number => instances.length
+    // A stream that never opens: the mock's deferred open would otherwise recover it and cancel the retry.
+    const failToOpen = (): void => {
+      lastInstance().readyState = 2
+    }
+
+    failToOpen()
+    act(() => {
+      emitError(lastInstance())
+    })
+    act(() => {
+      jest.advanceTimersByTime(1_999)
+    })
+    expect(opened()).toBe(1)
+    act(() => {
+      jest.advanceTimersByTime(1)
+    })
+    expect(opened()).toBe(2)
+
+    failToOpen()
+    act(() => {
+      emitError(lastInstance())
+    })
+    act(() => {
+      jest.advanceTimersByTime(2_999)
+    })
+    expect(opened()).toBe(2)
+    act(() => {
+      jest.advanceTimersByTime(1)
+    })
+    expect(opened()).toBe(3)
+  })
+
+  it('reconnects with the options of the latest render, not those of the first', () => {
+    // A reconnect() bound to the first render would reopen the old URL.
+    const { result, rerender } = renderHook(({ url }: { url: string }) => useRealtimeSse({ url }), {
+      initialProps: { url: '/old' },
+    })
+    rerender({ url: '/new' })
+
+    act(() => {
+      result.current.reconnect()
+    })
+
+    expect(lastInstance().url).toBe('/new')
+  })
 })

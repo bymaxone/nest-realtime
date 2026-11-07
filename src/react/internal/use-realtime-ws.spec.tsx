@@ -251,8 +251,10 @@ describe('useRealtimeWs', () => {
       await new Promise((r) => setTimeout(r, 10))
     })
     const callsBefore = mockIo.mock.calls.length
-    act(() => {
+    // io() is reached only after the dynamic import resolves, so let that happen before asserting.
+    await act(async () => {
       result.current.reconnect()
+      await new Promise((r) => setTimeout(r, 10))
     })
     expect(mockIo.mock.calls.length).toBe(callsBefore)
   })
@@ -308,5 +310,60 @@ describe('useRealtimeWs', () => {
       'ws://localhost',
       expect.objectContaining({ auth: { token: 't-2' } }),
     )
+  })
+})
+
+describe('useRealtimeWs — enabled, defaults and reconnect', () => {
+  it('opens the socket when enabled is explicitly true', async () => {
+    // `enabled: true` is what the universal hook passes on the WebSocket branch.
+    renderHook(() => useRealtimeWs({ url: 'ws://localhost', enabled: true }))
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+  })
+
+  it('never opens a socket while disabled, even when reconnect() is called', async () => {
+    // Both the mount effect and connect() must honour `enabled: false`.
+    const { result } = renderHook(() => useRealtimeWs({ url: 'ws://localhost', enabled: false }))
+    await act(async () => {
+      result.current.reconnect()
+      await new Promise((r) => setTimeout(r, 10))
+    })
+    expect(mockIo).not.toHaveBeenCalled()
+  })
+
+  it('uses /socket.io as the path when none is given', async () => {
+    renderHook(() => useRealtimeWs({ url: 'ws://localhost' }))
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    expect(mockIo.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ path: '/socket.io' }))
+  })
+
+  it('reports disconnected as soon as a reconnect starts, until the new socket connects', async () => {
+    // Between tearing the old socket down and the new one connecting there is no connection.
+    const { result } = renderHook(() => useRealtimeWs({ url: 'ws://localhost' }))
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    act(() => trigger('connect'))
+    expect(result.current.connected).toBe(true)
+
+    act(() => {
+      result.current.reconnect()
+    })
+    expect(result.current.connected).toBe(false)
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(2))
+  })
+
+  it('reconnects with the options of the latest render, not those of the first', async () => {
+    // A reconnect() bound to the first render would reopen the old URL.
+    const { result, rerender } = renderHook(({ url }: { url: string }) => useRealtimeWs({ url }), {
+      initialProps: { url: 'ws://a.example' },
+    })
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    rerender({ url: 'ws://b.example' })
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      result.current.reconnect()
+      await new Promise((r) => setTimeout(r, 10))
+    })
+
+    expect(mockIo.mock.calls[mockIo.mock.calls.length - 1]?.[0]).toBe('ws://b.example')
   })
 })
