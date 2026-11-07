@@ -91,6 +91,25 @@ describe('usePresence', () => {
     expect(result.current.count).toBe(0)
   })
 
+  it('ignores a last event that is neither online nor offline', () => {
+    // Only the two presence types change the set; any other event, even one that names an
+    // online user, must leave it alone.
+    const { rerender, result } = renderHook(
+      ({ events }: { events: Array<{ type: string; data: unknown }> }) => {
+        mockUseContext.mockReturnValue(makeContextStub(events))
+        return usePresence()
+      },
+      { initialProps: { events: [{ type: 'presence:online', data: { userId: 'u1' } }] } },
+    )
+    act(() => {})
+    expect(result.current.onlineUserIds).toContain('u1')
+
+    rerender({ events: [{ type: 'invoice.paid', data: { userId: 'u1' } }] })
+    act(() => {})
+    expect(result.current.onlineUserIds).toContain('u1')
+    expect(result.current.count).toBe(1)
+  })
+
   it('isOnline returns true for an online user and false for an offline user', () => {
     // isOnline() must reflect the current online set accurately.
     mockUseContext.mockReturnValue(
