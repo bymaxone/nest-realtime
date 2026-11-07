@@ -383,6 +383,19 @@ describe('RedisRealtimePubSub', () => {
       },
     )
 
+    // The wait listens for exactly the four events that end a first connection attempt, no more:
+    // Stryker does not mutate the array literal behind them, so this comparison is what pins it.
+    it('listens for exactly the events that end a first connection attempt while it waits', async () => {
+      const pub = publisher('connecting')
+      const subscribing = new RedisRealtimePubSub({ client: pub as unknown as Redis }).subscribe(
+        jest.fn(),
+      )
+      expect(await pending(subscribing)).toBe(true)
+      expect([...pub.eventNames()].sort()).toStrictEqual(['close', 'end', 'ready', 'reconnecting'])
+      pub.emit('ready')
+      await subscribing
+    })
+
     // The wait starts only once the subscriber is attached: a subscriber that reconnects while the
     // publisher is still connecting must re-subscribe, and a boot that fails never starts the wait.
     it('re-subscribes when the subscriber reconnects while the publisher is still connecting', async () => {

@@ -58,27 +58,28 @@ function trackedSources(root) {
 
 /** Lengths of the tracked source files over the limit, keyed by path. */
 function oversize(root) {
-  const lengths = {}
+  const lengths = new Map()
   for (const path of trackedSources(root)) {
     const length = lineCount(readFileSync(join(root, path), 'utf8'))
-    if (length > LIMIT) lengths[path] = length
+    if (length > LIMIT) lengths.set(path, length)
   }
   return lengths
 }
 
-/** Reads the baseline's `files` table from JSON text, failing loudly on a file that is not one. */
+/** Reads the baseline's `files` table from JSON text as a map, failing loudly on a file that is not one. */
 function parseBaseline(text, path) {
   const parsed = JSON.parse(text)
   const files = parsed?.files
   if (files === null || typeof files !== 'object' || Array.isArray(files)) {
     throw new Error(`${path}: expected { "files": { "<path>": <length> } }`)
   }
-  for (const [file, length] of Object.entries(files)) {
+  const table = new Map(Object.entries(files))
+  for (const [file, length] of table) {
     if (!Number.isInteger(length) || length <= LIMIT) {
       throw new Error(`${path}: ${file} must record an integer length above ${LIMIT}, got ${String(length)}`)
     }
   }
-  return files
+  return table
 }
 
 /** The baseline table at a git revision, or `null` when that revision has no baseline file. */
@@ -100,11 +101,12 @@ function baselineAt(root, ref, path) {
 /** Problems with how the baseline differs from the base revision's: it may only lose or lower entries. */
 function widening(baseline, base) {
   const problems = []
-  for (const [file, length] of Object.entries(baseline)) {
-    if (base[file] === undefined) {
+  for (const [file, length] of baseline) {
+    const inBase = base.get(file)
+    if (inBase === undefined) {
       problems.push(`${file} is on the baseline but the base revision does not have it. A new offender is split, not listed.`)
-    } else if (length > base[file]) {
-      problems.push(`${file} is recorded at ${length} lines, above ${base[file]} on the base revision.`)
+    } else if (length > inBase) {
+      problems.push(`${file} is recorded at ${length} lines, above ${inBase} on the base revision.`)
     }
   }
   return problems
@@ -113,8 +115,8 @@ function widening(baseline, base) {
 /** Compares the files over the limit with the baseline and returns one message per problem. */
 function problemsOf(over, baseline) {
   const problems = []
-  for (const [file, length] of Object.entries(over)) {
-    const recorded = baseline[file]
+  for (const [file, length] of over) {
+    const recorded = baseline.get(file)
     if (recorded === undefined) {
       problems.push(`${file} has ${length} lines, over the limit of ${LIMIT}. Split it by responsibility.`)
     } else if (length > recorded) {
@@ -123,8 +125,8 @@ function problemsOf(over, baseline) {
       problems.push(`${file} shrank to ${length} lines. Lower its baseline entry from ${recorded} to ${length}.`)
     }
   }
-  for (const file of Object.keys(baseline)) {
-    if (over[file] === undefined) {
+  for (const file of baseline.keys()) {
+    if (!over.has(file)) {
       problems.push(`${file} is on the baseline but is no longer over ${LIMIT} lines or tracked. Remove its entry.`)
     }
   }
