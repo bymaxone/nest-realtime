@@ -18,7 +18,10 @@
   "mutate": [
     "src/server/**/*.ts",
     "src/websocket/**/*.ts",
+    "src/react/**/*.ts",
+    "src/react/**/*.tsx",
     "!src/**/*.spec.ts",
+    "!src/**/*.spec.tsx",
     "!src/**/index.ts",
     "!src/server/interfaces/**",
     "!src/**/*.interface.ts"
