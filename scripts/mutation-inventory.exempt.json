@@ -1,0 +1,42 @@
+[
+  {
+    "file": "src/server/pubsub/fake-resp-server.spec.ts",
+    "reason": "Tests the in-process RESP server that the Redis specs run against. It is test infrastructure and imports no mutated source, so no mutant can be attributed to it."
+  },
+  {
+    "file": "src/server/check-api-surface.spec.ts",
+    "reason": "Tests scripts/check-api-surface.mjs, a release tooling script. It imports no mutated source."
+  },
+  {
+    "file": "src/check-file-length.spec.ts",
+    "reason": "Tests scripts/check-file-length.mjs, a CI tooling script. It imports no mutated source."
+  },
+  {
+    "file": "src/strip-bundle-comments.spec.ts",
+    "reason": "Tests the build's bundle comment stripper, a tooling script. It imports no mutated source."
+  },
+  {
+    "file": "src/stryker-jest-inventory.spec.ts",
+    "reason": "Checks that the Stryker Jest config matches every spec under src. It is a check on the mutation setup itself and imports no mutated source."
+  },
+  {
+    "file": "src/stryker-scope.spec.ts",
+    "reason": "Checks that every shipped source file is mutated or listed with a reason. It reads the build config and the sources as text and imports no mutated source."
+  },
+  {
+    "file": "src/shared/constants/constants.spec.ts",
+    "reason": "Pins the as-const value tables in src/shared by exact equality. Stryker does not mutate an as-const literal, and src/shared is listed with that reason in src/stryker-scope.spec.ts."
+  },
+  {
+    "file": "test/fixtures/authenticators/bearer.authenticator.spec.ts",
+    "reason": "Tests an example authenticator fixture that documents the IConnectionAuthenticator contract. The fixture is not shipped and is not mutated."
+  },
+  {
+    "file": "test/fixtures/authenticators/cookie-jwt.authenticator.spec.ts",
+    "reason": "Tests an example authenticator fixture that documents the IConnectionAuthenticator contract. The fixture is not shipped and is not mutated."
+  },
+  {
+    "file": "test/fixtures/authenticators/ticket.authenticator.spec.ts",
+    "reason": "Tests an example authenticator fixture that documents the IConnectionAuthenticator contract. The fixture is not shipped and is not mutated."
+  }
+]
