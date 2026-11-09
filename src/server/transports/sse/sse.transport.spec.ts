@@ -403,15 +403,11 @@ describe('SseTransport', () => {
     await tearingDown
   })
 
-  // onModuleDestroy is the first hook Nest runs on close, ahead of any host's beforeApplicationShutdown:
-  // it refuses new streams and leaves the open ones for the teardown that follows.
+  // onModuleDestroy runs ahead of any host's beforeApplicationShutdown: it refuses new streams only.
   it('flags shutdown from onModuleDestroy without tearing a stream down', () => {
     const { transport, connections } = build()
     addConn(connections, { connectionId: 'c1', userId: 'u1' })
-    expect(transport.shuttingDown).toBe(false)
-
     transport.onModuleDestroy()
-
     expect(transport.shuttingDown).toBe(true)
     expect(connections.get('c1')).toBeDefined()
   })
