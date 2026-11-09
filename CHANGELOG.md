@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The code differs from `REALTIME_AUTH_FAILED`, which the same middleware uses for a refused
   credential, so a client can tell the two apart.
 
+#### Apply to a derived backend
+
+`WebSocketTransport` gains a public `beforeApplicationShutdown()` hook and a `shuttingDown` getter,
+and `RealtimeGateway` gains a private `unavailable` method. A class that extends either and already
+declares a member with one of those names has to rename it or override it on purpose. A subclass
+of `WebSocketTransport` that overrides `beforeApplicationShutdown` has to call
+`super.beforeApplicationShutdown()`, or the gateway keeps accepting handshakes while the
+application closes. A gateway that replaces `RealtimeGateway`'s handshake middleware gets no
+refusal from this change; it can read `transport.shuttingDown` itself.
+
 ## [1.2.9] - 2026-11-06
 
 ### Changed
