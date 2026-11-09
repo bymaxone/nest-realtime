@@ -163,12 +163,15 @@ function emittedStatements(text: string): string[] {
     )
 }
 
-/** Whether an expression is a literal made of strings, numbers and nested object literals only. */
+/** Whether an expression is a literal made of strings, numbers and nested object literals only, with plain keys. */
 function isPlainLiteral(node: ts.Expression): boolean {
   if (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return true
   if (ts.isObjectLiteralExpression(node)) {
     return node.properties.every(
-      (property) => ts.isPropertyAssignment(property) && isPlainLiteral(property.initializer),
+      (property) =>
+        ts.isPropertyAssignment(property) &&
+        !ts.isComputedPropertyName(property.name) &&
+        isPlainLiteral(property.initializer),
     )
   }
   return false
@@ -294,6 +297,14 @@ describe('mutation scope', () => {
     expect(nonTableStatements('export function f() { return 1 }')).toHaveLength(1)
     expect(nonTableStatements('export const A = f() as const')).toHaveLength(1)
     expect(nonTableStatements('export const A = { a: g() } as const')).toHaveLength(1)
+    expect(
+      nonTableStatements("export const A = { [String(Date.now())]: 'x' } as const"),
+    ).toHaveLength(1)
+    expect(nonTableStatements("export const A = { ['a']: 'x' } as const")).toHaveLength(1)
+    expect(nonTableStatements('export const A = { ...B } as const')).toHaveLength(1)
+    expect(nonTableStatements("export const A = { 'a-b': 'x', 1: 'y', c: 'z' } as const")).toEqual(
+      [],
+    )
     expect(nonTableStatements("export const A = { a: 'x' } as const\nA.a")).toHaveLength(1)
   })
 
