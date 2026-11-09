@@ -28,11 +28,11 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
 //     path that failed without failing its call, and the Redis subscriber's lifecycle state)
-//   websocket  4,381 B →  4,850 B (the Socket.IO stack alone: the start-up message that names the
+//   websocket  4,714 B →  4,850 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
-//     attached or its fan-out throws, and the one-time warning for an emit made before the server
-//     is attached)
+//     attached or its fan-out throws, the one-time warning for an emit made before the server
+//     is attached, and the refusal of a handshake that arrives once shutdown has begun)
 //   shared       460 B →    510 B (types and constants)
 //   react      2,171 B →  2,400 B
 //

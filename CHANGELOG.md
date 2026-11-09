@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-11-09
+
 ### Fixed
 
 - **A WebSocket handshake that arrives while the application is closing is refused.** The handshake
@@ -925,7 +927,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.9...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.10...HEAD
+[1.2.10]: https://github.com/bymaxone/nest-realtime/compare/v1.2.9...v1.2.10
 [1.2.9]: https://github.com/bymaxone/nest-realtime/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/bymaxone/nest-realtime/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/bymaxone/nest-realtime/compare/v1.2.6...v1.2.7
