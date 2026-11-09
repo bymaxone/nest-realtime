@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-11-09
+
 ### Fixed
 
 - **A WebSocket handshake that arrives while the application is closing is refused.** The handshake
@@ -18,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shutdown began while the authenticator was running; this is the refusal SSE gives with a 503.
   The code differs from `REALTIME_AUTH_FAILED`, which the same middleware uses for a refused
   credential, so a client can tell the two apart.
+
+#### Apply to a derived backend
+
+`WebSocketTransport` gains a public `beforeApplicationShutdown()` hook and a `shuttingDown` getter,
+and `RealtimeGateway` gains a private `unavailable` method. A class that extends either and already
+declares a member with one of those names has to rename it or override it on purpose. A subclass
+of `WebSocketTransport` that overrides `beforeApplicationShutdown` has to call
+`super.beforeApplicationShutdown()`, or the gateway keeps accepting handshakes while the
+application closes. A gateway that replaces `RealtimeGateway`'s handshake middleware gets no
+refusal from this change; it can read `transport.shuttingDown` itself.
 
 ## [1.2.9] - 2026-11-06
 
@@ -925,7 +937,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.9...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.10...HEAD
+[1.2.10]: https://github.com/bymaxone/nest-realtime/compare/v1.2.9...v1.2.10
 [1.2.9]: https://github.com/bymaxone/nest-realtime/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/bymaxone/nest-realtime/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/bymaxone/nest-realtime/compare/v1.2.6...v1.2.7
