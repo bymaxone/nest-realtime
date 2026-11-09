@@ -136,56 +136,63 @@ describe('closing an application with SSE connections', () => {
 // Hooks run in parallel, so a provider whose beforeApplicationShutdown is slow keeps the close from
 // reaching the HTTP server while the transport's own hook has already run: the window in which a
 // new stream can still be opened.
-describe('a stream opened after the transport tore its streams down and before the server closes', () => {
-  let app: INestApplication
-  let port: number
-  let late: ClientRequest | undefined
-  let release: () => void
-  let entered: Promise<void>
+describe.each(['the realtime module', "the host's root module"] as const)(
+  'a stream opened while a slow shutdown hook in %s holds the close back',
+  (placement) => {
+    let app: INestApplication
+    let port: number
+    let late: ClientRequest | undefined
+    let release: () => void
+    let entered: Promise<void>
 
-  beforeEach(async () => {
-    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
-    const hold = new Promise<void>((resolve) => (release = resolve))
-    let enter: () => void
-    entered = new Promise<void>((resolve) => (enter = resolve))
-    class SlowToShutDown {
-      async beforeApplicationShutdown(): Promise<void> {
-        enter()
-        await hold
+    beforeEach(async () => {
+      jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+      const hold = new Promise<void>((resolve) => (release = resolve))
+      let enter: () => void
+      entered = new Promise<void>((resolve) => (enter = resolve))
+      class SlowToShutDown {
+        async beforeApplicationShutdown(): Promise<void> {
+          enter()
+          await hold
+        }
       }
-    }
-    // The slow provider joins the realtime module itself: the hooks of one module's providers run
-    // in parallel, so the transport's hook finishes while this one is still held.
-    const realtime = BymaxRealtimeModule.forRoot({
-      transport: 'sse',
-      authenticator: { authenticate: async () => ({ userId: 'u1' }) },
+      // The slow provider joins the realtime module itself: the hooks of one module's providers run
+      // in parallel, so the transport's hook finishes while this one is still held.
+      const realtime = BymaxRealtimeModule.forRoot({
+        transport: 'sse',
+        authenticator: { authenticate: async () => ({ userId: 'u1' }) },
+      })
+      const inRealtime = placement === 'the realtime module'
+      if (inRealtime) realtime.providers = [...(realtime.providers ?? []), SlowToShutDown]
+      const module: TestingModule = await Test.createTestingModule({
+        imports: [realtime],
+        providers: inRealtime ? [] : [SlowToShutDown],
+      }).compile()
+      app = module.createNestApplication()
+      await app.listen(0)
+      port = (app.getHttpServer().address() as AddressInfo).port
     })
-    realtime.providers = [...(realtime.providers ?? []), SlowToShutDown]
-    const module: TestingModule = await Test.createTestingModule({ imports: [realtime] }).compile()
-    app = module.createNestApplication()
-    await app.listen(0)
-    port = (app.getHttpServer().address() as AddressInfo).port
-  })
 
-  afterEach(() => {
-    late?.destroy()
-    late = undefined
-    jest.restoreAllMocks()
-  })
+    afterEach(() => {
+      late?.destroy()
+      late = undefined
+      jest.restoreAllMocks()
+    })
 
-  it('is refused with a 503, and does not keep the close pending', async () => {
-    const closing = app.close()
-    await entered
-    // The transport's own hook ran in parallel and has finished by now.
-    await new Promise((resolve) => setImmediate(resolve))
+    it('is refused with a 503, and does not keep the close pending', async () => {
+      const closing = app.close()
+      await entered
+      // The transport's own hook ran in parallel and has finished by now.
+      await new Promise((resolve) => setImmediate(resolve))
 
-    const refusal = await requestStream(port)
-    late = refusal.req
-    release()
+      const refusal = await requestStream(port)
+      late = refusal.req
+      release()
 
-    expect(refusal.status).toBe(503)
-    await expect(
-      closeWithin({ close: () => closing } as INestApplication, CLOSE_WITHIN_MS),
-    ).resolves.toBeUndefined()
-  })
-})
+      expect(refusal.status).toBe(503)
+      await expect(
+        closeWithin({ close: () => closing } as INestApplication, CLOSE_WITHIN_MS),
+      ).resolves.toBeUndefined()
+    })
+  },
+)

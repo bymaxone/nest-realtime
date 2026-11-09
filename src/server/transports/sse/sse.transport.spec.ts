@@ -403,6 +403,15 @@ describe('SseTransport', () => {
     await tearingDown
   })
 
+  // onModuleDestroy runs ahead of any host's beforeApplicationShutdown: it refuses new streams only.
+  it('flags shutdown from onModuleDestroy without tearing a stream down', () => {
+    const { transport, connections } = build()
+    addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    transport.onModuleDestroy()
+    expect(transport.shuttingDown).toBe(true)
+    expect(connections.get('c1')).toBeDefined()
+  })
+
   // The heartbeat interval getter honors config and falls back to the default.
   it('resolves the heartbeat interval', () => {
     expect(build({ sse: { heartbeatMs: 5_000 } }).transport.heartbeatMs).toBe(5_000)

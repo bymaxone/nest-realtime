@@ -96,6 +96,16 @@ export class SseTransport implements ITransport {
   ) {}
 
   /**
+   * Mark shutdown as begun at the first hook Nest runs on close, so that a slow
+   * `beforeApplicationShutdown` of the host's, which Nest runs before this transport's when it is in a
+   * module nearer the root, cannot leave a window in which a new stream is accepted. A slow
+   * `onModuleDestroy` in such a module still runs first; nothing the library owns runs earlier.
+   */
+  onModuleDestroy(): void {
+    this.#shuttingDown = true
+  }
+
+  /**
    * Tear down every SSE connection and stop heartbeat before the HTTP server closes.
    *
    * Nest awaits the HTTP server's close before it runs `onApplicationShutdown`, and the server

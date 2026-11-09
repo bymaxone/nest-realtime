@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Refusal during shutdown begins at `onModuleDestroy`, not at `beforeApplicationShutdown`.** Nest
+  runs the hooks of a module nearer the root before those of a module it imports, so a host's slow
+  `beforeApplicationShutdown` in the root module ran before the transport's own, and a WebSocket
+  handshake or an SSE stream arriving in that window was accepted. Nest runs every module's
+  `onModuleDestroy` before any `beforeApplicationShutdown`, so both transports now mark shutdown as
+  begun there: from then on a handshake gets `REALTIME_TRANSPORT_UNAVAILABLE` and a stream gets a 503. A slow `onModuleDestroy` in a module nearer the root than the realtime module still runs
+  first, and until it returns a connection is accepted: put slow shutdown work in
+  `beforeApplicationShutdown`, or make the host stop accepting traffic before it calls `close()`.
+
+#### Apply to a derived backend
+
+`SseTransport` and `WebSocketTransport` gain a public `onModuleDestroy()` that marks shutdown as
+begun. A subclass that overrides it has to call `super.onModuleDestroy()`.
+
 ## [1.2.10] - 2026-11-09
 
 ### Fixed
