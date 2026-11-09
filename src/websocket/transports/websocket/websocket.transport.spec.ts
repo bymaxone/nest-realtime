@@ -117,6 +117,13 @@ describe('WebSocketTransport', () => {
     expect(transport.shuttingDown).toBe(true)
   })
 
+  it('refuses handshakes from onModuleDestroy on, the first hook Nest runs on close', () => {
+    // Nest runs it before any beforeApplicationShutdown, including a slow one in the host's root module.
+    expect(transport.shuttingDown).toBe(false)
+    transport.onModuleDestroy()
+    expect(transport.shuttingDown).toBe(true)
+  })
+
   it('setServer logs the wiring message', () => {
     const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     try {

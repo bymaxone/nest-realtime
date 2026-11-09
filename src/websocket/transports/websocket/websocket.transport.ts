@@ -62,7 +62,20 @@ export class WebSocketTransport implements ITransport {
   ) {}
 
   /**
-   * Mark shutdown as begun, so the gateway refuses a handshake from here on.
+   * Mark shutdown as begun at the first hook Nest runs on close, so that no hook of the host's, however
+   * slow, can leave a window in which a handshake is accepted.
+   *
+   * Nest runs every module's `onModuleDestroy` before any `beforeApplicationShutdown`, and within a
+   * phase it runs a module nearer the root before one it imports, so a slow `beforeApplicationShutdown`
+   * in the host's root module runs before this transport's own. A slow `onModuleDestroy` in a module
+   * nearer the root than the realtime module still runs first; nothing the library owns runs earlier.
+   */
+  onModuleDestroy(): void {
+    this.#shuttingDown = true
+  }
+
+  /**
+   * Mark shutdown as begun, for a caller that runs only this hook; `onModuleDestroy` already did.
    *
    * Socket.IO closes every connection that is open when the server closes, so no connection is
    * torn down here; a socket accepted after this point would only be closed a moment later, and
