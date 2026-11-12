@@ -699,6 +699,41 @@ const hooks: IConnectionLifecycleHooks = {
 Like `roles`, it is a **connect-time snapshot**: a `revalidate` that keeps the connection alive
 does not refresh it. The library never reads a key.
 
+#### Joining rooms at admission
+
+`AuthenticationResult.rooms` lists extra rooms (a workspace, a project) that the library joins
+beside `user:` and `tenant:`, **before** the connection is announced:
+
+```typescript
+class WorkspaceAuthenticator implements IConnectionAuthenticator {
+  constructor(private readonly sessions: SessionStore) {}
+
+  async authenticate(ctx: ConnectionAuthContext): Promise<AuthenticationResult | null> {
+    const session = await this.sessions.find(ctx.cookies['sid'])
+    if (!session) return null
+    return { userId: session.userId, rooms: [`workspace:${session.workspaceId}`] }
+  }
+}
+```
+
+Scope a connection here, not by calling `joinRoom` from `onConnect`. `onConnect` runs after the
+connection is live, so an event published to the room in between is missed, and room events have
+no replay. Measured with a publish made while the `onConnect` join was still pending: both SSE and
+WebSocket delivered the next event and not that one. On SSE `onConnect` is also not awaited, and a
+hook that throws is only logged as a warning, so a connection scoped from there can stay live
+without its room. Neither behaviour changes; `rooms` is the way around both.
+
+A name must be a non-blank string of at most `ADMISSION_ROOM_LIMITS.MAX_ROOM_NAME_LENGTH`
+characters and must not start with `user:`, `tenant:` or `connection:`; at most
+`ADMISSION_ROOM_LIMITS.MAX_ROOMS` entries; duplicates join once. A result that breaks a rule
+is refused like a blank `userId` — a server fault (500 on SSE, a generic `connect_error` on
+WebSocket), not a 401 — and nothing is registered. The two limits are bounds against abuse, not
+measurements, and they apply to this field only: `joinRoom` stays free-form.
+
+The rooms are fixed at admission and handed back to `revalidate` in the original result. A
+different set returned later is not re-synchronized; use `joinRoom` and `leaveRoom` for changes
+during the connection.
+
 #### Client address versus peer address
 
 `authenticate` receives two addresses. On SSE `ip` is the address your application's
@@ -754,7 +789,8 @@ and joining `tenant:<other>` receives that tenant's events.
 There is no `emitToRole`. Roles are the consumer's authorization vocabulary, not
 the transport's — the library carries them through without interpreting them (see
 [Auth Inversion](#auth-inversion)). To deliver to a subset of connections by role,
-build a room for it in `onConnect`, where `ConnectionEventMeta.roles` carries the
+build a room for it in `onConnect` (a room that must hold from the first event belongs in
+[`rooms`](#joining-rooms-at-admission) instead), where `ConnectionEventMeta.roles` carries the
 snapshot the authenticator produced:
 
 ```typescript

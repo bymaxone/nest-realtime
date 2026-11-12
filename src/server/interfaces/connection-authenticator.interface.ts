@@ -75,6 +75,28 @@ export interface AuthenticationResult {
   readonly tenantId?: string
   readonly roles?: readonly string[]
   /**
+   * Extra rooms to join this connection to at admission, beside `user:` and `tenant:`.
+   *
+   * They are joined before the connection is announced or `onConnect` runs, so no event
+   * published to one of them can fall between admission and a later `joinRoom` — the
+   * window a join from `onConnect` leaves open. On SSE `onConnect` is not awaited
+   * and a hook that throws is only logged, so a connection scoped from there can go
+   * live, and stay, without its room; scope in `rooms`, not in `onConnect`.
+   *
+   * Each name must be a non-blank string of at most `ADMISSION_ROOM_LIMITS.MAX_ROOM_NAME_LENGTH`
+   * characters, must not start with `user:`, `tenant:` or `connection:` (the library
+   * composes those from the identity it resolved, or reserves them), and the list may
+   * hold at most `ADMISSION_ROOM_LIMITS.MAX_ROOMS` entries; duplicates join once.
+   * A result that breaks a rule is a contract violation, refused like a blank `userId`:
+   * a server fault, not a 401. The limits are bounds against abuse, not measurements.
+   * They apply to this field only; `joinRoom` stays free-form.
+   *
+   * The rooms are fixed at admission. `revalidate` is handed them back, but a different
+   * set returned later is not re-synchronized; use `joinRoom` and `leaveRoom` for
+   * changes during the connection.
+   */
+  readonly rooms?: readonly string[]
+  /**
    * Free-form extras for downstream code (e.g. feature flags, plan tier, a
    * correlation id read off the handshake headers).
    *

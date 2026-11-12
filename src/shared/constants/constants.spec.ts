@@ -4,6 +4,7 @@
  */
 import { REALTIME_ERROR_CODES } from './error-codes.constants'
 import { PRESENCE_EVENT_NAMES, RESERVED_EVENT_NAMES } from './reserved-events.constants'
+import { ADMISSION_ROOM_LIMITS } from './admission-rooms.constants'
 import { ROOM_PREFIXES } from './room-prefixes.constants'
 
 // Stryker does not mutate an object literal under `as const`, so no mutant guards these tables:
@@ -35,6 +36,10 @@ describe('the shared value tables', () => {
       TENANT: 'tenant',
       RESOURCE: 'resource',
     })
+  })
+
+  it('ADMISSION_ROOM_LIMITS holds exactly the two admission bounds', () => {
+    expect(ADMISSION_ROOM_LIMITS).toStrictEqual({ MAX_ROOMS: 32, MAX_ROOM_NAME_LENGTH: 256 })
   })
 
   it('RESERVED_EVENT_NAMES holds exactly the reserved event names', () => {

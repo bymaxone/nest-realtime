@@ -745,6 +745,31 @@ describe('ReauthenticationService', () => {
     expect(revalidate).toHaveBeenCalledWith('c1', expect.objectContaining({ tenantId: 't1' }))
   })
 
+  // The rooms joined at admission are handed back to revalidate with the rest of the original result.
+  it('passes the admission rooms to revalidate, and none when the connection has none', async () => {
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const withRooms: ConnectionRecord = {
+      ...mkRecord('c-rooms', 'u1'),
+      originalAuth: {
+        userId: 'u1',
+        tenantId: 't1',
+        roles: undefined,
+        rooms: ['w:1'],
+        metadata: undefined,
+      },
+    }
+    const connections = mkConnections([withRooms, mkRecord('c-plain', 'u2')])
+    const svc = build(
+      connections,
+      mkRealtime(),
+      mkAuth(revalidate),
+      mkOptions({ intervalSeconds: 60 }),
+    )
+    await svc.runCycle()
+    expect(revalidate).toHaveBeenCalledWith('c-rooms', expect.objectContaining({ rooms: ['w:1'] }))
+    expect(revalidate.mock.calls.find((c) => c[0] === 'c-plain')?.[1]).not.toHaveProperty('rooms')
+  })
+
   // The warn message for a throwing revalidate includes the connectionId.
   it('includes the connectionId in the warn when revalidate throws', async () => {
     // Kills StringLiteral mutation that blanks the warn template prefix.

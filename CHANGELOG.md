@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`AuthenticationResult.rooms`: rooms joined at admission.** An authenticator can return extra
+  rooms (a workspace, a project) that are joined before the connection is announced,
+  on both transports. Joining from `onConnect` leaves a window: the connection is already live, so an
+  event published to the room in between is missed, and room events have no replay. On SSE `onConnect`
+  is not awaited and a hook that throws is only logged, so a connection scoped there can stay
+  live without its room. A name must be a non-blank string of at most
+  `ADMISSION_ROOM_LIMITS.MAX_ROOM_NAME_LENGTH` characters and must not start with `user:`,
+  `tenant:` or `connection:`; at most `ADMISSION_ROOM_LIMITS.MAX_ROOMS` entries; duplicates
+  join once. A result that breaks a rule is refused like a blank `userId`. The limits are bounds
+  against abuse, not measurements, and apply to this field only; `joinRoom` is unchanged. The rooms
+  are fixed at admission: `revalidate` receives them, and a different set returned later is not
+  re-synchronized. `ADMISSION_ROOM_LIMITS` is exported from the root and `./shared` entries.
+
+#### Apply to a derived backend
+
+`ConnectionRecord.originalAuth` gains an optional `rooms`. A custom `IConnectionAuthenticator` is
+unaffected; one that wants a scoped room returns it in `rooms` instead of joining it from
+`onConnect`. A subclass of `SseTransport` or `WebSocketTransport` that overrides
+`registerConnection` or `registerSocket` has to join `auth.rooms` itself.
+
+### Fixed
+
+- The JSDoc of `onModuleDestroy` on both transports now opens with its limit: a slow
+  `onModuleDestroy` in a module nearer the root than the realtime module still runs first.
+
 ## [1.2.11] - 2026-11-09
 
 ### Fixed

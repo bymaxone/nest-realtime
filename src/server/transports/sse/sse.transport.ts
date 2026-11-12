@@ -96,10 +96,10 @@ export class SseTransport implements ITransport {
   ) {}
 
   /**
-   * Mark shutdown as begun at the first hook Nest runs on close, so that a slow
-   * `beforeApplicationShutdown` of the host's, which Nest runs before this transport's when it is in a
-   * module nearer the root, cannot leave a window in which a new stream is accepted. A slow
-   * `onModuleDestroy` in such a module still runs first; nothing the library owns runs earlier.
+   * Mark shutdown as begun at the first hook Nest runs on close. A slow `onModuleDestroy` in a module
+   * nearer the root than the realtime module still runs first, and until it returns a stream is
+   * accepted; nothing the library owns runs earlier. A slow `beforeApplicationShutdown` in such a
+   * module runs before this transport's own, which is why the flag is set here.
    */
   onModuleDestroy(): void {
     this.#shuttingDown = true
@@ -172,6 +172,7 @@ export class SseTransport implements ITransport {
         userId: params.auth.userId,
         tenantId: params.auth.tenantId,
         roles: params.auth.roles,
+        rooms: params.auth.rooms,
         metadata: params.auth.metadata,
       },
     }
@@ -180,6 +181,7 @@ export class SseTransport implements ITransport {
     if (params.auth.tenantId !== undefined) {
       this.rooms.join(params.connectionId, composeRoomId('TENANT', params.auth.tenantId))
     }
+    for (const room of params.auth.rooms ?? []) this.rooms.join(params.connectionId, room)
     await this.evictBeyondLimit(params.auth.userId)
   }
 

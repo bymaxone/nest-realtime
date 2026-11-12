@@ -102,6 +102,25 @@ describe('RealtimeGateway', () => {
     expect(transportMock.registerSocket).not.toHaveBeenCalled()
   })
 
+  it('handleConnection disconnects when the authenticator returns rooms that break the rules', async () => {
+    // The same refusal as a blank identity, on the path with no handshake middleware result.
+    authenticator.authenticate.mockResolvedValue({ userId: 'u-1', rooms: ['connection:x'] })
+    const socket = makeSocket()
+    await gateway.handleConnection(socket as never)
+    expect(socket.disconnect).toHaveBeenCalledWith(true)
+    expect(transportMock.registerSocket).not.toHaveBeenCalled()
+  })
+
+  it('handleConnection registers a socket whose authenticator returned valid rooms', async () => {
+    authenticator.authenticate.mockResolvedValue({ userId: 'u-1', rooms: ['workspace:w1'] })
+    const socket = makeSocket()
+    await gateway.handleConnection(socket as never)
+    expect(transportMock.registerSocket).toHaveBeenCalledWith(
+      socket,
+      expect.objectContaining({ rooms: ['workspace:w1'] }),
+    )
+  })
+
   it('applies tenantResolver before registering the socket', async () => {
     // The resolver runs on both transports or on neither. It decides the tenant that
     // routes a connection's events, so a consumer configuring it must get the same
@@ -669,6 +688,21 @@ describe('RealtimeGateway', () => {
       const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
       try {
         authenticator.authenticate.mockResolvedValue({ userId: '' })
+        const next = jest.fn()
+
+        await installMiddleware()(makeSocket(), next)
+
+        expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
+        expect(transportMock.registerSocket).not.toHaveBeenCalled()
+      } finally {
+        errorSpy.mockRestore()
+      }
+    })
+
+    it('answers rooms that break the rules with the generic error and registers nothing', async () => {
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      try {
+        authenticator.authenticate.mockResolvedValue({ userId: 'u-1', rooms: [' '] })
         const next = jest.fn()
 
         await installMiddleware()(makeSocket(), next)

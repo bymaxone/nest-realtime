@@ -34,6 +34,10 @@ declare global {
   interface TicketStore {
     consume(ticket: string): Promise<AuthenticationResult | null>
   }
+  /** A server-side session store; `find` returns the session behind a cookie, or `null`. */
+  interface SessionStore {
+    find(sid: string | undefined): Promise<{ userId: string; workspaceId: string } | null>
+  }
   /** Verifies the access-token cookie and returns its claims, or `null`. */
   function verify(token: string | undefined): Promise<{ sub: string } | null>
   const tracer: { recordConnection(connectionId: string, traceparent: unknown): void }

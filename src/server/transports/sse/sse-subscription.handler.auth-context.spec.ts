@@ -66,6 +66,40 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
     errorSpy.mockRestore()
   })
 
+  // Rooms the authenticator asks for are validated where the identity is: a bad one is a
+  // contract violation, so the connection is refused with the generic 500 and never registered.
+  it('answers rooms that break the admission rules with a generic 500, registering nothing', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    try {
+      const transport = mkTransport({
+        authenticate: jest.fn().mockResolvedValue({ userId: 'u1', rooms: ['user:u2'] }),
+      })
+      const handler = build(transport, mkHeartbeat(), mkOptions())
+      const thrown = await handler.handle(mkReq(), mkRes()).catch((err: unknown) => err)
+      expect(thrown).toBeInstanceOf(InternalServerErrorException)
+      expect((thrown as InternalServerErrorException).getResponse()).toEqual({
+        statusCode: 500,
+        message: 'Internal Server Error',
+      })
+      expect(transport.registerConnection).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('reserved prefix "user:"'))
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  // Valid rooms are handed to the transport inside the auth result, unchanged.
+  it('hands the rooms of a valid authentication result to registerConnection', async () => {
+    const auth = { userId: 'u1', rooms: ['workspace:w1'] }
+    const transport = mkTransport({ authenticate: jest.fn().mockResolvedValue(auth) })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const stream = await handler.handle(mkReq(), mkRes())
+    stream.subscribe().unsubscribe()
+    expect(transport.registerConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ auth: expect.objectContaining({ rooms: ['workspace:w1'] }) }),
+    )
+  })
+
   // Same for an empty tenant, which is a shared bucket rather than an absent one.
   it('refuses a connection whose authenticator returns a blank tenantId', async () => {
     const transport = mkTransport({
