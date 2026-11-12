@@ -77,7 +77,7 @@ export interface AuthenticationResult {
   /**
    * Extra rooms to join this connection to at admission, beside `user:` and `tenant:`.
    *
-   * They are joined before the connection is registered or announced, so no event
+   * They are joined before the connection is announced or `onConnect` runs, so no event
    * published to one of them can fall between admission and a later `joinRoom` — the
    * window a join from `onConnect` leaves open. On SSE `onConnect` is not awaited
    * and a hook that throws is only logged, so a connection scoped from there can go
