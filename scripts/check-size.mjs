@@ -20,20 +20,22 @@ import { dirname, join } from 'node:path'
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// Budgets are the measured brotli sizes of the bundles as they ship, comments stripped by
-// `scripts/strip-bundle-comments.mjs` (run by `pnpm build`), plus about 11% headroom:
-//   server       239 B →    265 B (a re-export facade over the shared runtime)
-//   internal  13,034 B → 13,500 B (the bulk of an SSE install: the route guard that authenticates
+// Budgets are at or above the measured brotli sizes of the bundles as they ship, comments stripped
+// by `scripts/strip-bundle-comments.mjs` (run by `pnpm build`). The margin differs per bundle and can
+// be none, so a change that grows a bundle raises its budget in the same change, with its own
+// measurement and reason. Each line is the measured size, then the budget:
+//   server       247 B →    265 B (a re-export facade over the shared runtime)
+//   internal  13,442 B → 13,500 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
 //     path that failed without failing its call, and the Redis subscriber's lifecycle state)
-//   websocket  4,721 B →  4,850 B (the Socket.IO stack alone: the start-up message that names the
+//   websocket  4,778 B →  4,850 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server
 //     is attached, and the refusal of a handshake that arrives once shutdown has begun)
-//   shared       460 B →    510 B (types and constants)
+//   shared       510 B →    510 B (types and constants)
 //   react      2,171 B →  2,400 B
 //
 // What an SSE application pays on the server is `server` + `internal`, since the

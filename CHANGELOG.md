@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.12] - 2026-11-12
+
 ### Added
 
 - **`AuthenticationResult.rooms`: rooms joined at admission.** An authenticator can return extra
@@ -982,7 +984,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.11...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.12...HEAD
+[1.2.12]: https://github.com/bymaxone/nest-realtime/compare/v1.2.11...v1.2.12
 [1.2.11]: https://github.com/bymaxone/nest-realtime/compare/v1.2.10...v1.2.11
 [1.2.10]: https://github.com/bymaxone/nest-realtime/compare/v1.2.9...v1.2.10
 [1.2.9]: https://github.com/bymaxone/nest-realtime/compare/v1.2.8...v1.2.9
