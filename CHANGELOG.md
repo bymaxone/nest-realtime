@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`AuthenticationResult.rooms`: rooms joined at admission.** An authenticator can return extra
-  rooms (a workspace, a project) that are joined before the connection is registered or announced,
+  rooms (a workspace, a project) that are joined before the connection is announced,
   on both transports. Joining from `onConnect` leaves a window: the connection is already live, so an
   event published to the room in between is missed, and room events have no replay. On SSE `onConnect`
   is not awaited and a hook that throws is only logged, so a connection scoped there can stay

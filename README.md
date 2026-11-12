@@ -702,7 +702,7 @@ does not refresh it. The library never reads a key.
 #### Joining rooms at admission
 
 `AuthenticationResult.rooms` lists extra rooms (a workspace, a project) that the library joins
-beside `user:` and `tenant:`, **before** the connection is registered or announced:
+beside `user:` and `tenant:`, **before** the connection is announced:
 
 ```typescript
 return { userId: claims.sub, tenantId: claims.tid, rooms: [`workspace:${claims.workspace}`] }
