@@ -705,7 +705,15 @@ does not refresh it. The library never reads a key.
 beside `user:` and `tenant:`, **before** the connection is announced:
 
 ```typescript
-return { userId: claims.sub, tenantId: claims.tid, rooms: [`workspace:${claims.workspace}`] }
+class WorkspaceAuthenticator implements IConnectionAuthenticator {
+  constructor(private readonly sessions: SessionStore) {}
+
+  async authenticate(ctx: ConnectionAuthContext): Promise<AuthenticationResult | null> {
+    const session = await this.sessions.find(ctx.cookies['sid'])
+    if (!session) return null
+    return { userId: session.userId, rooms: [`workspace:${session.workspaceId}`] }
+  }
+}
 ```
 
 Scope a connection here, not by calling `joinRoom` from `onConnect`. `onConnect` runs after the
