@@ -20,8 +20,10 @@ import { dirname, join } from 'node:path'
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// Budgets are the measured brotli sizes of the bundles as they ship, comments stripped by
-// `scripts/strip-bundle-comments.mjs` (run by `pnpm build`), plus about 11% headroom:
+// Budgets are at or above the measured brotli sizes of the bundles as they ship, comments stripped
+// by `scripts/strip-bundle-comments.mjs` (run by `pnpm build`). The margin differs per bundle and can
+// be none, so a change that grows a bundle raises its budget in the same change, with its own
+// measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
 //   internal  13,442 B → 13,500 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
