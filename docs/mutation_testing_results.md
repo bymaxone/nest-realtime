@@ -1,5 +1,9 @@
 # Mutation Testing Results — @bymax-one/nest-realtime
 
+## Current result — 2026-11-12
+
+Global mutation score **100.00%** on the hosted cold run of 2026-11-12 (run 43228738849, commit `eafdcb7`). The mutation inventory confirms every unit test ran in it: 1042 tests, with 10 exempt spec files left out. The sections below are the history of how the score was reached, newest runs last.
+
 ## v0.1.0 — 2026-06-30
 
 ### Run summary
