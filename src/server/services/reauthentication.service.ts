@@ -145,6 +145,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
             ? { tenantId: conn.originalAuth.tenantId }
             : {}),
           ...(conn.originalAuth.roles !== undefined ? { roles: conn.originalAuth.roles } : {}),
+          ...(conn.originalAuth.rooms !== undefined ? { rooms: conn.originalAuth.rooms } : {}),
           ...(conn.originalAuth.metadata !== undefined
             ? { metadata: conn.originalAuth.metadata }
             : {}),

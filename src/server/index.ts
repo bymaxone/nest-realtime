@@ -30,6 +30,7 @@ export {
   RedisRealtimePubSub,
   RESERVED_EVENT_NAMES,
   ROOM_PREFIXES,
+  ADMISSION_ROOM_LIMITS,
 } from '@bymax-one/nest-realtime/internal'
 
 export type {

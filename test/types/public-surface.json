@@ -1,5 +1,6 @@
 {
   ".": [
+    "ADMISSION_ROOM_LIMITS",
     "AuthenticationResult",
     "BymaxRealtimeModule",
     "BymaxRealtimeModuleAsyncOptions",
@@ -58,6 +59,7 @@
     "WebSocketTransport"
   ],
   "./shared": [
+    "ADMISSION_ROOM_LIMITS",
     "PRESENCE_EVENT_NAMES",
     "PresenceEventName",
     "PublicConnectionMeta",

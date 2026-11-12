@@ -12,6 +12,7 @@ import {
   REALTIME_OPTIONS_TOKEN,
   RESERVED_EVENT_NAMES,
   parseCookieHeader,
+  assertAdmissionRooms,
   assertIdentityIsNotBlank,
   resolveAuthTenant,
 } from '@bymax-one/nest-realtime/internal'
@@ -86,6 +87,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       }
       const resolvedAuth = resolveAuthTenant(this.options, auth)
       assertIdentityIsNotBlank(resolvedAuth)
+      assertAdmissionRooms(resolvedAuth)
       this.authenticated.set(socket, resolvedAuth)
       next()
     } catch (err) {
@@ -199,6 +201,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         }
         resolvedAuth = resolveAuthTenant(this.options, auth)
         assertIdentityIsNotBlank(resolvedAuth)
+        assertAdmissionRooms(resolvedAuth)
       }
 
       await this.transport.registerSocket(socket, resolvedAuth)

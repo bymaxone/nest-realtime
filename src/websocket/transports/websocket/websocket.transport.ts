@@ -62,13 +62,13 @@ export class WebSocketTransport implements ITransport {
   ) {}
 
   /**
-   * Mark shutdown as begun at the first hook Nest runs on close, so that no hook of the host's, however
-   * slow, can leave a window in which a handshake is accepted.
+   * Mark shutdown as begun at the first hook Nest runs on close. A slow `onModuleDestroy` in a module
+   * nearer the root than the realtime module still runs first, and until it returns a handshake is
+   * accepted; nothing the library owns runs earlier.
    *
    * Nest runs every module's `onModuleDestroy` before any `beforeApplicationShutdown`, and within a
    * phase it runs a module nearer the root before one it imports, so a slow `beforeApplicationShutdown`
-   * in the host's root module runs before this transport's own. A slow `onModuleDestroy` in a module
-   * nearer the root than the realtime module still runs first; nothing the library owns runs earlier.
+   * in the host's root module runs before this transport's own, which is why the flag is set here.
    */
   onModuleDestroy(): void {
     this.#shuttingDown = true
@@ -177,6 +177,7 @@ export class WebSocketTransport implements ITransport {
         userId: auth.userId,
         tenantId: auth.tenantId,
         roles: auth.roles,
+        rooms: auth.rooms,
         metadata: auth.metadata,
       },
     })
@@ -186,8 +187,11 @@ export class WebSocketTransport implements ITransport {
     // Per-connection room — enables adapter-aware cross-node revocation in disconnect().
     await socket.join(`${CONNECTION_ROOM_PREFIX}:${socket.id}`)
 
+    for (const room of auth.rooms ?? []) await socket.join(room)
+
     this.rooms.join(socket.id, `${ROOM_PREFIXES.USER}:${auth.userId}`)
     if (auth.tenantId) this.rooms.join(socket.id, `${ROOM_PREFIXES.TENANT}:${auth.tenantId}`)
+    for (const room of auth.rooms ?? []) this.rooms.join(socket.id, room)
 
     await this.evictBeyondLimit(auth.userId)
 

@@ -10,6 +10,7 @@ export type { PublicConnectionMeta } from './types/connection-meta.type'
 
 // Constants (+ derived types)
 export { ROOM_PREFIXES } from './constants/room-prefixes.constants'
+export { ADMISSION_ROOM_LIMITS } from './constants/admission-rooms.constants'
 export type { RoomPrefix } from './constants/room-prefixes.constants'
 export { RESERVED_EVENT_NAMES, PRESENCE_EVENT_NAMES } from './constants/reserved-events.constants'
 export type { ReservedEventName, PresenceEventName } from './constants/reserved-events.constants'

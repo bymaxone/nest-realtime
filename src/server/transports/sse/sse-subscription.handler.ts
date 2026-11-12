@@ -33,6 +33,7 @@ import type {
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import type { SseRequest, SseResponse } from '../../interfaces/sse-http.interface'
+import { assertAdmissionRooms } from '../../utils/assert-admission-rooms'
 import { assertIdentityIsNotBlank, resolveAuthTenant } from '../../utils/assert-identity'
 import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
@@ -184,6 +185,7 @@ export class SseSubscriptionHandler {
     const resolvedAuth = resolveAuthTenant(this.options, auth)
     try {
       assertIdentityIsNotBlank(resolvedAuth)
+      assertAdmissionRooms(resolvedAuth)
     } catch (err) {
       this.logger.error(`SSE connection refused — responding 500: ${describeError(err)}`)
       throw new InternalServerErrorException()

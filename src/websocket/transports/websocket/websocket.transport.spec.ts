@@ -233,6 +233,25 @@ describe('WebSocketTransport', () => {
     expect(socket.join).toHaveBeenCalledWith('tenant:tenant-1')
   })
 
+  it('registerSocket joins the rooms the authenticator returned, in the socket and the registry', async () => {
+    // Joined before onConnect, so a host never has to scope the socket from its hook.
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, { ...auth, rooms: ['workspace:w1', 'b'] })
+    expect(socket.join).toHaveBeenCalledWith('workspace:w1')
+    expect(socket.join).toHaveBeenCalledWith('b')
+    expect(roomRegistry.roomsOf('sock-1')).toEqual(
+      expect.arrayContaining(['workspace:w1', 'b', 'user:u-1', 'tenant:tenant-1']),
+    )
+    expect(connectionRegistry.get('sock-1')?.originalAuth.rooms).toEqual(['workspace:w1', 'b'])
+  })
+
+  it('registerSocket joins no extra room when the authenticator returned none', async () => {
+    const socket = makeSocket()
+    await transport.registerSocket(socket as never, auth)
+    expect(roomRegistry.roomsOf('sock-1')).toHaveLength(2)
+    expect(socket.join).toHaveBeenCalledTimes(3)
+  })
+
   it('registerSocket joins the per-connection room for cross-node revocation', async () => {
     // Each socket joins connection:{id} so disconnect() can target it via the adapter.
     const socket = makeSocket()
