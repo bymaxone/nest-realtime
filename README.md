@@ -715,9 +715,9 @@ WebSocket delivered the next event and not that one. On SSE `onConnect` is also 
 hook that throws is only logged as a warning, so a connection scoped from there can stay live
 without its room. Neither behaviour changes; `rooms` is the way around both.
 
-A name must be a non-blank string of at most `ADMISSION_ROOM_LIMITS.MAX_ROOM_NAME_LENGTH` (256)
+A name must be a non-blank string of at most `ADMISSION_ROOM_LIMITS.MAX_ROOM_NAME_LENGTH`
 characters and must not start with `user:`, `tenant:` or `connection:`; at most
-`ADMISSION_ROOM_LIMITS.MAX_ROOMS` (32) entries; duplicates join once. A result that breaks a rule
+`ADMISSION_ROOM_LIMITS.MAX_ROOMS` entries; duplicates join once. A result that breaks a rule
 is refused like a blank `userId` — a server fault (500 on SSE, a generic `connect_error` on
 WebSocket), not a 401 — and nothing is registered. The two limits are bounds against abuse, not
 measurements, and they apply to this field only: `joinRoom` stays free-form.
