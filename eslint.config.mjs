@@ -6,25 +6,13 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import prettierRecommended from 'eslint-plugin-prettier/recommended'
 
 // The library never imports an authentication package: the consumer plugs IConnectionAuthenticator.
-// `no-restricted-imports` sees static imports and re-exports only, so a dynamic `import()` and a
-// `require()` are caught by the syntax selectors below, which test the same set of names. A flat-config
-// rule is replaced, not merged, by a later block that sets it, so the src/shared block spreads the
-// import pattern into its own list. A specifier built at run time is invisible to any lint rule, so
-// both checks cover literal specifiers.
+// A module can be named by a string in any call shape (`import`, `import()`, `require()`,
+// `module.require()`, a type-level `import()`), so the rule matches the string itself, wherever a
+// string literal or a template quasi equals one of these specifiers, and not the syntax around it.
+// A specifier assembled at run time is invisible to any lint rule, so this covers literals only.
 const AUTH_IMPORT_MESSAGE =
   'This library never imports an auth package: the consumer plugs IConnectionAuthenticator.'
 const AUTH_SOURCE = String.raw`/^(@nestjs\/jwt|@bymax-one\/nest-auth)(\/|$)|(^|\/)passport(-[^\/]*)?(\/|$)/`
-const AUTH_IMPORT_PATTERN = {
-  group: [
-    '@nestjs/jwt',
-    '@nestjs/jwt/*',
-    '@bymax-one/nest-auth',
-    '@bymax-one/nest-auth/*',
-    'passport',
-    'passport-*',
-  ],
-  message: AUTH_IMPORT_MESSAGE,
-}
 
 export default [
   {
@@ -49,14 +37,10 @@ export default [
       },
     },
     rules: {
-      'no-restricted-imports': ['error', { patterns: [AUTH_IMPORT_PATTERN] }],
       'no-restricted-syntax': [
         'error',
-        { selector: `ImportExpression[source.value=${AUTH_SOURCE}]`, message: AUTH_IMPORT_MESSAGE },
-        {
-          selector: `CallExpression[callee.name='require'][arguments.0.value=${AUTH_SOURCE}]`,
-          message: AUTH_IMPORT_MESSAGE,
-        },
+        { selector: `Literal[value=${AUTH_SOURCE}]`, message: AUTH_IMPORT_MESSAGE },
+        { selector: `TemplateElement[value.cooked=${AUTH_SOURCE}]`, message: AUTH_IMPORT_MESSAGE },
       ],
       ...(security.configs?.recommended?.rules ?? {}),
       '@typescript-eslint/no-explicit-any': 'error',
@@ -101,7 +85,6 @@ export default [
         'error',
         {
           patterns: [
-            AUTH_IMPORT_PATTERN,
             {
               group: ['@nestjs/*', '@nestjs'],
               message: 'src/shared is zero-dependency: no @nestjs imports.',

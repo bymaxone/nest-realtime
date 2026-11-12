@@ -426,7 +426,7 @@ Sizing guidance and adapter trade-offs are in [docs/architecture/scaling-cheatsh
 
 This library **never** verifies a JWT, hashes a password, or imports an authentication package. It calls `IConnectionAuthenticator.authenticate()` once per connection and trusts the `AuthenticationResult` you return.
 
-This is a **structural guarantee**, not a guideline: an ESLint rule fails the lint step on any static import, dynamic `import()` or `require()` of `@bymax-one/nest-auth`, `@nestjs/jwt`, `passport` or `passport-*` under `src/`.
+This is a **structural guarantee**, not a guideline: an ESLint rule fails the lint step on any string literal under `src/` that names `@bymax-one/nest-auth`, `@nestjs/jwt`, `passport` or `passport-*`, so every form of `import` and `require` is refused.
 
 The consequence is worth stating plainly: a credential-handling vulnerability cannot originate in this package, because the code that would contain it does not exist here. It also means **you** are responsible for the bridge — vulnerabilities in a bridge implementation belong to that project, as [SECURITY.md](./SECURITY.md) records.
 
