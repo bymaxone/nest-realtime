@@ -5,6 +5,22 @@ import security from 'eslint-plugin-security'
 import reactHooks from 'eslint-plugin-react-hooks'
 import prettierRecommended from 'eslint-plugin-prettier/recommended'
 
+// The library never imports an authentication package: the consumer plugs IConnectionAuthenticator.
+// A flat-config rule is replaced, not merged, by a later block that sets it, so the src/shared block
+// below spreads the same pattern into its own list.
+const AUTH_IMPORT_PATTERN = {
+  group: [
+    '@nestjs/jwt',
+    '@nestjs/jwt/*',
+    '@bymax-one/nest-auth',
+    '@bymax-one/nest-auth/*',
+    'passport',
+    'passport-*',
+  ],
+  message:
+    'This library never imports an auth package: the consumer plugs IConnectionAuthenticator.',
+}
+
 export default [
   {
     ignores: ['dist/**', 'coverage/**', 'reports/**', '.stryker-tmp/**', 'node_modules/**'],
@@ -28,6 +44,7 @@ export default [
       },
     },
     rules: {
+      'no-restricted-imports': ['error', { patterns: [AUTH_IMPORT_PATTERN] }],
       ...(security.configs?.recommended?.rules ?? {}),
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': [
@@ -71,6 +88,7 @@ export default [
         'error',
         {
           patterns: [
+            AUTH_IMPORT_PATTERN,
             {
               group: ['@nestjs/*', '@nestjs'],
               message: 'src/shared is zero-dependency: no @nestjs imports.',
