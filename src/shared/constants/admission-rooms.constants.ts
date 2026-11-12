@@ -11,7 +11,7 @@
  * a room whose name is a payload. Neither was derived from a benchmark or from a
  * limit of Socket.IO or of the registries, and neither is a recommendation — a host
  * that needs few rooms should use far fewer. They apply only to the `rooms` field;
- * `joinRoom` takes any room name, as it always has.
+ * `joinRoom` accepts any room name.
  */
 export const ADMISSION_ROOM_LIMITS = {
   /** The most rooms one authentication result may carry. */
