@@ -206,8 +206,10 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     let timer: NodeJS.Timeout | undefined
     const timedOut = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
-        controller.abort()
+        // Rejected before the abort is dispatched: a call that answers from its abort listener
+        // settles after the timeout, so its answer cannot win the race.
         reject(new Error(`${what} did not settle within ${this.policy.revalidateTimeoutMs} ms`))
+        controller.abort()
       }, this.policy.revalidateTimeoutMs)
       timer.unref()
     })

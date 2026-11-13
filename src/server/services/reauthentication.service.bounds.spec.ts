@@ -36,8 +36,7 @@ describe('ReauthenticationService: the cycle is bounded', () => {
     jest.restoreAllMocks()
   })
 
-  // One call that never settles used to stall the serial cycle, so a connection after it was never
-  // revalidated and a revoked one stayed connected.
+  // A call that never settles must not keep another connection from being revalidated or revoked.
   it('revokes a connection after a revalidate that never settles, and one revoked behind it', async () => {
     const revalidate = jest.fn((id: string) =>
       id === 'hung' ? new Promise<boolean>(() => undefined) : Promise.resolve(false),
@@ -100,6 +99,32 @@ describe('ReauthenticationService: the cycle is bounded', () => {
     await svc.runCycle()
 
     expect(realtime.disconnect).toHaveBeenCalledTimes(2)
+  })
+
+  // The timeout wins even against a call that answers true from its own abort listener, which runs
+  // when the signal is aborted: the answer of a call that timed out is never taken.
+  it('does not keep a connection whose revalidate answers true when it is aborted', async () => {
+    const revalidate = jest.fn(
+      (_id: string, _auth: unknown, options: { signal: AbortSignal }) =>
+        new Promise<boolean>((resolve) => {
+          options.signal.addEventListener('abort', () => resolve(true))
+        }),
+    )
+    const realtime = mkRealtime()
+    const record = mkRecord('aborted')
+    const svc = build(
+      mkConnections([record]),
+      realtime,
+      mkAuth(revalidate as never),
+      mkOptions({ intervalSeconds: 60, revalidateTimeoutMs: 1_000 }),
+    )
+
+    const cycle = svc.runCycle()
+    await jest.advanceTimersByTimeAsync(1_000)
+    await cycle
+
+    expect(realtime.disconnect).toHaveBeenCalledWith('aborted', REVOKED)
+    expect(record.revalidatedAt).toBeUndefined()
   })
 
   // A call that did not answer in time is treated as one that threw: the connection is not kept.

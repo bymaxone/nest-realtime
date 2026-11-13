@@ -153,8 +153,8 @@ describe('validateOptions', () => {
     },
   )
 
-  // A 0, fractional, negative or non-numeric interval used to become a 1 ms timer; the others are
-  // bounds that must be whole numbers too.
+  // The interval, the timeout and the concurrency are positive whole numbers, and the cache window
+  // a non-negative one: a timer cannot run at 0 or at a fraction, and nothing runs 0.5 at a time.
   it.each([
     ['intervalSeconds', 1],
     ['cacheTtlMs', 0],
