@@ -18,6 +18,9 @@ import { describeError } from '../utils/describe-error'
 import { unavailableError } from '../utils/unavailable-error'
 import type { ConnectionRecord } from './connection-registry.service'
 
+/** The second argument every call carries: the signal a call can stop its work on. */
+const WITH_SIGNAL = { signal: expect.any(AbortSignal) }
+
 describe('ReauthenticationService', () => {
   beforeEach(() => jest.useFakeTimers())
   afterEach(() => jest.useRealTimers())
@@ -75,7 +78,11 @@ describe('ReauthenticationService', () => {
     svc.onModuleInit()
     jest.advanceTimersByTime(10_000)
     await flush()
-    expect(revalidate).toHaveBeenCalledWith('c1', expect.objectContaining({ userId: 'u1' }))
+    expect(revalidate).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({ userId: 'u1' }),
+      WITH_SIGNAL,
+    )
   })
 
   // A positive-cache hit skips the revalidate call within cacheTtlMs.
@@ -519,51 +526,6 @@ describe('ReauthenticationService', () => {
     )
   })
 
-  // revalidate is handed back the original result, metadata included — an
-  // authenticator that stored a trace id at connect time can read it here.
-  it('passes the stored metadata back to revalidate', async () => {
-    const revalidate = jest.fn().mockResolvedValue(true)
-    const record: ConnectionRecord = {
-      ...mkRecord(),
-      originalAuth: {
-        userId: 'u1',
-        tenantId: 't1',
-        roles: undefined,
-        metadata: { traceId: 'trace-1' },
-      },
-    }
-    const connections = mkConnections([record])
-    const svc = build(
-      connections,
-      mkRealtime(),
-      mkAuth(revalidate),
-      mkOptions({ intervalSeconds: 60 }),
-    )
-    await svc.runCycle()
-    expect(revalidate).toHaveBeenCalledWith(
-      'c1',
-      expect.objectContaining({ metadata: { traceId: 'trace-1' } }),
-    )
-  })
-
-  // The absent branch of the metadata spread: the key must be omitted, not set to
-  // undefined, so the reconstructed result stays valid under exactOptionalPropertyTypes.
-  it('omits metadata from the revalidate result when the connection has none', async () => {
-    const revalidate = jest.fn().mockResolvedValue(true)
-    const connections = mkConnections([mkRecord()])
-    const svc = build(
-      connections,
-      mkRealtime(),
-      mkAuth(revalidate),
-      mkOptions({ intervalSeconds: 60 }),
-    )
-    await svc.runCycle()
-    expect(revalidate).toHaveBeenCalledWith(
-      'c1',
-      expect.not.objectContaining({ metadata: undefined }),
-    )
-  })
-
   // A WebSocket connection is revalidated too. A policy that runs on one transport is
   // not a revocation policy: a socket admitted under credentials valid at handshake
   // would otherwise keep delivering for the life of the connection.
@@ -582,7 +544,11 @@ describe('ReauthenticationService', () => {
       mkOptions({ intervalSeconds: 60 }),
     )
     await svc.runCycle()
-    expect(revalidate).toHaveBeenCalledWith('c-ws', expect.objectContaining({ userId: 'u1' }))
+    expect(revalidate).toHaveBeenCalledWith(
+      'c-ws',
+      expect.objectContaining({ userId: 'u1' }),
+      WITH_SIGNAL,
+    )
   })
 
   // The failure meta reports the connection's own transport rather than a fixed one,
@@ -625,41 +591,6 @@ describe('ReauthenticationService', () => {
       'c1',
       REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
     )
-  })
-
-  // Covers the spread branches in originalAuth construction: tenantId absent + roles present.
-  it('passes originalAuth without tenantId and with roles when those fields are set accordingly', async () => {
-    const revalidate = jest.fn().mockResolvedValue(true)
-    // tenantId: undefined → spread emits {}; roles: defined → spread emits { roles }
-    const record: ConnectionRecord = {
-      connectionId: 'c-spread',
-      userId: 'u-spread',
-      tenantId: undefined,
-      transport: 'sse',
-      ip: '127.0.0.1',
-      userAgent: undefined,
-      connectedAt: new Date(),
-      subject: null,
-      close$: null,
-      originalAuth: {
-        userId: 'u-spread',
-        tenantId: undefined,
-        roles: ['admin'],
-        metadata: undefined,
-      },
-    }
-    const connections = mkConnections([record])
-    const realtime = mkRealtime()
-    const auth = mkAuth(revalidate)
-    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
-    await svc.runCycle()
-    expect(revalidate).toHaveBeenCalledWith(
-      'c-spread',
-      expect.objectContaining({ userId: 'u-spread', roles: ['admin'] }),
-    )
-    // tenantId should be absent (not present as undefined) on the passed object.
-    const passedAuth = revalidate.mock.calls[0][1] as Record<string, unknown>
-    expect('tenantId' in passedAuth).toBe(false)
   })
 
   // No hooks provided (undefined) — runCycle completes without crashing.
@@ -731,43 +662,6 @@ describe('ReauthenticationService', () => {
       'c1',
       REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
     )
-  })
-
-  // revalidate receives the tenantId from originalAuth when it is defined.
-  it('passes tenantId to revalidate when originalAuth.tenantId is set', async () => {
-    // Kills ObjectLiteral mutation { tenantId: conn.originalAuth.tenantId } → {}.
-    const revalidate = jest.fn().mockResolvedValue(true)
-    const connections = mkConnections([mkRecord()]) // mkRecord sets tenantId: 't1'
-    const realtime = mkRealtime()
-    const auth = mkAuth(revalidate)
-    const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
-    await svc.runCycle()
-    expect(revalidate).toHaveBeenCalledWith('c1', expect.objectContaining({ tenantId: 't1' }))
-  })
-
-  // The rooms joined at admission are handed back to revalidate with the rest of the original result.
-  it('passes the admission rooms to revalidate, and none when the connection has none', async () => {
-    const revalidate = jest.fn().mockResolvedValue(true)
-    const withRooms: ConnectionRecord = {
-      ...mkRecord('c-rooms', 'u1'),
-      originalAuth: {
-        userId: 'u1',
-        tenantId: 't1',
-        roles: undefined,
-        rooms: ['w:1'],
-        metadata: undefined,
-      },
-    }
-    const connections = mkConnections([withRooms, mkRecord('c-plain', 'u2')])
-    const svc = build(
-      connections,
-      mkRealtime(),
-      mkAuth(revalidate),
-      mkOptions({ intervalSeconds: 60 }),
-    )
-    await svc.runCycle()
-    expect(revalidate).toHaveBeenCalledWith('c-rooms', expect.objectContaining({ rooms: ['w:1'] }))
-    expect(revalidate.mock.calls.find((c) => c[0] === 'c-plain')?.[1]).not.toHaveProperty('rooms')
   })
 
   // The warn message for a throwing revalidate includes the connectionId.

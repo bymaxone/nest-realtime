@@ -17,13 +17,17 @@ import {
   REALTIME_HOOKS_TOKEN,
   REALTIME_OPTIONS_TOKEN,
 } from '../constants/injection-tokens.constants'
-import type { IConnectionAuthenticator } from '../interfaces/connection-authenticator.interface'
+import type {
+  AuthenticationResult,
+  IConnectionAuthenticator,
+} from '../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../interfaces/connection-lifecycle-hooks.interface'
 import type {
   BymaxRealtimeModuleOptions,
   ReauthenticationPolicy,
 } from '../interfaces/realtime-module-options.interface'
 import { describeError } from '../utils/describe-error'
+import { Semaphore } from '../utils/semaphore'
 import { runHook } from '../utils/run-hook'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
@@ -34,6 +38,8 @@ interface RequiredPolicy {
   intervalSeconds: number
   onFailure: 'disconnect' | 'event'
   cacheTtlMs: number
+  revalidateTimeoutMs: number
+  concurrency: number
 }
 
 /**
@@ -46,6 +52,8 @@ export function resolvePolicy(raw: ReauthenticationPolicy | undefined): Required
     intervalSeconds: raw?.intervalSeconds ?? 300,
     onFailure: raw?.onFailure ?? 'disconnect',
     cacheTtlMs: raw?.cacheTtlMs ?? 60_000,
+    revalidateTimeoutMs: raw?.revalidateTimeoutMs ?? 10_000,
+    concurrency: raw?.concurrency ?? 8,
   }
 }
 
@@ -65,9 +73,11 @@ export function resolvePolicy(raw: ReauthenticationPolicy | undefined): Required
 export class ReauthenticationService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(ReauthenticationService.name)
   private timer: NodeJS.Timeout | null = null
-  /** connectionId → epoch-ms timestamp of last successful revalidation. */
-  private readonly positiveCache = new Map<string, number>()
   private readonly policy: RequiredPolicy
+  /** Connections with a revalidation queued or running: one call at a time for each. */
+  private readonly inFlight = new Set<string>()
+  /** The cap on revalidations in flight, shared by every cycle. */
+  private readonly slots: Semaphore
 
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
@@ -77,6 +87,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     @Optional() @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks?: IConnectionLifecycleHooks,
   ) {
     this.policy = resolvePolicy(options.reauthenticationPolicy)
+    this.slots = new Semaphore(this.policy.concurrency)
   }
 
   /**
@@ -101,7 +112,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   }
 
   /**
-   * Clear the timer and the positive cache.
+   * Clear the timer.
    *
    * Called by NestJS on graceful shutdown to prevent leaks.
    */
@@ -110,15 +121,18 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       clearInterval(this.timer)
       this.timer = null
     }
-    this.positiveCache.clear()
   }
 
   /**
    * Run one revalidation cycle over every active connection, SSE and WebSocket alike.
    *
-   * A cache hit within `cacheTtlMs` skips the `revalidate` call. A positive result
-   * refreshes the cache. A negative result (or a thrown error) invokes the configured
-   * `onFailure` policy and fires the `onReauthenticationFailed` hook best-effort.
+   * Connections are revalidated concurrently, up to `concurrency` at a time across every cycle that
+   * overlaps, and each for at most `revalidateTimeoutMs`: a call that does not settle in time is
+   * handled as one that threw, so one connection cannot hold up the revocation of another. A
+   * connection with a call already in flight is left to it. A connection revalidated within
+   * `cacheTtlMs` is skipped, and a positive result refreshes that. A negative result (or a thrown
+   * error, or a timeout) invokes the configured `onFailure` policy and fires the
+   * `onReauthenticationFailed` hook best-effort.
    *
    * Exposed as public for test access.
    */
@@ -133,36 +147,76 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       ...this.connections.allByTransport('sse'),
       ...this.connections.allByTransport('websocket'),
     ]
-    for (const conn of connections) {
-      try {
-        const lastValid = this.positiveCache.get(conn.connectionId)
-        if (lastValid !== undefined && now - lastValid < this.policy.cacheTtlMs) continue
+    await Promise.all(connections.map((conn) => this.check(conn, now)))
+  }
 
-        // Build an AuthenticationResult from the stored snapshot (optional fields
-        // must be absent, not undefined, under exactOptionalPropertyTypes).
-        const originalAuth = {
-          userId: conn.originalAuth.userId,
-          ...(conn.originalAuth.tenantId !== undefined
-            ? { tenantId: conn.originalAuth.tenantId }
-            : {}),
-          ...(conn.originalAuth.roles !== undefined ? { roles: conn.originalAuth.roles } : {}),
-          ...(conn.originalAuth.rooms !== undefined ? { rooms: conn.originalAuth.rooms } : {}),
-          ...(conn.originalAuth.metadata !== undefined
-            ? { metadata: conn.originalAuth.metadata }
-            : {}),
-        }
-        // Require strict true — a truthy non-boolean result (e.g. a user object) is not success.
-        // When revalidate is absent, optional-chaining returns undefined; ?? true normalises it.
-        const rawResult = (await this.auth.revalidate?.(conn.connectionId, originalAuth)) ?? true
-        if (rawResult === true) {
-          this.positiveCache.set(conn.connectionId, now)
-          continue
-        }
-        await this.revoke(conn)
-      } catch (err) {
-        this.logger.warn(`Reauthentication errored for ${conn.connectionId}: ${describeError(err)}`)
-        await this.revoke(conn)
+  /** Revalidate one connection unless it is cached or already being revalidated. */
+  private async check(conn: ConnectionRecord, now: number): Promise<void> {
+    if (this.inFlight.has(conn.connectionId)) return
+    if (conn.revalidatedAt !== undefined && now - conn.revalidatedAt < this.policy.cacheTtlMs)
+      return
+    this.inFlight.add(conn.connectionId)
+    try {
+      await this.slots.run(() => this.revalidate(conn, now))
+    } finally {
+      this.inFlight.delete(conn.connectionId)
+    }
+  }
+
+  private async revalidate(conn: ConnectionRecord, now: number): Promise<void> {
+    try {
+      // Build an AuthenticationResult from the stored snapshot (optional fields
+      // must be absent, not undefined, under exactOptionalPropertyTypes).
+      const originalAuth = {
+        userId: conn.originalAuth.userId,
+        ...(conn.originalAuth.tenantId !== undefined
+          ? { tenantId: conn.originalAuth.tenantId }
+          : {}),
+        ...(conn.originalAuth.roles !== undefined ? { roles: conn.originalAuth.roles } : {}),
+        ...(conn.originalAuth.rooms !== undefined ? { rooms: conn.originalAuth.rooms } : {}),
+        ...(conn.originalAuth.metadata !== undefined
+          ? { metadata: conn.originalAuth.metadata }
+          : {}),
       }
+      // Require strict true — a truthy non-boolean result (e.g. a user object) is not success.
+      // When revalidate is absent, optional-chaining returns undefined; ?? true normalises it.
+      const rawResult = (await this.within(conn.connectionId, originalAuth)) ?? true
+      if (rawResult === true) {
+        conn.revalidatedAt = now
+        return
+      }
+      await this.revoke(conn)
+    } catch (err) {
+      this.logger.warn(`Reauthentication errored for ${conn.connectionId}: ${describeError(err)}`)
+      await this.revoke(conn)
+    }
+  }
+
+  /**
+   * Call the authenticator's `revalidate`, giving up when it has not settled in
+   * `revalidateTimeoutMs`: the signal it was handed is aborted and the call rejects. Whatever the
+   * abandoned call returns later is ignored.
+   */
+  private async within(
+    connectionId: string,
+    originalAuth: AuthenticationResult,
+  ): Promise<boolean | undefined> {
+    const controller = new AbortController()
+    let timer: NodeJS.Timeout | undefined
+    const timedOut = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(new Error(`revalidate did not settle within ${this.policy.revalidateTimeoutMs} ms`))
+      }, this.policy.revalidateTimeoutMs)
+      timer.unref()
+    })
+    try {
+      return await Promise.race([
+        this.auth.revalidate?.(connectionId, originalAuth, { signal: controller.signal }),
+        timedOut,
+      ])
+    } finally {
+      clearTimeout(timer)
     }
   }
 
@@ -182,12 +236,12 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   }
 
   /**
-   * Evict the positive-cache entry, optionally start the failure event, then disconnect. The
+   * Forget the last confirmation, optionally start the failure event, then disconnect. The
    * event is a notification: it is started first, so its local delivery precedes the disconnect,
    * but the revocation never waits for it. A failure to send it is logged.
    */
   private async handleFailure(conn: ConnectionRecord): Promise<void> {
-    this.positiveCache.delete(conn.connectionId)
+    conn.revalidatedAt = undefined
 
     if (this.policy.onFailure === 'event') this.notify(conn)
 

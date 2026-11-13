@@ -153,6 +153,57 @@ describe('validateOptions', () => {
     },
   )
 
+  // A 0, fractional, negative or non-numeric interval used to become a 1 ms timer; the others are
+  // bounds that must be whole numbers too.
+  it.each([
+    ['intervalSeconds', 1],
+    ['cacheTtlMs', 0],
+    ['revalidateTimeoutMs', 1],
+    ['concurrency', 1],
+  ] as const)('rejects a reauthenticationPolicy.%s that is not an integer >= %s', (name, least) => {
+    for (const bad of [least - 1, least + 0.5, Number.NaN, Infinity, '5', null]) {
+      expect(() =>
+        validateOptions({
+          transport: 'sse',
+          authenticator,
+          reauthenticationPolicy: { [name]: bad } as never,
+        }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.${name} must be an integer >= ${least}, got ${String(bad)}`,
+      )
+    }
+    for (const good of [least, least + 1, 300]) {
+      expect(() =>
+        validateOptions({
+          transport: 'sse',
+          authenticator,
+          reauthenticationPolicy: { [name]: good },
+        }),
+      ).not.toThrow()
+    }
+  })
+
+  it("rejects an onFailure other than 'disconnect' or 'event'", () => {
+    expect(() =>
+      validateOptions({
+        transport: 'sse',
+        authenticator,
+        reauthenticationPolicy: { onFailure: 'ignore' } as never,
+      }),
+    ).toThrow(
+      "[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.onFailure must be 'disconnect' or 'event', got ignore",
+    )
+    for (const good of ['disconnect', 'event'] as const) {
+      expect(() =>
+        validateOptions({
+          transport: 'sse',
+          authenticator,
+          reauthenticationPolicy: { onFailure: good },
+        }),
+      ).not.toThrow()
+    }
+  })
+
   // cacheTtlMs > intervalSeconds*1000 → Logger.warn (every cycle is a cache miss).
   it('warns when cacheTtlMs exceeds intervalSeconds*1000', () => {
     const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)

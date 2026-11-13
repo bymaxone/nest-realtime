@@ -7,6 +7,7 @@ export type {
   IConnectionAuthenticator,
   AuthenticationResult,
   ConnectionAuthContext,
+  RevalidateOptions,
 } from './connection-authenticator.interface'
 export type {
   IConnectionLifecycleHooks,

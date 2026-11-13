@@ -25,14 +25,16 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  14,755 B → 14,770 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  15,240 B → 15,260 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
 //     path that failed without failing its call, the Redis subscriber's lifecycle state, and the
 //     bound on what a client may leave unread: the byte and event accounting, the exact size of
 //     the frame Nest writes, the stall check and the close with its logged reason, and the
-//     hook runner that keeps a consumer's failing lifecycle hook from reaching a connection)
+//     hook runner that keeps a consumer's failing lifecycle hook from reaching a connection, and
+//     the bounded re-authentication cycle: the call timeout, the concurrency cap, the per-connection
+//     guard and the boot validation of its options)
 //   websocket  4,774 B →  4,850 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -51,7 +53,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 14_770 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 15_260 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 4_850 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_400 },
