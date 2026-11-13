@@ -88,6 +88,54 @@ describe('admitRooms', () => {
     expect(pulled).toBe(ADMISSION_ROOM_LIMITS.MAX_ROOMS + 1)
   })
 
+  // What is validated is what the iterator yields, because that is what the copy holds and
+  // what is joined: the array's own elements are not.
+  it('validates what the iterator yields, not the elements the array holds', () => {
+    const rooms = ['workspace:w1']
+    Object.defineProperty(rooms, Symbol.iterator, {
+      value: function* () {
+        yield 'user:victim'
+      },
+    })
+
+    expect(() => admitRooms(untyped(rooms))).toThrow('reserved prefix "user:"')
+  })
+
+  // The list is read once: an iterator that answers differently the second time must not make
+  // what was validated differ from what was copied.
+  it('reads the list once, so a second read cannot change what was checked', () => {
+    let reads = 0
+    const rooms = ['workspace:w1']
+    Object.defineProperty(rooms, Symbol.iterator, {
+      value: function* () {
+        reads += 1
+        yield reads === 1 ? 'workspace:w1' : 'user:victim'
+      },
+    })
+
+    expect(admitRooms(untyped(rooms)).rooms).toStrictEqual(['workspace:w1'])
+    expect(reads).toBe(1)
+  })
+
+  it('admits what an iterator yields, up to the maximum, and nothing the array also holds', () => {
+    const rooms = ['held-by-the-array']
+    Object.defineProperty(rooms, Symbol.iterator, {
+      value: function* () {
+        for (let i = 0; i < ADMISSION_ROOM_LIMITS.MAX_ROOMS; i++) yield `r${i}`
+      },
+    })
+
+    const admitted = admitRooms(untyped(rooms)).rooms
+    expect(admitted).toHaveLength(ADMISSION_ROOM_LIMITS.MAX_ROOMS)
+    expect(admitted).not.toContain('held-by-the-array')
+  })
+
+  // A length far beyond the bound, with holes: reading stops at the bound instead of walking it.
+  it('refuses a sparse array whose length is far beyond the maximum, without walking it', () => {
+    const sparse = new Array<string>(2 ** 32 - 1)
+    expect(() => admitRooms(untyped(sparse))).toThrow(`more than 32 rooms: the limit is 32`)
+  })
+
   it('refuses a name that is not a string, or is blank', () => {
     for (const bad of [1, null, undefined, {}, '', ' ', '\t\n']) {
       expect(() => admitRooms(untyped(['ok', bad]))).toThrow(
