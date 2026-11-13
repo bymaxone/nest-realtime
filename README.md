@@ -469,6 +469,36 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 
 ---
 
+## 🛡️ Security Table
+
+| Layer                 | Implementation                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------- |
+| Credential validation | Delegated entirely to your `IConnectionAuthenticator`                                              |
+| Auth library imports  | None: an ESLint rule fails lint on a string literal naming an auth package in `src`                |
+| Tenant isolation      | Room-scoped (`tenant:{id}`), resolved from the authenticated result                                |
+| Connection revocation | `disconnect(connectionId)`, cross-instance; rejects if it cannot reach it                          |
+| Credential expiry     | Interval re-authentication; a failure drops the connection, after an event if `onFailure: 'event'` |
+| Connection flooding   | FIFO eviction per user: oldest closed, new admitted, never a 429                                   |
+| SSE transport headers | `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform`                                |
+| WebSocket origin      | Explicit `cors` config passed straight to Socket.IO                                                |
+
+---
+
+## 🧱 Tech Stack
+
+<p>
+  <img src="https://img.shields.io/badge/NestJS-11-E0234E?style=flat-square&logo=nestjs&logoColor=white" alt="NestJS" />
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/RxJS-7-B7178C?style=flat-square&logo=reactivex&logoColor=white" alt="RxJS" />
+  <img src="https://img.shields.io/badge/Socket.IO-4-010101?style=flat-square&logo=socket.io&logoColor=white" alt="Socket.IO" />
+  <img src="https://img.shields.io/badge/Node.js-24%2B-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Redis-optional-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/Jest-30-C21325?style=flat-square&logo=jest&logoColor=white" alt="Jest" />
+</p>
+
+---
+
 ## 🧪 Testing & Quality
 
 A realtime channel fails in ways that are hard to reproduce — dropped streams, races between reconnect and revocation, one instance not seeing another's emit. The suite is built so those failures are caught by a test, not by a user.
