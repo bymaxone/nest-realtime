@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **A re-authentication failure could leave a connection connected.** When a connection's credentials were refused, a `onReauthenticationFailed` hook that threw before it returned (a plain function, which the interface allows) aborted the failure handling before the connection was disconnected, so a failing notification hook could keep a connection whose credentials had been refused until the next cycle, and the same on every cycle after. The hook's failure is now logged and the connection is disconnected as before.
+
 ### Fixed
 
+- **A consumer's lifecycle hook that fails can no longer take the process down or touch a connection.** On WebSocket, `onDisconnect` ran in a handler Nest does not wait for and was not guarded, so a hook that rejected or threw (a presence store that is down, for one) left an unhandled rejection, which ends the process on Node 15 and later, on the next disconnect of any client; and a failing `onConnect` disconnected the client it was announcing. Both are now logged and the connection is left as it is, as on SSE. A hook that throws before it returns (a plain function, which the interface allows) also escaped the SSE `onConnect` path and ended the stream with a 500. A hook is a notification; its failure is logged and nothing else changes.
 - **An SSE client that does not read can no longer grow the server without bound.** The response writes one event at a time and waits for the client to read, and every event behind that wait was held in memory with no limit: 100 MB sent to one connection that never read raised the server's memory by 167 MB and the connection stayed registered. Each connection is now bounded by `sse.maxQueuedBytes` (default 2 MiB) and `sse.maxQueuedEvents` (default 1000), counted as the frames Nest writes, from what has been sent and its socket has not yet taken, and a connection from which no byte has left the process for `sse.stallHeartbeats` heartbeats (default 3) while the response holds bytes is closed too. It is closed with the new reason `REALTIME_SLOW_CONSUMER` and a warning, only that connection, and the client reconnects with `Last-Event-ID`. An event that is alone in the queue is always taken, however large. `0` switches a bound off. The same 100 MB now closes the connection after 22 events with no growth in the server's memory. A bound that was not there before can close a client that had stalled; set the three options to `0` to keep the old behaviour.
 
 #### Apply to a derived backend

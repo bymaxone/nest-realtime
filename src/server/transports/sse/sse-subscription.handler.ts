@@ -39,6 +39,7 @@ import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { resolveClientAddress } from '../../utils/client-address'
 import { describeError } from '../../utils/describe-error'
+import { runHook } from '../../utils/run-hook'
 import { SseTransport } from './sse.transport'
 import { probeOf } from './outbound-backlog'
 import { HeartbeatService } from './heartbeat.service'
@@ -449,8 +450,8 @@ export class SseSubscriptionHandler {
    * @param invoke - A zero-arg function that calls the hook (handles optionality).
    */
   private fireHook(invoke: () => void | Promise<void>): void {
-    void Promise.resolve(invoke()).catch((err: unknown) => {
-      this.logger.warn(`Lifecycle hook failed: ${describeError(err)}`)
+    void runHook(invoke).then((failed) => {
+      if (failed) this.logger.warn(`Lifecycle hook failed: ${describeError(failed.error)}`)
     })
   }
 }

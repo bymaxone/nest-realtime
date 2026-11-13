@@ -13,6 +13,8 @@ import {
   ROOM_PREFIXES,
   REALTIME_ERROR_CODES,
   unavailableError,
+  describeError,
+  runHook,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   ITransport,
@@ -195,17 +197,20 @@ export class WebSocketTransport implements ITransport {
 
     await this.evictBeyondLimit(auth.userId)
 
-    await this.hooks.onConnect?.({
-      connectionId: socket.id,
-      userId: auth.userId,
-      tenantId: auth.tenantId,
-      roles: auth.roles,
-      metadata: auth.metadata,
-      transport: 'websocket',
-      ip: socket.handshake.address,
-      userAgent: socket.handshake.headers['user-agent'],
-      connectedAt,
-    })
+    const failed = await runHook(() =>
+      this.hooks.onConnect?.({
+        connectionId: socket.id,
+        userId: auth.userId,
+        tenantId: auth.tenantId,
+        roles: auth.roles,
+        metadata: auth.metadata,
+        transport: 'websocket',
+        ip: socket.handshake.address,
+        userAgent: socket.handshake.headers['user-agent'],
+        connectedAt,
+      }),
+    )
+    if (failed) this.logger.error(`onConnect hook failed: ${describeError(failed.error)}`)
   }
 
   /**
@@ -235,7 +240,8 @@ export class WebSocketTransport implements ITransport {
       durationMs: Date.now() - record.connectedAt.getTime(),
       ...(reason !== undefined ? { reason } : {}),
     }
-    await this.hooks.onDisconnect?.(disconnectMeta)
+    const failed = await runHook(() => this.hooks.onDisconnect?.(disconnectMeta))
+    if (failed) this.logger.error(`onDisconnect hook failed: ${describeError(failed.error)}`)
   }
 
   /**
