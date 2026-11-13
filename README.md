@@ -471,16 +471,16 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 
 ## 🛡️ Security Table
 
-| Layer                 | Implementation                                                                      |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| Credential validation | Delegated entirely to your `IConnectionAuthenticator`                               |
-| Auth library imports  | None: an ESLint rule fails lint on a string literal naming an auth package in `src` |
-| Tenant isolation      | Room-scoped (`tenant:{id}`), resolved from the authenticated result                 |
-| Connection revocation | `disconnect(connectionId)`, cross-instance; rejects if it cannot reach it           |
-| Credential expiry     | Interval re-authentication; drops the connection or emits an event first            |
-| Connection flooding   | FIFO eviction per user: oldest closed, new admitted, never a 429                    |
-| SSE transport headers | `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform`                 |
-| WebSocket origin      | Explicit `cors` config passed straight to Socket.IO                                 |
+| Layer                 | Implementation                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------- |
+| Credential validation | Delegated entirely to your `IConnectionAuthenticator`                                              |
+| Auth library imports  | None: an ESLint rule fails lint on a string literal naming an auth package in `src`                |
+| Tenant isolation      | Room-scoped (`tenant:{id}`), resolved from the authenticated result                                |
+| Connection revocation | `disconnect(connectionId)`, cross-instance; rejects if it cannot reach it                          |
+| Credential expiry     | Interval re-authentication; a failure drops the connection, after an event if `onFailure: 'event'` |
+| Connection flooding   | FIFO eviction per user: oldest closed, new admitted, never a 429                                   |
+| SSE transport headers | `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform`                                |
+| WebSocket origin      | Explicit `cors` config passed straight to Socket.IO                                                |
 
 ---
 
