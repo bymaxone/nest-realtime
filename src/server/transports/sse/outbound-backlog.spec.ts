@@ -120,6 +120,61 @@ describe('OutboundBacklog', () => {
   })
 })
 
+describe('OutboundBacklog: what the socket takes beyond what was counted', () => {
+  // The socket's total includes framing, chunk headers and keepalives that the sizes do not, so it
+  // runs ahead of what was counted. That surplus must not be kept as credit for later events.
+  it('does not keep the surplus a healthy connection built up as credit for when its client stops', () => {
+    const socket = probe()
+    const backlog = new OutboundBacklog({ maxBytes: 100, maxEvents: 2 }, socket)
+    for (let i = 0; i < 1000; i++) {
+      backlog.admit(10)
+      socket.take(35)
+    }
+
+    const admitted = Array.from({ length: 2000 }, () => backlog.admit(10)).filter(Boolean)
+
+    expect(admitted).toHaveLength(2)
+    expect(backlog.queuedEvents).toBe(2)
+    expect(backlog.queuedBytes).toBe(20)
+  })
+
+  it('keeps counting from what the socket had taken when the queue last emptied', () => {
+    const socket = probe()
+    const backlog = new OutboundBacklog({ maxBytes: 0, maxEvents: 0 }, socket)
+    backlog.admit(60)
+    socket.take(100)
+
+    backlog.admit(60)
+    socket.take(30)
+
+    expect(backlog.queuedBytes).toBe(30)
+    expect(backlog.queuedEvents).toBe(1)
+  })
+
+  // What the socket has already taken no longer counts toward the bound on events.
+  it('counts only the events still queued toward the event bound', () => {
+    const socket = probe()
+    const backlog = new OutboundBacklog({ maxBytes: 0, maxEvents: 2 }, socket)
+    backlog.admit(10)
+    backlog.admit(10)
+    socket.take(10)
+
+    expect(backlog.admit(10)).toBe(true)
+    expect(backlog.admit(10)).toBe(false)
+  })
+
+  it('does not forget events that the socket has only partly taken', () => {
+    const socket = probe()
+    const backlog = new OutboundBacklog({ maxBytes: 0, maxEvents: 0 }, socket)
+    backlog.admit(10)
+    backlog.admit(10)
+    socket.take(15)
+
+    expect(backlog.queuedEvents).toBe(1)
+    expect(backlog.queuedBytes).toBe(5)
+  })
+})
+
 describe('OutboundBacklog: what it keeps', () => {
   function sendAndTake(sent: number, taken: number): OutboundBacklog {
     const socket = probe()
@@ -273,7 +328,11 @@ describe('probeOf over a real socket', () => {
   it('stops reporting progress once the client stops reading, though keepalives keep being written', async () => {
     const res = await serve(false)
     const probe = probeOf(res)
-    for (let i = 0; i < 60; i++) res.write('x'.repeat(100_000))
+    // Fill until the socket buffers: how much the kernel takes before that differs by system.
+    for (let i = 0; i < 400 && (res.socket?.writableLength ?? 0) === 0; i++) {
+      res.write('x'.repeat(100_000))
+      await new Promise((resolve) => setImmediate(resolve))
+    }
     await new Promise((resolve) => setTimeout(resolve, 100))
     const watch = new StallWatch(3)
     const outcomes: boolean[] = []

@@ -44,13 +44,18 @@ export interface BacklogLimits {
  * is never more than what is written; a count that ran high would cut a client that is keeping up.
  * What the socket has accepted settles what was sent, so a client that reads is never cut however
  * much it receives in total.
+ *
+ * The socket's total also counts what the sizes leave out (framing, chunk headers, keepalives), so
+ * it runs ahead of what was counted. That surplus is dropped whenever everything counted has been
+ * taken, and not carried as credit for later events: carried, it would let a connection that was
+ * healthy for a long time queue far past the bounds once its client stopped.
  */
 export class OutboundBacklog {
   /** Cumulative end offset of every event still queued, oldest first. */
   private ends: number[] = []
   private head = 0
   private sent = 0
-  private readonly baseline: number
+  private baseline: number
 
   constructor(
     private readonly limits: BacklogLimits,
@@ -102,12 +107,20 @@ export class OutboundBacklog {
     return Math.max(0, this.probe.written() - this.baseline)
   }
 
-  /** Drop the events the socket has taken, and compact the queue once the dead prefix grows. */
+  /**
+   * Drop the events the socket has taken. When none is left, start counting afresh from what the
+   * socket has taken so far; otherwise compact the queue once the dead prefix grows.
+   */
   private settle(): void {
     const settled = this.settledOffset()
     // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — past the last offset `this.ends[this.head]` is `undefined`, and `undefined <= settled` is false, so the loop ends there whether or not the bound is tested
     while (this.head < this.ends.length && (this.ends[this.head] as number) <= settled) this.head++
-    if (this.head > 1024 && this.head * 2 > this.ends.length) {
+    if (this.head === this.ends.length) {
+      this.ends = []
+      this.head = 0
+      this.sent = 0
+      this.baseline = this.probe.written()
+    } else if (this.head > 1024 && this.head * 2 > this.ends.length) {
       this.ends = this.ends.slice(this.head)
       this.head = 0
     }

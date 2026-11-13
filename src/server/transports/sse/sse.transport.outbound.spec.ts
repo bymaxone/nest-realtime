@@ -110,19 +110,21 @@ describe('SseTransport: a client that does not read', () => {
     expect(connections.get('c1')).toBeDefined()
   })
 
-  // The size is read from the payload, which a consumer controls: one that cannot be serialised must
-  // fail for its own connection and not stop the event reaching the others.
-  it('isolates a payload that cannot be serialised: the other connections still receive the event', async () => {
+  // The size is read from the payload, which a consumer controls: one that cannot be serialised
+  // fails for the connection whose backlog is bounded, is logged, and does not stop the event
+  // reaching the other connections.
+  it('isolates a payload that cannot be serialised: it fails for the bounded connection and the others still receive it', async () => {
     const { transport } = build({ sse: { maxQueuedBytes: 1_000_000 } })
-    await register(transport, 'a', stuck())
-    await register(transport, 'b', stuck())
+    const bounded = await register(transport, 'a', stuck())
+    const unbounded = await register(transport, 'b', undefined)
     const circular: Record<string, unknown> = {}
     circular.self = circular
 
     await expect(transport.emitToUser('u1', 'e', circular)).resolves.toBeUndefined()
 
+    expect(bounded).toHaveLength(0)
+    expect(unbounded).toHaveLength(1)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('SSE delivery failed for a'))
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('SSE delivery failed for b'))
   })
 
   // Nest writes a string as it is, so its quotes and escapes are not on the wire and must not be counted.

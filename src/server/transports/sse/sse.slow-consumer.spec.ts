@@ -27,10 +27,11 @@ describe('SSE: a client that never reads', () => {
   let service: RealtimeService
   let connections: ConnectionRegistry
   const reasons: Array<string | undefined> = []
+  let warn: jest.SpyInstance
 
   async function boot(sse: Record<string, unknown> = {}): Promise<number> {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
-    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const hooks: IConnectionLifecycleHooks = {
       onDisconnect: (meta) => void reasons.push(meta.reason),
     }
@@ -79,15 +80,18 @@ describe('SSE: a client that never reads', () => {
     jest.restoreAllMocks()
   })
 
-  // Nothing bounded the queue behind a response that is waiting for the client to read: 60 MB of
-  // events were accepted for one connection and it stayed registered.
-  it('is closed, with a logged reason, once it falls too far behind', async () => {
+  // The queue behind a response that is waiting for the client to read holds every event in memory,
+  // so a client that stops reading is closed once what is queued for it passes the bound.
+  it('is closed, with the reason in the hook and in the log, once it falls too far behind', async () => {
     await openStalledClient(await boot())
 
     const closedAfter = await emitUntilClosed()
 
     expect(closedAfter).toBeDefined()
     expect(reasons).toStrictEqual([REALTIME_ERROR_CODES.SLOW_CONSUMER])
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(`${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection`),
+    )
   })
 
   it('keeps a client that keeps up, whatever its total traffic', async () => {
