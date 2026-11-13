@@ -28,24 +28,38 @@ function refuse(detail: string): never {
 }
 
 /**
- * Refuse an authentication result whose `rooms` break the admission rules.
+ * Validate the `rooms` of an authentication result and return the result the connection is
+ * admitted with.
  *
  * Like a blank identity, a bad room is a contract violation by the authenticator, so it
  * is refused at admission rather than trimmed or skipped: a connection quietly missing a
  * room it was meant to join would be live and unscoped. Every check is on the runtime
  * value, because the declared type is a promise, not a fact.
  *
+ * The rooms that are joined are the ones validated: the list is copied once, reading stops at
+ * the bound, the copy is what is checked, and the returned result carries the frozen copy.
+ * The authenticator keeps a reference to the array it returned, and the join happens after an
+ * await, so reading the original there would join whatever it holds by then.
+ *
  * @param auth - The resolved authentication result.
+ * @returns `auth` itself when it has no `rooms`; otherwise a result with the same fields and a
+ *   frozen copy of its `rooms`.
  * @throws Error carrying `REALTIME_AUTH_FAILED` when `rooms` is present and invalid.
  */
-export function assertAdmissionRooms(auth: AuthenticationResult): void {
+export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
   const { rooms } = auth
-  if (rooms === undefined) return
+  if (rooms === undefined) return auth
   if (!Array.isArray(rooms)) refuse('`rooms` is not an array')
-  if (rooms.length > ADMISSION_ROOM_LIMITS.MAX_ROOMS) {
-    refuse(`${rooms.length} rooms exceeds the limit of ${ADMISSION_ROOM_LIMITS.MAX_ROOMS}`)
+  const admitted: unknown[] = []
+  for (const room of rooms as Iterable<unknown>) {
+    if (admitted.length === ADMISSION_ROOM_LIMITS.MAX_ROOMS) {
+      refuse(
+        `more than ${ADMISSION_ROOM_LIMITS.MAX_ROOMS} rooms: the limit is ${ADMISSION_ROOM_LIMITS.MAX_ROOMS}`,
+      )
+    }
+    admitted.push(room)
   }
-  for (const room of rooms as unknown[]) {
+  for (const room of admitted) {
     if (typeof room !== 'string' || room.trim().length === 0) {
       refuse('every room must be a non-blank string')
     }
@@ -55,4 +69,5 @@ export function assertAdmissionRooms(auth: AuthenticationResult): void {
     const reserved = RESERVED_ROOM_PREFIXES.find((prefix) => room.startsWith(prefix))
     if (reserved !== undefined) refuse(`a room name starts with the reserved prefix "${reserved}"`)
   }
+  return { ...auth, rooms: Object.freeze(admitted as string[]) }
 }

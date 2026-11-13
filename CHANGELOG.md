@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The rooms joined at admission are the rooms that were validated.** `AuthenticationResult.rooms` is checked when the authenticator returns, and was joined later, after an await, from the same array. An authenticator that kept the array it returned and changed it in between could join names that were never checked, including a `user:` or `tenant:` room. The array is now copied once when it is validated, and only the copy, which is frozen, is joined and stored in `originalAuth`.
+
 ## [1.2.13] - 2026-11-13
 
 No change to the published package: `dist/` is the same as in 1.2.12.

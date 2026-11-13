@@ -252,4 +252,25 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
 
     expect(transport.authenticate).toHaveBeenCalledTimes(2)
   })
+
+  // The guard authenticates first and the connection registers when the stream is subscribed: the
+  // authenticator still holds the array it returned in between, so the rooms that are registered
+  // must be the ones it checked.
+  it('registers the rooms that were validated, not what the authenticator holds by then', async () => {
+    const returned = ['workspace:w1']
+    const transport = mkTransport({
+      authenticate: jest.fn().mockResolvedValue({ userId: 'u1', rooms: returned }),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const req = mkReq()
+
+    await handler.authenticateBeforeCommit(req)
+    const stream = await handler.handle(req, mkRes())
+    returned.push('user:victim')
+    stream.subscribe().unsubscribe()
+
+    expect(transport.registerConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ auth: expect.objectContaining({ rooms: ['workspace:w1'] }) }),
+    )
+  })
 })
