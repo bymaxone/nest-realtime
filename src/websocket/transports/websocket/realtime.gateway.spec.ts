@@ -121,6 +121,20 @@ describe('RealtimeGateway', () => {
     )
   })
 
+  it('registers the rooms handleConnection validated itself, not what the authenticator holds by then', async () => {
+    const returned = ['workspace:w1']
+    authenticator.authenticate.mockResolvedValue({ userId: 'u-1', rooms: returned })
+    let registered: readonly string[] | undefined
+    transportMock.registerSocket.mockImplementation(async (_socket, auth) => {
+      returned.push('user:victim')
+      registered = (auth as { rooms: readonly string[] }).rooms
+    })
+
+    await gateway.handleConnection(makeSocket() as never)
+
+    expect(registered).toStrictEqual(['workspace:w1'])
+  })
+
   it('applies tenantResolver before registering the socket', async () => {
     // The resolver runs on both transports or on neither. It decides the tenant that
     // routes a connection's events, so a consumer configuring it must get the same
@@ -712,6 +726,23 @@ describe('RealtimeGateway', () => {
       } finally {
         errorSpy.mockRestore()
       }
+    })
+
+    // The handshake validates and handleConnection registers later; the authenticator still holds
+    // its array in between, so what is registered must be what was validated.
+    it('registers the rooms the handshake validated, not what the authenticator holds by then', async () => {
+      const returned = ['workspace:w1']
+      authenticator.authenticate.mockResolvedValue({ userId: 'u-1', rooms: returned })
+      const socket = makeSocket()
+
+      await installMiddleware()(socket, jest.fn())
+      returned.push('user:victim')
+      await gateway.handleConnection(socket as never)
+
+      expect(transportMock.registerSocket).toHaveBeenCalledWith(
+        socket,
+        expect.objectContaining({ rooms: ['workspace:w1'] }),
+      )
     })
 
     it('applies tenantResolver in the middleware so handleConnection registers the resolved tenant', async () => {

@@ -12,7 +12,7 @@ import {
   REALTIME_OPTIONS_TOKEN,
   RESERVED_EVENT_NAMES,
   parseCookieHeader,
-  assertAdmissionRooms,
+  admitRooms,
   assertIdentityIsNotBlank,
   resolveAuthTenant,
 } from '@bymax-one/nest-realtime/internal'
@@ -87,8 +87,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       }
       const resolvedAuth = resolveAuthTenant(this.options, auth)
       assertIdentityIsNotBlank(resolvedAuth)
-      assertAdmissionRooms(resolvedAuth)
-      this.authenticated.set(socket, resolvedAuth)
+      this.authenticated.set(socket, admitRooms(resolvedAuth))
       next()
     } catch (err) {
       this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
@@ -201,7 +200,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         }
         resolvedAuth = resolveAuthTenant(this.options, auth)
         assertIdentityIsNotBlank(resolvedAuth)
-        assertAdmissionRooms(resolvedAuth)
+        resolvedAuth = admitRooms(resolvedAuth)
       }
 
       await this.transport.registerSocket(socket, resolvedAuth)

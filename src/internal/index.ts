@@ -67,7 +67,7 @@ export type { RedisOfflineQueueOptions } from '../server/offline-queue/redis-off
 
 // Utilities and contracts.
 export { assertIdentityIsNotBlank, resolveAuthTenant } from '../server/utils/assert-identity'
-export { assertAdmissionRooms } from '../server/utils/assert-admission-rooms'
+export { admitRooms } from '../server/utils/admit-rooms'
 export { composeRoomId } from '../server/utils/compose-room-id'
 export { describeError } from '../server/utils/describe-error'
 export { unavailableError } from '../server/utils/unavailable-error'

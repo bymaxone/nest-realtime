@@ -33,7 +33,7 @@ import type {
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import type { SseRequest, SseResponse } from '../../interfaces/sse-http.interface'
-import { assertAdmissionRooms } from '../../utils/assert-admission-rooms'
+import { admitRooms } from '../../utils/admit-rooms'
 import { assertIdentityIsNotBlank, resolveAuthTenant } from '../../utils/assert-identity'
 import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
@@ -177,15 +177,15 @@ export class SseSubscriptionHandler {
    * without a message.
    *
    * @param auth - The result the consumer's authenticator returned.
-   * @returns The same result with the routing tenant resolved.
+   * @returns The result with the routing tenant resolved and `rooms` replaced by the validated, frozen copy.
    * @throws InternalServerErrorException with the generic body when a trait is present
    *   but blank.
    */
   private resolveAndValidateIdentity(auth: AuthenticationResult): AuthenticationResult {
-    const resolvedAuth = resolveAuthTenant(this.options, auth)
+    let resolvedAuth = resolveAuthTenant(this.options, auth)
     try {
       assertIdentityIsNotBlank(resolvedAuth)
-      assertAdmissionRooms(resolvedAuth)
+      resolvedAuth = admitRooms(resolvedAuth)
     } catch (err) {
       this.logger.error(`SSE connection refused — responding 500: ${describeError(err)}`)
       throw new InternalServerErrorException()
