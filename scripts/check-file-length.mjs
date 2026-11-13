@@ -76,7 +76,9 @@ function parseBaseline(text, path) {
   const table = new Map(Object.entries(files))
   for (const [file, length] of table) {
     if (!Number.isInteger(length) || length <= LIMIT) {
-      throw new Error(`${path}: ${file} must record an integer length above ${LIMIT}, got ${String(length)}`)
+      throw new Error(
+        `${path}: ${file} must record an integer length above ${LIMIT}, got ${String(length)}`,
+      )
     }
   }
   return table
@@ -85,7 +87,10 @@ function parseBaseline(text, path) {
 /** The baseline table at a git revision, or `null` when that revision has no baseline file. */
 function baselineAt(root, ref, path) {
   try {
-    execFileSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: root, stdio: 'ignore' })
+    execFileSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], {
+      cwd: root,
+      stdio: 'ignore',
+    })
   } catch {
     throw new Error(`${ref}: not a revision in this repository`)
   }
@@ -104,7 +109,9 @@ function widening(baseline, base) {
   for (const [file, length] of baseline) {
     const inBase = base.get(file)
     if (inBase === undefined) {
-      problems.push(`${file} is on the baseline but the base revision does not have it. A new offender is split, not listed.`)
+      problems.push(
+        `${file} is on the baseline but the base revision does not have it. A new offender is split, not listed.`,
+      )
     } else if (length > inBase) {
       problems.push(`${file} is recorded at ${length} lines, above ${inBase} on the base revision.`)
     }
@@ -118,29 +125,42 @@ function problemsOf(over, baseline) {
   for (const [file, length] of over) {
     const recorded = baseline.get(file)
     if (recorded === undefined) {
-      problems.push(`${file} has ${length} lines, over the limit of ${LIMIT}. Split it by responsibility.`)
+      problems.push(
+        `${file} has ${length} lines, over the limit of ${LIMIT}. Split it by responsibility.`,
+      )
     } else if (length > recorded) {
-      problems.push(`${file} grew from ${recorded} to ${length} lines. A baselined file may only shrink.`)
+      problems.push(
+        `${file} grew from ${recorded} to ${length} lines. A baselined file may only shrink.`,
+      )
     } else if (length < recorded) {
-      problems.push(`${file} shrank to ${length} lines. Lower its baseline entry from ${recorded} to ${length}.`)
+      problems.push(
+        `${file} shrank to ${length} lines. Lower its baseline entry from ${recorded} to ${length}.`,
+      )
     }
   }
   for (const file of baseline.keys()) {
     if (!over.has(file)) {
-      problems.push(`${file} is on the baseline but is no longer over ${LIMIT} lines or tracked. Remove its entry.`)
+      problems.push(
+        `${file} is on the baseline but is no longer over ${LIMIT} lines or tracked. Remove its entry.`,
+      )
     }
   }
   return problems
 }
 
 const root = resolve(option('--root', process.cwd()))
-const baselinePath = resolve(option('--baseline', join(root, 'scripts', 'file-length-baseline.json')))
+const baselinePath = resolve(
+  option('--baseline', join(root, 'scripts', 'file-length-baseline.json')),
+)
 
 const baseline = parseBaseline(readFileSync(baselinePath, 'utf8'), baselinePath)
 const baseRef = option('--base', undefined)
 const base = baseRef === undefined ? null : baselineAt(root, baseRef, baselinePath)
 
-const problems = [...problemsOf(oversize(root), baseline), ...(base === null ? [] : widening(baseline, base))]
+const problems = [
+  ...problemsOf(oversize(root), baseline),
+  ...(base === null ? [] : widening(baseline, base)),
+]
 
 if (problems.length > 0) {
   for (const problem of problems) console.error(`✖ ${problem}`)

@@ -65,8 +65,9 @@ export interface SseResponse {
   setHeader(name: string, value: string): unknown
   /** Write raw bytes to the open stream — the `: keepalive` comment. */
   write(chunk: string): unknown
-  /** The socket, when the response has one; its `bytesWritten` is what the client has taken. */
-  readonly socket?: { readonly bytesWritten?: number } | null | undefined
+  /** The socket, when the response has one: `bytesWritten` counts what is still buffered in it. */
+  readonly socket?:
+    { readonly bytesWritten?: number; readonly writableLength?: number } | null | undefined
   /** Bytes the response is holding until the client reads. */
   readonly writableLength?: number | undefined
 }

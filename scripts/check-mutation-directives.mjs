@@ -179,9 +179,7 @@ if (!mutatorNames) {
   console.log('• mutator names unavailable from the installed Stryker — skipping that check')
 }
 
-const knownMutators = mutatorNames
-  ? new Set(mutatorNames.map((name) => name.toLowerCase()))
-  : null
+const knownMutators = mutatorNames ? new Set(mutatorNames.map((name) => name.toLowerCase())) : null
 
 const problems = sourceFiles('src').flatMap((file) => inspect(file, knownMutators))
 

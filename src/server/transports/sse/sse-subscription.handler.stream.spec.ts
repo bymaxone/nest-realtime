@@ -492,14 +492,14 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     expect(transport.checkStall).toHaveBeenCalledWith(connectionId)
   })
 
-  // The transport bounds a backlog by what the socket has taken, so it is handed a way to read that.
+  // The transport bounds a backlog by what has left the process, so it is handed a way to read that.
   it('hands the transport what the response has taken and holds', async () => {
     const transport = mkTransport()
     const handler = build(transport, mkHeartbeat(), mkOptions())
     const res = {
       setHeader: jest.fn(),
       write: jest.fn(),
-      socket: { bytesWritten: 7 },
+      socket: { bytesWritten: 7, writableLength: 2 },
       writableLength: 3,
     }
     const sub = (await handler.handle(mkReq(), res as never)).subscribe()
@@ -511,7 +511,7 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     }
     res.socket.bytesWritten = 20
 
-    expect(outbound.written()).toBe(20)
+    expect(outbound.written()).toBe(18)
     expect(outbound.buffered()).toBe(3)
   })
 

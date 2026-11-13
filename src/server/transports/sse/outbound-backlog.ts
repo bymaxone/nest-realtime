@@ -3,12 +3,31 @@
  * @layer transport
  */
 
+import type { SseResponse } from '../../interfaces/sse-http.interface'
+
 /** What the transport can read from a connection's response without owning it. */
 export interface OutboundProbe {
   /** Bytes the socket has accepted so far; it only grows. */
   written(): number
   /** Bytes the response is holding while the client does not read. */
   buffered(): number
+}
+
+/**
+ * What a response has handed to the network and what it still holds, or `undefined` when it has
+ * no socket to measure: a backlog counted against a counter that never moves would cut a client
+ * that is keeping up.
+ *
+ * A socket's `bytesWritten` includes the bytes still buffered in it, so it rises with every
+ * keepalive written to a client that reads nothing. What has left the process is `bytesWritten`
+ * less what the socket still buffers, and only that stops moving when the client stops reading.
+ */
+export function probeOf(res: SseResponse): OutboundProbe | undefined {
+  if (typeof res.socket?.bytesWritten !== 'number') return undefined
+  return {
+    written: () => (res.socket?.bytesWritten ?? 0) - (res.socket?.writableLength ?? 0),
+    buffered: () => Math.max(res.writableLength ?? 0, res.socket?.writableLength ?? 0),
+  }
 }
 
 /** The bounds on a connection's backlog; `0` switches a bound off. */

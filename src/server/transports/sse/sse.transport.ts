@@ -64,13 +64,29 @@ interface Outbound {
   readonly stall: StallWatch
 }
 
-/** The payload size of an event, computed once however many connections receive it. */
-const payloadBytes = new WeakMap<MessageEvent, number>()
+/**
+ * What an event adds to the stream, computed once however many connections receive it: its data,
+ * a string as it is and anything else as JSON, and its name and id with line breaks removed. The
+ * frame adds field names and separators, so the size is never more than what is written.
+ */
+const payloadBytes = new WeakMap<Frame, number>()
 
-function sizeOf(message: MessageEvent): number {
+/** A frame field as Nest writes it, without line breaks. */
+function fieldBytes(value: string): number {
+  return Buffer.byteLength(value.replace(/[\r\n]/g, ''))
+}
+
+/** An event this transport built: it always has a name and an id. */
+type Frame = MessageEvent & { readonly id: string; readonly type: string }
+
+function sizeOf(message: Frame): number {
   let size = payloadBytes.get(message)
   if (size === undefined) {
-    size = Buffer.byteLength(JSON.stringify(message.data) ?? '')
+    const { data, type, id } = message
+    size =
+      Buffer.byteLength(typeof data === 'string' ? data : (JSON.stringify(data) ?? '')) +
+      fieldBytes(type) +
+      fieldBytes(id)
     payloadBytes.set(message, size)
   }
   return size
@@ -462,12 +478,12 @@ export class SseTransport implements ITransport {
     record.close$?.complete()
   }
 
-  private buildMessage(id: string, event: string, data: unknown): MessageEvent {
+  private buildMessage(id: string, event: string, data: unknown): Frame {
     return { id, type: event, data: data as object }
   }
 
   /** Deliver to one connection, isolating failures so others still receive the event. */
-  private deliver(conn: ConnectionRecord, message: MessageEvent): void {
+  private deliver(conn: ConnectionRecord, message: Frame): void {
     try {
       const tracked = this.outbound.get(conn.connectionId)
       if (tracked && !tracked.backlog.admit(sizeOf(message))) {

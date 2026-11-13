@@ -2,7 +2,9 @@
  * @fileoverview Unit tests for the bound on what an SSE client may leave unread.
  * @layer transport
  */
-import { OutboundBacklog, StallWatch } from './outbound-backlog'
+import { createServer, type Server, type ServerResponse } from 'node:http'
+import { connect, type Socket } from 'node:net'
+import { OutboundBacklog, StallWatch, probeOf } from './outbound-backlog'
 import type { OutboundProbe } from './outbound-backlog'
 
 /** A response whose socket has taken `written` bytes and whose client is, or is not, reading. */
@@ -197,5 +199,103 @@ describe('StallWatch', () => {
     const watch = new StallWatch(0)
 
     for (let i = 0; i < 10; i++) expect(watch.stalled(socket)).toBe(false)
+  })
+})
+
+describe('probeOf', () => {
+  it('is undefined for a response with no socket to measure', () => {
+    expect(probeOf({ setHeader: jest.fn(), write: jest.fn() })).toBeUndefined()
+    expect(probeOf({ setHeader: jest.fn(), write: jest.fn(), socket: null })).toBeUndefined()
+    expect(probeOf({ setHeader: jest.fn(), write: jest.fn(), socket: {} })).toBeUndefined()
+  })
+
+  // `bytesWritten` of a socket includes what it still buffers; what has left is the difference.
+  it('reads what has left the process as the socket bytes less what it still buffers', () => {
+    const socket = { bytesWritten: 100, writableLength: 30 }
+    const probe = probeOf({ setHeader: jest.fn(), write: jest.fn(), socket, writableLength: 10 })
+
+    expect(probe?.written()).toBe(70)
+    expect(probe?.buffered()).toBe(30)
+  })
+
+  it('reads what the response holds from whichever of the response and the socket holds more', () => {
+    const socket = { bytesWritten: 100, writableLength: 5 }
+    const probe = probeOf({ setHeader: jest.fn(), write: jest.fn(), socket, writableLength: 40 })
+
+    expect(probe?.buffered()).toBe(40)
+  })
+
+  it('reads a response that has lost its socket as having sent and held nothing', () => {
+    const res: { socket: unknown } & Record<string, unknown> = {
+      setHeader: jest.fn(),
+      write: jest.fn(),
+      socket: { bytesWritten: 7 },
+    }
+    const probe = probeOf(res as never)
+    res.socket = null
+
+    expect(probe?.written()).toBe(0)
+    expect(probe?.buffered()).toBe(0)
+  })
+})
+
+// Over a real socket, because the property is what Node reports: `bytesWritten` rises with every
+// keepalive written to a client that reads nothing, so only the bytes that have left stop moving.
+describe('probeOf over a real socket', () => {
+  let server: Server | undefined
+  let client: Socket | undefined
+
+  afterEach(async () => {
+    client?.destroy()
+    client = undefined
+    await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()))
+    server = undefined
+  })
+
+  function serve(reading: boolean): Promise<ServerResponse> {
+    return new Promise((resolve) => {
+      server = createServer((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+        res.flushHeaders()
+        resolve(res)
+      })
+      server.listen(0, '127.0.0.1', () => {
+        const { port } = server?.address() as { port: number }
+        client = connect(port, '127.0.0.1', () => {
+          client?.write('GET / HTTP/1.1\r\nHost: x\r\n\r\n')
+        })
+        if (reading) client.on('data', () => undefined)
+        else client.pause()
+      })
+    })
+  }
+
+  it('stops reporting progress once the client stops reading, though keepalives keep being written', async () => {
+    const res = await serve(false)
+    const probe = probeOf(res)
+    for (let i = 0; i < 60; i++) res.write('x'.repeat(100_000))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const watch = new StallWatch(3)
+    const outcomes: boolean[] = []
+
+    for (let i = 0; i < 4; i++) {
+      res.write(': keepalive\n\n')
+      outcomes.push(watch.stalled(probe as OutboundProbe))
+    }
+
+    expect(probe?.buffered()).toBeGreaterThan(0)
+    expect(outcomes).toStrictEqual([false, false, false, true])
+  })
+
+  it('keeps reporting progress while the client reads', async () => {
+    const res = await serve(true)
+    const probe = probeOf(res)
+    const before = probe?.written() ?? 0
+
+    res.write('x'.repeat(50_000))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(probe?.written()).toBeGreaterThanOrEqual(before + 50_000)
+    expect(probe?.buffered()).toBe(0)
   })
 })
