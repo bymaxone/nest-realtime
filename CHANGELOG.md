@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.13] - 2026-11-13
+
+No change to the published package: `dist/` is the same as in 1.2.12.
+
+### Changed
+
+- **An ESLint rule now enforces the auth-import rule.** A string literal under `src/` that names `@bymax-one/nest-auth`, `@nestjs/jwt`, `passport` or `passport-*` fails the lint step, so a literal specifier is refused in every form of `import` and `require`. It is covered by `src/eslint-auth-gate.spec.ts`.
+
+### Documentation
+
+- The README is audited and shortened. Shutdown has its own section, "What This Library Does NOT Do" replaces the deployment notes, and a compact Security Table and Tech Stack stay.
+
 ## [1.2.12] - 2026-11-12
 
 ### Added
@@ -984,7 +996,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.12...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.13...HEAD
+[1.2.13]: https://github.com/bymaxone/nest-realtime/compare/v1.2.12...v1.2.13
 [1.2.12]: https://github.com/bymaxone/nest-realtime/compare/v1.2.11...v1.2.12
 [1.2.11]: https://github.com/bymaxone/nest-realtime/compare/v1.2.10...v1.2.11
 [1.2.10]: https://github.com/bymaxone/nest-realtime/compare/v1.2.9...v1.2.10
