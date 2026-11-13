@@ -7,6 +7,13 @@ import type { MessageEvent } from '@nestjs/common'
 /** An event this transport built: it always has a name and an id. */
 export type Frame = MessageEvent & { readonly id: string; readonly type: string }
 
+/** The fields of a frame the size depends on; `data` is whatever a caller passed to an emit. */
+export interface FrameFields {
+  readonly id: string
+  readonly type: string
+  readonly data?: unknown
+}
+
 // What Nest writes around each field of a frame: `event: <type>\n`, `id: <id>\n`, `data: <text>\n`,
 // and a blank line that ends the frame.
 const EVENT_FIELD = 'event: '.length + '\n'.length
@@ -15,7 +22,7 @@ const DATA_FIELD = 'data: '.length + '\n'.length
 const FRAME_END = '\n'.length
 
 /** The bytes a frame adds, computed once however many connections receive it. */
-const sizes = new WeakMap<Frame, number>()
+const sizes = new WeakMap<FrameFields, number>()
 
 /** A frame field as Nest writes it, without line breaks. */
 function fieldBytes(value: string): number {
@@ -31,7 +38,7 @@ function fieldBytes(value: string): number {
  * further line gets, and HTTP chunk headers are left out because a response that is not chunked
  * has none.
  */
-export function frameBytes(message: Frame): number {
+export function frameBytes(message: FrameFields): number {
   let size = sizes.get(message)
   if (size === undefined) {
     const { data, type, id } = message

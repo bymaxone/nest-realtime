@@ -4,10 +4,10 @@
  */
 import { SseStream } from '@nestjs/core/router/sse-stream'
 import { frameBytes } from './frame-size'
-import type { Frame } from './frame-size'
+import type { FrameFields } from './frame-size'
 
 /** What Nest writes for a message, read from its own stream. */
-function written(message: Frame): number {
+function written(message: FrameFields): number {
   const stream = new SseStream()
   let total = 0
   stream.on('data', (chunk: string | Buffer) => {
@@ -17,7 +17,7 @@ function written(message: Frame): number {
   return total
 }
 
-const frame = (over: Partial<Frame> = {}): Frame => ({
+const frame = (over: Partial<FrameFields> = {}): FrameFields => ({
   id: '1-000001',
   type: 'tick',
   data: {},
@@ -40,15 +40,15 @@ describe('frameBytes', () => {
   })
 
   it('counts null data as nothing, as Nest writes none', () => {
-    const message = frame({ data: null as unknown as object })
+    const message = frame({ data: null })
     expect(frameBytes(message)).toBe(written(message))
   })
 
   // A payload with no JSON form is written as an empty data line, which Nest cannot actually do for
   // a function, so only that nothing is counted for its text is asserted.
   it('counts a payload with no JSON form as an empty data line', () => {
-    const message = frame({ data: (() => undefined) as unknown as object })
-    const noData: Frame = { id: message.id, type: message.type }
+    const message = frame({ data: () => undefined })
+    const noData: FrameFields = { id: message.id, type: message.type }
 
     expect(frameBytes(message)).toBe(frameBytes(noData) + 'data: \n'.length)
   })
