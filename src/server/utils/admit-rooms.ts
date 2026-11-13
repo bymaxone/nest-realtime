@@ -50,10 +50,10 @@ export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
   const { rooms } = auth
   if (rooms === undefined) return auth
   if (!Array.isArray(rooms)) refuse('`rooms` is not an array')
-  if (rooms.length > ADMISSION_ROOM_LIMITS.MAX_ROOMS) {
-    refuse(`${rooms.length} rooms exceeds the limit of ${ADMISSION_ROOM_LIMITS.MAX_ROOMS}`)
-  }
   const admitted = [...(rooms as unknown[])]
+  if (admitted.length > ADMISSION_ROOM_LIMITS.MAX_ROOMS) {
+    refuse(`${admitted.length} rooms exceeds the limit of ${ADMISSION_ROOM_LIMITS.MAX_ROOMS}`)
+  }
   for (const room of admitted) {
     if (typeof room !== 'string' || room.trim().length === 0) {
       refuse('every room must be a non-blank string')

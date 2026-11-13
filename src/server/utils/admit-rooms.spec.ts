@@ -54,6 +54,20 @@ describe('admitRooms', () => {
     )
   })
 
+  // The count is the count of what the connection would join, which is what iterating the array
+  // yields; `length` is a property an array can disagree with its own iterator about.
+  it('refuses an array whose iterator yields more rooms than its length says', () => {
+    const rooms = ['workspace:w1']
+    Object.defineProperty(rooms, Symbol.iterator, {
+      value: function* () {
+        for (let i = 0; i <= ADMISSION_ROOM_LIMITS.MAX_ROOMS; i++) yield `r${i}`
+      },
+    })
+    expect(() => admitRooms(untyped(rooms))).toThrow(
+      `${PREFIX}33 rooms exceeds the limit of 32${SUFFIX}`,
+    )
+  })
+
   it('refuses a name that is not a string, or is blank', () => {
     for (const bad of [1, null, undefined, {}, '', ' ', '\t\n']) {
       expect(() => admitRooms(untyped(['ok', bad]))).toThrow(
