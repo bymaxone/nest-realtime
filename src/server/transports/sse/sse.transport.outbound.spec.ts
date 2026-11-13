@@ -63,7 +63,7 @@ describe('SseTransport: a client that does not read', () => {
     expect(reasons).toStrictEqual([REALTIME_ERROR_CODES.SLOW_CONSUMER])
     expect(warn).toHaveBeenCalledWith(
       `${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection slow, its client has not read what was sent ` +
-        '(2 events, 44 bytes queued, 10 bytes held by the response)',
+        '(2 events, 86 bytes queued, 10 bytes held by the response)',
     )
   })
 
@@ -100,7 +100,7 @@ describe('SseTransport: a client that does not read', () => {
 
   // `JSON.stringify(undefined)` is `undefined`, not a string: an event with no data weighs nothing.
   it('takes an event that has no data', async () => {
-    const { transport, connections } = build({ sse: { maxQueuedBytes: 42 } })
+    const { transport, connections } = build({ sse: { maxQueuedBytes: 70 } })
     const received = await register(transport, 'c1', stuck())
 
     await transport.emitToUser('u1', 'e', undefined)
@@ -129,7 +129,7 @@ describe('SseTransport: a client that does not read', () => {
 
   // Nest writes a string as it is, so its quotes and escapes are not on the wire and must not be counted.
   it('counts a string payload as it is written, not as JSON', async () => {
-    const { transport, connections } = build({ sse: { maxQueuedBytes: 48 } })
+    const { transport, connections } = build({ sse: { maxQueuedBytes: 90 } })
     const received = await register(transport, 'c1', stuck())
 
     await transport.emitToUser('u1', 'e', 'a"b')
@@ -153,7 +153,7 @@ describe('SseTransport: a client that does not read', () => {
   })
 
   it('counts an event name written without its line breaks', async () => {
-    const { transport, connections } = build({ sse: { maxQueuedBytes: 46 } })
+    const { transport, connections } = build({ sse: { maxQueuedBytes: 88 } })
     const received = await register(transport, 'a', stuck())
 
     await transport.emitToUser('u1', 'a\r\nb', 1)

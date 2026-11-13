@@ -42,6 +42,8 @@ import { unavailableError } from '../../utils/unavailable-error'
 import { InMemoryPubSub } from '../../pubsub/in-memory-pubsub'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
+import { frameBytes } from './frame-size'
+import type { Frame } from './frame-size'
 import { OutboundBacklog, StallWatch } from './outbound-backlog'
 import type { OutboundProbe } from './outbound-backlog'
 
@@ -62,34 +64,6 @@ interface Outbound {
   readonly probe: OutboundProbe
   readonly backlog: OutboundBacklog
   readonly stall: StallWatch
-}
-
-/**
- * What an event adds to the stream, computed once however many connections receive it: its data,
- * a string as it is and anything else as JSON, and its name and id with line breaks removed. The
- * frame adds field names and separators, so the size is never more than what is written.
- */
-const payloadBytes = new WeakMap<Frame, number>()
-
-/** A frame field as Nest writes it, without line breaks. */
-function fieldBytes(value: string): number {
-  return Buffer.byteLength(value.replace(/[\r\n]/g, ''))
-}
-
-/** An event this transport built: it always has a name and an id. */
-type Frame = MessageEvent & { readonly id: string; readonly type: string }
-
-function sizeOf(message: Frame): number {
-  let size = payloadBytes.get(message)
-  if (size === undefined) {
-    const { data, type, id } = message
-    size =
-      Buffer.byteLength(typeof data === 'string' ? data : (JSON.stringify(data) ?? '')) +
-      fieldBytes(type) +
-      fieldBytes(id)
-    payloadBytes.set(message, size)
-  }
-  return size
 }
 
 /** A caught failure, boxed so that a thrown `undefined` or `null` is still a failure. */
@@ -486,7 +460,7 @@ export class SseTransport implements ITransport {
   private deliver(conn: ConnectionRecord, message: Frame): void {
     try {
       const tracked = this.outbound.get(conn.connectionId)
-      if (tracked && !tracked.backlog.admit(sizeOf(message))) {
+      if (tracked && !tracked.backlog.admit(frameBytes(message))) {
         this.cutSlowConsumer(conn.connectionId, 'its client has not read what was sent', tracked)
         return
       }
