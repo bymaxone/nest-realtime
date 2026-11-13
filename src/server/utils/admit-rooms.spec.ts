@@ -50,7 +50,7 @@ describe('admitRooms', () => {
   it('refuses one room more than the maximum', () => {
     const over = Array.from({ length: ADMISSION_ROOM_LIMITS.MAX_ROOMS + 1 }, (_v, i) => `r${i}`)
     expect(() => admitRooms(untyped(over))).toThrow(
-      `${PREFIX}33 rooms exceeds the limit of 32${SUFFIX}`,
+      `${PREFIX}more than 32 rooms: the limit is 32${SUFFIX}`,
     )
   })
 
@@ -64,8 +64,28 @@ describe('admitRooms', () => {
       },
     })
     expect(() => admitRooms(untyped(rooms))).toThrow(
-      `${PREFIX}33 rooms exceeds the limit of 32${SUFFIX}`,
+      `${PREFIX}more than 32 rooms: the limit is 32${SUFFIX}`,
     )
+  })
+
+  // The bound has to stop the reading, not follow it: an iterator that never ends would otherwise
+  // keep admission from completing.
+  it('stops reading an iterator once it has yielded more than the maximum', () => {
+    let pulled = 0
+    const rooms = ['workspace:w1']
+    Object.defineProperty(rooms, Symbol.iterator, {
+      value: function* () {
+        for (;;) {
+          pulled += 1
+          yield `r${pulled}`
+        }
+      },
+    })
+
+    expect(() => admitRooms(untyped(rooms))).toThrow(
+      `${PREFIX}more than 32 rooms: the limit is 32${SUFFIX}`,
+    )
+    expect(pulled).toBe(ADMISSION_ROOM_LIMITS.MAX_ROOMS + 1)
   })
 
   it('refuses a name that is not a string, or is blank', () => {

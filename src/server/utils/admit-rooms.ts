@@ -36,10 +36,10 @@ function refuse(detail: string): never {
  * room it was meant to join would be live and unscoped. Every check is on the runtime
  * value, because the declared type is a promise, not a fact.
  *
- * The rooms that are joined are the ones validated: the list is copied once, the copy is
- * what is checked, and the returned result carries the frozen copy. The authenticator keeps
- * a reference to the array it returned, and the join happens after an await, so reading the
- * original there would join whatever it holds by then.
+ * The rooms that are joined are the ones validated: the list is copied once, reading stops at
+ * the bound, the copy is what is checked, and the returned result carries the frozen copy.
+ * The authenticator keeps a reference to the array it returned, and the join happens after an
+ * await, so reading the original there would join whatever it holds by then.
  *
  * @param auth - The resolved authentication result.
  * @returns `auth` itself when it has no `rooms`; otherwise a result with the same fields and a
@@ -50,9 +50,14 @@ export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
   const { rooms } = auth
   if (rooms === undefined) return auth
   if (!Array.isArray(rooms)) refuse('`rooms` is not an array')
-  const admitted = [...(rooms as unknown[])]
-  if (admitted.length > ADMISSION_ROOM_LIMITS.MAX_ROOMS) {
-    refuse(`${admitted.length} rooms exceeds the limit of ${ADMISSION_ROOM_LIMITS.MAX_ROOMS}`)
+  const admitted: unknown[] = []
+  for (const room of rooms as Iterable<unknown>) {
+    if (admitted.length === ADMISSION_ROOM_LIMITS.MAX_ROOMS) {
+      refuse(
+        `more than ${ADMISSION_ROOM_LIMITS.MAX_ROOMS} rooms: the limit is ${ADMISSION_ROOM_LIMITS.MAX_ROOMS}`,
+      )
+    }
+    admitted.push(room)
   }
   for (const room of admitted) {
     if (typeof room !== 'string' || room.trim().length === 0) {
