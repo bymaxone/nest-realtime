@@ -996,7 +996,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.12...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.13...HEAD
+[1.2.13]: https://github.com/bymaxone/nest-realtime/compare/v1.2.12...v1.2.13
 [1.2.12]: https://github.com/bymaxone/nest-realtime/compare/v1.2.11...v1.2.12
 [1.2.11]: https://github.com/bymaxone/nest-realtime/compare/v1.2.10...v1.2.11
 [1.2.10]: https://github.com/bymaxone/nest-realtime/compare/v1.2.9...v1.2.10
