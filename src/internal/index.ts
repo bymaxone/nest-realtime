@@ -70,6 +70,7 @@ export { assertIdentityIsNotBlank, resolveAuthTenant } from '../server/utils/ass
 export { admitRooms } from '../server/utils/admit-rooms'
 export { composeRoomId } from '../server/utils/compose-room-id'
 export { describeError } from '../server/utils/describe-error'
+export { runHook } from '../server/utils/run-hook'
 export { unavailableError } from '../server/utils/unavailable-error'
 export { realtimeError } from '../server/utils/realtime-error'
 export type { CodedError } from '../server/utils/realtime-error'

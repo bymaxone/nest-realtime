@@ -130,6 +130,28 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     expect(onConnect).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }))
   })
 
+  // The hook is a consumer's notification: one that throws before it returns must neither end the
+  // stream nor keep the heartbeat from starting.
+  it('keeps the stream open and starts the heartbeat when onConnect throws before it returns', async () => {
+    const onConnect = jest.fn(() => {
+      throw new Error('audit log down')
+    })
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const transport = mkTransport()
+    const heartbeat = mkHeartbeat()
+    const handler = build(transport, heartbeat, mkOptions(), { onConnect })
+    const errors: unknown[] = []
+    const sub = (await handler.handle(mkReq(), mkRes())).subscribe({ error: (e) => errors.push(e) })
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(errors).toStrictEqual([])
+    expect(sub.closed).toBe(false)
+    expect(heartbeat.start).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('Lifecycle hook failed: audit log down')
+    sub.unsubscribe()
+    warn.mockRestore()
+  })
+
   // onConnect receives the roles the authenticator produced, read off the record.
   it('passes the connection roles to onConnect', async () => {
     const onConnect = jest.fn().mockResolvedValue(undefined)
@@ -377,8 +399,7 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
       const handler = build(transport, mkHeartbeat(), mkOptions(), { onConnect })
       const stream = await handler.handle(mkReq(), mkRes())
       const sub = stream.subscribe()
-      await Promise.resolve()
-      await Promise.resolve()
+      await new Promise((resolve) => setImmediate(resolve))
       sub.unsubscribe()
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hook-crash'))
     } finally {

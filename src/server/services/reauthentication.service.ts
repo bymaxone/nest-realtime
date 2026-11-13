@@ -24,6 +24,7 @@ import type {
   ReauthenticationPolicy,
 } from '../interfaces/realtime-module-options.interface'
 import { describeError } from '../utils/describe-error'
+import { runHook } from '../utils/run-hook'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
 import { RealtimeService } from './realtime.service'
@@ -190,8 +191,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
 
     if (this.policy.onFailure === 'event') this.notify(conn)
 
-    // Fire the hook best-effort — a throwing hook must not block the disconnect.
-    void Promise.resolve(
+    // Fire the hook best-effort — a hook that throws, before it returns or after, must not block
+    // the disconnect.
+    void runHook(() =>
       this.hooks?.onReauthenticationFailed?.({
         connectionId: conn.connectionId,
         userId: conn.userId,
@@ -203,8 +205,10 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         userAgent: conn.userAgent,
         connectedAt: conn.connectedAt,
       }),
-    ).catch((err: unknown) => {
-      this.logger.warn(`onReauthenticationFailed hook failed: ${describeError(err)}`)
+    ).then((failed) => {
+      if (failed) {
+        this.logger.warn(`onReauthenticationFailed hook failed: ${describeError(failed.error)}`)
+      }
     })
 
     await this.realtime.disconnect(conn.connectionId, REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED)
