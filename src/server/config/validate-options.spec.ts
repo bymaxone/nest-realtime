@@ -153,6 +153,57 @@ describe('validateOptions', () => {
     },
   )
 
+  // The interval, the timeout and the concurrency are positive whole numbers, and the cache window
+  // a non-negative one: a timer cannot run at 0 or at a fraction, and nothing runs 0.5 at a time.
+  it.each([
+    ['intervalSeconds', 1],
+    ['cacheTtlMs', 0],
+    ['revalidateTimeoutMs', 1],
+    ['concurrency', 1],
+  ] as const)('rejects a reauthenticationPolicy.%s that is not an integer >= %s', (name, least) => {
+    for (const bad of [least - 1, least + 0.5, Number.NaN, Infinity, '5', null]) {
+      expect(() =>
+        validateOptions({
+          transport: 'sse',
+          authenticator,
+          reauthenticationPolicy: { [name]: bad } as never,
+        }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.${name} must be an integer >= ${least}, got ${String(bad)}`,
+      )
+    }
+    for (const good of [least, least + 1, 300]) {
+      expect(() =>
+        validateOptions({
+          transport: 'sse',
+          authenticator,
+          reauthenticationPolicy: { [name]: good },
+        }),
+      ).not.toThrow()
+    }
+  })
+
+  it("rejects an onFailure other than 'disconnect' or 'event'", () => {
+    expect(() =>
+      validateOptions({
+        transport: 'sse',
+        authenticator,
+        reauthenticationPolicy: { onFailure: 'ignore' } as never,
+      }),
+    ).toThrow(
+      "[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.onFailure must be 'disconnect' or 'event', got ignore",
+    )
+    for (const good of ['disconnect', 'event'] as const) {
+      expect(() =>
+        validateOptions({
+          transport: 'sse',
+          authenticator,
+          reauthenticationPolicy: { onFailure: good },
+        }),
+      ).not.toThrow()
+    }
+  })
+
   // cacheTtlMs > intervalSeconds*1000 → Logger.warn (every cycle is a cache miss).
   it('warns when cacheTtlMs exceeds intervalSeconds*1000', () => {
     const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)

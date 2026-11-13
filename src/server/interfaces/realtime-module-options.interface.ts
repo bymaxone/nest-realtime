@@ -69,6 +69,8 @@ export interface ReauthenticationPolicy {
   intervalSeconds?: number
   onFailure?: 'disconnect' | 'event'
   cacheTtlMs?: number
+  revalidateTimeoutMs?: number
+  concurrency?: number
 }
 
 /** Synchronous module configuration. */

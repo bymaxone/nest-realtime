@@ -41,6 +41,7 @@
     "RedisRealtimePubSub",
     "RedisRealtimePubSubOptions",
     "ReservedEventName",
+    "RevalidateOptions",
     "RoomPrefix",
     "SseOptions",
     "SseRealtimeModuleAsyncOptions",

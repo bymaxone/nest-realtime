@@ -45,8 +45,37 @@ export function validateOptions(options: BymaxRealtimeModuleOptions): void {
   validateReauthPolicy(options)
 }
 
+/** The integer options of the re-authentication policy and the least each may be. */
+const REAUTH_INTEGER_OPTIONS = [
+  ['intervalSeconds', 1],
+  ['cacheTtlMs', 0],
+  ['revalidateTimeoutMs', 1],
+  ['concurrency', 1],
+] as const
+
 function validateReauthPolicy(options: BymaxRealtimeModuleOptions): void {
   const policy = options.reauthenticationPolicy
+  for (const [name, least] of REAUTH_INTEGER_OPTIONS) {
+    const value: unknown = policy?.[name]
+    if (
+      value !== undefined &&
+      !(typeof value === 'number' && Number.isInteger(value) && value >= least)
+    ) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.INVALID_OPTIONS,
+        `options.reauthenticationPolicy.${name} must be an integer >= ${least}, got ${String(value)}`,
+        { who: 'BymaxRealtimeModule' },
+      )
+    }
+  }
+  const onFailure: unknown = policy?.onFailure
+  if (onFailure !== undefined && onFailure !== 'disconnect' && onFailure !== 'event') {
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `options.reauthenticationPolicy.onFailure must be 'disconnect' or 'event', got ${String(onFailure)}`,
+      { who: 'BymaxRealtimeModule' },
+    )
+  }
   if (
     policy?.cacheTtlMs !== undefined &&
     policy.intervalSeconds !== undefined &&

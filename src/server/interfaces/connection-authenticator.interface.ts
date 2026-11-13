@@ -109,6 +109,16 @@ export interface AuthenticationResult {
   readonly metadata?: Record<string, unknown>
 }
 
+/** What `IConnectionAuthenticator.revalidate` is handed besides the connection. */
+export interface RevalidateOptions {
+  /**
+   * Aborted when the call has not settled within `reauthenticationPolicy.revalidateTimeoutMs`,
+   * after which the connection is disconnected whatever the call returns. Pass it to the work behind
+   * the call so that it stops.
+   */
+  readonly signal: AbortSignal
+}
+
 /**
  * Connection authenticator contract — the only auth surface the library owns.
  *
@@ -148,7 +158,15 @@ export interface IConnectionAuthenticator {
    * Optionally re-validate during long sessions. Called periodically based on
    * `reauthenticationPolicy.intervalSeconds`.
    *
+   * A call that has not settled within `reauthenticationPolicy.revalidateTimeoutMs` is treated as
+   * one that threw: the connection is disconnected, not kept, whatever the call returns later.
+   * Pass `options.signal` to the work behind it (a `fetch`, a query) so that it stops then too.
+   *
    * @returns `true` to keep the connection alive, `false` to disconnect.
    */
-  revalidate?(connectionId: string, originalAuth: AuthenticationResult): Promise<boolean>
+  revalidate?(
+    connectionId: string,
+    originalAuth: AuthenticationResult,
+    options?: RevalidateOptions,
+  ): Promise<boolean>
 }

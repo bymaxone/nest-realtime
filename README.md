@@ -350,7 +350,7 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | **presence**               | `IPresenceStorage` — contract for your own presence tracking; the library never calls it                                                                          | — (disabled)                                                         |
 | **sse**                    | `endpoint`, `heartbeatMs`, `replayBufferSize`, `maxConnectionsPerUser`, `emitConnectionEvent`, `maxQueuedBytes`, `maxQueuedEvents`, `stallHeartbeats`             | `/realtime/sse`, `30000`, `100`, `5`, `true`, `2097152`, `1000`, `3` |
 | **websocket**              | `namespace`, `cors`, `maxHttpBufferSize`, `pingIntervalMs`, `pingTimeoutMs`, `maxConnectionsPerUser`, `emitConnectionEvent`, `redisAdapter`                       | `'/'`, — (Socket.IO defaults)                                        |
-| **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`                                                                                        | `300`, `'disconnect'`, `60000`                                       |
+| **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`, `revalidateTimeoutMs`, `concurrency`                                                  | `300`, `'disconnect'`, `60000`, `10000`, `8`                         |
 
 `sse.heartbeatMs` must be between 5,000 and 90,000 ms. Any other value, including `NaN` and a non-number, stops the application at start-up with `REALTIME_INVALID_OPTIONS`. `sse.maxQueuedBytes`, `sse.maxQueuedEvents` and `sse.stallHeartbeats` must be integers of 0 or more, and `0` switches that bound off.
 
@@ -459,6 +459,8 @@ A complete `@bymax-one/nest-auth` bridge is in [docs/examples/nest-auth-bridge.m
 ### Re-Authentication
 
 Long-lived connections outlive short-lived tokens. `reauthenticationPolicy` revalidates on an interval and either drops the connection or emits `connection:reauthentication-failed` and then drops it, depending on `onFailure`. The connection is dropped even when that event cannot be sent: the event is a notification, and the failure to send it is logged. Successful checks are cached for `cacheTtlMs` so a busy connection is not revalidated on every event.
+
+`revalidate` is bounded. At most `concurrency` calls run at once, across every cycle (a revocation that does not settle in `revalidateTimeoutMs` is given up on the same way, and tried again on the next cycle), and a connection with a call in flight is not asked again until it settles, so one slow connection cannot hold up the revocation of the others. A call that has not settled in `revalidateTimeoutMs` is treated exactly as one that threw: the connection is **revoked** (the `AbortSignal` in the call's third argument is aborted so the work behind it can stop, and whatever the call returns later is ignored). The consequence is that an auth backend that is down, or slower than the timeout, revokes every connection due for revalidation in that cycle, and those clients reconnect and are refused at the handshake until the backend recovers. Set `revalidateTimeoutMs` above your backend's p99. `intervalSeconds`, `revalidateTimeoutMs` and `concurrency` must be integers of 1 or more and `cacheTtlMs` an integer of 0 or more; anything else stops the application at start-up with `REALTIME_INVALID_OPTIONS`.
 
 ### Security Checklist
 

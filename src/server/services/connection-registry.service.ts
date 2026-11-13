@@ -28,6 +28,11 @@ export interface ConnectionRecord {
   subject: Subject<MessageEvent> | null
   /** Server-initiated teardown signal (SSE only); `null` for WebSocket. */
   close$: Subject<void> | null
+  /**
+   * When the re-authentication policy last confirmed the credentials behind this connection, in
+   * epoch milliseconds. Kept on the record so that it cannot outlive the connection it describes.
+   */
+  revalidatedAt?: number | undefined
   /** Snapshot of the original authentication result — used by the re-auth policy. */
   originalAuth: {
     userId: string

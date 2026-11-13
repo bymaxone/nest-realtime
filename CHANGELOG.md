@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **One re-authentication call that never settled kept every connection after it from being revalidated or revoked.** The cycle ran serially and `revalidate` had no time limit, so a call that hung (an auth backend that accepts the request and never answers) left every later connection un-checked, and a connection whose credentials had been refused stayed connected, on every cycle after. Each call is now bounded by `reauthenticationPolicy.revalidateTimeoutMs` (default 10,000 ms), and a call that does not settle in time is treated as one that threw: the connection is revoked. The cycle runs up to `concurrency` (default 8) connections at once, and a connection with a call in flight is not asked again, so overlapping cycles no longer call `revalidate` several times at once for one connection. An auth backend that is down or slower than the timeout therefore revokes every connection due in that cycle, and the clients are refused at the handshake until it recovers: set the timeout above the backend's p99.
+
+#### Apply to a derived backend
+
+`ReauthenticationPolicy` gains `revalidateTimeoutMs` and `concurrency`; `IConnectionAuthenticator.revalidate` takes an optional third argument `{ signal: AbortSignal }` (new exported type `RevalidateOptions`), aborted on timeout; `ConnectionRecord` gains an optional `revalidatedAt`, which holds the time of the last confirmation instead of a map in the service. The re-authentication options are now validated when the application starts: `intervalSeconds`, `revalidateTimeoutMs` and `concurrency` must be integers of 1 or more, `cacheTtlMs` an integer of 0 or more, and `onFailure` `'disconnect'` or `'event'`. An `intervalSeconds` of 0 or a fractional one used to start a timer firing every millisecond or so, and now stops the application at start-up.
+
+- **The memory kept for re-authentication no longer outlives the connection.** The cache of successful checks was a map that was cleared only on revocation and at shutdown, so every connection that was revalidated and then closed left an entry behind (1,000 closed connections left 1,000). It now lives on the connection's record.
+
 - **A re-authentication failure could leave a connection connected.** When a connection's credentials were refused, a `onReauthenticationFailed` hook that threw before it returned (a plain function, which the interface allows) aborted the failure handling before the connection was disconnected, so a failing notification hook could keep a connection whose credentials had been refused until the next cycle, and the same on every cycle after. The hook's failure is now logged and the connection is disconnected as before.
 
 ### Fixed

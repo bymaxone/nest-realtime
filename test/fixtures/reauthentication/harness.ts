@@ -63,6 +63,8 @@ export function mkOptions(policy?: {
   intervalSeconds?: number
   onFailure?: 'disconnect' | 'event'
   cacheTtlMs?: number
+  revalidateTimeoutMs?: number
+  concurrency?: number
 }) {
   return { transport: 'sse', authenticator: {}, reauthenticationPolicy: policy }
 }
