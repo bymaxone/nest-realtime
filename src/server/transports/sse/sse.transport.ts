@@ -468,12 +468,12 @@ export class SseTransport implements ITransport {
 
   /** Deliver to one connection, isolating failures so others still receive the event. */
   private deliver(conn: ConnectionRecord, message: MessageEvent): void {
-    const tracked = this.outbound.get(conn.connectionId)
-    if (tracked && !tracked.backlog.admit(sizeOf(message))) {
-      this.cutSlowConsumer(conn.connectionId, 'its client has not read what was sent', tracked)
-      return
-    }
     try {
+      const tracked = this.outbound.get(conn.connectionId)
+      if (tracked && !tracked.backlog.admit(sizeOf(message))) {
+        this.cutSlowConsumer(conn.connectionId, 'its client has not read what was sent', tracked)
+        return
+      }
       conn.subject?.next(message)
     } catch (error) {
       this.logger.warn(`SSE delivery failed for ${conn.connectionId}: ${describeError(error)}`)

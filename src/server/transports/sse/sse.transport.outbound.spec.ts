@@ -108,6 +108,21 @@ describe('SseTransport: a client that does not read', () => {
     expect(connections.get('c1')).toBeDefined()
   })
 
+  // The size is read from the payload, which a consumer controls: one that cannot be serialised must
+  // fail for its own connection and not stop the event reaching the others.
+  it('isolates a payload that cannot be serialised: the other connections still receive the event', async () => {
+    const { transport } = build({ sse: { maxQueuedBytes: 1_000_000 } })
+    await register(transport, 'a', stuck())
+    await register(transport, 'b', stuck())
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+
+    await expect(transport.emitToUser('u1', 'e', circular)).resolves.toBeUndefined()
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('SSE delivery failed for a'))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('SSE delivery failed for b'))
+  })
+
   it('counts an event once however many connections receive it', async () => {
     const { transport } = build({ sse: { maxQueuedBytes: 1_000_000 } })
     const spy = jest.spyOn(JSON, 'stringify')
