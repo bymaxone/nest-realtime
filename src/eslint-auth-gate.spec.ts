@@ -1,10 +1,10 @@
 /**
  * Pins the ESLint rule that keeps authentication packages out of `src/`. The library never imports
  * one, the consumer plugs `IConnectionAuthenticator`, and the README says a lint rule enforces it.
- * A module can be named by a string in any call shape, so the rule matches the string and each case
- * here is a different shape: `no-restricted-imports` alone sees static imports and re-exports, and
- * a rule written per syntax form missed `import()`, `require()`, `module.require()` and a template
- * literal in turn.
+ * A module can be named by a string in any call shape, so the rule matches the string itself and
+ * each case here is a different shape: static imports and re-exports, `import()`, `require()`,
+ * `module.require()`, template literals and type-level imports. A matcher for static imports alone
+ * leaves the others open.
  *
  * Each case lints a snippet from stdin under a `src` path, the way `pnpm lint` would see a file there.
  *
