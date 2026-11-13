@@ -33,6 +33,9 @@ export interface SseOptions {
   replayBufferSize?: number
   maxConnectionsPerUser?: number
   emitConnectionEvent?: boolean
+  maxQueuedBytes?: number
+  maxQueuedEvents?: number
+  stallHeartbeats?: number
 }
 
 /** WebSocket-transport-specific options. */

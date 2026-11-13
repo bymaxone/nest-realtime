@@ -42,6 +42,10 @@ import { unavailableError } from '../../utils/unavailable-error'
 import { InMemoryPubSub } from '../../pubsub/in-memory-pubsub'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
+import { frameBytes } from './frame-size'
+import type { Frame } from './frame-size'
+import { OutboundBacklog, StallWatch } from './outbound-backlog'
+import type { OutboundProbe } from './outbound-backlog'
 
 /** Parameters required to register a freshly authenticated SSE connection. */
 export interface RegisterSseConnectionParams {
@@ -51,6 +55,15 @@ export interface RegisterSseConnectionParams {
   close$: Subject<void>
   ip: string
   userAgent: string | undefined
+  /** What the response has taken and holds; without it the connection's backlog is not bounded. */
+  outbound?: OutboundProbe | undefined
+}
+
+/** What is tracked for a connection whose client could be slow to read. */
+interface Outbound {
+  readonly probe: OutboundProbe
+  readonly backlog: OutboundBacklog
+  readonly stall: StallWatch
 }
 
 /** A caught failure, boxed so that a thrown `undefined` or `null` is still a failure. */
@@ -78,6 +91,7 @@ export class SseTransport implements ITransport {
   private readonly logger = new Logger(SseTransport.name)
   /** Set when shutdown begins; from then on a new stream is refused. */
   #shuttingDown = false
+  private readonly outbound = new Map<string, Outbound>()
 
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
@@ -177,6 +191,7 @@ export class SseTransport implements ITransport {
       },
     }
     this.connections.register(record)
+    this.track(params)
     this.rooms.join(params.connectionId, composeRoomId('USER', params.auth.userId))
     if (params.auth.tenantId !== undefined) {
       this.rooms.join(params.connectionId, composeRoomId('TENANT', params.auth.tenantId))
@@ -191,6 +206,7 @@ export class SseTransport implements ITransport {
     if (!record) return
     this.rooms.leaveAll(connectionId)
     this.heartbeat.stop(connectionId)
+    this.outbound.delete(connectionId)
     try {
       await this.hooks.onDisconnect?.({
         connectionId: record.connectionId,
@@ -436,17 +452,64 @@ export class SseTransport implements ITransport {
     record.close$?.complete()
   }
 
-  private buildMessage(id: string, event: string, data: unknown): MessageEvent {
+  private buildMessage(id: string, event: string, data: unknown): Frame {
     return { id, type: event, data: data as object }
   }
 
   /** Deliver to one connection, isolating failures so others still receive the event. */
-  private deliver(conn: ConnectionRecord, message: MessageEvent): void {
+  private deliver(conn: ConnectionRecord, message: Frame): void {
     try {
+      const tracked = this.outbound.get(conn.connectionId)
+      if (tracked && !tracked.backlog.admit(frameBytes(message))) {
+        this.cutSlowConsumer(conn.connectionId, 'its client has not read what was sent', tracked)
+        return
+      }
       conn.subject?.next(message)
     } catch (error) {
       this.logger.warn(`SSE delivery failed for ${conn.connectionId}: ${describeError(error)}`)
     }
+  }
+
+  /** Start bounding a connection's backlog, when its response can be measured. */
+  private track(params: RegisterSseConnectionParams): void {
+    const { outbound: probe } = params
+    const sse = this.options.sse
+    if (!probe) return
+    this.outbound.set(params.connectionId, {
+      probe,
+      backlog: new OutboundBacklog(
+        { maxBytes: sse?.maxQueuedBytes ?? 0, maxEvents: sse?.maxQueuedEvents ?? 0 },
+        probe,
+      ),
+      stall: new StallWatch(sse?.stallHeartbeats ?? 0),
+    })
+  }
+
+  /** Called on each heartbeat: closes a connection whose client has stopped reading altogether. */
+  checkStall(connectionId: string): void {
+    const tracked = this.outbound.get(connectionId)
+    if (tracked?.stall.stalled(tracked.probe)) {
+      this.cutSlowConsumer(
+        connectionId,
+        'its socket has taken nothing for several heartbeats',
+        tracked,
+      )
+    }
+  }
+
+  private cutSlowConsumer(connectionId: string, why: string, tracked: Outbound): void {
+    this.logger.warn(
+      `${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection ${connectionId}, ${why} ` +
+        `(${tracked.backlog.queuedEvents} events, ${tracked.backlog.queuedBytes} bytes queued, ` +
+        `${tracked.probe.buffered()} bytes held by the response)`,
+    )
+    this.disconnectLocal(connectionId, REALTIME_ERROR_CODES.SLOW_CONSUMER).catch(
+      (error: unknown) => {
+        this.logger.warn(
+          `Closing slow SSE connection ${connectionId} failed: ${describeError(error)}`,
+        )
+      },
+    )
   }
 
   /** Publish once to the bus; resolves with the failure, or `undefined` once the bus accepted it. */

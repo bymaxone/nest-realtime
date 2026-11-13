@@ -14,6 +14,9 @@ export const DEFAULT_SSE: Required<SseOptions> = {
   replayBufferSize: 100,
   maxConnectionsPerUser: 5,
   emitConnectionEvent: true,
+  maxQueuedBytes: 2 * 1024 * 1024,
+  maxQueuedEvents: 1000,
+  stallHeartbeats: 3,
 }
 
 /** Module options with every SSE field resolved to a concrete value. */

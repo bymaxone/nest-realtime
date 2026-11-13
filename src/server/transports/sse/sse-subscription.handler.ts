@@ -40,6 +40,7 @@ import type { ConnectionRecord } from '../../services/connection-registry.servic
 import { resolveClientAddress } from '../../utils/client-address'
 import { describeError } from '../../utils/describe-error'
 import { SseTransport } from './sse.transport'
+import { probeOf } from './outbound-backlog'
 import { HeartbeatService } from './heartbeat.service'
 
 /** Coerce a possibly-multi-valued header to a single string. */
@@ -397,7 +398,15 @@ export class SseSubscriptionHandler {
   private activateConnection(p: StreamParams, subscriber: Subscriber<MessageEvent>): void {
     const { connectionId, resolvedAuth, ip, userAgent, subject, close$ } = p
     this.transport
-      .registerConnection({ connectionId, auth: resolvedAuth, subject, close$, ip, userAgent })
+      .registerConnection({
+        connectionId,
+        auth: resolvedAuth,
+        subject,
+        close$,
+        ip,
+        userAgent,
+        outbound: probeOf(p.res),
+      })
       .then(() => this.onRegistered(p, subscriber))
       .catch((err: unknown) => {
         this.fireHook(() =>
@@ -428,7 +437,9 @@ export class SseSubscriptionHandler {
       this.fireHook(() => this.hooks?.onConnect?.(buildMeta(record)))
     }
     const heartbeatMs = this.options.sse?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
-    this.heartbeat.start(connectionId, res, heartbeatMs)
+    this.heartbeat.start(connectionId, res, heartbeatMs, () =>
+      this.transport.checkStall(connectionId),
+    )
   }
 
   /**

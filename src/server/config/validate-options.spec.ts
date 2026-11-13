@@ -135,6 +135,24 @@ describe('validateOptions', () => {
     ).not.toThrow()
   })
 
+  it.each(['maxQueuedBytes', 'maxQueuedEvents', 'stallHeartbeats'] as const)(
+    'rejects a sse.%s that is not an integer >= 0, and accepts 0 and a positive integer',
+    (name) => {
+      for (const bad of [-1, 1.5, Number.NaN, Infinity, '5', null]) {
+        expect(() =>
+          validateOptions({ transport: 'sse', authenticator, sse: { [name]: bad } as never }),
+        ).toThrow(
+          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.${name} must be an integer >= 0 (0 switches the bound off), got ${String(bad)}`,
+        )
+      }
+      for (const good of [0, 1, 4096]) {
+        expect(() =>
+          validateOptions({ transport: 'sse', authenticator, sse: { [name]: good } }),
+        ).not.toThrow()
+      }
+    },
+  )
+
   // cacheTtlMs > intervalSeconds*1000 → Logger.warn (every cycle is a cache miss).
   it('warns when cacheTtlMs exceeds intervalSeconds*1000', () => {
     const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
