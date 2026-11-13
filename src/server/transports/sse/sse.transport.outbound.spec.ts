@@ -62,7 +62,8 @@ describe('SseTransport: a client that does not read', () => {
     expect(connections.get('slow')).toBeUndefined()
     expect(reasons).toStrictEqual([REALTIME_ERROR_CODES.SLOW_CONSUMER])
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining(`${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection slow`),
+      `${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection slow, its client has not read what was sent ` +
+        '(2 events, 2 bytes queued, 10 bytes held by the response)',
     )
   })
 
@@ -103,8 +104,9 @@ describe('SseTransport: a client that does not read', () => {
     const received = await register(transport, 'c1', stuck())
 
     await transport.emitToUser('u1', 'e', undefined)
+    await transport.emitToUser('u1', 'e', undefined)
 
-    expect(received).toHaveLength(1)
+    expect(received).toHaveLength(2)
     expect(connections.get('c1')).toBeDefined()
   })
 
@@ -150,6 +152,10 @@ describe('SseTransport: a client that does not read', () => {
 
       expect(connections.get('slow')).toBeUndefined()
       expect(reasons).toStrictEqual([REALTIME_ERROR_CODES.SLOW_CONSUMER])
+      expect(warn).toHaveBeenCalledWith(
+        `${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection slow, its socket has taken nothing for several heartbeats ` +
+          '(0 events, 0 bytes queued, 10 bytes held by the response)',
+      )
     })
 
     it('does nothing for a connection it does not track', async () => {

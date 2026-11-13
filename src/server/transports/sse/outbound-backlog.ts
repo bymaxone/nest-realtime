@@ -46,6 +46,11 @@ export class OutboundBacklog {
     return this.pendingBytes()
   }
 
+  /** Offsets still held, settled ones included until the queue is compacted (diagnostics). */
+  get retained(): number {
+    return this.ends.length
+  }
+
   /** Events sent and not yet accepted by the socket. */
   get queuedEvents(): number {
     this.settle()
@@ -81,6 +86,7 @@ export class OutboundBacklog {
   /** Drop the events the socket has taken, and compact the queue once the dead prefix grows. */
   private settle(): void {
     const settled = this.settledOffset()
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — past the last offset `this.ends[this.head]` is `undefined`, and `undefined <= settled` is false, so the loop ends there whether or not the bound is tested
     while (this.head < this.ends.length && (this.ends[this.head] as number) <= settled) this.head++
     if (this.head > 1024 && this.head * 2 > this.ends.length) {
       this.ends = this.ends.slice(this.head)

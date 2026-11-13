@@ -118,7 +118,46 @@ describe('OutboundBacklog', () => {
   })
 })
 
+describe('OutboundBacklog: what it keeps', () => {
+  function sendAndTake(sent: number, taken: number): OutboundBacklog {
+    const socket = probe()
+    const backlog = new OutboundBacklog({ maxBytes: 0, maxEvents: 0 }, socket)
+    for (let i = 0; i < sent; i++) backlog.admit(1)
+    socket.take(taken)
+    backlog.queuedEvents
+    return backlog
+  }
+
+  // The settled prefix is dropped once it is both long and the larger part of the queue.
+  it('drops the settled offsets once they are more than 1024 and more than half of what is held', () => {
+    expect(sendAndTake(5000, 4990).retained).toBe(10)
+  })
+
+  it('keeps them while they number 1024 or fewer', () => {
+    expect(sendAndTake(1030, 1024).retained).toBe(1030)
+  })
+
+  it('keeps them while they are no more than half of what is held', () => {
+    expect(sendAndTake(4000, 2000).retained).toBe(4000)
+    expect(sendAndTake(5000, 1100).retained).toBe(5000)
+  })
+
+  it('keeps a short queue whole', () => {
+    expect(sendAndTake(15, 10).retained).toBe(15)
+  })
+})
+
 describe('StallWatch', () => {
+  // The first check has nothing to compare with, so it cannot find the socket stuck.
+  it('does not count the first check, whatever the socket has already taken', () => {
+    const socket = probe(1)
+    socket.hold = 10
+    const watch = new StallWatch(1)
+
+    expect(watch.stalled(socket)).toBe(false)
+    expect(watch.stalled(socket)).toBe(true)
+  })
+
   // Several checks in a row, not one: a client that is only a little slow is not stalled.
   it('reports a stall only after the configured number of checks with nothing taken and bytes held', () => {
     const socket = probe()

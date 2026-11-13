@@ -141,7 +141,9 @@ describe('validateOptions', () => {
       for (const bad of [-1, 1.5, Number.NaN, Infinity, '5', null]) {
         expect(() =>
           validateOptions({ transport: 'sse', authenticator, sse: { [name]: bad } as never }),
-        ).toThrow(new RegExp(`options.sse.${name} must be an integer >= 0`))
+        ).toThrow(
+          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.${name} must be an integer >= 0 (0 switches the bound off), got ${String(bad)}`,
+        )
       }
       for (const good of [0, 1, 4096]) {
         expect(() =>
