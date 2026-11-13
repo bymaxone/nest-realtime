@@ -20,6 +20,10 @@
     "reason": "Checks that the Stryker Jest config matches every spec under src. It is a check on the mutation setup itself and imports no mutated source."
   },
   {
+    "file": "src/eslint-auth-gate.spec.ts",
+    "reason": "Lints snippets against eslint.config.mjs to prove the rule that keeps authentication packages out of src refuses every way of loading one. It is a check on the lint configuration and imports no mutated source."
+  },
+  {
     "file": "src/stryker-scope.spec.ts",
     "reason": "Checks that every shipped source file is mutated or listed with a reason. It reads the build config and the sources as text and imports no mutated source."
   },

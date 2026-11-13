@@ -42,15 +42,6 @@ declare global {
   function verify(token: string | undefined): Promise<{ sub: string } | null>
   const tracer: { recordConnection(connectionId: string, traceparent: unknown): void }
 
-  /** A helper that one README snippet defines and others call. */
-  function joinRoleRoom(
-    resolver: {
-      get(token: typeof RealtimeService): { joinRoom(c: string, r: string): Promise<void> }
-    },
-    role: string,
-    roomId: string,
-  ): (meta: ConnectionEventMeta) => Promise<void>
-
   /** The consuming application's own component. */
   function InvoiceList(): ReactElement
   /** `@nestjs/core`, which a fragment names without importing it. */

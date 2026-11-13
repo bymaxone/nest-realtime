@@ -5,6 +5,15 @@ import security from 'eslint-plugin-security'
 import reactHooks from 'eslint-plugin-react-hooks'
 import prettierRecommended from 'eslint-plugin-prettier/recommended'
 
+// The library never imports an authentication package: the consumer plugs IConnectionAuthenticator.
+// A module can be named by a string in any call shape (`import`, `import()`, `require()`,
+// `module.require()`, a type-level `import()`), so the rule matches the string itself, wherever a
+// string literal or a template quasi equals one of these specifiers, and not the syntax around it.
+// A specifier assembled at run time is invisible to any lint rule, so this covers literals only.
+const AUTH_IMPORT_MESSAGE =
+  'This library never imports an auth package: the consumer plugs IConnectionAuthenticator.'
+const AUTH_SOURCE = String.raw`/^(@nestjs\/jwt|@bymax-one\/nest-auth)(\/|$)|(^|\/)passport(-[^\/]*)?(\/|$)/`
+
 export default [
   {
     ignores: ['dist/**', 'coverage/**', 'reports/**', '.stryker-tmp/**', 'node_modules/**'],
@@ -28,6 +37,11 @@ export default [
       },
     },
     rules: {
+      'no-restricted-syntax': [
+        'error',
+        { selector: `Literal[value=${AUTH_SOURCE}]`, message: AUTH_IMPORT_MESSAGE },
+        { selector: `TemplateElement[value.cooked=${AUTH_SOURCE}]`, message: AUTH_IMPORT_MESSAGE },
+      ],
       ...(security.configs?.recommended?.rules ?? {}),
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': [

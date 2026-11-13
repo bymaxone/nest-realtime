@@ -43,11 +43,7 @@ The default transport is **Server-Sent Events**: browser-native, plain HTTP, no 
 - **📡 SSE first, and that is the point** — SSE reconnects natively, replays through `Last-Event-ID`, and traverses proxies as ordinary HTTP. Most apps only push server → client, and for those WebSocket is a dependency you pay for without using.
 - **🔌 Auth stays yours** — The library never verifies a JWT, never imports an auth package. You implement `IConnectionAuthenticator`; cookie, ticket, and bearer patterns are all supported. This is enforced structurally, not by convention.
 - **🏢 Multi-tenant by construction** — Every connection auto-joins `user:{id}` and, when present, `tenant:{id}`. Tenant scoping is a room convention, not an afterthought bolted onto a chat library.
-- **🪶 Nothing in your bundle you didn't ask for** — `"dependencies": {}` on the server, and `socket.io-client` is reached through `await import()` so an SSE-only frontend ships **2.26 KB brotli** instead of ~80 KB.
-
-```
-pnpm add @bymax-one/nest-realtime
-```
+- **🪶 Nothing in your bundle you didn't ask for** — `"dependencies": {}` on the server, and `socket.io-client` is reached through `await import()` so an SSE-only frontend ships about 2 KB brotli and never loads it.
 
 ---
 
@@ -63,7 +59,7 @@ pnpm add @bymax-one/nest-realtime
 ### 🔐 Security & Auth
 
 - ✅ **Auth inversion** — the consumer plugs `IConnectionAuthenticator`; the library owns no credentials
-- ✅ **Zero auth imports** — `src/` contains no reference to `@nestjs/jwt`, `passport-*`, or any auth package, verified in CI
+- ✅ **Zero auth imports** — `src/` imports no auth package (`@nestjs/jwt`, `passport-*`, `@bymax-one/nest-auth`), and a lint rule fails the build if one appears
 - ✅ **Three handshake patterns** — HttpOnly cookie (SSE-safe), one-time ticket, and bearer header (WebSocket only)
 - ✅ **Periodic re-authentication** — revalidate credentials on an interval, with a positive-result cache
 - ✅ **Tenant from the token, never the body** — `tenantId` comes from the authenticated result via `tenantResolver`
@@ -78,11 +74,9 @@ pnpm add @bymax-one/nest-realtime
 
 ### 🧩 Developer Experience
 
-- ✅ **4 subpath exports** — server, WebSocket, shared types, and React; tree-shakeable, ESM + CJS dual output
 - ✅ **Dynamic module** — `forRoot()` and `forRootAsync()` with `useFactory` / `useClass` / `useExisting`
 - ✅ **Strict TypeScript, zero `any`** — `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` enabled
 - ✅ **Horizontal scaling** — `IRealtimePubSub` for SSE fan-out, `@socket.io/redis-adapter` for WebSocket
-- ✅ **Bundle gate in CI** — the SSE-only React bundle is measured on every build and fails over budget
 
 ---
 
@@ -105,9 +99,7 @@ One package, four entry points — import only what your app needs:
 
 `/websocket` also exports `RealtimeGateway`, `WebSocketTransport` and `CompositeTransport`. They are exported for the module's own wiring and for tests: applications register `BymaxRealtimeWebSocketModule` and install `RealtimeIoAdapter`, and do not construct them.
 
-The `shared` subpath carries no Node or NestJS import, so the same event names and error codes are used on both sides of the wire without duplicating a constant.
-
-**The `websocket` subpath exists so the server one costs nothing extra.** Everything that touches `@nestjs/websockets`, `@nestjs/platform-socket.io` and `socket.io` is reachable only through it, so an application on SSE — the default transport — never installs the Socket.IO stack. Importing it is what opts in, in the install as much as in the configuration.
+**The `websocket` subpath exists so the server one costs nothing extra.** Everything that touches `@nestjs/websockets`, `@nestjs/platform-socket.io` and `socket.io` is reachable only through it, so an SSE application never installs the Socket.IO stack. Importing it is what opts in.
 
 The package also exposes `@bymax-one/nest-realtime/internal`. It is **not public API** and carries no compatibility promise — it is the shared runtime the two server subpaths import so that a service registered through one and injected through the other is the same class. Import the four above; nothing you need is only there.
 
@@ -121,14 +113,7 @@ The package also exposes `@bymax-one/nest-realtime/internal`. It is **not public
 ### 1. Install
 
 ```bash
-# Using pnpm (recommended)
-pnpm add @bymax-one/nest-realtime
-
-# Using npm
-npm install @bymax-one/nest-realtime
-
-# Using yarn
-yarn add @bymax-one/nest-realtime
+pnpm add @bymax-one/nest-realtime   # or npm install / yarn add
 ```
 
 > [!IMPORTANT]
@@ -340,7 +325,11 @@ bootstrap()
 ```
 
 > [!IMPORTANT]
-> The `main.ts` line is not optional. `RealtimeIoAdapter` is what applies `websocket.cors`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`. Without it those options are ignored, the gateway's own CORS stays closed (`origin: false`) so a browser on another origin cannot connect, and the module logs an error at start-up that names this fix.
+> The `main.ts` line is not optional. `RealtimeIoAdapter` is what applies `websocket.cors`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`. Without it those options are ignored, the gateway's own CORS stays closed (`origin: false`) so a browser on another origin cannot connect, and the module logs this error once at start-up:
+
+```
+RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options are ignored and the gateway CORS stays closed (origin: false): browsers on another origin cannot connect. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from '@bymax-one/nest-realtime/websocket'.
+```
 
 With `redisAdapter`, the adapter registers `@socket.io/redis-adapter` and calls `pubClient.duplicate()` for the subscriber; the library never opens its own Redis connection. If it cannot be installed (the package is missing, the client has no `duplicate()`), the boot fails with `REALTIME_REDIS_ADAPTER_FAILED` instead of serving a single instance; a Redis that is merely unreachable does not fail the boot. Socket.IO's polling fallback needs sticky sessions even then — see [docs/architecture/scaling-cheatsheet.md](./docs/architecture/scaling-cheatsheet.md). On the frontend, a `ws://` or `wss://` `url` selects WebSocket in `RealtimeProvider`. Replay through `Last-Event-ID` and the offline queue are SSE features: a WebSocket connection has neither.
 
@@ -389,7 +378,7 @@ The options are typed per entry point: `SseRealtimeModuleOptions` and `SseRealti
 > `REALTIME_OPTIONS_TOKEN` reports the route that was actually bound — so a health check or an
 > OpenAPI document built from the options names the path that exists.
 
-The full reference, including `forRootAsync` with `useFactory` / `useClass` / `useExisting`, is in [docs/technical_specification.md](./docs/technical_specification.md) §4.
+The design specification, [docs/technical_specification.md](./docs/technical_specification.md) §4, covers the options in depth. It was written against v0.1.0, so where it differs from this README or the CHANGELOG, those are current.
 
 ---
 
@@ -423,16 +412,6 @@ The package runs **inside** your NestJS application as a dynamic module — not 
               └────────→ Browser ←─────┘
 ```
 
-### Design Principles
-
-| Principle                 | Description                                                                                                                              |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **🔌 Interface-Driven**   | Authentication, pub/sub, offline queue, and presence are contracts you implement — Redis reference implementations ship, none are forced |
-| **🔀 Transport-Agnostic** | `RealtimeService` talks to `ITransport`; adding or swapping a transport never touches application code                                   |
-| **🛡️ Auth Inversion**     | The library holds no credential logic, so an auth vulnerability cannot originate here                                                    |
-| **🪶 Zero Runtime Deps**  | `"dependencies": {}` — every dependency is a peer, and optional ones are marked in `peerDependenciesMeta`                                |
-| **🌳 Tree-Shakeable**     | `sideEffects: false`, subpath exports, and a dynamic `import()` that keeps `socket.io-client` out of the SSE bundle                      |
-
 ### Cross-Instance Emit Flow
 
 An emit delivers locally **and** publishes once. Every other instance's subscriber re-emits through local-only paths (`emitToUserLocal`, …), so a message is never republished and cannot loop. Connection revocation crosses instances as an `op: 'disconnect'` message on the same channel.
@@ -447,11 +426,7 @@ Sizing guidance and adapter trade-offs are in [docs/architecture/scaling-cheatsh
 
 This library **never** verifies a JWT, hashes a password, or imports an authentication package. It calls `IConnectionAuthenticator.authenticate()` once per connection and trusts the `AuthenticationResult` you return.
 
-This is a **structural guarantee**, not a guideline — `src/` is audited in CI for any reference to `@bymax-one/nest-auth`, `@nestjs/jwt`, or `passport-*`:
-
-```bash
-grep -rE "@nestjs/jwt|@bymax-one/nest-auth|passport" src/   # must return zero
-```
+This is a **structural guarantee**, not a guideline: an ESLint rule fails the lint step on any string literal under `src/` that names `@bymax-one/nest-auth`, `@nestjs/jwt`, `passport` or `passport-*`, so a literal specifier is refused in every form of `import` and `require`.
 
 The consequence is worth stating plainly: a credential-handling vulnerability cannot originate in this package, because the code that would contain it does not exist here. It also means **you** are responsible for the bridge — vulnerabilities in a bridge implementation belong to that project, as [SECURITY.md](./SECURITY.md) records.
 
@@ -494,39 +469,6 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 
 ---
 
-## 🛡️ Security Table
-
-| Layer                 | Implementation                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Credential validation | Delegated entirely to consumer-supplied `IConnectionAuthenticator`                                                        |
-| Auth library imports  | None — enforced by a CI grep over `src/`                                                                                  |
-| Tenant isolation      | Room-scoped (`tenant:{id}`), resolved from the authenticated result                                                       |
-| Connection revocation | `disconnect(connectionId)`, propagated cross-instance via `op: 'disconnect'`; rejects when it cannot reach the connection |
-| Credential expiry     | Interval re-authentication with `disconnect` or event on failure                                                          |
-| Connection flooding   | FIFO eviction per user — oldest closed, new admitted, never a 429                                                         |
-| SSE transport headers | `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform` by default                                            |
-| WebSocket origin      | Explicit `cors` config passed straight to Socket.IO                                                                       |
-
-> [!IMPORTANT]
-> This package holds **zero credential logic**. That is its central security property — and it means the strength of your realtime auth is exactly the strength of the authenticator you plug in.
-
----
-
-## 🧱 Tech Stack
-
-<p>
-  <img src="https://img.shields.io/badge/NestJS-11-E0234E?style=flat-square&logo=nestjs&logoColor=white" alt="NestJS" />
-  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
-  <img src="https://img.shields.io/badge/RxJS-7-B7178C?style=flat-square&logo=reactivex&logoColor=white" alt="RxJS" />
-  <img src="https://img.shields.io/badge/Socket.IO-4-010101?style=flat-square&logo=socket.io&logoColor=white" alt="Socket.IO" />
-  <img src="https://img.shields.io/badge/Node.js-24%2B-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
-  <img src="https://img.shields.io/badge/Redis-optional-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis" />
-  <img src="https://img.shields.io/badge/Jest-30-C21325?style=flat-square&logo=jest&logoColor=white" alt="Jest" />
-</p>
-
----
-
 ## 🧪 Testing & Quality
 
 A realtime channel fails in ways that are hard to reproduce — dropped streams, races between reconnect and revocation, one instance not seeing another's emit. The suite is built so those failures are caught by a test, not by a user.
@@ -541,7 +483,7 @@ A realtime channel fails in ways that are hard to reproduce — dropped streams,
 pnpm test          # unit + integration
 pnpm test:e2e      # end-to-end (single instance, no Redis needed)
 pnpm test:cov:all  # 100% coverage gate
-pnpm mutation      # Stryker mutation testing (~15-25 min)
+pnpm mutation      # Stryker mutation testing
 pnpm build && pnpm size
 ```
 
@@ -574,7 +516,9 @@ The unified emit API. Identical on every transport.
 
 All methods return `Promise<void>`.
 
-**Revocation is never best-effort.** `disconnect(connectionId)` resolves when the connection was closed on this instance or when the revocation was handed to the bus (`IRealtimePubSub`). It **rejects** when it could not: `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the publish (`RedisRealtimePubSub` refuses it at once while its Redis client is anything but ready, and does not wait for the connection to return), `REALTIME_TRANSPORT_UNAVAILABLE` when the WebSocket server is not attached or its fan-out throws. The error carries that code as `error.code` (a `RealtimeErrorCode`), so branch on the property and not on the message text; it is a plain `Error`, not a class to test with `instanceof`. A rejection means the connection may still be connected, so retry. An emit is different: `emitToUser`, `emitToTenant`, `emitToRoom` and `broadcast` stay at-most-once, and **resolve even when the publish to the other instances failed**. That failure is not silent: it is logged with `REALTIME_PUBSUB_UNAVAILABLE` and the operation, and passed to the `onDeliveryFailure` hook, which is where to count it. `emitToUser` also resolves, reporting it the same way, when the offline queue could not keep an event for a user who is offline here, because another instance may have delivered it live. It rejects only when the event has no delivery path left: the user is offline here, the queue failed, and the bus failed or cannot reach another instance (the default in-memory bus). With `transport: 'both'`, an emit that fails on one transport is logged and resolves; one that fails on both rejects with `REALTIME_TRANSPORT_UNAVAILABLE`. A rejected emit is not proof that no client received it, so retry only where a duplicate is acceptable.
+**Revocation is never best-effort.** `disconnect(connectionId)` resolves once the connection was closed on this instance or the revocation was handed to the bus (`IRealtimePubSub`). It **rejects**, with `error.code` set to a `RealtimeErrorCode`, when it could not: `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the publish (`RedisRealtimePubSub` refuses at once while its Redis client is not ready), `REALTIME_TRANSPORT_UNAVAILABLE` when the WebSocket server is not attached or its fan-out throws. Branch on the code, not the message; the error is a plain `Error`, not a class for `instanceof`. A rejection means the connection may still be connected, so retry.
+
+**Emits are at-most-once.** `emitToUser`, `emitToTenant`, `emitToRoom` and `broadcast` **resolve even when the publish to the other instances failed**; that failure is logged with `REALTIME_PUBSUB_UNAVAILABLE` and passed to the `onDeliveryFailure` hook, which is where to count it. An offline queue that could not keep an event for a user who is offline here is reported the same way, since another instance may have delivered it live; a failure on one transport of `'both'` is only logged. An emit rejects only when the event has no delivery path left: for `emitToUser`, the user is offline here, the queue failed, and the bus failed or cannot reach another instance (the default in-memory bus); with `'both'`, a failure on both transports rejects with `REALTIME_TRANSPORT_UNAVAILABLE`. A rejected emit is not proof that no client received it, so retry only where a duplicate is acceptable.
 
 `joinRoom` and `leaveRoom` act on a connection **this instance holds**; for any other id they resolve and change nothing. A failure of the transport that holds the connection rejects the call.
 
@@ -630,43 +574,11 @@ Reference implementations shipped: `InMemoryPubSub` (default), `RedisRealtimePub
 
 #### Identity must be present or absent, never blank
 
-`userId` must be a non-empty string, and `tenantId` must be either absent or a non-empty
-string. A connection whose authenticator — or whose `tenantResolver` — yields a blank one is
-**refused at bootstrap** rather than registered.
+`userId` must be a non-empty string, and `tenantId` either absent or a non-empty string. A connection whose authenticator, or whose `tenantResolver`, yields a blank one is **refused at bootstrap** as a server fault, not a `401`: blank is not missing. Every connection carrying `''` lands under the same registry key and joins the same `user:` or `tenant:` room, and a later emit reaches all of them. Whitespace counts as blank.
 
-The reason is that blank is not missing. `userId` and `tenantId` key the connection registry
-and compose the `user:` and `tenant:` rooms, so every connection carrying `''` lands under the
-same key and joins the same room; a later emit to that key reaches all of them. On a long-lived
-subscription that is not one wrong response but a stream that keeps delivering.
+To place a connection in no tenant, **omit `tenantId`**. The runtime also accepts `undefined` or `null`, but whether those type-check depends on the consumer's `tsconfig` (`exactOptionalPropertyTypes` rejects `undefined`, `strictNullChecks` rejects `null`), so omission is the only form that compiles everywhere.
 
-To place a connection in no tenant, the **authenticator omits `tenantId`** — that is indexed
-under none and joins no tenant room, which an empty string is not. Whitespace counts as blank:
-`' '` composes `user: ` just as `''` does.
-
-Omission is the form to write, because it is the only one that compiles everywhere.
-`AuthenticationResult` declares `tenantId?: string`; the runtime accepts an explicit `undefined`
-or `null` too — an untyped claim spread into the result produces them routinely — but whether
-either _type-checks_ depends on the consuming project's `tsconfig`, which the published
-declarations do not control:
-
-| consumer's `tsconfig`                     | `tenantId: undefined` | `tenantId: null` |
-| ----------------------------------------- | --------------------- | ---------------- |
-| `strict` + `exactOptionalPropertyTypes`   | `TS2375`              | `TS2322`         |
-| `strict`, no `exactOptionalPropertyTypes` | compiles              | `TS2322`         |
-| no `strictNullChecks`                     | compiles              | compiles         |
-
-Omitting the key is correct in all three.
-
-`tenantResolver` cannot clear a tenant, and this is the one asymmetry worth reading twice.
-Resolution is `tenantResolver?.(auth) ?? auth.tenantId`, so a resolver returning `undefined` or
-`null` means _no opinion_ and falls back to the tenant the authenticator supplied. A resolver
-written to place a connection in no tenant by returning `null` leaves it in `auth.tenantId`'s
-room instead, still receiving that tenant's events. Decide the absent case in the
-authenticator, where absence is what it looks like.
-
-A blank identity surfaces as a server fault rather than a `401`, because the client's
-credentials were accepted and the fault is in the authenticator. Return `null` to reject a
-client.
+`tenantResolver` cannot clear a tenant. Resolution is `tenantResolver?.(auth) ?? auth.tenantId`, so a resolver returning `undefined` or `null` means "no opinion" and the authenticator's tenant stays. Decide the absent case in the authenticator.
 
 #### Carrying handshake context into the hooks
 
@@ -677,9 +589,7 @@ the original result. It is the only channel that crosses that boundary — `auth
 the request headers but no `connectionId` yet, and those hooks see the `connectionId` but not
 the headers.
 
-`onError` is the exception and takes a narrower payload (`connectionId?`, `error`, `transport`):
-it can fire before authentication resolves, so there may be no connection to describe, which is
-also why its `connectionId` is optional. It carries neither `roles` nor `metadata`.
+`onError` takes a narrower payload (`connectionId?`, `error`, `transport`) with neither `roles` nor `metadata`, because it can fire before authentication resolves.
 
 ```typescript
 class TracingAuthenticator implements IConnectionAuthenticator {
@@ -716,12 +626,7 @@ class WorkspaceAuthenticator implements IConnectionAuthenticator {
 }
 ```
 
-Scope a connection here, not by calling `joinRoom` from `onConnect`. `onConnect` runs after the
-connection is live, so an event published to the room in between is missed, and room events have
-no replay. Measured with a publish made while the `onConnect` join was still pending: both SSE and
-WebSocket delivered the next event and not that one. On SSE `onConnect` is also not awaited, and a
-hook that throws is only logged as a warning, so a connection scoped from there can stay live
-without its room. Neither behaviour changes; `rooms` is the way around both.
+Scope a connection here, not by calling `joinRoom` from `onConnect`. On **SSE** the connection is live before `onConnect` runs and the hook is not awaited, so an event published to the room in that window is missed (room events have no replay), and a hook that throws is only logged as a warning, leaving the connection live and unscoped. On **WebSocket** the hook is awaited before `connection:established`, so no window is observable once the client is ready; `rooms` is still the right place. Neither hook behaviour changes.
 
 A name must be a non-blank string of at most `ADMISSION_ROOM_LIMITS.MAX_ROOM_NAME_LENGTH`
 characters and must not start with `user:`, `tenant:` or `connection:`; at most
@@ -769,20 +674,11 @@ composeRoomId('TENANT', tenantId) // → "tenant:t_acme"
 composeRoomId('RESOURCE', 'invoice', invoiceId) // → "resource:invoice:42"
 ```
 
-`composeRoomId` joins its parts with `:` and escapes nothing, so a part must not contain `:`. The `encodeURIComponent` advice below holds for that `:` separator only, because it escapes `:` and leaves characters such as `-`, `.`, `_` and `~` alone.
-`('a:b', 'c')` and `('a', 'b:c')` both give `resource:a:b:c` and land in the same room. When a
-part comes from outside your code, encode it first:
-`composeRoomId('RESOURCE', encodeURIComponent(type), encodeURIComponent(id))`.
+`composeRoomId` joins its parts with `:` and escapes nothing, so `('a:b', 'c')` and `('a', 'b:c')` both give `resource:a:b:c` and land in the same room. Encode a part that comes from outside your code with `encodeURIComponent`, which escapes `:` and is sound for this separator only: `composeRoomId('RESOURCE', encodeURIComponent(type), encodeURIComponent(id))`.
 
-A `resource:` room is not tenant-scoped: two tenants using the same type and id share it. When ids
-are only unique within a tenant, pass the tenant as its own encoded part —
-`composeRoomId('RESOURCE', 'invoice', encodeURIComponent(tenantId), encodeURIComponent(id))` —
-because gluing them into one part with a separator that ids may contain, such as `-`, lets two
-different pairs compose the same room.
+A `resource:` room is not tenant-scoped: two tenants using the same type and id share it. When ids are only unique within a tenant, pass the tenant as its own encoded part rather than gluing it to the id with a separator that ids may contain, such as `-`.
 
-Never pass client-supplied input to `joinRoom` or `emitToRoom` as a room id without checking that
-it cannot start with the reserved `user:` or `tenant:` prefixes. The library does not guard them,
-and joining `tenant:<other>` receives that tenant's events.
+Never pass client-supplied input to `joinRoom` or `emitToRoom` as a room id without checking that it cannot start with `user:` or `tenant:`. `joinRoom` is not guarded (only the `rooms` field is validated), and joining `tenant:<other>` receives that tenant's events.
 
 #### Role-scoped delivery
 
@@ -829,58 +725,8 @@ the connection alive does not refresh it. When a role can be revoked mid-session
 make `revalidate` return `false` so the connection is torn down and re-established
 with the new roles.
 
-##### Make the hook testable: depend on the capability, not the injector
-
-The snippet above works, and it still walks a careful consumer into a wall: a
-`moduleRef.get()` call inside the hook means unit-testing that hook requires
-faking `ModuleRef`, which in practice means `as unknown as ModuleRef` — a
-suppression many codebases block outright.
-
-Give the hook the two capabilities it actually uses instead. `ModuleRef` and
-`RealtimeService` satisfy these shapes **structurally**, so the module passes the
-real objects and a test passes plain ones, with no cast at either end:
-
-```typescript
-interface RoomJoiner {
-  joinRoom(connectionId: string, roomId: string): Promise<void>
-}
-
-interface ServiceResolver {
-  get(token: typeof RealtimeService): RoomJoiner
-}
-
-function joinRoleRoom(resolver: ServiceResolver, role: string, roomId: string) {
-  return async (meta: ConnectionEventMeta): Promise<void> => {
-    if (!meta.roles?.includes(role)) return
-    await resolver.get(RealtimeService).joinRoom(meta.connectionId, roomId)
-  }
-}
-```
-
-Wire it with the real injector:
-
-```typescript
-inject: [ModuleRef],
-useFactory: (moduleRef: ModuleRef) => ({
-  transport: 'sse' as const,
-  authenticator: new CookieAuthenticator(),
-  hooks: { onConnect: joinRoleRoom(moduleRef, 'admin', 'role:admin') },
-}),
-```
-
-and test it without booting NestJS:
-
-```typescript
-const joinRoom = jest.fn()
-const onConnect = joinRoleRoom({ get: () => ({ joinRoom }) }, 'admin', 'role:admin')
-```
-
 > [!NOTE]
-> Match roles by exact membership. `roles?.includes('admin')` on a `readonly string[]`
-> compares whole elements; reaching for `roles?.some((r) => r.includes('admin'))` —
-> for case-insensitivity, say — admits `administrator`, `admin-readonly` and
-> `superadmin`. That failure is an authorization leak, it fails open, and it only
-> shows up for role names nobody declared.
+> Match roles by exact membership. `roles?.some((r) => r.includes('admin'))` admits `administrator` and `superadmin`, which fails open as an authorization leak.
 
 ### Reserved Events
 
@@ -907,19 +753,23 @@ These names belong to the library. Do not reuse them for application events. The
 
 ### Error Codes
 
-| Code                               | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `REALTIME_INVALID_OPTIONS`         | Raised at bootstrap for an invalid option                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `REALTIME_NO_AUTHENTICATOR`        | Raised at bootstrap when the authenticator is missing or invalid                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `REALTIME_AUTH_FAILED`             | Raised when authentication is refused: the SSE 401 body and the WebSocket handshake refusal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `REALTIME_REAUTHENTICATION_FAILED` | Raised when a revalidation fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `REALTIME_TOO_MANY_CONNECTIONS`    | Raised as the reason an evicted connection is closed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `REALTIME_INVALID_TICKET`          | Reserved, never raised today: a ticket store is yours to write                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `REALTIME_PUBSUB_UNAVAILABLE`      | Raised as the rejection of a disconnect when the bus refuses the revocation; an emit's publish failure is logged and passed to the delivery-failure hook                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `REALTIME_TRANSPORT_UNAVAILABLE`   | Raised as the rejection of a disconnect, a join or a leave when the transport that holds the connection fails or has no server attached, and of an emit to an offline user that has no delivery path left. Also what a new SSE stream or WebSocket handshake is refused with once shutdown has begun: a 503 whose message is the code, and a connect_error whose data.code is the code. Shutdown begins, for this purpose, in the onModuleDestroy phase, ahead of every beforeApplicationShutdown hook, so a slow beforeApplicationShutdown in the host does not leave a window; a slow onModuleDestroy in a module nearer the root than the realtime module still runs first, and a connection is accepted until it returns. |
-| `REALTIME_REDIS_ADAPTER_FAILED`    | Raised at bootstrap when the Redis adapter is configured and cannot be installed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `REALTIME_PAYLOAD_TOO_LARGE`       | Reserved, never raised today                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `REALTIME_REPLAY_BUFFER_MISS`      | Reserved, never raised today                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Code                               | Status                                                                                                                                                                                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REALTIME_INVALID_OPTIONS`         | Raised at bootstrap for an invalid option                                                                                                                                                                                                |
+| `REALTIME_NO_AUTHENTICATOR`        | Raised at bootstrap when the authenticator is missing or invalid                                                                                                                                                                         |
+| `REALTIME_AUTH_FAILED`             | Raised when authentication is refused: the SSE 401 body and the WebSocket handshake refusal                                                                                                                                              |
+| `REALTIME_REAUTHENTICATION_FAILED` | Raised when a revalidation fails                                                                                                                                                                                                         |
+| `REALTIME_TOO_MANY_CONNECTIONS`    | Raised as the reason an evicted connection is closed                                                                                                                                                                                     |
+| `REALTIME_INVALID_TICKET`          | Reserved, never raised today: a ticket store is yours to write                                                                                                                                                                           |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | Raised as the rejection of a disconnect when the bus refuses the revocation; an emit's publish failure is logged and passed to the delivery-failure hook                                                                                 |
+| `REALTIME_TRANSPORT_UNAVAILABLE`   | Raised as the rejection of a disconnect when the WebSocket transport fails or has no server attached, and of an emit that has no delivery path left. Also what a stream or handshake that arrives during shutdown is refused with, below |
+| `REALTIME_REDIS_ADAPTER_FAILED`    | Raised at bootstrap when the Redis adapter is configured and cannot be installed                                                                                                                                                         |
+| `REALTIME_PAYLOAD_TOO_LARGE`       | Reserved, never raised today                                                                                                                                                                                                             |
+| `REALTIME_REPLAY_BUFFER_MISS`      | Reserved, never raised today                                                                                                                                                                                                             |
+
+### Shutdown
+
+From the `onModuleDestroy` phase on, which runs ahead of every `beforeApplicationShutdown`, a new SSE stream gets a 503 whose message is `REALTIME_TRANSPORT_UNAVAILABLE` and a new WebSocket handshake gets a `connect_error` whose `data.code` is that code. A slow `onModuleDestroy` in a module nearer the root than the realtime module still runs first, and until it returns a connection is accepted.
 
 ### DI Tokens
 
@@ -953,55 +803,21 @@ These names belong to the library. Do not reuse them for application events. The
 
 ---
 
-## 🚧 Deployment Notes
+## 🚫 What This Library Does NOT Do
 
-SSE connections are long-lived HTTP responses, and several common proxy defaults break them silently:
-
-| Concern                  | Fix                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------ |
-| **Response compression** | Disable on the SSE endpoint — `Content-Encoding: gzip` buffers the body and defeats streaming          |
-| **Proxy buffering**      | Nginx `proxy_buffering off`. The library already sends `X-Accel-Buffering: no`                         |
-| **CDN caching**          | `Cache-Control: no-cache, no-transform` — set by the library on the SSE response                       |
-| **Idle timeout**         | Must exceed `sse.heartbeatMs` (default 30 s). AWS ALB's 60 s default is compatible                     |
-| **WebSocket + polling**  | Enable sticky sessions. The Redis adapter syncs messages between instances, but not handshake affinity |
-
-Platform-specific configuration is in [docs/proxies-cheat-sheet.md](./docs/proxies-cheat-sheet.md).
-
-### Troubleshooting
-
-**The log shows `RealtimeIoAdapter is not the active WebSocket adapter`.** The gateway logs this once at start-up, as an error, when its Socket.IO server was not created by `RealtimeIoAdapter`:
-
-```
-RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options are ignored and the gateway CORS stays closed (origin: false): browsers on another origin cannot connect. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from '@bymax-one/nest-realtime/websocket'.
-```
-
-When `websocket` options are set, their names follow the words "the websocket options" in parentheses, for example `(cors, redisAdapter)`. The fix is the `main.ts` line in [step 7](#7-add-websocket-optional): `RealtimeIoAdapter` applies `cors`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`, and until it is installed none of them takes effect.
+- **Authenticate.** It holds no credential logic. The strength of your realtime auth is the strength of the `IConnectionAuthenticator` you plug in.
+- **Guarantee delivery.** Emits are at-most-once, with no acknowledgement. `Last-Event-ID` replay and the offline queue are SSE-only and bounded.
+- **Track presence.** `IPresenceStorage` is a seam the library never calls, and `presence:*` events are emitted by your code.
+- **Receive client messages.** `RealtimeGateway` registers no message handlers, so a WebSocket client's `emit` is ignored unless you write a gateway.
+- **Route by role.** There is no `emitToRole`; build a room from `ConnectionEventMeta.roles` (see [Role-scoped delivery](#role-scoped-delivery)).
+- **Configure your proxy.** SSE needs response compression and proxy buffering off and an idle timeout above `sse.heartbeatMs`; the library sends `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform`. WebSocket with the polling fallback needs sticky sessions. See [docs/proxies-cheat-sheet.md](./docs/proxies-cheat-sheet.md).
+- **Run a separate server.** It runs inside your NestJS application.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please open an issue to discuss substantial changes before submitting a pull request.
-
-```bash
-# Clone the repository
-git clone https://github.com/bymaxone/nest-realtime.git
-cd nest-realtime
-
-# Install dependencies
-pnpm install
-
-# Run tests
-pnpm test
-
-# Build
-pnpm build
-
-# Type check
-pnpm typecheck
-```
-
-Every change must keep the full gate green:
+Please open an issue to discuss substantial changes before a pull request. Clone the repository, run `pnpm install`, and keep the full gate green:
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm size

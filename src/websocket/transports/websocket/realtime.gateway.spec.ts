@@ -227,7 +227,7 @@ describe('RealtimeGateway', () => {
       expect(message).not.toMatch(/websocket options \(/)
     })
 
-    it('says in the README troubleshooting section exactly what it logs', () => {
+    it('says in the README exactly what it logs', () => {
       // A consumer who meets the message looks it up in the README, so the text must match.
       gateway.afterInit({ use: jest.fn() } as never)
       const message = String(errorSpy.mock.calls[0]?.[0])
