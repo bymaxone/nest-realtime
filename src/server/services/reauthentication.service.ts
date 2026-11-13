@@ -17,10 +17,7 @@ import {
   REALTIME_HOOKS_TOKEN,
   REALTIME_OPTIONS_TOKEN,
 } from '../constants/injection-tokens.constants'
-import type {
-  AuthenticationResult,
-  IConnectionAuthenticator,
-} from '../interfaces/connection-authenticator.interface'
+import type { IConnectionAuthenticator } from '../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../interfaces/connection-lifecycle-hooks.interface'
 import type {
   BymaxRealtimeModuleOptions,
@@ -180,7 +177,10 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       }
       // Require strict true — a truthy non-boolean result (e.g. a user object) is not success.
       // When revalidate is absent, optional-chaining returns undefined; ?? true normalises it.
-      const rawResult = (await this.within(conn.connectionId, originalAuth)) ?? true
+      const rawResult =
+        (await this.bounded('revalidate', (signal) =>
+          this.auth.revalidate?.(conn.connectionId, originalAuth, { signal }),
+        )) ?? true
       if (rawResult === true) {
         conn.revalidatedAt = now
         return
@@ -193,28 +193,26 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   }
 
   /**
-   * Call the authenticator's `revalidate`, giving up when it has not settled in
-   * `revalidateTimeoutMs`: the signal it was handed is aborted and the call rejects. Whatever the
-   * abandoned call returns later is ignored.
+   * Run `work`, giving up when it has not settled in `revalidateTimeoutMs`: the signal it was handed
+   * is aborted and the call rejects. Whatever the abandoned work returns or throws later is ignored.
+   * The same bound holds for the call to `revalidate` and for the revocation after it, because both
+   * run in a slot that every connection shares.
    */
-  private async within(
-    connectionId: string,
-    originalAuth: AuthenticationResult,
-  ): Promise<boolean | undefined> {
+  private async bounded<T>(
+    what: string,
+    work: (signal: AbortSignal) => Promise<T> | undefined,
+  ): Promise<T | undefined> {
     const controller = new AbortController()
     let timer: NodeJS.Timeout | undefined
     const timedOut = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
         controller.abort()
-        reject(new Error(`revalidate did not settle within ${this.policy.revalidateTimeoutMs} ms`))
+        reject(new Error(`${what} did not settle within ${this.policy.revalidateTimeoutMs} ms`))
       }, this.policy.revalidateTimeoutMs)
       timer.unref()
     })
     try {
-      return await Promise.race([
-        this.auth.revalidate?.(connectionId, originalAuth, { signal: controller.signal }),
-        timedOut,
-      ])
+      return await Promise.race([work(controller.signal), timedOut])
     } finally {
       clearTimeout(timer)
     }
@@ -222,12 +220,12 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
 
   /**
    * Revoke a connection whose revalidation failed, and keep the cycle going when the
-   * revocation itself is rejected. The positive-cache entry is already gone, so the next
-   * cycle revalidates the connection and tries again.
+   * revocation itself is rejected or does not settle in time. The last confirmation is already
+   * forgotten, so the next cycle revalidates the connection and tries again.
    */
   private async revoke(conn: ConnectionRecord): Promise<void> {
     try {
-      await this.handleFailure(conn)
+      await this.bounded('revocation', () => this.handleFailure(conn))
     } catch (err) {
       this.logger.warn(
         `Revocation of ${conn.connectionId} failed, retrying next cycle: ${describeError(err)}`,

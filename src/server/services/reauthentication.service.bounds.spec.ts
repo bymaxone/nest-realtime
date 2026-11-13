@@ -61,6 +61,47 @@ describe('ReauthenticationService: the cycle is bounded', () => {
     )
   })
 
+  // The revoke runs in the same slot, so a disconnect that never settles must not hold it for ever.
+  it('releases the slot of a revoke that never settles, so the connections behind it are still revoked', async () => {
+    const realtime = mkRealtime()
+    realtime.disconnect.mockImplementation((id: string) =>
+      id === 'stuck' ? new Promise<void>(() => undefined) : Promise.resolve(),
+    )
+    const svc = build(
+      mkConnections([mkRecord('stuck'), mkRecord('next', 'u2')]),
+      realtime,
+      mkAuth(jest.fn().mockResolvedValue(false)),
+      mkOptions({ intervalSeconds: 60, concurrency: 1, revalidateTimeoutMs: 1_000 }),
+    )
+
+    const cycle = svc.runCycle()
+    await jest.advanceTimersByTimeAsync(2_000)
+    await cycle
+
+    expect(realtime.disconnect).toHaveBeenCalledWith('next', REVOKED)
+    expect(warn).toHaveBeenCalledWith(
+      'Revocation of stuck failed, retrying next cycle: revocation did not settle within 1000 ms',
+    )
+  })
+
+  it('asks again about a connection whose revoke timed out on the next cycle', async () => {
+    const realtime = mkRealtime()
+    realtime.disconnect.mockImplementationOnce(() => new Promise<void>(() => undefined))
+    const svc = build(
+      mkConnections([mkRecord('stuck')]),
+      realtime,
+      mkAuth(jest.fn().mockResolvedValue(false)),
+      mkOptions({ intervalSeconds: 60, revalidateTimeoutMs: 1_000 }),
+    )
+
+    const first = svc.runCycle()
+    await jest.advanceTimersByTimeAsync(1_000)
+    await first
+    await svc.runCycle()
+
+    expect(realtime.disconnect).toHaveBeenCalledTimes(2)
+  })
+
   // A call that did not answer in time is treated as one that threw: the connection is not kept.
   it('does not keep a connection whose revalidate answers true only after the timeout', async () => {
     let answer!: (ok: boolean) => void
