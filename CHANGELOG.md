@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An SSE client that does not read can no longer grow the server without bound.** The response writes one event at a time and waits for the client to read, and every event behind that wait was held in memory with no limit: 100 MB sent to one connection that never read raised the server's memory by 167 MB and the connection stayed registered. Each connection is now bounded by `sse.maxQueuedBytes` (default 2 MiB) and `sse.maxQueuedEvents` (default 1000), counted from what its socket has not yet taken, and a connection whose socket takes nothing for `sse.stallHeartbeats` heartbeats (default 3) while the response holds bytes is closed too. It is closed with the new reason `REALTIME_SLOW_CONSUMER` and a warning, only that connection, and the client reconnects with `Last-Event-ID`. An event that is alone in the queue is always taken, however large. `0` switches a bound off. The same 100 MB now closes the connection after 22 events with no growth in the server's memory. A bound that was not there before can close a client that had stalled; set the three options to `0` to keep the old behaviour.
+
+#### Apply to a derived backend
+
+`SseOptions` gains `maxQueuedBytes`, `maxQueuedEvents` and `stallHeartbeats`, `RegisterSseConnectionParams` gains an optional `outbound`, `HeartbeatService.start` an optional fourth argument, `SseResponse` the optional `socket` and `writableLength`, and `REALTIME_ERROR_CODES` the `SLOW_CONSUMER` code. A derived transport that calls `registerConnection` without `outbound` keeps its connections unbounded.
+
 - **The rooms joined at admission are the rooms that were validated.** `AuthenticationResult.rooms` is checked when the authenticator returns, and was joined later, after an await, from the same array. An authenticator that kept the array it returned and changed it in between could join names that were never checked, including a `user:` or `tenant:` room. The array is now copied once when it is validated, and only the copy, which is frozen, is joined and stored in `originalAuth`.
 
 ## [1.2.13] - 2026-11-13

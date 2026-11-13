@@ -42,7 +42,12 @@ export class HeartbeatService {
    *   `[5_000, 90_000]`.
    * @throws {Error} When `intervalMs` is outside the valid range.
    */
-  start(connectionId: string, res: HeartbeatWritable, intervalMs: number): void {
+  start(
+    connectionId: string,
+    res: HeartbeatWritable,
+    intervalMs: number,
+    onTick?: () => void,
+  ): void {
     if (intervalMs < HEARTBEAT_MIN_MS || intervalMs > HEARTBEAT_MAX_MS) {
       throw realtimeError(
         REALTIME_ERROR_CODES.INVALID_OPTIONS,
@@ -53,6 +58,7 @@ export class HeartbeatService {
     const timer = setInterval(() => {
       try {
         res.write(KEEPALIVE_COMMENT)
+        onTick?.()
       } catch {
         // The response stream is already closed (client gone) — stop pinging it so
         // a write-after-close error in the timer never crashes the process.

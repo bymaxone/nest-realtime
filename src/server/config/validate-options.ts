@@ -83,6 +83,19 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
       { who: 'BymaxRealtimeModule' },
     )
   }
+  for (const name of ['maxQueuedBytes', 'maxQueuedEvents', 'stallHeartbeats'] as const) {
+    const value: unknown = sse?.[name]
+    if (
+      value !== undefined &&
+      !(typeof value === 'number' && Number.isInteger(value) && value >= 0)
+    ) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.INVALID_OPTIONS,
+        `options.sse.${name} must be an integer >= 0 (0 switches the bound off), got ${String(value)}`,
+        { who: 'BymaxRealtimeModule' },
+      )
+    }
+  }
   if (sse?.maxConnectionsPerUser !== undefined && sse.maxConnectionsPerUser < 0) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,

@@ -68,7 +68,12 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     // Yield to the microtask queue so registerConnection's .then() runs.
     await Promise.resolve()
     sub.unsubscribe()
-    expect(heartbeat.start).toHaveBeenCalledWith(expect.any(String), expect.anything(), 45_000)
+    expect(heartbeat.start).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      45_000,
+      expect.any(Function),
+    )
   })
 
   // Unsubscribing the stream has to tear the INNER pipeline down as well. Every other case here
@@ -105,7 +110,12 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     const sub = stream.subscribe()
     await Promise.resolve()
     sub.unsubscribe()
-    expect(heartbeat.start).toHaveBeenCalledWith(expect.any(String), expect.anything(), 30_000)
+    expect(heartbeat.start).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      30_000,
+      expect.any(Function),
+    )
   })
 
   // onConnect hook is fired best-effort after registration resolves.
@@ -460,5 +470,85 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     await Promise.resolve()
     const ctx = (onError as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>
     expect(ctx['transport']).toBe('sse')
+  })
+
+  // Each heartbeat asks the transport whether the client has stopped reading.
+  it('checks the connection for a stalled client on every heartbeat', async () => {
+    const transport = mkTransport({ checkStall: jest.fn() })
+    const heartbeat = mkHeartbeat()
+    const handler = build(transport, heartbeat, mkOptions())
+    const sub = (await handler.handle(mkReq(), mkRes())).subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+
+    const [connectionId, , , onTick] = (heartbeat.start as jest.Mock).mock.calls[0] as [
+      string,
+      unknown,
+      number,
+      () => void,
+    ]
+    onTick()
+
+    expect(transport.checkStall).toHaveBeenCalledWith(connectionId)
+  })
+
+  // The transport bounds a backlog by what the socket has taken, so it is handed a way to read that.
+  it('hands the transport what the response has taken and holds', async () => {
+    const transport = mkTransport()
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const res = {
+      setHeader: jest.fn(),
+      write: jest.fn(),
+      socket: { bytesWritten: 7 },
+      writableLength: 3,
+    }
+    const sub = (await handler.handle(mkReq(), res as never)).subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+
+    const { outbound } = (transport.registerConnection as jest.Mock).mock.calls[0][0] as {
+      outbound: { written(): number; buffered(): number }
+    }
+    res.socket.bytesWritten = 20
+
+    expect(outbound.written()).toBe(20)
+    expect(outbound.buffered()).toBe(3)
+  })
+
+  it('reads a response that has since lost its socket or its buffer as having taken and held nothing', async () => {
+    const transport = mkTransport()
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const res: {
+      setHeader: jest.Mock
+      write: jest.Mock
+      socket: unknown
+      writableLength?: number
+    } = {
+      setHeader: jest.fn(),
+      write: jest.fn(),
+      socket: { bytesWritten: 7 },
+    }
+    const sub = (await handler.handle(mkReq(), res as never)).subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+    const { outbound } = (transport.registerConnection as jest.Mock).mock.calls[0][0] as {
+      outbound: { written(): number; buffered(): number }
+    }
+    res.socket = null
+
+    expect(outbound.written()).toBe(0)
+    expect(outbound.buffered()).toBe(0)
+  })
+
+  it('does not bound a connection whose response has no socket to measure', async () => {
+    const transport = mkTransport()
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const sub = (await handler.handle(mkReq(), mkRes())).subscribe()
+    await Promise.resolve()
+    sub.unsubscribe()
+
+    expect(transport.registerConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ outbound: undefined }),
+    )
   })
 })

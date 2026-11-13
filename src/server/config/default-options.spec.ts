@@ -27,6 +27,13 @@ describe('DEFAULT_SSE', () => {
     expect(DEFAULT_SSE.maxConnectionsPerUser).toBe(5)
   })
 
+  // A client that does not read must not be able to grow the server without bound, so these are on.
+  it('bounds what a client may leave unread by default', () => {
+    expect(DEFAULT_SSE.maxQueuedBytes).toBe(2 * 1024 * 1024)
+    expect(DEFAULT_SSE.maxQueuedEvents).toBe(1000)
+    expect(DEFAULT_SSE.stallHeartbeats).toBe(3)
+  })
+
   it('has emitConnectionEvent defaulting to true', () => {
     expect(DEFAULT_SSE.emitConnectionEvent).toBe(true)
   })

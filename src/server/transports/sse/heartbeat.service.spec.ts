@@ -105,4 +105,26 @@ describe('HeartbeatService', () => {
       clearSpy.mockRestore()
     }
   })
+
+  // The tick callback is how the transport learns, once per heartbeat, that a client is not reading.
+  it('calls the tick callback after every keepalive', () => {
+    const onTick = jest.fn()
+    heartbeat.start('c1', res, 5_000, onTick)
+
+    jest.advanceTimersByTime(15_000)
+
+    expect(onTick).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not call the tick callback when the keepalive could not be written', () => {
+    write.mockImplementation(() => {
+      throw new Error('closed')
+    })
+    const onTick = jest.fn()
+    heartbeat.start('c1', res, 5_000, onTick)
+
+    jest.advanceTimersByTime(5_000)
+
+    expect(onTick).not.toHaveBeenCalled()
+  })
 })

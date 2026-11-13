@@ -10,6 +10,8 @@
  * `TOO_MANY_CONNECTIONS` signals FIFO eviction: when a user exceeds
  * `maxConnectionsPerUser`, the OLDEST connection is evicted (closed with this
  * code) and the new one is admitted — it is never an HTTP 429 rejection.
+ * `SLOW_CONSUMER` is the reason an SSE connection is closed when the client does not read
+ * what is sent to it.
  */
 export const REALTIME_ERROR_CODES = {
   INVALID_OPTIONS: 'REALTIME_INVALID_OPTIONS',
@@ -17,6 +19,7 @@ export const REALTIME_ERROR_CODES = {
   AUTH_FAILED: 'REALTIME_AUTH_FAILED',
   REAUTHENTICATION_FAILED: 'REALTIME_REAUTHENTICATION_FAILED',
   TOO_MANY_CONNECTIONS: 'REALTIME_TOO_MANY_CONNECTIONS',
+  SLOW_CONSUMER: 'REALTIME_SLOW_CONSUMER',
   INVALID_TICKET: 'REALTIME_INVALID_TICKET',
   PUBSUB_UNAVAILABLE: 'REALTIME_PUBSUB_UNAVAILABLE',
   TRANSPORT_UNAVAILABLE: 'REALTIME_TRANSPORT_UNAVAILABLE',

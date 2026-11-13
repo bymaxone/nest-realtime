@@ -40,6 +40,7 @@ import type { ConnectionRecord } from '../../services/connection-registry.servic
 import { resolveClientAddress } from '../../utils/client-address'
 import { describeError } from '../../utils/describe-error'
 import { SseTransport } from './sse.transport'
+import type { OutboundProbe } from './outbound-backlog'
 import { HeartbeatService } from './heartbeat.service'
 
 /** Coerce a possibly-multi-valued header to a single string. */
@@ -96,6 +97,15 @@ function buildEstablishedEvent(connectionId: string, auth: AuthenticationResult)
 /** Map a durable offline-queue event to the SSE `MessageEvent` wire shape. */
 function toMessageEvent(event: OfflineQueuedEvent): MessageEvent {
   return { id: event.id, type: event.event, data: event.data as object }
+}
+
+/**
+ * What the response has taken and holds, or `undefined` when it has no socket to measure: a
+ * backlog counted against a counter that never moves would cut a client that is keeping up.
+ */
+function probeOf(res: SseResponse): OutboundProbe | undefined {
+  if (typeof res.socket?.bytesWritten !== 'number') return undefined
+  return { written: () => res.socket?.bytesWritten ?? 0, buffered: () => res.writableLength ?? 0 }
 }
 
 /** Build `ConnectionEventMeta` from a registered connection record. */
@@ -397,7 +407,15 @@ export class SseSubscriptionHandler {
   private activateConnection(p: StreamParams, subscriber: Subscriber<MessageEvent>): void {
     const { connectionId, resolvedAuth, ip, userAgent, subject, close$ } = p
     this.transport
-      .registerConnection({ connectionId, auth: resolvedAuth, subject, close$, ip, userAgent })
+      .registerConnection({
+        connectionId,
+        auth: resolvedAuth,
+        subject,
+        close$,
+        ip,
+        userAgent,
+        outbound: probeOf(p.res),
+      })
       .then(() => this.onRegistered(p, subscriber))
       .catch((err: unknown) => {
         this.fireHook(() =>
@@ -428,7 +446,9 @@ export class SseSubscriptionHandler {
       this.fireHook(() => this.hooks?.onConnect?.(buildMeta(record)))
     }
     const heartbeatMs = this.options.sse?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
-    this.heartbeat.start(connectionId, res, heartbeatMs)
+    this.heartbeat.start(connectionId, res, heartbeatMs, () =>
+      this.transport.checkStall(connectionId),
+    )
   }
 
   /**
