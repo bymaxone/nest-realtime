@@ -57,6 +57,29 @@ function singleHeader(value: string | string[] | undefined): string | undefined 
   return typeof value === 'string' ? value : undefined
 }
 
+/**
+ * Longest last event id that is believed. A URL carries the id into access logs and caches, and the
+ * header has no bound of its own beyond the server's header limit; the ids this library generates
+ * are 20 characters.
+ */
+const MAX_LAST_EVENT_ID_LENGTH = 256
+
+/** An id that is one non-empty string within the bound, or `undefined`, as if it were absent. */
+function believedId(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' && value.length <= MAX_LAST_EVENT_ID_LENGTH
+    ? value
+    : undefined
+}
+
+/**
+ * The id a reconnect resumes after: the `Last-Event-ID` header, else the `lastEventId` query
+ * parameter. A new `EventSource` cannot send the header, so a client that opens one after its
+ * stream was refused resumes through the query. The header wins when both are believed.
+ */
+function lastEventIdOf(req: SseRequest): string | undefined {
+  return believedId(req.headers['last-event-id']) ?? believedId(req.query['lastEventId'])
+}
+
 /** Normalize header names to lowercase and flatten array values. */
 function normalizeHeaders(headers: SseRequest['headers']): Record<string, string | undefined> {
   const out = Object.create(null) as Record<string, string | undefined>
@@ -289,7 +312,7 @@ export class SseSubscriptionHandler {
     // receive them live. The queue events were read in the guard and are reconciled with the ring now,
     // so an event that is in both is delivered once. Reading both before registering means no
     // concurrent emitter can reach subject.next() first, and offline events precede live ones.
-    const lastEventId = singleHeader(req.headers['last-event-id'])
+    const lastEventId = lastEventIdOf(req)
     const replayEvents = lastEventId
       ? this.transport.getReplayEvents(resolvedAuth.userId, lastEventId)
       : []
@@ -392,7 +415,7 @@ export class SseSubscriptionHandler {
    * is a generic `500`, whatever its error says.
    */
   private async readQueue(req: SseRequest, userId: string): Promise<OfflineQueueRead> {
-    const lastEventId = singleHeader(req.headers['last-event-id'])
+    const lastEventId = lastEventIdOf(req)
     // Stryker disable next-line BooleanLiteral: equivalent — with no Last-Event-ID or no queue there is no second read either, so this flag is never read
     if (!lastEventId || !this.offlineDelivery) return { events: [], degraded: false }
     try {
@@ -420,7 +443,7 @@ export class SseSubscriptionHandler {
     req: SseRequest,
     authenticated: AuthenticatedRequest,
   ): Promise<OfflineQueuedEvent[]> {
-    const lastEventId = singleHeader(req.headers['last-event-id'])
+    const lastEventId = lastEventIdOf(req)
     const { queueRead } = authenticated
     if (!lastEventId || !this.offlineDelivery) return queueRead.events
     try {
