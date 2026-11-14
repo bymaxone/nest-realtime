@@ -135,7 +135,7 @@ describe('WebSocket: a lifecycle hook that fails', () => {
 
   // The library waits for onConnect before it announces the connection, so a hook that never
   // settles must be given up on or the client is never told it is connected.
-  it('announces the connection after hookTimeoutMs when onConnect never settles', async () => {
+  it('announces the connection only after the library gives up on an onConnect that never settles', async () => {
     await boot({ onConnect: () => new Promise<void>(() => undefined) }, 300)
     // The order is the proof that the client waited for the hook: the library gave up on it, and
     // only then announced the connection. Nothing here reads the clock.

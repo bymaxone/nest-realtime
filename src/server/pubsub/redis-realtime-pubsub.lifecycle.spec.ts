@@ -207,13 +207,13 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
 
   // An unreachable Redis does not answer at all; the boot must not wait for it.
   it(
-    'resolves at once, not subscribed, when Redis is unreachable',
+    'resolves, not subscribed, when Redis is unreachable',
     traced(async () => {
       const { warn } = spies()
       const fake = await closedPort()
       const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
       // Awaited with no bound of its own: a boot that waited for a reply or a retry would stay
-      // pending, and the 3 s limit of this file fails the case well inside the mutation runner's.
+      // pending, and the 3 s limit of this file fails the case.
       const unsubscribe = await subscribe(pubsub)
       expect(typeof unsubscribe).toBe('function')
       expect(pubsub.isSubscribed()).toBe(false)
