@@ -81,6 +81,8 @@ export { assertIdentityIsNotBlank, resolveAuthTenant } from '../server/utils/ass
 export { admitRooms } from '../server/utils/admit-rooms'
 export { composeRoomId } from '../server/utils/compose-room-id'
 export { describeError } from '../server/utils/describe-error'
+export { quitWithin } from '../server/utils/quit-within'
+export type { QuitableClient } from '../server/utils/quit-within'
 export { runHook } from '../server/utils/run-hook'
 export { unavailableError } from '../server/utils/unavailable-error'
 export { realtimeError } from '../server/utils/realtime-error'
