@@ -44,12 +44,24 @@ overrides:
   # GHSA-xhq7-xmqj-769h (3.7): via ajv 8 <- @stryker-mutator/core.
   # Remove when ajv requires fast-uri >= 3.1.9.
   'fast-uri': '^3.1.9'
+  # glob GHSA-3g3m-2fjr-6pw4: via test-exclude <- babel-plugin-istanbul <- the jest chain, and
+  # via @stryker-mutator. glob 10 and 13 are the two majors in the tree; both are forced to
+  # the first fixed release, 14.0.2. Scoped per major, as minimatch is, so that an unrelated
+  # line is not moved. Remove each floor when its consumer requires glob >= 14.0.2.
+  'glob@10': '^14.0.2'
+  'glob@13': '^14.0.2'
   # handlebars GHSA-8r5x-fm3f-whwj (9.8), GHSA-p8wg-vrv2-v86f (9.2),
   # GHSA-xw65-4hp5-5hc7 (4.7): via ts-jest. Remove when ts-jest requires >= 4.7.10.
   'handlebars@4': '^4.7.10'
   # js-yaml GHSA-2883-xcg3-v3hh (7.5): via @istanbuljs/load-nyc-config <- babel-plugin-istanbul.
   # Remove when that chain moves to js-yaml 4.
   'js-yaml@3': '^3.15.2'
+  # minimatch GHSA-g3hv-75wg-m249: via eslint, stryker and the jest chain. Majors 9 and 10 are
+  # forced to the first fixed release, 11.0.1. Major 3 is left alone: it is the line
+  # brace-expansion 1.x belongs to (see above) and a cross-major floor breaks it.
+  # Remove each floor when its consumer requires minimatch >= 11.0.1.
+  'minimatch@9': '^11.0.1'
+  'minimatch@10': '^11.0.1'
   # multer GHSA-q7qp-rjg7-q26m (7.5), GHSA-535w-7cp7-47q4, GHSA-qfvm-cv95-jqjf and
   # GHSA-wc9g-mqfw-jrwm (7.5), GHSA-3pph-fpjx-jg34 (5.3), GHSA-qvfw-j98x-7q72 (3.7):
   # via @nestjs/platform-express. Remove when platform-express pins multer >= 2.5.0.
