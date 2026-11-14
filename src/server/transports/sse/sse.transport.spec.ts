@@ -18,6 +18,7 @@ describe('SseTransport', () => {
   it('emits to a user, buffers, and publishes exactly once', async () => {
     const { transport, connections, replay, publish } = build()
     const { received } = addConn(connections, { connectionId: 'c1', userId: 'u1' })
+    replay.open('u1')
     await transport.emitToUser('u1', 'foo', { x: 1 })
     expect(received).toHaveLength(1)
     expect(received[0]?.type).toBe('foo')

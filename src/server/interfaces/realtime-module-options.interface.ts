@@ -33,6 +33,8 @@ export interface SseOptions {
   replayBufferSize?: number
   maxConnectionsPerUser?: number
   emitConnectionEvent?: boolean
+  replayTtlMs?: number
+  replayMaxIdleUsers?: number
   maxQueuedBytes?: number
   maxQueuedEvents?: number
   stallHeartbeats?: number
