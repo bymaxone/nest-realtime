@@ -96,26 +96,12 @@ export class OfflineQueueDeliveryService {
     ringBufferIds: Set<string>,
   ): Promise<OfflineQueuedEvent[]> {
     if (!this.storage) return []
-    if (this.pending >= this.maxPending) {
-      this.countTimeout()
-      throw new OfflineQueueTimeoutError()
-    }
 
     let events: OfflineQueuedEvent[]
     try {
-      const call = this.storage.retrieveSince(userId, lastEventId, RETRIEVE_LIMIT)
-      // The call cannot be cancelled, so it keeps its place until it actually settles, not until it
-      // was given up on: a store that never answers fills the limit instead of piling up one more
-      // abandoned call for every reconnect.
-      this.pending += 1
-      const settled = (): void => void (this.pending -= 1)
-      call.then(settled, settled)
-      events = await this.withinDeadline(call)
+      events = await this.read(this.storage, userId, lastEventId, RETRIEVE_LIMIT)
     } catch (err) {
-      if (err instanceof OfflineQueueTimeoutError) {
-        this.countTimeout()
-        throw err
-      }
+      if (err instanceof OfflineQueueTimeoutError) throw err
       reportDeliveryFailure(
         this.logger,
         this.hooks,
@@ -157,6 +143,62 @@ export class OfflineQueueDeliveryService {
       await this.storage.acknowledge(userId, lastId)
     } catch (err) {
       this.logger.warn(`Offline queue acknowledge failed: ${describeError(err)}`)
+    }
+  }
+
+  /**
+   * Return what was appended to the queue after `read`, the events an earlier {@link retrieve} of the
+   * same reconnect returned: the events with an id after the last of them, or after `lastEventId`
+   * when it returned none, never more than the one reconnect's limit in all. The earlier read is
+   * made before the response is committed, and a user with no connection here has no replay ring, so
+   * an event emitted while the application's interceptors ran sits in the queue and nowhere else.
+   *
+   * Unlike {@link retrieve}, every failure is thrown, the store's own included: a stream built
+   * without these events moves the client's cursor past them with the next event it receives, and
+   * an attempt that ends before it delivers anything leaves the cursor where it was. The read has the
+   * same deadline and the same share of `maxPendingHandshakes` as `retrieve`.
+   *
+   * @param userId - The reconnecting user.
+   * @param lastEventId - The `Last-Event-ID` header value.
+   * @param read - The events the earlier read returned, in the order it returned them.
+   * @returns The events appended since, in queue order; empty when no queue is configured or the
+   *   earlier read already reached the limit.
+   * @throws OfflineQueueTimeoutError when the queue did not answer in time or the reads waiting at
+   *   once are all taken; the store's own error when it fails.
+   */
+  async retrieveAppended(
+    userId: string,
+    lastEventId: string,
+    read: readonly OfflineQueuedEvent[],
+  ): Promise<OfflineQueuedEvent[]> {
+    const room = RETRIEVE_LIMIT - read.length
+    if (!this.storage || room <= 0) return []
+    return this.read(this.storage, userId, read.at(-1)?.id ?? lastEventId, room)
+  }
+
+  /** One bounded call to the storage: refused at once when the reads waiting are all taken. */
+  private async read(
+    storage: IOfflineQueueStorage,
+    userId: string,
+    sinceId: string,
+    limit: number,
+  ): Promise<OfflineQueuedEvent[]> {
+    if (this.pending >= this.maxPending) {
+      this.countTimeout()
+      throw new OfflineQueueTimeoutError()
+    }
+    try {
+      const call = storage.retrieveSince(userId, sinceId, limit)
+      // The call cannot be cancelled, so it keeps its place until it actually settles, not until it
+      // was given up on: a store that never answers fills the limit instead of piling up one more
+      // abandoned call for every reconnect.
+      this.pending += 1
+      const settled = (): void => void (this.pending -= 1)
+      call.then(settled, settled)
+      return await this.withinDeadline(call)
+    } catch (err) {
+      if (err instanceof OfflineQueueTimeoutError) this.countTimeout()
+      throw err
     }
   }
 

@@ -245,7 +245,14 @@ export class SseSubscriptionHandler {
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
-    const stream = this.openStream(req, res, authenticated)
+    let queueEvents: OfflineQueuedEvent[]
+    try {
+      queueEvents = await this.readAppended(req, authenticated)
+    } catch (err) {
+      authenticated.ticket.release()
+      throw err
+    }
+    const stream = this.openStream(req, res, { ...authenticated, queueEvents })
     // Authentication is asynchronous, so shutdown may have begun while this request waited.
     try {
       this.refuseDuringShutdown()
@@ -387,6 +394,36 @@ export class SseSubscriptionHandler {
     if (!lastEventId || !this.offlineDelivery) return []
     try {
       return await this.offlineDelivery.retrieve(userId, lastEventId, new Set())
+    } catch (err) {
+      if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
+      throw this.serverError(err, 'SSE handshake failed')
+    }
+  }
+
+  /**
+   * Add what was appended to the offline queue since the guard read it, so that an event emitted to
+   * this user while the application's interceptors ran, which is in the queue and in no replay ring,
+   * is delivered with the rest of the gap. The earlier read ended at the last event it returned, and
+   * this one starts after it, so the two lists are disjoint and keep queue order.
+   *
+   * A failure ends the attempt here, before any event is delivered, instead of degrading to the gap
+   * already read: a stream that skipped these events moves the client's cursor past them with the next
+   * event it receives, where an attempt that delivered nothing leaves it where it was.
+   */
+  private async readAppended(
+    req: SseRequest,
+    authenticated: AuthenticatedRequest,
+  ): Promise<OfflineQueuedEvent[]> {
+    const lastEventId = singleHeader(req.headers['last-event-id'])
+    const { queueEvents: read } = authenticated
+    if (!lastEventId || !this.offlineDelivery) return read
+    try {
+      const appended = await this.offlineDelivery.retrieveAppended(
+        authenticated.auth.userId,
+        lastEventId,
+        read,
+      )
+      return [...read, ...appended]
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
       throw this.serverError(err, 'SSE handshake failed')

@@ -12,6 +12,7 @@ import type { MessageEvent } from '@nestjs/common'
 import type { Subject } from 'rxjs'
 import { firstValueFrom } from 'rxjs'
 import { take } from 'rxjs/operators'
+import type { OfflineQueuedEvent } from '../../interfaces/offline-queue-storage.interface'
 import { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
 import {
   collect,
@@ -23,6 +24,12 @@ import {
   build,
 } from '../../../../test/fixtures/sse/subscription-harness'
 import { SseSubscriptionHandler } from './sse-subscription.handler'
+
+/** A queue's read as the library's contract has it: the events after the cursor, in queue order. */
+function afterCursor(events: OfflineQueuedEvent[]) {
+  return async (_userId: string, sinceId: string): Promise<OfflineQueuedEvent[]> =>
+    events.slice(events.findIndex((event) => event.id === sinceId) + 1)
+}
 
 describe('SseSubscriptionHandler — replay and offline queue', () => {
   // A Last-Event-ID replays the buffered events after that id.
@@ -73,6 +80,7 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
   it('emits offline queue events as MessageEvents when Last-Event-ID is set', async () => {
     const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
     const offlineDelivery = {
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest
         .fn()
         .mockResolvedValue([{ id: 'q1', event: 'queued', data: { x: 1 }, emittedAt: new Date() }]),
@@ -133,6 +141,7 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
       getReplayEvents: jest.fn().mockReturnValue([]),
     })
     const offlineDelivery = {
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest
         .fn()
         .mockResolvedValue([
@@ -188,7 +197,7 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
       emitConnectionEvent: false,
     })
     const offlineDelivery = new OfflineQueueDeliveryService({
-      retrieveSince: async () => [queued('a'), queued('b')],
+      retrieveSince: afterCursor([queued('a'), queued('b')]),
       acknowledge: async () => undefined,
       append: async () => undefined,
     })
@@ -212,7 +221,7 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
       emitConnectionEvent: false,
     })
     const offlineDelivery = new OfflineQueueDeliveryService({
-      retrieveSince: async () => [{ id: 'q1', event: 'evt', data: {}, emittedAt: new Date() }],
+      retrieveSince: afterCursor([{ id: 'q1', event: 'evt', data: {}, emittedAt: new Date() }]),
       acknowledge: async () => undefined,
       append: async () => undefined,
     })
@@ -238,6 +247,7 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
       emitConnectionEvent: false,
     })
     const offlineDelivery = {
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest.fn().mockResolvedValue([]),
       acknowledge,
     } as unknown as OfflineQueueDeliveryService
@@ -261,6 +271,7 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
     const acknowledge = jest.fn().mockResolvedValue(undefined)
     const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
     const offlineDelivery = {
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest.fn().mockResolvedValue([queued]),
       acknowledge,
     } as unknown as OfflineQueueDeliveryService
@@ -287,6 +298,7 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
     const acknowledge = jest.fn().mockResolvedValue(undefined)
     const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
     const offlineDelivery = {
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest
         .fn()
         .mockResolvedValue([{ id: 'q1', event: 'queued', data: {}, emittedAt: new Date() }]),
@@ -331,6 +343,7 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
       emitConnectionEvent: false,
     })
     const offlineDelivery = {
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest
         .fn()
         .mockResolvedValue([{ id: 'q1', event: 'queued', data: {}, emittedAt: new Date() }]),

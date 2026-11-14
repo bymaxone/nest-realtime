@@ -165,6 +165,7 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
       let finish: (events: never[]) => void = () => undefined
       const offlineDelivery = {
         retrieve: jest.fn(() => new Promise<never[]>((resolve) => (finish = resolve))),
+        retrieveAppended: jest.fn().mockResolvedValue([]),
         acknowledge: jest.fn(),
       }
       const { admission, registerConnection, transport } = setup(1)

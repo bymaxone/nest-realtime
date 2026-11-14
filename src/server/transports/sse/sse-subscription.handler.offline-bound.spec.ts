@@ -3,8 +3,9 @@
  * bound, and registers nothing.
  * @layer transport
  */
-import { Logger, ServiceUnavailableException } from '@nestjs/common'
+import { InternalServerErrorException, Logger, ServiceUnavailableException } from '@nestjs/common'
 import {
+  collect,
   mkTransport,
   mkHeartbeat,
   mkOptions,
@@ -105,8 +106,13 @@ describe('SseSubscriptionHandler: a reconnect whose offline queue does not answe
       })
       const delivery = new OfflineQueueDeliveryService(
         {
-          retrieveSince: () =>
-            new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 9_000)),
+          // The first read, in the guard, is the slow one; the read when the stream is built is not.
+          retrieveSince: jest
+            .fn()
+            .mockImplementationOnce(
+              () => new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 9_000)),
+            )
+            .mockResolvedValue([]),
           acknowledge: jest.fn(),
           append: jest.fn(),
         },
@@ -154,6 +160,81 @@ describe('SseSubscriptionHandler: a reconnect whose offline queue does not answe
 
       expect(registerConnection).toHaveBeenCalledTimes(1)
       expect(() => admission.admit()).not.toThrow()
+    })
+  })
+
+  // The read when the stream is built adds what was appended since the guard read, and a failure of
+  // it ends the attempt before anything is delivered.
+  describe('the read of what was appended since', () => {
+    function withTwoReads(second: () => Promise<never[]>) {
+      const release = jest.fn()
+      const registerConnection = jest.fn().mockResolvedValue(undefined)
+      const transport = mkTransport({
+        registerConnection,
+        emitConnectionEvent: false,
+        admit: () => ({ release, renew: jest.fn() }),
+      })
+      const at = (id: string) => ({ id, event: 'evt', data: {}, emittedAt: new Date() })
+      const retrieveSince = jest
+        .fn()
+        .mockResolvedValueOnce([at('q-1')])
+        .mockImplementation(second)
+      const delivery = new OfflineQueueDeliveryService(
+        { retrieveSince, acknowledge: jest.fn(), append: jest.fn() },
+        undefined,
+        mkOptions({ authenticateTimeoutMs: 1_000 }),
+      )
+      const handler = new SseSubscriptionHandler(
+        transport,
+        mkHeartbeat(),
+        mkOptions(),
+        undefined,
+        delivery,
+      )
+      return { handler, release, registerConnection, retrieveSince }
+    }
+    const reconnect = () => mkReq({ headers: { 'last-event-id': 'q-0' } })
+
+    it('delivers the first read, then what was appended, in queue order', async () => {
+      const appended = [{ id: 'q-2', event: 'evt', data: {}, emittedAt: new Date() }]
+      const { handler, retrieveSince } = withTwoReads(async () => appended as never[])
+
+      const stream = await handler.handle(reconnect(), mkRes())
+
+      expect(collect(stream).map((e) => e.id)).toEqual(['q-1', 'q-2'])
+      expect(retrieveSince).toHaveBeenNthCalledWith(1, 'u1', 'q-0', 200)
+      expect(retrieveSince).toHaveBeenNthCalledWith(2, 'u1', 'q-1', 199)
+    })
+
+    it('ends the attempt with a 503, delivering and registering nothing, when it does not answer', async () => {
+      const { handler, release, registerConnection } = withTwoReads(
+        () => new Promise(() => undefined),
+      )
+      const outcome = handler.handle(reconnect(), mkRes()).catch((error: unknown) => error)
+
+      await jest.advanceTimersByTimeAsync(1_000)
+
+      expect(await outcome).toBeInstanceOf(ServiceUnavailableException)
+      expect(registerConnection).not.toHaveBeenCalled()
+      expect(release).toHaveBeenCalledTimes(1)
+    })
+
+    it('ends the attempt with a generic 500, and logs the cause, when the store fails', async () => {
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      const { handler, release } = withTwoReads(() =>
+        Promise.reject(new Error('redis 10.1.2.3 down')),
+      )
+
+      const outcome = await handler.handle(reconnect(), mkRes()).catch((e: unknown) => e)
+
+      expect(outcome).toBeInstanceOf(InternalServerErrorException)
+      expect(JSON.stringify((outcome as InternalServerErrorException).getResponse())).not.toContain(
+        '10.1.2.3',
+      )
+      expect(error).toHaveBeenCalledWith(
+        'SSE handshake failed — responding 500: redis 10.1.2.3 down',
+      )
+      expect(release).toHaveBeenCalledTimes(1)
     })
   })
 })
