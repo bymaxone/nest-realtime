@@ -133,9 +133,9 @@ describe('RedisRealtimePubSub against a real Redis', () => {
   // A port nothing listens on is an outage: the boot completes, unready, and does not hang.
   it('completes the boot, unready, when Redis is unreachable', async () => {
     const pubsub = new RedisRealtimePubSub({ client: client('redis://127.0.0.1:1') })
-    const started = Date.now()
+    // Awaited with no bound of its own: a boot that waited for the port would stay pending and the
+    // test's own limit fails the case.
     const unsubscribe = await pubsub.subscribe(() => undefined)
-    expect(Date.now() - started).toBeLessThan(2000)
     expect(pubsub.isSubscribed()).toBe(false)
     await unsubscribe()
   })

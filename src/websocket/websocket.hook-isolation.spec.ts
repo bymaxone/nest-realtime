@@ -137,12 +137,18 @@ describe('WebSocket: a lifecycle hook that fails', () => {
   // settles must be given up on or the client is never told it is connected.
   it('announces the connection after hookTimeoutMs when onConnect never settles', async () => {
     await boot({ onConnect: () => new Promise<void>(() => undefined) }, 300)
-    const startedAt = Date.now()
+    // The order is the proof that the client waited for the hook: the library gave up on it, and
+    // only then announced the connection. Nothing here reads the clock.
+    const order: string[] = []
+    logged.mockImplementation((message: unknown) => {
+      if (String(message).includes('did not settle')) order.push('hook given up')
+    })
 
     const socket = await connect()
+    order.push('announced')
 
+    expect(order).toEqual(['hook given up', 'announced'])
     expect(socket.connected).toBe(true)
-    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(250)
     expect(connections.allByTransport('websocket')).toHaveLength(1)
     expect(logged).toHaveBeenCalledWith('onConnect hook failed: did not settle within 300 ms')
   })

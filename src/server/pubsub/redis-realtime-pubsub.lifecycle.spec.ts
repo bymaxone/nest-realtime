@@ -212,9 +212,9 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       const { warn } = spies()
       const fake = await closedPort()
       const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
-      const started = Date.now()
+      // Awaited with no bound of its own: a boot that waited for a reply or a retry would stay
+      // pending, and the 3 s limit of this file fails the case well inside the mutation runner's.
       const unsubscribe = await subscribe(pubsub)
-      expect(Date.now() - started).toBeLessThan(1500)
       expect(typeof unsubscribe).toBe('function')
       expect(pubsub.isSubscribed()).toBe(false)
       // Several retries pass; the log carries one line, not one per retry.
@@ -241,9 +241,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
         return null
       })
       const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
-      const started = Date.now()
       await subscribe(pubsub)
-      expect(Date.now() - started).toBeLessThan(1000)
       expect(pubsub.isSubscribed()).toBe(false)
       // The one line names the close as the reason; the Error the boot race resolves with does not
       // reach the log.

@@ -5,8 +5,10 @@
  * @layer test
  */
 import type { Socket } from 'node:net'
+import { Logger } from '@nestjs/common'
 import Redis from 'ioredis'
 import { FakeRespServer, healthyRedis } from '../../../test/fixtures/fake-resp-server'
+import { settlesInThisTurn } from '../../../test/support/settles-in-this-turn'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
@@ -17,6 +19,9 @@ const message: RealtimePubSubMessage = {
   args: { connectionId: 'c1', reason: 'revoked' },
   origin: 'inst-1',
 }
+
+/** How long the adapter waits for the publisher before it boots without it. */
+const PUBLISHER_WAIT_MS = 2_000
 
 const clients: Redis[] = []
 const servers: FakeRespServer[] = []
@@ -121,6 +126,13 @@ describe('RedisRealtimePubSub publishing connection', () => {
   // connections), subscribing gives up on it after the deadline and the instance starts unready.
   it('completes the boot, unready, when only the publisher never answers its handshake', async () => {
     let silent: Socket | undefined
+    let subscriberUp: () => void = () => undefined
+    const subscribed = new Promise<void>((resolve) => {
+      subscriberUp = resolve
+    })
+    jest.spyOn(Logger.prototype, 'log').mockImplementation((message: unknown) => {
+      if (String(message).startsWith('Subscribed to')) subscriberUp()
+    })
     const fake = new FakeRespServer((command, socket) => {
       silent ??= socket
       return socket === silent ? null : healthyRedis(command, socket)
@@ -134,10 +146,41 @@ describe('RedisRealtimePubSub publishing connection', () => {
     await until('the publisher to connect its socket', () => redis.status === 'connect')
     const before = listeners()
 
-    const started = Date.now()
-    await pubsub.subscribe(() => undefined)
+    // The deadline is a timer, so it is driven by a clock the test owns: the real socket carries
+    // the subscriber to the point where the boot waits on the publisher, and the boot gives up on
+    // it at the deadline exactly, not before and not after. With the deadline set far beyond this
+    // the boot would still be pending at the last step, and the case fails.
+    jest.useFakeTimers({
+      doNotFake: [
+        'setImmediate',
+        'clearImmediate',
+        'nextTick',
+        'queueMicrotask',
+        'Date',
+        'performance',
+      ],
+    })
+    try {
+      let booted = false
+      const subscribing = pubsub
+        .subscribe(() => undefined)
+        .then(() => {
+          booted = true
+        })
+      // From the line the adapter logs once its subscriber is up to the moment it starts waiting on
+      // the publisher there are only microtasks, so one turn of the loop and the deadline is armed.
+      await subscribed
+      await new Promise((resolve) => setImmediate(resolve))
 
-    expect(Date.now() - started).toBeLessThan(3_000)
+      await jest.advanceTimersByTimeAsync(PUBLISHER_WAIT_MS - 1)
+      expect(booted).toBe(false)
+      await jest.advanceTimersByTimeAsync(1)
+      expect(await settlesInThisTurn(subscribing)).toMatchObject({ status: 'fulfilled' })
+    } finally {
+      jest.useRealTimers()
+      jest.restoreAllMocks()
+    }
+
     expect(redis.status).toBe('connect')
     expect(pubsub.isSubscribed()).toBe(false)
     expect(listeners()).toEqual(before)
@@ -171,11 +214,14 @@ describe('RedisRealtimePubSub publishing connection', () => {
     const pubsub = new RedisRealtimePubSub({ client: redis })
     await until('the client to connect its socket', () => redis.status === 'connect')
 
-    const started = Date.now()
-    await expect(pubsub.publish(message)).rejects.toThrow(
-      '[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is connect)',
-    )
-    expect(Date.now() - started).toBeLessThan(200)
+    // Refused in this turn of the event loop: queued behind the handshake it would still be waiting.
+    expect(await settlesInThisTurn(pubsub.publish(message))).toMatchObject({
+      status: 'rejected',
+      reason: {
+        message:
+          '[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is connect)',
+      },
+    })
 
     fake.respond(healthyRedis)
     fake.drop()

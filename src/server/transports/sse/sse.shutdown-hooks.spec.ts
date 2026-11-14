@@ -55,7 +55,18 @@ describe('closing an application with SSE connections whose onDisconnect never s
   it('closes within a few hook timeouts, and ends every stream', async () => {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
-    const hooks = { onDisconnect: (): Promise<void> => new Promise<void>(() => undefined) }
+    let started = 0
+    let everyHookStarted: () => void = () => undefined
+    const everyHookHasStarted = new Promise<void>((resolve) => {
+      everyHookStarted = resolve
+    })
+    const hooks = {
+      onDisconnect: (): Promise<void> => {
+        started += 1
+        if (started === STREAMS) everyHookStarted()
+        return new Promise<void>(() => undefined)
+      },
+    }
     const module = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRoot({
@@ -73,11 +84,30 @@ describe('closing an application with SSE connections whose onDisconnect never s
     for (let i = 0; i < STREAMS; i++) streams.push(await openStream(port))
     const connections = module.get(ConnectionRegistry)
     expect(connections.allByTransport('sse')).toHaveLength(STREAMS)
-    const startedAt = Date.now()
 
-    await app.close()
+    // The clock belongs to the test. Every stream's hook starts, and its timer is armed, before any
+    // one of them is given up on, so a single hook timeout of the clock is enough to close. Hooks
+    // run one after another would never start the last stream's hook, and the close would stay
+    // pending: a sequence of hook timeouts is what the old bound on elapsed time was guarding.
+    jest.useFakeTimers({
+      doNotFake: [
+        'setImmediate',
+        'clearImmediate',
+        'nextTick',
+        'queueMicrotask',
+        'Date',
+        'performance',
+      ],
+    })
+    try {
+      const closing = app.close()
+      await everyHookHasStarted
+      await jest.advanceTimersByTimeAsync(HOOK_TIMEOUT_MS)
+      await closing
+    } finally {
+      jest.useRealTimers()
+    }
 
-    expect(Date.now() - startedAt).toBeLessThan(HOOK_TIMEOUT_MS * 5)
     expect(connections.allByTransport('sse')).toHaveLength(0)
-  })
+  }, 10_000)
 })
