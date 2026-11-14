@@ -27,12 +27,10 @@ overrides:
   # Remove when platform-express pins body-parser >= 2.4.0.
   'body-parser@2': '^2.4.0'
   # brace-expansion GHSA-6j4f-fj2g-mc7p and GHSA-qhr7-859c-m2p7 (7.5), GHSA-q2hr-2g5m-vwhr
-  # (5.3): via minimatch <- stryker, eslint and the jest chain. Scoped per major because
-  # minimatch 3 consumes brace-expansion 1.x, minimatch 9 consumes 2.x and minimatch 10
-  # consumes 5.x; one cross-major floor breaks `minimatch.braceExpand` for the other two.
+  # (5.3): via minimatch. Scoped per major because minimatch 3 consumes brace-expansion 1.x and
+  # minimatch 11 consumes 5.x; one cross-major floor breaks `minimatch.braceExpand` for the other.
   # Remove each floor when its minimatch line requires a brace-expansion at or above it.
   'brace-expansion@1': '^1.1.21'
-  'brace-expansion@2': '^2.1.7'
   'brace-expansion@5': '^5.0.12'
   'browserslist': '^4.28.7'
   # engine.io GHSA-2gc4-cqfq-p2gv (7.5): via socket.io <- @nestjs/platform-socket.io.
@@ -44,10 +42,10 @@ overrides:
   # GHSA-xhq7-xmqj-769h (3.7): via ajv 8 <- @stryker-mutator/core.
   # Remove when ajv requires fast-uri >= 3.1.9.
   'fast-uri': '^3.1.9'
-  # glob GHSA-3g3m-2fjr-6pw4: via test-exclude <- babel-plugin-istanbul <- the jest chain, and
-  # via @stryker-mutator. glob 10 and 13 are the two majors in the tree; both are forced to
-  # the first fixed release, 14.0.2. Scoped per major, as minimatch is, so that an unrelated
-  # line is not moved. Remove each floor when its consumer requires glob >= 14.0.2.
+  # glob GHSA-3g3m-2fjr-6pw4: test-exclude <- babel-plugin-istanbul asks for glob ^10.4.1, and
+  # @jest/reporters, jest-config and jest-runtime ask for ^13.0.6. Each range is forced to
+  # 14.0.2, the first fixed release; the keys name the ranges, so no other line is moved.
+  # Remove each floor when the package behind it requires glob >= 14.0.2.
   'glob@10': '^14.0.2'
   'glob@13': '^14.0.2'
   # handlebars GHSA-8r5x-fm3f-whwj (9.8), GHSA-p8wg-vrv2-v86f (9.2),
@@ -56,11 +54,10 @@ overrides:
   # js-yaml GHSA-2883-xcg3-v3hh (7.5): via @istanbuljs/load-nyc-config <- babel-plugin-istanbul.
   # Remove when that chain moves to js-yaml 4.
   'js-yaml@3': '^3.15.2'
-  # minimatch GHSA-g3hv-75wg-m249: via eslint, stryker and the jest chain. Majors 9 and 10 are
-  # forced to the first fixed release, 11.0.1. Major 3 is left alone: it is the line
-  # brace-expansion 1.x belongs to (see above) and a cross-major floor breaks it.
-  # Remove each floor when its consumer requires minimatch >= 11.0.1.
-  'minimatch@9': '^11.0.1'
+  # minimatch GHSA-g3hv-75wg-m249: eslint asks for ^10.2.6 and test-exclude for ^10.2.2. That range
+  # is forced to 11.0.1, the first fixed release. ^3 is left alone: it is the range
+  # brace-expansion 1.x belongs to (see brace-expansion above), and a cross-major floor breaks it.
+  # Remove the floor when both require minimatch >= 11.0.1.
   'minimatch@10': '^11.0.1'
   # multer GHSA-q7qp-rjg7-q26m (7.5), GHSA-535w-7cp7-47q4, GHSA-qfvm-cv95-jqjf and
   # GHSA-wc9g-mqfw-jrwm (7.5), GHSA-3pph-fpjx-jg34 (5.3), GHSA-qvfw-j98x-7q72 (3.7):
