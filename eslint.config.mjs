@@ -118,6 +118,8 @@ export default [
   // still has suppressions is reported only when it raises that file's count, so a split and a new
   // offender in the same file net to zero and go unseen. The count can only go down, which is why this is
   // accepted, but it is not invisible: a split removes its suppression in the same change.
+  // The baseline is keyed by file, so a function moved to another file counts as growth there and fails
+  // `check:suppressions`: a move has to fix the violation and not carry it along.
   {
     files: ['src/**/*.ts', 'src/**/*.tsx'],
     ignores: ['**/*.spec.ts', '**/*.spec.tsx'],
