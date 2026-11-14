@@ -8,6 +8,14 @@
     "reason": "Tests scripts/check-api-surface.mjs, a release tooling script. It imports no mutated source."
   },
   {
+    "file": "src/check-spec-headers.spec.ts",
+    "reason": "Tests scripts/check-spec-headers.mjs, a CI tooling script. It imports no mutated source."
+  },
+  {
+    "file": "src/check-suppressions-baseline.spec.ts",
+    "reason": "Tests scripts/check-suppressions-baseline.mjs, a CI tooling script. It imports no mutated source."
+  },
+  {
     "file": "src/check-file-length.spec.ts",
     "reason": "Tests scripts/check-file-length.mjs, a CI tooling script. It imports no mutated source."
   },

@@ -1,13 +1,13 @@
 /**
  * Tests for `usePresence`.
+ * @layer react
  *
- * The hook reads the `events` array from `useRealtimeContext` and processes
- * `presence:online` / `presence:offline` typed events. These arrive via the
- * WebSocket path (where `onAny` preserves the event name as `type`) or via named
- * SSE events once named-event support lands in the SSE hook.
- *
- * To isolate the state-machine logic from transport details, `useRealtimeContext`
- * is mocked so tests can inject events with any type directly.
+ * `useRealtimeContext` is mocked so tests can inject events of any `type`, and the hook is driven by the
+ * `events` array it supplies. It throws outside a `RealtimeProvider`.
+ * A `presence:online` event adds its user to `onlineUserIds`; a `presence:offline` event removes it.
+ * An `invoice.paid` event leaves an online user in the set.
+ * `onlineUserIds` is returned sorted when users arrive out of order.
+ * Inside a real `RealtimeProvider`, a named `presence:online` SSE event marks its user online.
  */
 import React from 'react'
 import { act, renderHook } from '@testing-library/react'

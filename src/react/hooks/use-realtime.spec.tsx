@@ -1,9 +1,13 @@
 /**
- * Tests for the universal hook — `useRealtime`.
+ * Tests for the universal hook `useRealtime`.
+ * @layer react
  *
- * Verifies transport auto-detection from URL scheme and explicit transport
- * overrides. Both internal hooks are mocked so tests stay isolated from
- * EventSource / socket.io-client specifics.
+ * Both internal hooks are mocked, so no EventSource or socket.io-client is involved.
+ * A relative path url selects the `sse` transport and a `ws://` url selects `websocket`.
+ * `transport: 'sse'` overrides a `ws://` url, and `transport: 'websocket'` overrides an `http://` url.
+ * `transport: 'auto'` on a `ws://` url still selects `websocket`.
+ * `emit` is undefined on the SSE branch.
+ * `withCredentials` is forwarded to the SSE hook, and is absent from its options when unset.
  */
 // Mock both internal hooks BEFORE any imports that load the module under test.
 jest.mock('../internal/use-realtime-sse', () => ({

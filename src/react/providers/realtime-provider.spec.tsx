@@ -1,9 +1,11 @@
 /**
  * Tests for `RealtimeProvider` and `useRealtimeContext`.
+ * @layer react
  *
- * Verifies that the provider renders children, the context is accessible inside,
- * throws a clear error outside, and that all consumers share ONE underlying
- * connection (one EventSource for SSE).
+ * The provider renders its children.
+ * Inside it, `useRealtimeContext` exposes `connected` as a boolean and `reconnect` as a function.
+ * Outside it, `useRealtimeContext` throws `useRealtimeContext must be used within <RealtimeProvider>`.
+ * Two consumers under one provider open one EventSource.
  */
 import React from 'react'
 import { act, render, renderHook } from '@testing-library/react'

@@ -1,9 +1,11 @@
 /**
- * Tests for `useRealtimeConnection` — the lite connection hook.
+ * Tests for `useRealtimeConnection`, the lite connection hook.
+ * @layer react
  *
- * Verifies that the hook returns only `{ connected, error, reconnectAttempts,
- * reconnect }` with no events array, and that the returned values reflect live
- * connection state.
+ * Its result has a `reconnectAttempts` key and no `events` key.
+ * `reconnectAttempts` reaches 2 after two SSE errors.
+ * `connected` is true once the EventSource has opened.
+ * An SSE error sets `error`, and `reconnect()` opens a new EventSource.
  */
 import { act, renderHook } from '@testing-library/react'
 import { EventSourceMock, emitError } from '../../../test/setup/react-setup'
