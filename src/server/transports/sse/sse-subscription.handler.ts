@@ -127,8 +127,8 @@ interface AuthenticatedRequest {
   auth: AuthenticationResult
   /** The place held for this connection until it is registered or its response closes. */
   ticket: AdmissionTicket
-  /** What a reconnect missed, read before the response is committed. */
-  gap: { replayEvents: MessageEvent[]; queueEvents: OfflineQueuedEvent[] }
+  /** The offline queue's gap for a reconnect, read before the response is committed. */
+  queueEvents: OfflineQueuedEvent[]
 }
 
 /** Parameters forwarded from `handle()` into `buildStream()`. */
@@ -245,7 +245,7 @@ export class SseSubscriptionHandler {
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
-    const stream = this.openStream(res, authenticated)
+    const stream = this.openStream(req, res, authenticated)
     // Authentication is asynchronous, so shutdown may have begun while this request waited.
     try {
       this.refuseDuringShutdown()
@@ -264,19 +264,28 @@ export class SseSubscriptionHandler {
   }
 
   private openStream(
+    req: SseRequest,
     res: SseResponse,
     authenticated: AuthenticatedRequest,
   ): Observable<MessageEvent> {
-    const { context, auth: resolvedAuth, ticket, gap } = authenticated
+    const { context, auth: resolvedAuth, ticket } = authenticated
 
     const connectionId = randomUUID()
     const subject = new Subject<MessageEvent>()
     const close$ = new Subject<void>()
 
-    // The ring-buffer and offline-queue gaps were read before the connection is registered, so no
-    // concurrent emitter can reach subject.next() before we know what "offline" means, and offline
-    // events always precede live events in the merged stream.
-    const { replayEvents, queueEvents } = gap
+    // The ring buffer is read here, as late as the route allows, rather than in the guard: whatever
+    // the application runs between the two (an interceptor that awaits, say) would otherwise leave
+    // events that were emitted meanwhile out of the replay, and the connection is not registered to
+    // receive them live. The queue events were read in the guard and are reconciled with the ring now,
+    // so an event that is in both is delivered once. Reading both before registering means no
+    // concurrent emitter can reach subject.next() first, and offline events precede live ones.
+    const lastEventId = singleHeader(req.headers['last-event-id'])
+    const replayEvents = lastEventId
+      ? this.transport.getReplayEvents(resolvedAuth.userId, lastEventId)
+      : []
+    const ringBufferIds = new Set(replayEvents.map((e) => e.id ?? ''))
+    const queueEvents = authenticated.queueEvents.filter((e) => !ringBufferIds.has(e.id))
     // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — `of()` with no arguments emits nothing and completes, exactly as `EMPTY` does; the guard picks the clearer expression, not a different stream
     const replay$ = replayEvents.length > 0 ? of(...replayEvents) : EMPTY
 
@@ -349,7 +358,12 @@ export class SseSubscriptionHandler {
       const auth = await this.transport.authenticate(context)
       if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
       const resolved = this.resolveAndValidateIdentity(auth)
-      return { context, auth: resolved, ticket, gap: await this.readGap(req, resolved.userId) }
+      return {
+        context,
+        auth: resolved,
+        ticket,
+        queueEvents: await this.readQueue(req, resolved.userId),
+      }
     } catch (err) {
       ticket.release()
       throw err
@@ -357,9 +371,8 @@ export class SseSubscriptionHandler {
   }
 
   /**
-   * Read what a reconnect missed: the events still in the ring buffer, and the offline queue's
-   * gap, retrieved WITHOUT acknowledging (acknowledgment is deferred until the events have been
-   * emitted to an open subscriber, so delivery is at-least-once).
+   * Read the offline queue's gap for a reconnect, WITHOUT acknowledging (acknowledgment is deferred
+   * until the events have been emitted to an open subscriber, so delivery is at-least-once).
    *
    * This runs with the authentication, in the guard, because a refusal that needs I/O is a status
    * only if it is decided before Nest commits the response: with an interceptor registered it
@@ -368,17 +381,11 @@ export class SseSubscriptionHandler {
    * is reported by the service and gives an empty gap, and anything else it throws is a generic
    * `500`, whatever its error says.
    */
-  private async readGap(req: SseRequest, userId: string): Promise<AuthenticatedRequest['gap']> {
+  private async readQueue(req: SseRequest, userId: string): Promise<OfflineQueuedEvent[]> {
     const lastEventId = singleHeader(req.headers['last-event-id'])
-    if (!lastEventId) return { replayEvents: [], queueEvents: [] }
-    const replayEvents = this.transport.getReplayEvents(userId, lastEventId)
-    if (!this.offlineDelivery) return { replayEvents, queueEvents: [] }
-    const ringBufferIds = new Set(replayEvents.map((e) => e.id ?? ''))
+    if (!lastEventId || !this.offlineDelivery) return []
     try {
-      return {
-        replayEvents,
-        queueEvents: await this.offlineDelivery.retrieve(userId, lastEventId, ringBufferIds),
-      }
+      return await this.offlineDelivery.retrieve(userId, lastEventId, new Set())
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
       throw this.serverError(err, 'SSE handshake failed')
