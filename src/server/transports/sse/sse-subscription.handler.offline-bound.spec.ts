@@ -218,21 +218,5 @@ describe('SseSubscriptionHandler: a reconnect whose offline queue does not answe
       expect(registerConnection).not.toHaveBeenCalled()
       expect(release).toHaveBeenCalledTimes(1)
     })
-
-    // An outage of the store is not a reason to refuse every reconnect: the first read has already
-    // answered an empty gap for it, and the second answers no extra events.
-    it('delivers the first read, and ends no attempt, when the store fails the second read', async () => {
-      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-      const { handler, registerConnection } = withTwoReads(() =>
-        Promise.reject(new Error('redis down')),
-      )
-
-      const stream = await handler.handle(reconnect(), mkRes())
-
-      expect(collect(stream).map((e) => e.id)).toEqual(['q-1'])
-      expect(registerConnection).toHaveBeenCalledTimes(1)
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('redis down'))
-      warn.mockRestore()
-    })
   })
 })

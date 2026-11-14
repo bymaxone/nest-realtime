@@ -21,6 +21,7 @@ import {
   OfflineQueueDeliveryService,
   OfflineQueueTimeoutError,
 } from '../../offline-queue/offline-queue-delivery.service'
+import type { OfflineQueueRead } from '../../offline-queue/offline-queue-delivery.service'
 import type { OfflineQueuedEvent } from '../../interfaces/offline-queue-storage.interface'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
@@ -128,7 +129,7 @@ interface AuthenticatedRequest {
   /** The place held for this connection until it is registered or its response closes. */
   ticket: AdmissionTicket
   /** The offline queue's gap for a reconnect, read before the response is committed. */
-  queueEvents: OfflineQueuedEvent[]
+  queueRead: OfflineQueueRead
 }
 
 /** Parameters forwarded from `handle()` into `buildStream()`. */
@@ -252,7 +253,7 @@ export class SseSubscriptionHandler {
       authenticated.ticket.release()
       throw err
     }
-    const stream = this.openStream(req, res, { ...authenticated, queueEvents })
+    const stream = this.openStream(req, res, authenticated, queueEvents)
     // Authentication is asynchronous, so shutdown may have begun while this request waited.
     try {
       this.refuseDuringShutdown()
@@ -274,6 +275,7 @@ export class SseSubscriptionHandler {
     req: SseRequest,
     res: SseResponse,
     authenticated: AuthenticatedRequest,
+    gapEvents: OfflineQueuedEvent[],
   ): Observable<MessageEvent> {
     const { context, auth: resolvedAuth, ticket } = authenticated
 
@@ -291,7 +293,7 @@ export class SseSubscriptionHandler {
     const replayEvents = lastEventId
       ? this.transport.getReplayEvents(resolvedAuth.userId, lastEventId)
       : []
-    const queueEvents = authenticated.queueEvents.filter(
+    const queueEvents = gapEvents.filter(
       (queued) => !replayEvents.some((replayed) => replayed.id === queued.id),
     )
     // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — `of()` with no arguments emits nothing and completes, exactly as `EMPTY` does; the guard picks the clearer expression, not a different stream
@@ -370,7 +372,7 @@ export class SseSubscriptionHandler {
         context,
         auth: resolved,
         ticket,
-        queueEvents: await this.readQueue(req, resolved.userId),
+        queueRead: await this.readQueue(req, resolved.userId),
       }
     } catch (err) {
       ticket.release()
@@ -386,14 +388,14 @@ export class SseSubscriptionHandler {
    * only if it is decided before Nest commits the response: with an interceptor registered it
    * commits `200` from a timer once the route returns, and a refusal after that can only end the
    * stream. A queue that did not answer in time is a `503` with the generic body; a queue that fails
-   * is reported by the service and gives an empty gap, and anything else it throws is a generic
-   * `500`, whatever its error says.
+   * is reported by the service and gives an empty gap marked as degraded, and anything else it throws
+   * is a generic `500`, whatever its error says.
    */
-  private async readQueue(req: SseRequest, userId: string): Promise<OfflineQueuedEvent[]> {
+  private async readQueue(req: SseRequest, userId: string): Promise<OfflineQueueRead> {
     const lastEventId = singleHeader(req.headers['last-event-id'])
-    if (!lastEventId || !this.offlineDelivery) return []
+    if (!lastEventId || !this.offlineDelivery) return { events: [], degraded: false }
     try {
-      return await this.offlineDelivery.retrieve(userId, lastEventId, new Set())
+      return await this.offlineDelivery.retrieveGap(userId, lastEventId)
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
       throw this.serverError(err, 'SSE handshake failed')
@@ -406,29 +408,30 @@ export class SseSubscriptionHandler {
    * is delivered with the rest of the gap. The earlier read ended at the last event it returned, and
    * this one starts after it, so the two lists are disjoint and keep queue order.
    *
-   * A read that did not answer in time, or was refused because the reads waiting are all taken, ends
-   * the attempt here, before any event is delivered: a stream that skipped these events moves the
-   * client's cursor past them with the next event it receives, where an attempt that delivered nothing
-   * leaves it where it was. The store's own error is reported by the service and adds no events, as
-   * the first read's does.
+   * When the first read failed, the store is down and the reconnect is served without a gap, as it
+   * always has been: there is no second read. When the first read succeeded, a second one that did not
+   * answer in time, was refused because the reads waiting are all taken, or failed ends the attempt
+   * here, before any event is delivered: a stream that skipped these events moves the client's cursor
+   * past them with the next event it receives, where an attempt that delivered nothing leaves it where
+   * it was.
    */
   private async readAppended(
     req: SseRequest,
     authenticated: AuthenticatedRequest,
   ): Promise<OfflineQueuedEvent[]> {
     const lastEventId = singleHeader(req.headers['last-event-id'])
-    const { queueEvents: read } = authenticated
-    if (!lastEventId || !this.offlineDelivery) return read
+    const { queueRead } = authenticated
+    if (!lastEventId || !this.offlineDelivery) return queueRead.events
     try {
       const appended = await this.offlineDelivery.retrieveAppended(
         authenticated.auth.userId,
         lastEventId,
-        read,
+        queueRead,
       )
-      return [...read, ...appended]
-    } catch {
-      // Only a read that did not answer in time reaches here: the store's own error is the service's.
-      throw new ServiceUnavailableException()
+      return [...queueRead.events, ...appended]
+    } catch (err) {
+      if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
+      throw this.serverError(err, 'SSE handshake failed')
     }
   }
 

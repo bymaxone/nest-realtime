@@ -35,6 +35,7 @@ class ArrivalOrderedQueue implements IOfflineQueueStorage {
   readonly events: OfflineQueuedEvent[] = []
   reads = 0
   hangFromRead: number | undefined
+  failFromRead: number | undefined
   acknowledged: string[] = []
 
   async append(_userId: string, event: OfflineQueuedEvent): Promise<void> {
@@ -43,6 +44,9 @@ class ArrivalOrderedQueue implements IOfflineQueueStorage {
 
   retrieveSince(_userId: string, sinceId: string): Promise<OfflineQueuedEvent[]> {
     this.reads += 1
+    if (this.failFromRead !== undefined && this.reads >= this.failFromRead) {
+      return Promise.reject(new Error('redis 10.1.2.3:6379 unreachable'))
+    }
     if (this.hangFromRead !== undefined && this.reads >= this.hangFromRead) {
       return new Promise(() => undefined)
     }
@@ -179,5 +183,35 @@ describe.each([
         expect(reply.headers['retry-after']).toBeUndefined()
       }
     }
+  })
+
+  // Claude's finding: a store that stays down must not refuse every reconnect. The first read has
+  // degraded, so the reconnect is served as it always has been, and the store is not asked again.
+  it('serves a reconnect whose store is down, with one read and no error, when the first read fails', async () => {
+    const port = await boot()
+    queue.failFromRead = 1
+
+    const { status, text } = await reconnect(port, 600)
+
+    expect(status).toBe(200)
+    expect(text).toContain('connection:established')
+    expect(queue.reads).toBe(1)
+  })
+
+  // Codex's finding: the first read succeeded and the second failed, so a stream served with the first
+  // read's events alone would move the client's cursor past the ones the second was for. The attempt
+  // ends before anything is delivered or acknowledged, and the cause reaches no one.
+  it('ends the attempt, delivering and acknowledging nothing, when the second read fails after a first that succeeded', async () => {
+    const port = await boot()
+    queue.failFromRead = 2
+
+    const { status, text } = await reconnect(port, 600)
+
+    expect(text).not.toContain('"n":1')
+    expect(text).not.toContain('connection:established')
+    expect(text).not.toContain('10.1.2.3')
+    expect(queue.acknowledged).toEqual([])
+    expect(queue.reads).toBe(2)
+    expect(withInterceptor ? [200, 500] : [500]).toContain(status)
   })
 })

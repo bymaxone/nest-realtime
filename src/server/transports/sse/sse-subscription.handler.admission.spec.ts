@@ -17,6 +17,7 @@ import {
   mkOptions,
   mkReq,
   build,
+  StubDelivery,
 } from '../../../../test/fixtures/sse/subscription-harness'
 import {
   ConnectionAdmission,
@@ -163,18 +164,19 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
     // A slow offline-queue read is one of the waits before registration; it can outlast the place.
     it('ends the stream with a 503, and registers nothing, when a slow offline-queue read outlives its place', async () => {
       let finish: (events: never[]) => void = () => undefined
-      const offlineDelivery = {
-        retrieve: jest.fn(() => new Promise<never[]>((resolve) => (finish = resolve))),
+      const retrieve = jest.fn(() => new Promise<never[]>((resolve) => (finish = resolve)))
+      const offlineDelivery = new StubDelivery({
+        retrieve,
         retrieveAppended: jest.fn().mockResolvedValue([]),
         acknowledge: jest.fn(),
-      }
+      })
       const { admission, registerConnection, transport } = setup(1)
       const handler = new SseSubscriptionHandler(
         transport,
         mkHeartbeat(),
         mkOptions(),
         undefined,
-        offlineDelivery as never,
+        offlineDelivery,
       )
       const { res } = mkClosableRes()
       const req = mkReq({ headers: { 'last-event-id': 'e-1' } })
@@ -189,7 +191,7 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
         stream.subscribe({ error: resolve, complete: () => resolve(undefined) }),
       )
 
-      expect(offlineDelivery.retrieve).toHaveBeenCalledTimes(1)
+      expect(retrieve).toHaveBeenCalledTimes(1)
       expect(error).toBeInstanceOf(ServiceUnavailableException)
       expect(registerConnection).not.toHaveBeenCalled()
     })
