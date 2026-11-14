@@ -251,6 +251,26 @@ describe('OfflineQueueDeliveryService: the read is bounded', () => {
         await expect(service.retrieve('u1', 'e-1', new Set())).resolves.toEqual([])
       }
     })
+
+    // A store written without async (a JavaScript consumer, or an in-memory one) returns its events
+    // instead of a promise. Counting the call before it is known to be a promise would leave the
+    // place taken for ever, and a few of these would refuse every reconnect until a restart.
+    it('keeps no place for a store that returns its events instead of a promise', async () => {
+      const events: OfflineQueuedEvent[] = [
+        { id: 'e-2', event: 'evt', data: {}, emittedAt: new Date() },
+      ]
+      const storage: IOfflineQueueStorage = {
+        retrieveSince: jest.fn().mockReturnValue(events),
+        acknowledge: jest.fn(),
+        append: jest.fn(),
+      }
+      const service = build(storage, 1_000, 1)
+
+      for (let i = 0; i < 3; i += 1) {
+        await expect(service.retrieve('u1', 'e-1', new Set())).resolves.toEqual(events)
+      }
+      expect(storage.retrieveSince).toHaveBeenCalledTimes(3)
+    })
   })
 
   // The offline reads and the authentications share the limit's value, `maxPendingHandshakes`, and

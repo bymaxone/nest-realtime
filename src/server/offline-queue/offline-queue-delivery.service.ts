@@ -218,7 +218,9 @@ export class OfflineQueueDeliveryService {
       throw new OfflineQueueTimeoutError()
     }
     try {
-      const call = storage.retrieveSince(userId, sinceId, limit)
+      // A store that is not async returns its events, not a promise: wrapped before it is counted, so
+      // that nothing between the count and the release can throw and leave the place taken.
+      const call = Promise.resolve(storage.retrieveSince(userId, sinceId, limit))
       // The call cannot be cancelled, so it keeps its place until it actually settles, not until it
       // was given up on: a store that never answers fills the limit instead of piling up one more
       // abandoned call for every reconnect.

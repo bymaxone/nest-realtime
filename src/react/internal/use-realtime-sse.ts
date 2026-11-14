@@ -4,8 +4,10 @@
  *
  * Opens a browser-native `EventSource`, tracks connection state, and accumulates
  * received events. Implements exponential backoff on error to avoid thundering-herd
- * reconnect storms. The native EventSource auto-sends `Last-Event-ID` from its
- * internal state — this hook does not duplicate that logic.
+ * reconnect storms. The browser restarts a dropped stream by itself and sends `Last-Event-ID`
+ * from its internal state. An `EventSource` this hook opens afresh (after a refusal, after its
+ * backoff, on a manual reconnect) has no such state and cannot send the header, so the hook keeps
+ * the last event id it saw and sends it as the `lastEventId` query parameter.
  *
  * Named server events (the reserved catalog plus presence) are delivered by the
  * browser ONLY to listeners registered with `addEventListener(name, …)`, never to
@@ -59,6 +61,22 @@ export interface UseRealtimeSseOptions {
 
 /** Maximum number of events kept in memory per hook instance. */
 const MAX_EVENTS = 100
+
+/**
+ * The url a new stream is opened with: `url` as given until an event has been seen, then with the
+ * id of the last one as the `lastEventId` query parameter, before any fragment. A `lastEventId` the
+ * url already carries (a cursor the application started from) is replaced, since two of them
+ * reach the server as an array, which it reads as no id.
+ */
+function withLastEventId(url: string, id: string | undefined): string {
+  if (id === undefined) return url
+  const hash = url.indexOf('#')
+  const head = hash < 0 ? url : url.slice(0, hash)
+  const mark = head.indexOf('?')
+  const query = new URLSearchParams(mark < 0 ? '' : head.slice(mark + 1))
+  query.set('lastEventId', id)
+  return `${mark < 0 ? head : head.slice(0, mark)}?${query}${hash < 0 ? '' : url.slice(hash)}`
+}
 
 /**
  * Named SSE events this hook subscribes to so their `type` survives transport.
@@ -154,6 +172,8 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
   const reconnectMsRef = useRef<number>(validDelay(opts.reconnectInitialMs, 1_000))
   const attemptsRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The id of the last event seen, and the url it belongs to: another url is another stream.
+  const lastIdRef = useRef<{ url: string; id: string } | undefined>(undefined)
 
   // Carried as a newline-joined string rather than the array itself: an inline
   // `eventNames={['order.created']}` literal has a new identity on every render, so
@@ -187,9 +207,13 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
     sourceRef.current?.close()
     clearReconnectTimer()
 
-    // EventSource automatically sends `Last-Event-ID` based on the last event id
-    // it has seen — no manual tracking needed on this end.
-    const source = new EventSource(opts.url, { withCredentials: opts.withCredentials ?? false })
+    // A new EventSource has seen no event, so it sends no `Last-Event-ID`: the last id seen on this
+    // url goes in the query instead. An id never outlives a change of url, so one from before a
+    // detour to another url is not brought back.
+    if (lastIdRef.current?.url !== opts.url) lastIdRef.current = undefined
+    const source = new EventSource(withLastEventId(opts.url, lastIdRef.current?.id), {
+      withCredentials: opts.withCredentials ?? false,
+    })
     sourceRef.current = source
 
     source.onopen = () => {
@@ -232,6 +256,8 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
     // listeners, so the original event `type` is preserved either way. The
     // `: keepalive` heartbeat is a raw comment and never surfaces here (spec §6.1, §13).
     const handleEvent = (e: MessageEvent): void => {
+      // A frame without an id says nothing about where the stream stands.
+      if (e.lastEventId !== '') lastIdRef.current = { url: opts.url, id: e.lastEventId }
       let data: TEvents[keyof TEvents]
       try {
         data = JSON.parse(e.data as string) as TEvents[keyof TEvents]

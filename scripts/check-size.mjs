@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  17,614 B → 17,620 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  17,661 B → 17,670 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -37,7 +37,9 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     guard and the boot validation of its options, and the instance-wide connection bound: the
 //     admission service with its rate-limited log line, the place held for a handshake until it is
 //     registered or its response closes, the 503 that refuses one past `maxConnections`, and the
-//     rejection of a call that found no path, which is a 503 exception)
+//     rejection of a call that found no path, which is a 503 exception, and the last event id of a
+//     reconnect: one resolver for the header and the query parameter, bounded in length, and the
+//     read of an offline queue that wraps what a store returns before it counts the call)
 //   websocket  5,251 B →  5,260 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -46,7 +48,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     for a handshake until its socket is registered or its engine connection closes, and the
 //     transport code that marks a refusal the client can retry)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
-//   react      2,171 B →  2,400 B
+//   react      2,484 B →  2,500 B (the resume parameter: the last event id the hook saw, replacing one
+//     the url already carries, before any fragment)
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
@@ -58,10 +61,10 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 17_620 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 17_670 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_260 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
-  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_400 },
+  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_500 },
 ]
 
 // The Socket.IO stack must not be reachable from anything an SSE application
