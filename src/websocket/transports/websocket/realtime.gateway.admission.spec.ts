@@ -6,6 +6,7 @@
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import {
+  AuthenticationGate,
   ConnectionAdmission,
   ConnectionLimitError,
   ConnectionRegistry,
@@ -180,6 +181,7 @@ describe('RealtimeGateway: the place held for a socket', () => {
     await middleware(socket, jest.fn())
 
     void gateway.handleConnection(socket as never)
+    await new Promise((resolve) => setImmediate(resolve))
 
     expect(transport.registerSocket).toHaveBeenCalledTimes(1)
     expect(() => admission.admit()).not.toThrow()
@@ -193,5 +195,116 @@ describe('RealtimeGateway: the place held for a socket', () => {
 
     expect(socket.disconnect).toHaveBeenCalledWith(true)
     expect(() => admission.admit()).not.toThrow()
+  })
+
+  // Namespace middleware that runs after ours can hold a socket past the time bound; its place may
+  // have been taken by then, and it must not register past the limit.
+  describe('a socket delayed past the time bound by later middleware', () => {
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    it('is refused, and not registered, when its place was given back and taken', async () => {
+      const { admission, gateway, middleware, transport } = await setup(
+        jest.fn().mockResolvedValue({ userId: 'u1' }),
+      )
+      const { socket } = makeSocket()
+      await middleware(socket, jest.fn())
+      jest.advanceTimersByTime(15_000)
+      admission.admit()
+
+      await gateway.handleConnection(socket as never)
+
+      expect(socket.disconnect).toHaveBeenCalledWith(true)
+      expect(transport.registerSocket).not.toHaveBeenCalled()
+    })
+
+    it('is registered when its place was given back and nobody took it', async () => {
+      const { gateway, middleware, transport } = await setup(
+        jest.fn().mockResolvedValue({ userId: 'u1' }),
+      )
+      const { socket } = makeSocket()
+      await middleware(socket, jest.fn())
+      jest.advanceTimersByTime(15_000)
+
+      await gateway.handleConnection(socket as never)
+
+      expect(transport.registerSocket).toHaveBeenCalledTimes(1)
+      expect(socket.disconnect).not.toHaveBeenCalled()
+    })
+  })
+
+  // A derived transport's registration may throw before it returns a promise; the place goes back.
+  it('gives the place back when registration throws as it is called', async () => {
+    const { admission, gateway, middleware, transport } = await setup(
+      jest.fn().mockResolvedValue({ userId: 'u1' }),
+    )
+    transport.registerSocket.mockImplementation(() => {
+      throw new Error('registration broke')
+    })
+    const { socket } = makeSocket()
+    await middleware(socket, jest.fn())
+
+    await gateway.handleConnection(socket as never)
+
+    expect(socket.disconnect).toHaveBeenCalledWith(true)
+    expect(() => admission.admit()).not.toThrow()
+  })
+
+  describe('an authenticator that never answers', () => {
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    it('keeps the place until the gate gives up on the handshake, and gives it back then', async () => {
+      const admission = new ConnectionAdmission(
+        {
+          transport: 'websocket',
+          authenticator: { authenticate: async () => null },
+          maxConnections: 1,
+          authenticateTimeoutMs: 1_000,
+        },
+        new ConnectionRegistry(),
+      )
+      const gate = new AuthenticationGate(
+        {
+          transport: 'websocket',
+          authenticateTimeoutMs: 1_000,
+          authenticator: { authenticate: async () => null },
+        },
+        { authenticate: () => new Promise(() => undefined) },
+      )
+      const module = await Test.createTestingModule({
+        providers: [
+          RealtimeGateway,
+          {
+            provide: WebSocketTransport,
+            useValue: {
+              setServer: jest.fn(),
+              shuttingDown: false,
+              admit: () => admission.admit(),
+              authenticate: (ctx: never) => gate.authenticate(ctx),
+              registerSocket: jest.fn(),
+            },
+          },
+          { provide: REALTIME_OPTIONS_TOKEN, useValue: {} as BymaxRealtimeModuleOptions },
+        ],
+      }).compile()
+      const server = { use: jest.fn() }
+      module.get(RealtimeGateway).afterInit(server as never)
+      const middleware = server.use.mock.calls[0]?.[0] as (
+        socket: unknown,
+        next: Next,
+      ) => Promise<void>
+      const next = jest.fn()
+      const pending = middleware(makeSocket().socket, next)
+
+      jest.advanceTimersByTime(999)
+      expect(() => admission.admit()).toThrow(ConnectionLimitError)
+      jest.advanceTimersByTime(1)
+      await pending
+
+      expect(next).toHaveBeenCalledTimes(1)
+      expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
+      expect(() => admission.admit()).not.toThrow()
+    })
   })
 })

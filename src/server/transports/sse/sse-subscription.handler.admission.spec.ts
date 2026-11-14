@@ -22,6 +22,7 @@ import {
   ConnectionAdmission,
   ConnectionLimitError,
 } from '../../services/connection-admission.service'
+import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
 
 /** A response that lets the test end it, as a client leaving would. */
@@ -199,5 +200,51 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
     expect(failure).toBeInstanceOf(InternalServerErrorException)
     expect(error).toHaveBeenCalledWith('SSE registration refused — responding 500: broken')
     error.mockRestore()
+  })
+
+  // The authenticator is the one wait before registration that the library bounds: the gate gives up
+  // on it at authenticateTimeoutMs, which is less than the time a place is held for, so a place can
+  // never be reclaimed under a handshake that is still waiting for it.
+  describe('an authenticator that never answers', () => {
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    it('keeps the place until the gate gives up, and gives it back then', async () => {
+      const admission = new ConnectionAdmission(
+        {
+          transport: 'sse',
+          authenticator: { authenticate: async () => null },
+          maxConnections: 1,
+          authenticateTimeoutMs: 1_000,
+        },
+        new ConnectionRegistry(),
+      )
+      const gate = new AuthenticationGate(
+        {
+          transport: 'sse',
+          authenticateTimeoutMs: 1_000,
+          authenticator: { authenticate: async () => null },
+        },
+        { authenticate: () => new Promise(() => undefined) },
+      )
+      const handler = build(
+        mkTransport({
+          admit: () => admission.admit(),
+          authenticate: (ctx: never) => gate.authenticate(ctx),
+        }),
+        mkHeartbeat(),
+        mkOptions(),
+      )
+      const refused = handler
+        .authenticateBeforeCommit(mkReq(), mkClosableRes().res)
+        .catch((e: unknown) => e)
+
+      jest.advanceTimersByTime(999)
+      expect(() => admission.admit()).toThrow(ConnectionLimitError)
+      jest.advanceTimersByTime(1)
+
+      expect(await refused).toBeInstanceOf(ServiceUnavailableException)
+      expect(() => admission.admit()).not.toThrow()
+    })
   })
 })

@@ -37,7 +37,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     guard and the boot validation of its options, and the instance-wide connection bound: the
 //     admission service with its rate-limited log line, the place held for a handshake until it is
 //     registered or its response closes, and the 503 that refuses one past `maxConnections`)
-//   websocket  5,098 B →  5,120 B (the Socket.IO stack alone: the start-up message that names the
+//   websocket  5,185 B →  5,220 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server
@@ -57,7 +57,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
   { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 17_040 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_120 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_220 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_400 },
 ]
