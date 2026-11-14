@@ -84,9 +84,8 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       // Room is taken before the authenticator is asked, and given back when the socket is
       // registered or its engine connection closes, whichever comes first: a client that leaves
       // while it is being authenticated never reaches `handleConnection`.
-      const held = this.transport.admit()
+      const held = this.admit(socket)
       ticket = held
-      socket.conn.once('close', () => held.release())
       const auth = await this.transport.authenticate(this.buildAuthContext(socket))
       // Authentication is asynchronous, so shutdown may have begun while this handshake waited.
       if (this.transport.shuttingDown) {
@@ -238,6 +237,24 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   }
 
   /**
+   * Take a place for a socket, given back when it is released or when the socket's engine connection
+   * closes. Several namespaces share one engine connection, so the listener is removed on release:
+   * left attached, every handshake that is refused would add one for as long as the connection lives.
+   */
+  private admit(socket: Socket): AdmissionTicket {
+    const held = this.transport.admit()
+    const onClose = (): void => held.release()
+    socket.conn.once('close', onClose)
+    return {
+      release: () => {
+        socket.conn.off('close', onClose)
+        held.release()
+      },
+      renew: () => held.renew(),
+    }
+  }
+
+  /**
    * The identity of a socket and the place held for it: what the handshake middleware kept, or, for a
    * socket it never saw, a fresh authentication, failing closed. Resolves to nothing for a socket that
    * has been disconnected here.
@@ -254,8 +271,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       socket.disconnect(true)
       return undefined
     }
-    const held = this.transport.admit()
-    socket.conn.once('close', () => held.release())
+    const held = this.admit(socket)
     try {
       const fresh = await this.transport.authenticate(this.buildAuthContext(socket))
       if (!fresh) {

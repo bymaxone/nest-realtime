@@ -42,7 +42,7 @@ function makeSocket(
       },
       query: opts.query ?? {},
     },
-    conn: { once: jest.fn() },
+    conn: { once: jest.fn(), off: jest.fn() },
     disconnect: jest.fn(),
     emit: jest.fn(),
     join: jest.fn().mockResolvedValue(undefined),

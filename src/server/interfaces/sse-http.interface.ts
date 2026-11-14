@@ -71,6 +71,7 @@ export interface SseResponse {
         readonly bytesWritten?: number
         readonly writableLength?: number
         once?(event: 'close', listener: () => void): unknown
+        off?(event: 'close', listener: () => void): unknown
       }
     | null
     | undefined
@@ -82,6 +83,13 @@ export interface SseResponse {
    * which has no `once` and carries the Node response as `raw`.
    */
   once?(event: 'close', listener: () => void): unknown
+  /** Remove a listener added with `once`. */
+  off?(event: 'close', listener: () => void): unknown
   /** The underlying Node response, on a framework whose own response object is a wrapper (Fastify). */
-  readonly raw?: { once?(event: 'close', listener: () => void): unknown } | undefined
+  readonly raw?:
+    | {
+        once?(event: 'close', listener: () => void): unknown
+        off?(event: 'close', listener: () => void): unknown
+      }
+    | undefined
 }

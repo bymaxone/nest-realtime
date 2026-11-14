@@ -19,7 +19,7 @@ function makeSocket() {
   return {
     id: 'sock-1',
     handshake: { address: '1.2.3.4', auth: {}, headers: { cookie: '' }, query: {} },
-    conn: { once: jest.fn() },
+    conn: { once: jest.fn(), off: jest.fn() },
     disconnect: jest.fn(),
     emit: jest.fn(),
     join: jest.fn().mockResolvedValue(undefined),

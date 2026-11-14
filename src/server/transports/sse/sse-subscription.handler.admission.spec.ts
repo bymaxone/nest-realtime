@@ -10,7 +10,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common'
-import type { Response } from 'express'
+import type { SseResponse } from '../../interfaces/sse-http.interface'
 import {
   mkTransport,
   mkHeartbeat,
@@ -29,14 +29,14 @@ import { SseSubscriptionHandler } from './sse-subscription.handler'
 /** A response that lets the test end it, as a client leaving would. */
 function mkClosableRes() {
   let onClose: (() => void) | undefined
-  const res = {
+  const res: SseResponse = {
     setHeader: jest.fn(),
     write: jest.fn(),
     once: jest.fn((_event: string, listener: () => void) => {
       onClose = listener
     }),
   }
-  return { res: res as unknown as Response, close: () => onClose?.() }
+  return { res, close: () => onClose?.() }
 }
 
 function setup(
@@ -110,7 +110,7 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
   it('gives the place back when the Node response behind a Fastify-style reply closes', async () => {
     const { admission, handler } = setup(1)
     const raw = new EventEmitter()
-    const reply = { setHeader: jest.fn(), write: jest.fn(), raw } as unknown as Response
+    const reply: SseResponse = { setHeader: jest.fn(), write: jest.fn(), raw }
     await handler.authenticateBeforeCommit(mkReq(), reply)
     expect(() => admission.admit()).toThrow(ConnectionLimitError)
 
@@ -126,7 +126,7 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
     // Nothing reports the request dying, so only the time bound can give its place back.
     it('has its place given back after authenticateTimeoutMs and a margin', async () => {
       const { admission, handler } = setup(1)
-      const bare = { setHeader: jest.fn(), write: jest.fn() } as unknown as Response
+      const bare: SseResponse = { setHeader: jest.fn(), write: jest.fn() }
       await handler.authenticateBeforeCommit(mkReq(), bare)
 
       jest.advanceTimersByTime(14_999)
@@ -280,6 +280,43 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
 
       expect(await refused).toBeInstanceOf(ServiceUnavailableException)
       expect(() => admission.admit()).not.toThrow()
+    })
+  })
+
+  // A keep-alive socket outlives its requests, so a listener each request leaves on it would grow
+  // for as long as the client stays connected.
+  describe('the listener on a socket shared by many requests', () => {
+    const onSharedSocket = (socket: EventEmitter): SseResponse => ({
+      setHeader: jest.fn(),
+      write: jest.fn(),
+      socket,
+    })
+
+    it('is removed when the handshake is refused, however many are made on the same socket', async () => {
+      const { handler } = setup(1, jest.fn().mockResolvedValue(null))
+      const socket = new EventEmitter()
+
+      for (let i = 0; i < 1_000; i += 1) {
+        await handler
+          .authenticateBeforeCommit(mkReq(), onSharedSocket(socket))
+          .catch(() => undefined)
+      }
+
+      expect(socket.listenerCount('close')).toBe(0)
+    })
+
+    it('is removed once the connection is registered', async () => {
+      const { handler } = setup(1)
+      const socket = new EventEmitter()
+      const res = onSharedSocket(socket)
+      const req = mkReq()
+      await handler.authenticateBeforeCommit(req, res)
+      expect(socket.listenerCount('close')).toBe(1)
+
+      const stream = await handler.handle(req, res)
+      stream.subscribe({ error: () => undefined })
+
+      expect(socket.listenerCount('close')).toBe(0)
     })
   })
 })

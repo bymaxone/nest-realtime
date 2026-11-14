@@ -348,8 +348,15 @@ export class SseSubscriptionHandler {
   ): Promise<AuthenticatedRequest> {
     // Room for the connection is taken before the authenticator is asked, and given back when the
     // connection is registered or when the response closes, whichever comes first.
-    const ticket = this.transport.admit()
-    onResponseClose(res, () => ticket.release())
+    const held = this.transport.admit()
+    const detach = onResponseClose(res, () => ticket.release())
+    const ticket: AdmissionTicket = {
+      release: () => {
+        detach()
+        held.release()
+      },
+      renew: () => held.renew(),
+    }
     try {
       // The authorization header is stripped (not valid for SSE).
       const context = buildAuthContext(req)

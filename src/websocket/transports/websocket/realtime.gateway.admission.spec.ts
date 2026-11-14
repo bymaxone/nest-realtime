@@ -3,6 +3,7 @@
  * authenticated, and gives it back however the handshake ends.
  * @layer transport
  */
+import { EventEmitter } from 'node:events'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import {
@@ -18,38 +19,40 @@ import { WebSocketTransport } from './websocket.transport'
 
 type Next = (err?: Error) => void
 
-/** A socket whose engine connection the test can close, as a client leaving would. */
-function makeSocket() {
-  const listeners = new Map<string, () => void>()
+/** A socket on an engine connection the test can close, as a client leaving would; sockets may share one. */
+function makeSocket(engine: EventEmitter = new EventEmitter()) {
   return {
-    close: () => listeners.get('close')?.(),
+    close: () => engine.emit('close'),
     socket: {
       id: 'sock-1',
       handshake: { address: '1.2.3.4', auth: {}, headers: { cookie: '' }, query: {} },
-      conn: {
-        once: jest.fn((event: string, listener: () => void) => {
-          listeners.set(event, listener)
-        }),
-      },
+      conn: engine,
       disconnect: jest.fn(),
       emit: jest.fn(),
     },
   }
 }
 
-async function setup(authenticate: jest.Mock) {
+/**
+ * A gateway over a one-place admission. With `gateTimeoutMs`, `authenticate` goes through a real
+ * gate that gives up on the authenticator after that long, as the transport does.
+ */
+async function setup(authenticate: jest.Mock, gateTimeoutMs?: number) {
+  const timeouts = gateTimeoutMs === undefined ? {} : { authenticateTimeoutMs: gateTimeoutMs }
+  const base = {
+    transport: 'websocket',
+    authenticator: { authenticate: async () => null },
+  } as const
   const admission = new ConnectionAdmission(
-    {
-      transport: 'websocket',
-      authenticator: { authenticate: async () => null },
-      maxConnections: 1,
-    },
+    { ...base, maxConnections: 1, ...timeouts },
     new ConnectionRegistry(),
   )
+  const gate = new AuthenticationGate({ ...base, ...timeouts }, { authenticate })
   const transport = {
     setServer: jest.fn(),
     admit: () => admission.admit(),
-    authenticate,
+    authenticate:
+      gateTimeoutMs === undefined ? authenticate : (ctx: never) => gate.authenticate(ctx),
     registerSocket: jest.fn().mockResolvedValue(undefined),
     shuttingDown: false,
   }
@@ -255,45 +258,10 @@ describe('RealtimeGateway: the place held for a socket', () => {
     afterEach(() => jest.useRealTimers())
 
     it('keeps the place until the gate gives up on the handshake, and gives it back then', async () => {
-      const admission = new ConnectionAdmission(
-        {
-          transport: 'websocket',
-          authenticator: { authenticate: async () => null },
-          maxConnections: 1,
-          authenticateTimeoutMs: 1_000,
-        },
-        new ConnectionRegistry(),
+      const { admission, middleware } = await setup(
+        jest.fn(() => new Promise(() => undefined)),
+        1_000,
       )
-      const gate = new AuthenticationGate(
-        {
-          transport: 'websocket',
-          authenticateTimeoutMs: 1_000,
-          authenticator: { authenticate: async () => null },
-        },
-        { authenticate: () => new Promise(() => undefined) },
-      )
-      const module = await Test.createTestingModule({
-        providers: [
-          RealtimeGateway,
-          {
-            provide: WebSocketTransport,
-            useValue: {
-              setServer: jest.fn(),
-              shuttingDown: false,
-              admit: () => admission.admit(),
-              authenticate: (ctx: never) => gate.authenticate(ctx),
-              registerSocket: jest.fn(),
-            },
-          },
-          { provide: REALTIME_OPTIONS_TOKEN, useValue: {} as BymaxRealtimeModuleOptions },
-        ],
-      }).compile()
-      const server = { use: jest.fn() }
-      module.get(RealtimeGateway).afterInit(server as never)
-      const middleware = server.use.mock.calls[0]?.[0] as (
-        socket: unknown,
-        next: Next,
-      ) => Promise<void>
       const next = jest.fn()
       const pending = middleware(makeSocket().socket, next)
 
@@ -305,6 +273,49 @@ describe('RealtimeGateway: the place held for a socket', () => {
       expect(next).toHaveBeenCalledTimes(1)
       expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
       expect(() => admission.admit()).not.toThrow()
+    })
+  })
+
+  // Several namespaces share one engine connection: a listener left on it by each handshake that
+  // ends without the connection closing would grow for as long as the client stays connected.
+  describe('the listener on the engine connection', () => {
+    it('is removed when a handshake is refused, however many are made on the same connection', async () => {
+      const engine = new EventEmitter()
+      const { middleware } = await setup(jest.fn().mockResolvedValue(null))
+
+      for (let i = 0; i < 1_000; i += 1) await middleware(makeSocket(engine).socket, jest.fn())
+
+      expect(engine.listenerCount('close')).toBe(0)
+    })
+
+    it('is removed when the socket is registered, and when it is refused for want of room', async () => {
+      const engine = new EventEmitter()
+      const { admission, gateway, middleware } = await setup(
+        jest.fn().mockResolvedValue({ userId: 'u1' }),
+      )
+      const { socket } = makeSocket(engine)
+      await middleware(socket, jest.fn())
+      expect(engine.listenerCount('close')).toBe(1)
+
+      await gateway.handleConnection(socket as never)
+      expect(engine.listenerCount('close')).toBe(0)
+
+      admission.admit()
+      await middleware(makeSocket(engine).socket, jest.fn())
+      expect(engine.listenerCount('close')).toBe(0)
+    })
+
+    it('is removed for a socket the middleware never saw, whether it is registered or refused', async () => {
+      const engine = new EventEmitter()
+      const { gateway, transport } = await setup(jest.fn().mockResolvedValue({ userId: 'u1' }))
+
+      await gateway.handleConnection(makeSocket(engine).socket as never)
+      transport.registerSocket.mockImplementation(() => {
+        throw new Error('registration broke')
+      })
+      await gateway.handleConnection(makeSocket(engine).socket as never)
+
+      expect(engine.listenerCount('close')).toBe(0)
     })
   })
 })
