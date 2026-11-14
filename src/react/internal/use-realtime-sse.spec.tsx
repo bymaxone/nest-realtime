@@ -1,10 +1,14 @@
 /**
- * Tests for the SSE branch hook — `useRealtimeSse`.
+ * Tests for the SSE branch hook `useRealtimeSse`.
+ * @layer react
  *
- * Exercises the full observable surface: open, message accumulation, last-event
- * tracking, the 100-entry cap, error + exponential backoff, the failure counter and
- * its attempt ceiling, application event-name subscription, malformed payloads,
- * manual reconnect, cleanup on unmount, and `withCredentials` forwarding.
+ * It starts disconnected, and `connected` is true once the EventSource has opened.
+ * A received message is appended with its id; a named event keeps its type.
+ * The events array holds at most 100 entries. An error sets `error`.
+ * The first retry opens at twice `reconnectInitialMs`; a second retry is capped at `reconnectMaxMs`.
+ * `reconnectAttempts` reaches 3 over three failures and returns to 0 when the stream opens.
+ * `maxAttempts` closes the stream once reached. `reconnect()` opens a new EventSource, and unmount closes it.
+ * Application event-name subscription, malformed payloads and `withCredentials` forwarding are covered too.
  */
 import { act, renderHook } from '@testing-library/react'
 import {

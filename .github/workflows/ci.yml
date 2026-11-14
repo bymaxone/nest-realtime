@@ -79,16 +79,57 @@ jobs:
       - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
       - name: Mutation directives parse and carry their reason
         run: pnpm check:mutants
-      - name: Source files stay within the length limit
+      - name: Choose the revision the baselines are compared with
         env:
           BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          # A pull request is also checked against the baseline on its base branch, so the
-          # baseline it carries cannot admit the offender it adds.
+          # A baseline is compared with the one it replaces, so the baseline a change carries cannot admit
+          # the offender it adds. For a pull request that is the base branch; for a push it is the commit
+          # the push replaced. A manual run, a first push (an all-zero `before`) and a force push whose old
+          # tip is not in the checkout have nothing to compare with: the baselines are then only checked
+          # against the tree. A direct push that grows a baseline is flagged on its own run only, because
+          # the next push compares with the grown commit. The checkout above is not shallow.
+          # The value goes into $GITHUB_ENV, a file where a newline would start a second variable, so it
+          # is checked against the shape it can have and the step fails on anything else.
+          base=""
           if [ -n "$BASE_REF" ]; then
-            pnpm check:file-length --base "origin/$BASE_REF"
+            base="origin/$BASE_REF"
+            if ! [[ "$base" =~ ^origin/[A-Za-z0-9._/-]+$ ]]; then
+              echo "::error title=ci::the base branch name has an unexpected character."
+              exit 1
+            fi
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ]; then
+            if ! [[ "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error title=ci::the commit the push replaced is not a 40-digit hex id."
+              exit 1
+            fi
+            if git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+              base="$BEFORE_SHA"
+            fi
+          fi
+          echo "COMPARE_BASE=$base" >> "$GITHUB_ENV"
+      - name: Source files stay within the length limit
+        run: |
+          if [ -n "$COMPARE_BASE" ]; then
+            pnpm check:file-length --base "$COMPARE_BASE"
           else
             pnpm check:file-length
+          fi
+      - name: Spec files open with a purpose and layer header
+        run: |
+          if [ -n "$COMPARE_BASE" ]; then
+            pnpm check:spec-headers --base "$COMPARE_BASE"
+          else
+            pnpm check:spec-headers
+          fi
+      - name: The lint suppression baseline does not grow
+        run: |
+          if [ -n "$COMPARE_BASE" ]; then
+            pnpm check:suppressions --base "$COMPARE_BASE"
+          else
+            pnpm check:suppressions
           fi
       - name: Build all subpaths
         run: pnpm build

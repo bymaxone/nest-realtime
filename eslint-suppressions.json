@@ -1,0 +1,22 @@
+{
+  "src/react/internal/use-realtime-sse.ts": {
+    "max-lines-per-function": {
+      "count": 2
+    }
+  },
+  "src/react/internal/use-realtime-ws.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/server/composition/realtime-module.factory.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/websocket/transports/websocket/websocket.transport.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  }
+}

@@ -1,11 +1,13 @@
 /**
- * Tests for the WebSocket branch hook — `useRealtimeWs`.
+ * Tests for the WebSocket branch hook `useRealtimeWs`.
+ * @layer react
  *
- * socket.io-client is loaded via a dynamic `import()` inside the hook.
- * Jest's module-level `jest.mock(...)` intercepts both static and dynamic
- * imports so the mock is in place before any `await import('socket.io-client')`
- * call resolves. We capture the mock handles via module-scope variables so
- * individual tests can control the fake socket without reloading modules.
+ * `socket.io-client` is mocked with a fake `io`, so tests trigger the socket's events themselves.
+ * `io` is called with the url and `withCredentials: true`; `connected` is true after the `connect` event.
+ * An `onAny` event sets `lastEvent`, and the events array is capped at 100.
+ * `emit` reaches the socket, and unmount calls `socket.disconnect()`.
+ * `reconnect()` disconnects the previous socket once. `io` is not called while `enabled` is false.
+ * An empty `auth` object is omitted, and an equal inline `auth` object does not reopen the socket.
  */
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useRealtimeWs } from './use-realtime-ws'

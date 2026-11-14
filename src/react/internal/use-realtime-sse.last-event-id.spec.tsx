@@ -1,7 +1,13 @@
 /**
- * Tests for how `useRealtimeSse` resumes a stream. A new `EventSource` cannot send `Last-Event-ID`,
- * so the hook keeps the last event id it saw and sends it as the `lastEventId` query parameter
- * whenever it opens one itself.
+ * Tests for how `useRealtimeSse` resumes a stream with the `lastEventId` query parameter.
+ * @layer react
+ *
+ * The first stream opens with the url as given.
+ * After an event with id `ev-7` and a failure, the retry opens `?lastEventId=ev-7`; a manual `reconnect()` does too.
+ * The latest event id is used, and an event with no id keeps the earlier one.
+ * The parameter is added to urls with a query, a fragment or both, and an existing one is replaced.
+ * An id containing a space, `&`, `=` and `#` is encoded (`a+b%26c%3Dd%23e`).
+ * A url change forgets the id, and returning to an earlier url does not bring it back.
  */
 import { act, renderHook } from '@testing-library/react'
 import { emitError, emitMessage, EventSourceMock } from '../../../test/setup/react-setup'
