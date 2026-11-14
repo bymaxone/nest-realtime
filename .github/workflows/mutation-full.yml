@@ -33,10 +33,16 @@ jobs:
   full:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
-      # Measured cold: 13 min. Generous on purpose — nothing blocks on this job, so an
-      # over-wide ceiling costs only the minutes it uses, while an under-tight one costs the
-      # whole run and leaves the week without a measured baseline.
-      timeout-minutes: 60
+      # Four shards of two workers each. A cold run of the whole suite takes an hour or more on one
+      # runner and grows with the suite, so it is split across four runners instead of given a longer
+      # one. The count and the concurrency are passed here and not written into stryker.config.json,
+      # which the per-push incremental job and local runs share.
+      shards: 4
+      concurrency: 2
+      # The ceiling of one shard. Nothing blocks on this job, so a wide ceiling costs only the minutes
+      # it uses, while a tight one costs the whole run and leaves the week without a measured
+      # baseline. It stays under GitHub's 6 hour job limit.
+      timeout-minutes: 355
       # Fail when the unit suite has a test the mutation run did not run. The specs that cannot
       # reach mutated source are listed with a reason in scripts/mutation-inventory.exempt.json;
       # the list is held to account both ways by the action.
