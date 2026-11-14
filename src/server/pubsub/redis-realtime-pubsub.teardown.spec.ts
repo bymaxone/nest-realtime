@@ -10,7 +10,8 @@
  * own events, so nothing here reads the clock.
  */
 import Redis from 'ioredis'
-import { FakeRespServer, healthyRedis } from '../../../test/fixtures/fake-resp-server'
+import { Logger } from '@nestjs/common'
+import { FakeRespServer, healthyRedis, pushed } from '../../../test/fixtures/fake-resp-server'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
 /** The delay ioredis gives the socket to close before it destroys it, by default. */
@@ -27,6 +28,11 @@ async function timersStartedBy(operation: () => Promise<unknown>): Promise<numbe
   }
 }
 
+/** Resolves once `condition` holds, trying again after each turn of the event loop. */
+async function until(condition: () => boolean): Promise<void> {
+  while (!condition()) await new Promise((resolve) => setImmediate(resolve))
+}
+
 /** Resolves once `sub` has the status named by `event`, which ioredis also emits on reaching it. */
 function reached(sub: Redis, event: 'end' | 'reconnecting'): Promise<void> {
   if (sub.status === event) return Promise.resolve()
@@ -35,16 +41,28 @@ function reached(sub: Redis, event: 'end' | 'reconnecting'): Promise<void> {
 
 const clients: Redis[] = []
 const servers: FakeRespServer[] = []
+const retire: Array<() => Promise<void>> = []
 
 /** A client that keeps what it duplicates, so a test can read the subscriber's state. */
-function client(port: number, retryStrategy: () => number | null): { redis: Redis; subs: Redis[] } {
-  const redis = new Redis({ host: '127.0.0.1', port, retryStrategy, maxRetriesPerRequest: null })
+function client(
+  port: number,
+  retryStrategy: () => number | null,
+  extra: Record<string, unknown> = {},
+): { redis: Redis; subs: Redis[] } {
+  const redis = new Redis({
+    host: '127.0.0.1',
+    port,
+    retryStrategy,
+    maxRetriesPerRequest: null,
+    ...extra,
+  })
   redis.on('error', () => undefined)
   const subs: Redis[] = []
   const duplicate = redis.duplicate.bind(redis)
   redis.duplicate = (override) => {
     const sub = duplicate(override)
     subs.push(sub)
+    clients.push(sub)
     return sub
   }
   clients.push(redis)
@@ -67,7 +85,12 @@ async function closedPort(): Promise<number> {
 }
 
 afterEach(async () => {
-  for (const redis of clients.splice(0)) redis.disconnect()
+  for (const unsubscribe of retire.splice(0)) await unsubscribe()
+  // A client that has ended has nothing left to disconnect, and disconnecting it would arm the very
+  // timer these cases look for. A publisher that is waiting to reconnect cannot be given a short
+  // timeout, since the subscriber would inherit it and the cases would prove nothing; its timer
+  // outlives the file by two seconds and a Jest worker does not mind.
+  for (const redis of clients.splice(0)) if (redis.status !== 'end') redis.disconnect()
   for (const fake of servers.splice(0)) await fake.stop()
 })
 
@@ -114,5 +137,46 @@ describe('RedisRealtimePubSub retiring a subscriber that has no open socket', ()
 
     expect(delays).toHaveLength(1)
     await reached(subs[0] as Redis, 'end')
+  })
+})
+
+describe('RedisRealtimePubSub subscriber that ioredis disconnects on its own', () => {
+  // Scenario: the connection drops, and the SUBSCRIBE the adapter sends once ioredis has reconnected
+  // is refused with READONLY, which `reconnectOnError` turns into a disconnect that ioredis makes
+  // itself, with the short `disconnectTimeout` the subscriber was created with. Expected: it
+  // reconnects once more, subscribes again, and a message pushed afterwards reaches the handler.
+  // Why: the short timeout must change how long a socket is given to close, and nothing else.
+  it('reconnects and subscribes again after ioredis disconnects it itself', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    const fake = await server()
+    const { redis } = client(fake.port, () => 40, { reconnectOnError: () => 1 })
+    const delivered = new Promise<unknown>((resolve) => {
+      void new RedisRealtimePubSub({ client: redis })
+        .subscribe(resolve)
+        .then((unsubscribe) => retire.push(unsubscribe))
+    })
+    // Settle the boot, then script the refusal: the first SUBSCRIBE after the drop is refused, the
+    // next one, made after ioredis disconnected the subscriber itself, is answered.
+    await until(() => retire.length > 0)
+    let subscribes = 0
+    const resubscribed = new Promise<void>((resolve) => {
+      fake.respond((command, socket) => {
+        if (command[0] !== 'SUBSCRIBE') return healthyRedis(command, socket)
+        subscribes += 1
+        if (subscribes === 1) return '-READONLY refused once by the scripted server\r\n'
+        resolve()
+        return healthyRedis(command, socket)
+      })
+    })
+
+    fake.drop()
+    await resubscribed
+    fake.broadcast(
+      pushed('bymax:realtime', JSON.stringify({ op: 'broadcast', args: {}, origin: 'x' })),
+    )
+
+    expect(await delivered).toMatchObject({ op: 'broadcast' })
+    expect(subscribes).toBe(2)
   })
 })
