@@ -6,8 +6,10 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import {
   REALTIME_HOOKS_TOKEN,
   REALTIME_OFFLINE_QUEUE_TOKEN,
+  REALTIME_OPTIONS_TOKEN,
 } from '../constants/injection-tokens.constants'
 import type { IConnectionLifecycleHooks } from '../interfaces/connection-lifecycle-hooks.interface'
+import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import type {
   IOfflineQueueStorage,
   OfflineQueuedEvent,
@@ -17,6 +19,19 @@ import { describeError } from '../utils/describe-error'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
 
 const RETRIEVE_LIMIT = 200
+
+/** `authenticateTimeoutMs` when it is not set. */
+const DEFAULT_TIMEOUT_MS = 10_000
+
+/** How long a window of timeouts is summarised in one log line. */
+const REPORT_WINDOW_MS = 10_000
+
+/** The read of the offline queue did not settle in time: the handshake is given up on. */
+export class OfflineQueueTimeoutError extends Error {
+  constructor() {
+    super('the offline queue did not answer in time')
+  }
+}
 
 /**
  * Fetches events from the offline queue that the client missed since `lastEventId`
@@ -33,6 +48,9 @@ const RETRIEVE_LIMIT = 200
 @Injectable()
 export class OfflineQueueDeliveryService {
   private readonly logger = new Logger(OfflineQueueDeliveryService.name)
+  private readonly timeoutMs: number
+  private windowStartedAt = Number.NEGATIVE_INFINITY
+  private timedOut = 0
 
   constructor(
     @Optional()
@@ -41,7 +59,12 @@ export class OfflineQueueDeliveryService {
     @Optional()
     @Inject(REALTIME_HOOKS_TOKEN)
     private readonly hooks?: IConnectionLifecycleHooks,
-  ) {}
+    @Optional()
+    @Inject(REALTIME_OPTIONS_TOKEN)
+    options?: BymaxRealtimeModuleOptions,
+  ) {
+    this.timeoutMs = options?.authenticateTimeoutMs ?? DEFAULT_TIMEOUT_MS
+  }
 
   /**
    * Return events for `userId` that arrived after `lastEventId` and are NOT
@@ -54,7 +77,10 @@ export class OfflineQueueDeliveryService {
    * @param userId - The reconnecting user.
    * @param lastEventId - The `Last-Event-ID` header value.
    * @param ringBufferIds - Set of event ids already replayed from the ring buffer.
-   * @returns Gap events, or an empty array when no offline queue is configured.
+   * @returns Gap events, or an empty array when no offline queue is configured or it fails.
+   * @throws OfflineQueueTimeoutError when the queue has not answered in `authenticateTimeoutMs`: the
+   *   read is part of the handshake, so a queue that hangs must not keep the request open. The call
+   *   to the storage cannot be cancelled and runs on; its late answer is ignored.
    */
   async retrieve(
     userId: string,
@@ -65,8 +91,14 @@ export class OfflineQueueDeliveryService {
 
     let events: OfflineQueuedEvent[]
     try {
-      events = await this.storage.retrieveSince(userId, lastEventId, RETRIEVE_LIMIT)
+      events = await this.withinDeadline(
+        this.storage.retrieveSince(userId, lastEventId, RETRIEVE_LIMIT),
+      )
     } catch (err) {
+      if (err instanceof OfflineQueueTimeoutError) {
+        this.countTimeout()
+        throw err
+      }
       reportDeliveryFailure(
         this.logger,
         this.hooks,
@@ -109,5 +141,32 @@ export class OfflineQueueDeliveryService {
     } catch (err) {
       this.logger.warn(`Offline queue acknowledge failed: ${describeError(err)}`)
     }
+  }
+
+  /** Settle with `read`, or reject with an OfflineQueueTimeoutError once the deadline has passed. */
+  private async withinDeadline<T>(read: Promise<T>): Promise<T> {
+    let timer: NodeJS.Timeout | undefined
+    const expired = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new OfflineQueueTimeoutError()), this.timeoutMs)
+      timer.unref()
+    })
+    try {
+      return await Promise.race([read, expired])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /** Count a timeout, and log at most one line for each window, so a hung queue cannot flood the log. */
+  private countTimeout(): void {
+    this.timedOut += 1
+    const now = performance.now()
+    if (now - this.windowStartedAt < REPORT_WINDOW_MS) return
+    this.windowStartedAt = now
+    const count = this.timedOut
+    this.timedOut = 0
+    this.logger.warn(
+      `reconnects given up on since the last report: ${count}, because the offline queue did not answer in ${this.timeoutMs} ms`,
+    )
   }
 }

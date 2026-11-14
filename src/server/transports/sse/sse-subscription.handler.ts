@@ -17,7 +17,10 @@ import type { MessageEvent } from '@nestjs/common'
 import { EMPTY, merge, Observable, of, Subject } from 'rxjs'
 import type { Subscriber, Subscription } from 'rxjs'
 import { catchError, finalize, takeUntil } from 'rxjs/operators'
-import { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
+import {
+  OfflineQueueDeliveryService,
+  OfflineQueueTimeoutError,
+} from '../../offline-queue/offline-queue-delivery.service'
 import type { OfflineQueuedEvent } from '../../interfaces/offline-queue-storage.interface'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 import { RESERVED_EVENT_NAMES } from '../../constants/reserved-events.constants'
@@ -245,6 +248,9 @@ export class SseSubscriptionHandler {
       stream = await this.openStream(req, res, authenticated)
     } catch (err) {
       authenticated.ticket.release()
+      // The read of the offline queue is part of the handshake: a queue that did not answer is the
+      // system being unavailable, counted and logged by the service once for each window.
+      if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
       throw this.serverError(err, 'SSE handshake failed')
     }
     // Authentication is asynchronous, so shutdown may have begun while this request waited.
