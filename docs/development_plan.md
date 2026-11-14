@@ -53,7 +53,7 @@ The phase order respects the dependency graph (Appendix A): contracts before tra
 | **Graceful failure: pub/sub never crashes the app** | Unavailable pub/sub degrades to single-instance + warn log; does not throw at runtime. |
 | **Multi-tenant ready** | Room conventions `user:{id}`, `tenant:{id}`, `resource:{type}:{id}` are first-class. Auto-join in default rooms happens at connection. |
 | **Frontend tree-shakeable** | `socket.io-client` loaded dynamically via `await import()` in `useRealtime`; SSE-only React bundle ≤ 4 KiB brotli (vs ~80 KB with static socket.io-client). |
-| **Conventional Commits** | `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`. Drives the semver bump on release. |
+| **Conventional Commits** | `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`. Commit subjects do not drive a version bump: the number carries no compatibility information while the API is pre-stable. |
 
 ### 1.3 Status legend
 
