@@ -28,14 +28,43 @@ describe('settlesInThisTurn', () => {
     expect(await settlesInThisTurn(hops)).toEqual({ status: 'fulfilled', value: 'done' })
   })
 
-  // Scenario: a promise that waits for a macrotask, which is what a reconnect or a reply is.
-  // Expected: pending, and the promise still completes afterwards. Why: a call that queues behind
-  // something outside the process must not be mistaken for one that was refused at once.
-  it('reports a promise that waits for the next turn as pending, and leaves it to finish', async () => {
-    const waiting = new Promise<string>((resolve) => setTimeout(() => resolve('late'), 0))
+  // Scenario: a call that answers from a timer. Expected: pending, and the call still completes
+  // afterwards. Why: a call that queues behind something outside the process must not be mistaken
+  // for one that was refused at once. The timer is started by the call, so no time has passed on it
+  // when the end of the turn is armed.
+  it('reports a call that answers from a timer as pending, and leaves it to finish', async () => {
+    let waiting: Promise<string> = Promise.resolve('')
 
-    expect(await settlesInThisTurn(() => waiting)).toEqual({ status: 'pending' })
+    const outcome = await settlesInThisTurn(() => {
+      waiting = new Promise<string>((resolve) => setTimeout(() => resolve('late'), 0))
+      return waiting
+    })
+
+    expect(outcome).toEqual({ status: 'pending' })
     expect(await waiting).toBe('late')
+  })
+
+  // Scenario: the helper is called from a setImmediate callback, and the call's timer is already due
+  // when the loop next turns. Expected: pending. Why: the loop runs due timers before the immediates
+  // of its next iteration, so an end of the turn armed as an immediate alone would come after the
+  // timer; a timer armed before the call comes before every timer the call starts.
+  it('reports a due timer as pending when called from a setImmediate callback', async () => {
+    const outcome = await new Promise((resolve) => {
+      setImmediate(() => {
+        resolve(
+          settlesInThisTurn(
+            () =>
+              new Promise<string>((done) => {
+                setTimeout(() => done('late'), 0)
+                const start = Date.now()
+                while (Date.now() - start < 10) continue
+              }),
+          ),
+        )
+      })
+    })
+
+    expect(outcome).toEqual({ status: 'pending' })
   })
 
   // Scenario: a call that defers its answer to a setImmediate callback, queued while the call runs.
