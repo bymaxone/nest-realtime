@@ -30,7 +30,7 @@ describe('WebSocket: a lifecycle hook that fails', () => {
   const onUnhandled = (reason: unknown): void => void unhandled.push(reason)
   let logged: jest.SpyInstance
 
-  async function boot(hooks: IConnectionLifecycleHooks): Promise<void> {
+  async function boot(hooks: IConnectionLifecycleHooks, hookTimeoutMs?: number): Promise<void> {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     logged = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
@@ -40,6 +40,7 @@ describe('WebSocket: a lifecycle hook that fails', () => {
           transport: 'websocket',
           authenticator: { authenticate: async () => ({ userId: 'u1' }) },
           hooks,
+          ...(hookTimeoutMs !== undefined ? { hookTimeoutMs } : {}),
         }),
       ],
     }).compile()
@@ -130,5 +131,32 @@ describe('WebSocket: a lifecycle hook that fails', () => {
     expect(first.connected).toBe(true)
     expect(second.connected).toBe(true)
     expect(connections.allByTransport('websocket')).toHaveLength(2)
+  })
+
+  // The library waits for onConnect before it announces the connection, so a hook that never
+  // settles must be given up on or the client is never told it is connected.
+  it('announces the connection after hookTimeoutMs when onConnect never settles', async () => {
+    await boot({ onConnect: () => new Promise<void>(() => undefined) }, 300)
+    const startedAt = Date.now()
+
+    const socket = await connect()
+
+    expect(socket.connected).toBe(true)
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(250)
+    expect(connections.allByTransport('websocket')).toHaveLength(1)
+    expect(logged).toHaveBeenCalledWith('onConnect hook failed: did not settle within 300 ms')
+  })
+
+  it('removes the connection when onDisconnect never settles, and the other client stays', async () => {
+    await boot({ onDisconnect: () => new Promise<void>(() => undefined) }, 300)
+    const socket = await connect()
+    const other = await connect()
+
+    socket.close()
+    await sleep(700)
+
+    expect(connections.allByTransport('websocket')).toHaveLength(1)
+    expect(other.connected).toBe(true)
+    expect(logged).toHaveBeenCalledWith('onDisconnect hook failed: did not settle within 300 ms')
   })
 })

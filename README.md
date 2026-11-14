@@ -345,6 +345,7 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | **authenticator**          | `IConnectionAuthenticator`                                                                                                                                        | — (**required**)                                                     |
 | **tenantResolver**         | `(auth) => string \| undefined \| null` — derives `tenantId` from the auth result, on **both** transports; `undefined` and `null` mean "no opinion" and fall back | `auth.tenantId`                                                      |
 | **hooks**                  | `onConnect`, `onDisconnect`, `onError`, `onReauthenticationFailed`, `onDeliveryFailure` (fire-and-forget)                                                         | —                                                                    |
+| **hookTimeoutMs**          | How long the library waits for a hook it awaits (`onDisconnect` on both transports, WebSocket `onConnect`) before giving up on it; integer >= 1                   | `5000`                                                               |
 | **pubsub**                 | `IRealtimePubSub` — cross-instance fan-out for SSE                                                                                                                | `InMemoryPubSub`                                                     |
 | **offlineQueue**           | `IOfflineQueueStorage` — events held while a user is away                                                                                                         | — (disabled)                                                         |
 | **presence**               | `IPresenceStorage` — contract for your own presence tracking; the library never calls it                                                                          | — (disabled)                                                         |
@@ -353,6 +354,10 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`, `revalidateTimeoutMs`, `concurrency`                                                  | `300`, `'disconnect'`, `60000`, `10000`, `8`                         |
 
 `sse.heartbeatMs` must be between 5,000 and 90,000 ms. Any other value, including `NaN` and a non-number, stops the application at start-up with `REALTIME_INVALID_OPTIONS`. `sse.maxQueuedBytes`, `sse.maxQueuedEvents` and `sse.stallHeartbeats` must be integers of 0 or more, and `0` switches that bound off.
+
+#### Hooks the library waits for
+
+A hook is a notification: its failure is logged and nothing else changes. Three hooks are awaited by the library, and each is given up on after `hookTimeoutMs` (default 5,000 ms; an integer of 1 or more, checked at start-up): `onDisconnect` on both transports and `onConnect` on WebSocket, which is awaited before the connection is announced. A hook that has not settled by then is logged as `did not settle within N ms` and abandoned, whatever it returns later. The other hooks are not waited for and have no limit. On SSE the client is cut first and `onDisconnect` runs after, so a slow hook cannot keep a connection open; on shutdown every connection is closed at once, so a hook that never settles delays closing the application by about one `hookTimeoutMs`, not by one per connection. A hook that needs longer than the timeout must hand its work off and return.
 
 #### A client that does not read
 

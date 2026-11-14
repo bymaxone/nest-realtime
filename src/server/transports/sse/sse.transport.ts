@@ -8,6 +8,7 @@ import type { Subject } from 'rxjs'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 import {
   DEFAULT_HEARTBEAT_MS,
+  DEFAULT_HOOK_TIMEOUT_MS,
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
   REALTIME_INSTANCE_ID_TOKEN,
@@ -37,6 +38,7 @@ import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import { composeRoomId } from '../../utils/compose-room-id'
 import { describeError } from '../../utils/describe-error'
+import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
 import { unavailableError } from '../../utils/unavailable-error'
 import { InMemoryPubSub } from '../../pubsub/in-memory-pubsub'
@@ -131,12 +133,14 @@ export class SseTransport implements ITransport {
     // does not open a stream the teardown below would not see.
     this.#shuttingDown = true
     this.heartbeat.stopAll()
-    // Await each teardown so onDisconnect hooks complete within the shutdown window
-    // (RxJS finalize cannot await an async callback). disconnectLocal removes the record
-    // first, so the stream's own finalize cleanup is then a harmless no-op.
-    for (const conn of this.connections.allByTransport('sse')) {
-      await this.disconnectLocal(conn.connectionId)
-    }
+    // Every connection is cut at once and each hook is bounded by `hookTimeoutMs`, so the whole
+    // teardown takes about one timeout however many connections there are and however many of their
+    // hooks hang. Awaited so that the hooks that do settle finish within the shutdown window (RxJS
+    // finalize cannot await an async callback). disconnectLocal removes the record first, so the
+    // stream's own finalize cleanup is then a harmless no-op.
+    await Promise.all(
+      this.connections.allByTransport('sse').map((conn) => this.disconnectLocal(conn.connectionId)),
+    )
   }
 
   /** The same teardown, for a caller that runs only this hook; it finds nothing left to close. */
@@ -200,30 +204,51 @@ export class SseTransport implements ITransport {
     await this.evictBeyondLimit(params.auth.userId)
   }
 
-  /** Idempotent cleanup for a connection — runs the disconnect hook exactly once. */
+  /**
+   * Idempotent cleanup for a connection that has already gone — runs the disconnect hook exactly
+   * once, which the library waits for no longer than `hookTimeoutMs`.
+   */
   async unregisterConnection(connectionId: string, reason?: string): Promise<void> {
+    const record = this.release(connectionId)
+    if (record) await this.notifyDisconnect(record, reason)
+  }
+
+  /**
+   * Forget a connection: its record, its rooms, its heartbeat and its backlog. Synchronous, so that
+   * nothing a consumer's code does can come between a connection and its removal.
+   */
+  private release(connectionId: string): ConnectionRecord | undefined {
     const record = this.connections.unregister(connectionId)
-    if (!record) return
+    // Idempotent for a connection that is already gone, so there is nothing to branch on.
     this.rooms.leaveAll(connectionId)
     this.heartbeat.stop(connectionId)
     this.outbound.delete(connectionId)
-    try {
-      await this.hooks.onDisconnect?.({
-        connectionId: record.connectionId,
-        userId: record.userId,
-        tenantId: record.tenantId,
-        roles: record.originalAuth.roles,
-        metadata: record.originalAuth.metadata,
-        transport: 'sse',
-        ip: record.ip,
-        userAgent: record.userAgent,
-        connectedAt: record.connectedAt,
-        durationMs: Date.now() - record.connectedAt.getTime(),
-        ...(reason !== undefined ? { reason } : {}),
-      })
-    } catch (error) {
-      this.logger.error(`onDisconnect hook failed: ${describeError(error)}`)
-    }
+    return record
+  }
+
+  /** Run `onDisconnect` for a released connection, giving up on it after `hookTimeoutMs`. */
+  private async notifyDisconnect(
+    record: ConnectionRecord,
+    reason: string | undefined,
+  ): Promise<void> {
+    const failed = await runHook(
+      () =>
+        this.hooks.onDisconnect?.({
+          connectionId: record.connectionId,
+          userId: record.userId,
+          tenantId: record.tenantId,
+          roles: record.originalAuth.roles,
+          metadata: record.originalAuth.metadata,
+          transport: 'sse',
+          ip: record.ip,
+          userAgent: record.userAgent,
+          connectedAt: record.connectedAt,
+          durationMs: Date.now() - record.connectedAt.getTime(),
+          ...(reason !== undefined ? { reason } : {}),
+        }),
+      this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
+    )
+    if (failed) this.logger.error(`onDisconnect hook failed: ${describeError(failed.error)}`)
   }
 
   /** Replay the events a user missed after `lastEventId`. */
@@ -444,12 +469,13 @@ export class SseTransport implements ITransport {
   async disconnectLocal(connectionId: string, reason?: string): Promise<void> {
     const record = this.connections.get(connectionId)
     if (!record || record.transport !== 'sse') return
-    // Clean up with the reason BEFORE closing the stream. The stream's finalize
-    // also calls unregisterConnection, but the record is already gone by then, so
-    // that call is a no-op and the disconnect reason still reaches onDisconnect.
-    await this.unregisterConnection(connectionId, reason)
+    // The record goes first, so that the stream's own finalize, which calls unregisterConnection,
+    // finds nothing to do and the reason reaches onDisconnect. The client is then cut, and only after
+    // that does any consumer code run: a hook that is slow or never settles cannot keep it connected.
+    const released = this.release(connectionId)
     record.close$?.next()
     record.close$?.complete()
+    if (released) await this.notifyDisconnect(released, reason)
   }
 
   private buildMessage(id: string, event: string, data: unknown): Frame {

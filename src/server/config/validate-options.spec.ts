@@ -135,6 +135,22 @@ describe('validateOptions', () => {
     ).not.toThrow()
   })
 
+  // The bound on a hook the library waits for is a positive whole number of milliseconds.
+  it('rejects a hookTimeoutMs that is not an integer >= 1, and accepts 1 and more', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '5000', null]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, hookTimeoutMs: bad as never }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.hookTimeoutMs must be an integer >= 1, got ${String(bad)}`,
+      )
+    }
+    for (const good of [1, 5_000, 60_000]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, hookTimeoutMs: good }),
+      ).not.toThrow()
+    }
+  })
+
   it.each(['maxQueuedBytes', 'maxQueuedEvents', 'stallHeartbeats'] as const)(
     'rejects a sse.%s that is not an integer >= 0, and accepts 0 and a positive integer',
     (name) => {

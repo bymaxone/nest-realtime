@@ -15,6 +15,7 @@ import {
   unavailableError,
   describeError,
   runHook,
+  DEFAULT_HOOK_TIMEOUT_MS,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   ITransport,
@@ -197,18 +198,20 @@ export class WebSocketTransport implements ITransport {
 
     await this.evictBeyondLimit(auth.userId)
 
-    const failed = await runHook(() =>
-      this.hooks.onConnect?.({
-        connectionId: socket.id,
-        userId: auth.userId,
-        tenantId: auth.tenantId,
-        roles: auth.roles,
-        metadata: auth.metadata,
-        transport: 'websocket',
-        ip: socket.handshake.address,
-        userAgent: socket.handshake.headers['user-agent'],
-        connectedAt,
-      }),
+    const failed = await runHook(
+      () =>
+        this.hooks.onConnect?.({
+          connectionId: socket.id,
+          userId: auth.userId,
+          tenantId: auth.tenantId,
+          roles: auth.roles,
+          metadata: auth.metadata,
+          transport: 'websocket',
+          ip: socket.handshake.address,
+          userAgent: socket.handshake.headers['user-agent'],
+          connectedAt,
+        }),
+      this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
     )
     if (failed) this.logger.error(`onConnect hook failed: ${describeError(failed.error)}`)
   }
@@ -240,7 +243,10 @@ export class WebSocketTransport implements ITransport {
       durationMs: Date.now() - record.connectedAt.getTime(),
       ...(reason !== undefined ? { reason } : {}),
     }
-    const failed = await runHook(() => this.hooks.onDisconnect?.(disconnectMeta))
+    const failed = await runHook(
+      () => this.hooks.onDisconnect?.(disconnectMeta),
+      this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
+    )
     if (failed) this.logger.error(`onDisconnect hook failed: ${describeError(failed.error)}`)
   }
 

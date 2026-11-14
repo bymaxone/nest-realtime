@@ -39,6 +39,7 @@ export {
   REALTIME_PUBSUB_TOKEN,
   REALTIME_TRANSPORT_TOKEN,
 } from '../server/constants/injection-tokens.constants'
+export { DEFAULT_HOOK_TIMEOUT_MS } from '../server/constants/injection-tokens.constants'
 
 // Services and registries — classes used as injection tokens.
 export { ConnectionRegistry } from '../server/services/connection-registry.service'

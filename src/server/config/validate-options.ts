@@ -41,8 +41,23 @@ export function validateOptions(options: BymaxRealtimeModuleOptions): void {
       { who: 'BymaxRealtimeModule' },
     )
   }
+  validateHookTimeout(options)
   validateSseOptions(options)
   validateReauthPolicy(options)
+}
+
+function validateHookTimeout(options: BymaxRealtimeModuleOptions): void {
+  const value: unknown = options.hookTimeoutMs
+  if (
+    value !== undefined &&
+    !(typeof value === 'number' && Number.isInteger(value) && value >= 1)
+  ) {
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `options.hookTimeoutMs must be an integer >= 1, got ${String(value)}`,
+      { who: 'BymaxRealtimeModule' },
+    )
+  }
 }
 
 /** The integer options of the re-authentication policy and the least each may be. */
