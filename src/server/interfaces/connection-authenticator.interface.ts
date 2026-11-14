@@ -166,7 +166,8 @@ export interface IConnectionAuthenticator {
    * one that threw: the connection is disconnected, not kept, whatever the call returns later.
    * Pass `options.signal` to the work behind it (a `fetch`, a query) so that it stops then too.
    *
-   * @returns `true` to keep the connection alive, `false` to disconnect.
+   * @returns `true` to keep the connection alive. `false` disconnects it, and so does anything
+   * else (including no return value): only an explicit `true` keeps it.
    */
   revalidate?(
     connectionId: string,
