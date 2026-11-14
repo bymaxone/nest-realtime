@@ -1,8 +1,9 @@
 /**
  * The loopback default for the end-to-end suite's listeners, and its installers.
  *
- * Layer: e2e support. `test/jest.loopback-listen.ts` installs both patches for every e2e file; this
- * module only defines them, so a suite can import it without installing anything.
+ * Layer: test support. `test/setup/jest.loopback-listen.ts` installs both patches for the e2e runner
+ * and for the server, coverage and mutation runners; this module only defines them, so a suite can
+ * import it without installing anything.
  *
  * `server.listen(port)` with no host binds the unspecified IPv6 address `::`, and supertest then
  * dials `127.0.0.1:<port>`. Under BSD bind rules, which macOS follows, another process can bind
