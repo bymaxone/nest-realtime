@@ -35,6 +35,9 @@ import type {
  */
 const CONNECTION_ROOM_PREFIX = 'connection'
 
+/** Per-user WebSocket connections kept when `websocket.maxConnectionsPerUser` is unset; the SSE default. */
+const DEFAULT_MAX_CONNECTIONS_PER_USER = 5
+
 /**
  * WebSocket transport implementing `ITransport` over a Socket.IO `Server`.
  *
@@ -361,12 +364,13 @@ export class WebSocketTransport implements ITransport {
 
   /**
    * Evict the user's oldest WebSocket connections (FIFO) when over
-   * `websocket.maxConnectionsPerUser`. Emits `REALTIME_TOO_MANY_CONNECTIONS`
+   * `websocket.maxConnectionsPerUser`, which is {@link DEFAULT_MAX_CONNECTIONS_PER_USER} when
+   * unset and unbounded when `0`. Emits `REALTIME_TOO_MANY_CONNECTIONS`
    * as the disconnect reason — never rejects the new connection with HTTP 429.
    */
   private async evictBeyondLimit(userId: string): Promise<void> {
-    const max = this.options.websocket?.maxConnectionsPerUser
-    if (max === undefined || max <= 0) return
+    const max = this.options.websocket?.maxConnectionsPerUser ?? DEFAULT_MAX_CONNECTIONS_PER_USER
+    if (max <= 0) return
 
     let userConnections = this.connections.byUser(userId, 'websocket')
     while (userConnections.length > max) {

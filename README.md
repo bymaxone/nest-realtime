@@ -352,7 +352,7 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | **offlineQueue**           | `IOfflineQueueStorage` — events held while a user is away                                                                                                                                  | — (disabled)                                                                           |
 | **presence**               | `IPresenceStorage` — contract for your own presence tracking; the library never calls it                                                                                                   | — (disabled)                                                                           |
 | **sse**                    | `endpoint`, `heartbeatMs`, `replayBufferSize`, `replayTtlMs`, `replayMaxIdleUsers`, `maxConnectionsPerUser`, `emitConnectionEvent`, `maxQueuedBytes`, `maxQueuedEvents`, `stallHeartbeats` | `/realtime/sse`, `30000`, `100`, `300000`, `1000`, `5`, `true`, `2097152`, `1000`, `3` |
-| **websocket**              | `namespace`, `cors`, `maxHttpBufferSize`, `pingIntervalMs`, `pingTimeoutMs`, `maxConnectionsPerUser`, `emitConnectionEvent`, `redisAdapter`                                                | `'/'`, — (Socket.IO defaults)                                                          |
+| **websocket**              | `namespace`, `cors`, `maxHttpBufferSize`, `pingIntervalMs`, `pingTimeoutMs`, `maxConnectionsPerUser`, `emitConnectionEvent`, `redisAdapter`                                                | `'/'`, — (Socket.IO defaults), `5` for `maxConnectionsPerUser`                         |
 | **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`, `revalidateTimeoutMs`, `concurrency`                                                                           | `300`, `'disconnect'`, `60000`, `10000`, `8`                                           |
 
 `sse.heartbeatMs` must be between 5,000 and 90,000 ms. Any other value, including `NaN` and a non-number, stops the application at start-up with `REALTIME_INVALID_OPTIONS`. `websocket.pingIntervalMs` and `websocket.pingTimeoutMs` must be integers from 1 to 2147483647 (Socket.IO runs both as timers, and Node runs a longer one as 1 ms). `sse.replayTtlMs` must be an integer from 1 to 2147483647 and `sse.replayMaxIdleUsers` an integer of 1 or more. `sse.maxQueuedBytes`, `sse.maxQueuedEvents` and `sse.stallHeartbeats` must be integers of 0 or more, and `0` switches that bound off.
@@ -374,7 +374,7 @@ A hook is a notification: its failure is logged and nothing else changes. Three 
 An SSE response writes one event at a time and waits for the client to read before the next, so everything behind that wait is held in server memory. Each connection is bounded: when the events and bytes sent to it and not yet taken by its socket pass `sse.maxQueuedEvents` or `sse.maxQueuedBytes` (an event that is alone in the queue is always taken, however large), or no byte has left the process for `sse.stallHeartbeats` heartbeats in a row while the response holds bytes, the connection is closed with the reason `REALTIME_SLOW_CONSUMER` and a warning is logged. Only that connection is closed; the client reconnects and `Last-Event-ID` replays what it missed. A connection whose response has no socket to measure is not bounded.
 
 > [!NOTE]
-> `websocket.maxConnectionsPerUser` is **opt-in** and unlimited unless set to a positive number, while `sse.maxConnectionsPerUser` defaults to `5`. The two transports differ here on purpose: an SSE stream holds an HTTP connection open, a Socket.IO client multiplexes.
+> `maxConnectionsPerUser` defaults to `5` on both transports: a user's sixth connection closes their oldest, which is sent a disconnect. `0` switches the cap off. The cap is per user and does not bound the connections of an instance: many users, or a token minted per request, are bounded by your proxy or the process's file-descriptor limit, not by this option.
 
 The options are typed per entry point: `SseRealtimeModuleOptions` and `SseRealtimeModuleAsyncOptions` fix `transport: 'sse'`, and `WebSocketRealtimeModuleOptions` and `WebSocketRealtimeModuleAsyncOptions` (from `/websocket`) fix `'websocket' | 'both'`. `forRootAsync` takes `useFactory`, `useClass` (a `BymaxRealtimeModuleOptionsFactory`) or `useExisting`.
 
@@ -485,7 +485,7 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 - `tenantId` is derived from the authenticated result, never from a query parameter or request body
 - Tickets are single-use and short-lived; `consume()` must be atomic under concurrency
 - `websocket.cors.origin` is an explicit allowlist, not `true`, in any browser-facing deployment
-- `maxConnectionsPerUser` is set for WebSocket if clients are untrusted — it is unlimited by default
+- `maxConnectionsPerUser` is left at its default of `5` (or set) for WebSocket if clients are untrusted — `0` makes it unlimited
 - Reserved event names are not reused for application events (see the [catalog](#reserved-events))
 
 ---

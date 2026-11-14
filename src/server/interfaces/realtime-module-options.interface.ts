@@ -47,6 +47,10 @@ export interface WebSocketOptions {
   maxHttpBufferSize?: number
   pingIntervalMs?: number
   pingTimeoutMs?: number
+  /**
+   * Connections one user may hold at once; beyond it the OLDEST is closed. Defaults to `5`,
+   * the SSE default. `0` switches the bound off.
+   */
   maxConnectionsPerUser?: number
   /**
    * Emit a `connection:established` event to the client immediately after a

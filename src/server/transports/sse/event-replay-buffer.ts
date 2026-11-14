@@ -65,10 +65,10 @@ export class EventReplayBuffer {
   /** A connection of the user closed: with the last one the entry becomes idle and starts to age. */
   close(userId: string): void {
     const ring = this.rings.get(userId)
-    if (!ring) return
+    if (!ring || ring.live === 0) return
     ring.live -= 1
     if (ring.live > 0) return
-    this.idle.set(userId, Date.now())
+    this.idle.set(userId, performance.now())
     const max = this.opts.sse?.replayMaxIdleUsers ?? DEFAULT_REPLAY_MAX_IDLE_USERS
     for (const oldest of this.idle.keys()) {
       if (this.idle.size <= max) break
@@ -114,7 +114,7 @@ export class EventReplayBuffer {
   /** Forget the idle entries that have aged past the TTL, oldest first. */
   private sweep(): void {
     const ttl = this.opts.sse?.replayTtlMs ?? DEFAULT_REPLAY_TTL_MS
-    const now = Date.now()
+    const now = performance.now()
     for (const [userId, closedAt] of this.idle) {
       if (now - closedAt < ttl) break
       this.drop(userId)
