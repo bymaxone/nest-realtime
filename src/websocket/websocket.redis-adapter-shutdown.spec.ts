@@ -116,8 +116,8 @@ async function bootOn(
 }
 
 describe('closing an application with the Socket.IO Redis adapter', () => {
-  // The adapter opens a subscriber connection beside the caller's client. Nothing closed it, so it
-  // stayed connected to Redis after the application was gone.
+  // The adapter owns the subscriber connection it opens beside the caller's client, so it closes
+  // that one with the application; the caller's client is the caller's and stays open.
   it('closes the adapter subscriber connection with the application, and leaves the caller client open', async () => {
     const { fake } = await scriptedServer()
     const app = await bootOn(fake)
