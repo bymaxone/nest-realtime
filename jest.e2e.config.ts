@@ -27,7 +27,9 @@ const config: Config = {
     '^@bymax-one/nest-realtime/shared$': '<rootDir>/src/shared/index.ts',
     '^@bymax-one/nest-realtime/react$': '<rootDir>/src/react/index.ts',
   },
-  setupFiles: ['reflect-metadata'],
+  // The loopback default for every port-only `listen`, and supertest waiting for it: see
+  // `test/support/loopback-listen.ts`.
+  setupFiles: ['reflect-metadata', '<rootDir>/test/setup/jest.loopback-listen.ts'],
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.e2e.json', isolatedModules: true }],
   },
