@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.15] - 2026-11-14
+
 ### Fixed
 
 - **Closing the application waited for ever on a Redis that had stopped answering.** The Redis pub/sub subscriber is closed with a `QUIT`, a command on a connection, and on a connection that accepts the socket and never replies (a paused or partitioned Redis) it never settles, so `app.close()` stayed pending until the process was killed. The close now waits two seconds for the reply and then disconnects the connection. The subscriber that `RealtimeIoAdapter` opens for the Socket.IO Redis adapter with `pubClient.duplicate()` was never closed at all; it now is, in `dispose()`, once every server has closed, and on one bound for all of them. Your `pubClient` is never closed or changed.
@@ -1092,7 +1094,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.14...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.15...HEAD
+[1.2.15]: https://github.com/bymaxone/nest-realtime/compare/v1.2.14...v1.2.15
 [1.2.14]: https://github.com/bymaxone/nest-realtime/compare/v1.2.13...v1.2.14
 [1.2.13]: https://github.com/bymaxone/nest-realtime/compare/v1.2.12...v1.2.13
 [1.2.12]: https://github.com/bymaxone/nest-realtime/compare/v1.2.11...v1.2.12
