@@ -2,7 +2,7 @@
  * @fileoverview Unit tests for the reconnect backoff.
  * @layer react
  */
-import { MAX_TIMER_MS, nextBackoff } from './backoff'
+import { MAX_TIMER_MS, nextBackoff, validDelay } from './backoff'
 
 describe('nextBackoff', () => {
   it('doubles the last delay', () => {
@@ -21,5 +21,25 @@ describe('nextBackoff', () => {
 
   it('keeps a delay that is exactly what a timer can run', () => {
     expect(nextBackoff(1_073_741_823, Number.MAX_SAFE_INTEGER)).toBe(2_147_483_646)
+  })
+})
+
+describe('validDelay', () => {
+  // A delay that is not a positive whole number reaches a timer as 1 ms, and a reconnect every
+  // millisecond is a loop against the server: it is replaced by the default.
+  it.each([Number.NaN, Infinity, -Infinity, -1, 0, 0.5, 1.5])(
+    'replaces %s with the default',
+    (bad) => {
+      expect(validDelay(bad, 1_000)).toBe(1_000)
+    },
+  )
+
+  it('replaces an absent delay with the default', () => {
+    expect(validDelay(undefined, 30_000)).toBe(30_000)
+  })
+
+  it('keeps a positive whole number', () => {
+    expect(validDelay(1, 1_000)).toBe(1)
+    expect(validDelay(45_000, 1_000)).toBe(45_000)
   })
 })

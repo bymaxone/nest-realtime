@@ -216,6 +216,40 @@ describe('useRealtimeSse', () => {
     jest.useRealTimers()
   })
 
+  // A delay the caller got wrong (a NaN from a bad parse, say) must not become a reconnect every
+  // millisecond: the default applies, and the first retry still waits for its doubled delay.
+  it.each([
+    ['reconnectInitialMs', { reconnectInitialMs: Number.NaN }],
+    ['reconnectInitialMs', { reconnectInitialMs: -1 }],
+    ['reconnectMaxMs', { reconnectMaxMs: Number.NaN }],
+    ['reconnectMaxMs', { reconnectMaxMs: Infinity }],
+  ])('keeps the default backoff when %s is not a usable delay', (_name, bad) => {
+    jest.useFakeTimers()
+    try {
+      renderHook(() => useRealtimeSse({ url: '/realtime/sse', ...bad }))
+      act(() => {
+        const src = lastInstance()
+        src.readyState = 1
+        src.onopen?.(new Event('open'))
+      })
+      const before = instances.length
+      act(() => {
+        emitError(lastInstance())
+      })
+
+      act(() => {
+        jest.advanceTimersByTime(1_999)
+      })
+      expect(instances.length).toBe(before)
+      act(() => {
+        jest.advanceTimersByTime(100)
+      })
+      expect(instances.length).toBeGreaterThan(before)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('forces a new EventSource when reconnect() is called manually', async () => {
     // Manual reconnect resets the backoff and opens a fresh source immediately.
     const { result } = renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
