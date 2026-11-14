@@ -271,6 +271,27 @@ describe('RealtimeIoAdapter subscriber connection', () => {
       expect(String(warn.mock.calls[0]?.[0])).toContain('(String)')
     })
 
+    // Scenario: a rejection with no prototype, which has no constructor to name. Expected: the
+    // warning still comes, naming a plain Error, and nothing is left unhandled. Why: the handler is
+    // what keeps a rejection from ending the process, so it must not throw on what it is handed.
+    it('names a rejection that has no constructor, and leaves nothing unhandled', async () => {
+      const sub = subscriber()
+      sub.subscribe.mockRejectedValue(Object.create(null))
+      installed(sub)
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+
+      try {
+        void sub.subscribe('a')
+        await new Promise((resolve) => setImmediate(resolve))
+      } finally {
+        process.off('unhandledRejection', unhandled)
+      }
+
+      expect(String(warn.mock.calls[0]?.[0])).toContain('(Error)')
+      expect(unhandled).not.toHaveBeenCalled()
+    })
+
     // Scenario: a command that hands back no promise, as a mock can. Expected: it is called through
     // and its result returned. Why: the guard must not assume the shape of what it wraps.
     it('returns what a command returns when that is not a promise', () => {

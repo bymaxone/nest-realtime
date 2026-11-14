@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  17,785 B → 17,815 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  17,809 B → 17,815 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -44,7 +44,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     to reconnect does not wait out ioredis's 2,000 ms default, and the bounded close: a QUIT waited
 //     for up to two seconds, then the connection disconnected, shared by the subscriber's retire and
 //     by the Socket.IO adapter's close)
-//   websocket  5,537 B →  5,567 B (the Socket.IO stack alone: the start-up message that names the
+//   websocket  5,540 B →  5,567 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server

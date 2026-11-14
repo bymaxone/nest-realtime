@@ -159,7 +159,7 @@ export class RealtimeIoAdapter extends IoAdapter {
         Promise.resolve(pending).catch((err: unknown) => {
           if (reported) return
           reported = true
-          const kind = Object(err).constructor.name as string
+          const kind = (Object(err).constructor?.name as string | undefined) ?? 'Error'
           this.adapterLogger.warn(`Redis adapter subscriber command failed (${kind})`)
         })
         return pending

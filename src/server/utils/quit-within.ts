@@ -32,17 +32,21 @@ export const QUIT_WAIT_MS = 2_000
  */
 export async function quitWithin(client: QuitableClient, ms: number = QUIT_WAIT_MS): Promise<void> {
   let timer: NodeJS.Timeout | undefined
-  const bound = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms)
+  const bound = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms)
     // The wait must not keep the process alive: the connection is what the process is closing.
     timer.unref()
   })
-  const answered = client.quit().then(
-    () => true,
-    () => false,
+  let answered = false
+  const quit = client.quit().then(
+    () => {
+      answered = true
+    },
+    () => undefined,
   )
   try {
-    if (!(await Promise.race([answered, bound]))) client.disconnect()
+    await Promise.race([quit, bound])
+    if (!answered) client.disconnect()
   } finally {
     clearTimeout(timer)
   }
