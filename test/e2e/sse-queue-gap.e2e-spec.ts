@@ -186,7 +186,7 @@ describe.each([
   })
 
   // A store that stays down must not refuse every reconnect. The first read has
-  // degraded, so the reconnect is served as it always has been, and the store is not asked again.
+  // degraded, so the reconnect is served without the gap, and the store is not asked again.
   it('serves a reconnect whose store is down, with one read and no error, when the first read fails', async () => {
     const port = await boot()
     queue.failFromRead = 1

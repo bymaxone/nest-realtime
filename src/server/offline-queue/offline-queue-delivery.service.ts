@@ -34,8 +34,8 @@ export interface OfflineQueueRead {
   /** The gap events, in queue order. */
   readonly events: OfflineQueuedEvent[]
   /**
-   * Whether the store failed: the gap is then empty, and the reconnect is served without it, as an
-   * outage of the store has always been served, so no second read is made for it.
+   * Whether the store failed: the gap is then empty, and the reconnect is served without it, so no
+   * second read is made for it.
    */
   readonly degraded: boolean
 }
@@ -114,7 +114,7 @@ export class OfflineQueueDeliveryService {
    * The first read of a reconnect's gap: what {@link retrieve} returns, with whether the store failed.
    * A reconnect that was served without the gap because the store failed is not asked a second time
    * for what was appended since ({@link retrieveAppended}): the store is down, and the reconnect
-   * degrades as it always has.
+   * is served without the gap.
    *
    * @param userId - The reconnecting user.
    * @param lastEventId - The `Last-Event-ID` header value.
@@ -181,7 +181,7 @@ export class OfflineQueueDeliveryService {
    * application's interceptors ran sits in the queue and nowhere else.
    *
    * When the first read failed (`read.degraded`) there is nothing to add to: the store is down and the
-   * reconnect is served as it always has been, without a second read. When it succeeded, every
+   * reconnect is served without the gap and without a second read. When it succeeded, every
    * failure of this read is thrown, the store's own error included, and the attempt ends before it
    * delivers anything: a stream built without these events moves the client's cursor past them with
    * the next event it receives, and an attempt that delivers nothing leaves the cursor where it was.

@@ -139,7 +139,7 @@ describe('OfflineQueueDeliveryService.retrieveAppended', () => {
   })
 
   // One reconnect never carries more than the limit: when the first read reached it, the older events
-  // beyond it are dropped as before, and there is nothing to read.
+  // beyond it are dropped, and there is nothing to read.
   it('makes no read once the first read reached the limit', async () => {
     const store = storage(async () => [event('x')])
     const read = answered(...Array.from({ length: RETRIEVE_LIMIT }, (_, i) => event(`e-${i}`)))
@@ -164,7 +164,7 @@ describe('OfflineQueueDeliveryService.retrieveAppended', () => {
     await expect(service.retrieveAppended('u1', 'e-0', answered())).resolves.toEqual([])
   })
 
-  // The store is down and the reconnect is served as it always has been: asking it again would turn
+  // The store is down and the reconnect is served without the gap: asking it again would turn
   // an outage into a second failure for every reconnect.
   it('makes no read when the first read degraded', async () => {
     const store = storage(async () => [event('x')])

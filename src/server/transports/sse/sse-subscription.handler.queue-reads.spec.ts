@@ -137,8 +137,7 @@ describe('SseSubscriptionHandler: the two reads of the offline-queue gap, case b
   })
 
   // The first read decides whether there is a second: a first read that timed out or was refused ends
-  // the attempt with the 503, and one whose store failed serves the reconnect without a gap, as an
-  // outage always has. Only a first read that succeeded is followed by a second, and its every
+  // the attempt with the 503, and one whose store failed serves the reconnect without a gap. Only a first read that succeeded is followed by a second, and its every
   // failure then ends the attempt before anything is delivered, so the client's cursor stays put.
   const CELLS: Array<[First, Second, Outcome]> = [
     ['ok', 'ok', { answer: 'served', delivered: ['q-1', 'q-2'], reads: 2 }],

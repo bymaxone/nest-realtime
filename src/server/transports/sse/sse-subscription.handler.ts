@@ -409,8 +409,8 @@ export class SseSubscriptionHandler {
    * is delivered with the rest of the gap. The earlier read ended at the last event it returned, and
    * this one starts after it, so the two lists are disjoint and keep queue order.
    *
-   * When the first read failed, the store is down and the reconnect is served without a gap, as it
-   * always has been: there is no second read. When the first read succeeded, a second one that did not
+   * When the first read failed, the store is down and the reconnect is served without a gap and
+   * there is no second read. When the first read succeeded, a second one that did not
    * answer in time, was refused because the reads waiting are all taken, or failed ends the attempt
    * here, before any event is delivered: a stream that skipped these events moves the client's cursor
    * past them with the next event it receives, where an attempt that delivered nothing leaves it where
