@@ -406,9 +406,11 @@ export class SseSubscriptionHandler {
    * is delivered with the rest of the gap. The earlier read ended at the last event it returned, and
    * this one starts after it, so the two lists are disjoint and keep queue order.
    *
-   * A failure ends the attempt here, before any event is delivered, instead of degrading to the gap
-   * already read: a stream that skipped these events moves the client's cursor past them with the next
-   * event it receives, where an attempt that delivered nothing leaves it where it was.
+   * A read that did not answer in time, or was refused because the reads waiting are all taken, ends
+   * the attempt here, before any event is delivered: a stream that skipped these events moves the
+   * client's cursor past them with the next event it receives, where an attempt that delivered nothing
+   * leaves it where it was. The store's own error is reported by the service and adds no events, as
+   * the first read's does.
    */
   private async readAppended(
     req: SseRequest,
@@ -424,9 +426,9 @@ export class SseSubscriptionHandler {
         read,
       )
       return [...read, ...appended]
-    } catch (err) {
-      if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
-      throw this.serverError(err, 'SSE handshake failed')
+    } catch {
+      // Only a read that did not answer in time reaches here: the store's own error is the service's.
+      throw new ServiceUnavailableException()
     }
   }
 

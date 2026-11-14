@@ -3,6 +3,7 @@
  * read starts, how much it may return, and that every failure is thrown.
  * @layer application
  */
+import { Logger } from '@nestjs/common'
 import type {
   IOfflineQueueStorage,
   OfflineQueuedEvent,
@@ -80,23 +81,31 @@ describe('OfflineQueueDeliveryService.retrieveAppended', () => {
     await expect(service.retrieveAppended('u1', 'e-0', [])).resolves.toEqual([])
   })
 
-  // A stream built without these events moves the client's cursor past them, so a store that fails
-  // here ends the attempt instead of being read as an empty answer.
-  it('throws the store’s own error rather than answering an empty gap', async () => {
+  // A store that fails is reported and answers no extra events, as the first read's error answers an
+  // empty gap: the reconnect is served, and an outage does not become a refusal of every reconnect.
+  it('reports the store’s error and returns nothing rather than failing the reconnect', async () => {
+    const error = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const store = storage(() => Promise.reject(new Error('down')))
 
-    await expect(build(store).retrieveAppended('u1', 'e-0', [])).rejects.toThrow('down')
+    await expect(build(store).retrieveAppended('u1', 'e-0', [])).resolves.toEqual([])
+
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('Offline queue retrieve failed: down'),
+    )
+    error.mockRestore()
   })
 
-  it('throws when the store throws as it is called, and takes no place for it', async () => {
+  it('returns nothing when the store throws as it is called, and takes no place for it', async () => {
+    const error = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const store = storage(() => {
       throw new Error('broken')
     })
     const service = build(store, 1)
 
     for (let i = 0; i < 3; i += 1) {
-      await expect(service.retrieveAppended('u1', 'e-0', [])).rejects.toThrow('broken')
+      await expect(service.retrieveAppended('u1', 'e-0', [])).resolves.toEqual([])
     }
+    error.mockRestore()
   })
 
   it('gives up on a store that does not answer, at the same deadline as the first read', async () => {

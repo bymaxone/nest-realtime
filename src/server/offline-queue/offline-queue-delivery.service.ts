@@ -95,25 +95,12 @@ export class OfflineQueueDeliveryService {
     lastEventId: string,
     ringBufferIds: Set<string>,
   ): Promise<OfflineQueuedEvent[]> {
-    if (!this.storage) return []
+    const storage = this.storage
+    if (!storage) return []
 
-    let events: OfflineQueuedEvent[]
-    try {
-      events = await this.read(this.storage, userId, lastEventId, RETRIEVE_LIMIT)
-    } catch (err) {
-      if (err instanceof OfflineQueueTimeoutError) throw err
-      reportDeliveryFailure(
-        this.logger,
-        this.hooks,
-        {
-          code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
-          op: 'offlineRetrieve',
-          error: err,
-        },
-        'Offline queue retrieve failed',
-      )
-      return []
-    }
+    const events = await this.degradeOnError(() =>
+      this.read(storage, userId, lastEventId, RETRIEVE_LIMIT),
+    )
 
     if (events.length === RETRIEVE_LIMIT) {
       this.logger.warn(
@@ -153,10 +140,11 @@ export class OfflineQueueDeliveryService {
    * made before the response is committed, and a user with no connection here has no replay ring, so
    * an event emitted while the application's interceptors ran sits in the queue and nowhere else.
    *
-   * Unlike {@link retrieve}, every failure is thrown, the store's own included: a stream built
-   * without these events moves the client's cursor past them with the next event it receives, and
-   * an attempt that ends before it delivers anything leaves the cursor where it was. The read has the
-   * same deadline and the same share of `maxPendingHandshakes` as `retrieve`.
+   * It fails as {@link retrieve} does: a timeout, or a refusal because the reads waiting are all
+   * taken, is thrown, and the attempt ends before it delivers anything, which leaves the client's
+   * cursor where it was; the store's own error is reported and answers no events, so an outage of the
+   * store does not become a refusal of every reconnect. The read has the same deadline and the same
+   * share of `maxPendingHandshakes` as `retrieve`.
    *
    * @param userId - The reconnecting user.
    * @param lastEventId - The `Last-Event-ID` header value.
@@ -164,16 +152,41 @@ export class OfflineQueueDeliveryService {
    * @returns The events appended since, in queue order; empty when no queue is configured or the
    *   earlier read already reached the limit.
    * @throws OfflineQueueTimeoutError when the queue did not answer in time or the reads waiting at
-   *   once are all taken; the store's own error when it fails.
+   *   once are all taken.
    */
   async retrieveAppended(
     userId: string,
     lastEventId: string,
     read: readonly OfflineQueuedEvent[],
   ): Promise<OfflineQueuedEvent[]> {
+    const storage = this.storage
     const room = RETRIEVE_LIMIT - read.length
-    if (!this.storage || room <= 0) return []
-    return this.read(this.storage, userId, read.at(-1)?.id ?? lastEventId, room)
+    if (!storage || room <= 0) return []
+    return this.degradeOnError(() =>
+      this.read(storage, userId, read.at(-1)?.id ?? lastEventId, room),
+    )
+  }
+
+  /** Run a read; a timeout is thrown, and any other failure is reported and answers no events. */
+  private async degradeOnError(
+    read: () => Promise<OfflineQueuedEvent[]>,
+  ): Promise<OfflineQueuedEvent[]> {
+    try {
+      return await read()
+    } catch (err) {
+      if (err instanceof OfflineQueueTimeoutError) throw err
+      reportDeliveryFailure(
+        this.logger,
+        this.hooks,
+        {
+          code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+          op: 'offlineRetrieve',
+          error: err,
+        },
+        'Offline queue retrieve failed',
+      )
+      return []
+    }
   }
 
   /** One bounded call to the storage: refused at once when the reads waiting are all taken. */

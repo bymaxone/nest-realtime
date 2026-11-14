@@ -3,7 +3,7 @@
  * bound, and registers nothing.
  * @layer transport
  */
-import { InternalServerErrorException, Logger, ServiceUnavailableException } from '@nestjs/common'
+import { Logger, ServiceUnavailableException } from '@nestjs/common'
 import {
   collect,
   mkTransport,
@@ -219,22 +219,20 @@ describe('SseSubscriptionHandler: a reconnect whose offline queue does not answe
       expect(release).toHaveBeenCalledTimes(1)
     })
 
-    it('ends the attempt with a generic 500, and logs the cause, when the store fails', async () => {
-      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
-      const { handler, release } = withTwoReads(() =>
-        Promise.reject(new Error('redis 10.1.2.3 down')),
+    // An outage of the store is not a reason to refuse every reconnect: the first read has already
+    // answered an empty gap for it, and the second answers no extra events.
+    it('delivers the first read, and ends no attempt, when the store fails the second read', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      const { handler, registerConnection } = withTwoReads(() =>
+        Promise.reject(new Error('redis down')),
       )
 
-      const outcome = await handler.handle(reconnect(), mkRes()).catch((e: unknown) => e)
+      const stream = await handler.handle(reconnect(), mkRes())
 
-      expect(outcome).toBeInstanceOf(InternalServerErrorException)
-      expect(JSON.stringify((outcome as InternalServerErrorException).getResponse())).not.toContain(
-        '10.1.2.3',
-      )
-      expect(error).toHaveBeenCalledWith(
-        'SSE handshake failed — responding 500: redis 10.1.2.3 down',
-      )
-      expect(release).toHaveBeenCalledTimes(1)
+      expect(collect(stream).map((e) => e.id)).toEqual(['q-1'])
+      expect(registerConnection).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('redis down'))
+      warn.mockRestore()
     })
   })
 })
