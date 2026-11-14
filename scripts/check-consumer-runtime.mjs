@@ -286,7 +286,8 @@ function cleanup() {
 console.log('Consumer runtime gate')
 
 // A tarball the caller supplies is the artifact under test; without one this gate packs the repository.
-const suppliedTarball = process.env['PACKAGE_TARBALL']
+// An empty variable is no tarball: `resolve('')` is the current directory, which `tar` cannot open.
+const suppliedTarball = process.env['PACKAGE_TARBALL'] || undefined
 
 if (suppliedTarball === undefined && !existsSync(join(rootDir, 'dist'))) {
   console.error('✗ dist/ is missing — run `pnpm build` first')
