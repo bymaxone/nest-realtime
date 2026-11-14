@@ -14,6 +14,7 @@ import type {
 } from '../interfaces/realtime-pubsub.interface'
 import { SseTransport } from '../transports/sse/sse.transport'
 import { describeError } from '../utils/describe-error'
+import { windowedReport } from '../utils/windowed-report'
 
 interface EmitUserArgs {
   userId: string
@@ -80,10 +81,26 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
     }
   }
 
+  /**
+   * Messages the subscriber cannot act on, counted and reported once for each window. The line
+   * carries the count and the reason in a fixed vocabulary: an unknown op, or the class of the last
+   * failure. The op and the failure's message can echo what whoever publishes to the channel
+   * wrote, so neither is ever written.
+   */
+  private readonly dropped = windowedReport(
+    // Stryker disable next-line StringLiteral: equivalent — a report is only written after a drop, and every drop sets `last` first
+    () => ({ count: 0, last: 'none' }),
+    ({ count, last }) => {
+      this.logger.warn(
+        `Pub/sub dropped ${count} message(s) it could not act on since the last report (last: ${last})`,
+      )
+    },
+  )
+
   private handle(msg: RealtimePubSubMessage): void {
-    // Drop messages we originated — they were already delivered locally.
-    if (msg.origin === this.instanceId) return
     try {
+      // Drop messages we originated — they were already delivered locally.
+      if (msg.origin === this.instanceId) return
       switch (msg.op) {
         case 'emitToUser': {
           const a = msg.args as EmitUserArgs
@@ -118,12 +135,16 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
           break
         }
         default: {
-          const exhaustive: never = msg.op
-          this.logger.warn(`Unknown pub/sub op: ${String(exhaustive)}`)
+          msg.op satisfies never
+          this.drop('unknown op')
         }
       }
     } catch (err) {
-      this.logger.warn(`Pub/sub message handling failed: ${describeError(err)}`)
+      this.drop(String(Object(err).constructor?.name ?? 'Error'))
     }
+  }
+
+  private drop(last: string): void {
+    this.dropped(({ count }) => ({ count: count + 1, last }))
   }
 }
