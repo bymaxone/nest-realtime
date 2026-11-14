@@ -101,7 +101,10 @@ describe('publishing to a Redis that has stopped answering', () => {
     await jest.advanceTimersByTimeAsync(1)
     await turnsUntil('the publish settling at the bound', () => outcome !== 'pending')
 
-    expect(outcome).toMatchObject({ code: REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE })
+    expect(outcome).toMatchObject({
+      code: REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
+      cause: { message: 'the server did not answer within 2000 ms' },
+    })
   })
 
   /*
