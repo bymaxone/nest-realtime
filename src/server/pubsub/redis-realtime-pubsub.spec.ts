@@ -219,7 +219,11 @@ describe('RedisRealtimePubSub', () => {
     const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
     const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
     await pubsub.subscribe(jest.fn())
-    expect(pub.duplicate).toHaveBeenCalledWith({ autoResubscribe: false, enableOfflineQueue: true })
+    expect(pub.duplicate).toHaveBeenCalledWith({
+      autoResubscribe: false,
+      disconnectTimeout: 1,
+      enableOfflineQueue: true,
+    })
   })
 
   // Only an error reply is the server refusing the subscription. Any other rejection of the first

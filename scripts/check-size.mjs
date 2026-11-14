@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  17,675 B → 17,680 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  17,670 B → 17,670 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -40,8 +40,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     rejection of a call that found no path, which is a 503 exception, and the last event id of a
 //     reconnect: one resolver for the header and the query parameter, bounded in length, and the
 //     read of an offline queue that wraps what a store returns before it counts the call, and the
-//     release of a subscriber that has already ended: ioredis arms a 2,000 ms timer in disconnect()
-//     that only a socket's close clears, so a second disconnect on an ended client is skipped)
+//     short disconnect timeout of the subscriber, so that retiring one that has ended or is waiting
+//     to reconnect does not wait out ioredis's 2,000 ms default)
 //   websocket  5,251 B →  5,260 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -63,7 +63,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 17_680 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 17_670 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_260 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_500 },

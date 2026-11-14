@@ -38,15 +38,6 @@ const PUBLISHER_WAIT_MS = 2_000
 /** The events that name a status other than connecting: each ends a first connection attempt. */
 const CONNECTION_OVER = ['ready', 'close', 'reconnecting', 'end'] as const
 
-/**
- * Takes a subscriber's connection down, unless it has already ended. ioredis arms a 2,000 ms timer
- * in `disconnect()` that only the socket's `close` clears, and a client in the `end` state has no
- * socket left to close, so a second `disconnect()` would keep the process alive for two seconds.
- */
-function release(sub: Redis): void {
-  if (sub.status !== 'end') sub.disconnect()
-}
-
 /** A connection failure as text: ioredis wraps a refused connect in an error with no message. */
 function connectionReason(err: unknown): string {
   const code = (err as { code?: unknown } | null)?.code
@@ -220,7 +211,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         try {
           // QUIT queues behind a connection that never came up and would never answer.
           if (connected) await sub.quit()
-          else release(sub)
+          else sub.disconnect()
         } catch {
           // Quit failures are non-fatal; the reference is already cleared so the
           // next subscribe rebuilds a fresh client.
@@ -243,7 +234,16 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it. The offline queue
     // is forced on, whatever the host client chose: the first SUBSCRIBE is issued before the
     // connection exists.
-    const sub = this.#pub.duplicate({ autoResubscribe: false, enableOfflineQueue: true })
+    // `disconnectTimeout` is how long ioredis lets a socket close after `disconnect()` before it
+    // destroys it, 2,000 ms by default. The timer that waits is cleared only by the socket's
+    // `close`, which a subscriber that has ended, or is waiting to reconnect, no longer has coming,
+    // so the default would keep the process alive that long. A retired subscriber has nothing in
+    // flight worth waiting for.
+    const sub = this.#pub.duplicate({
+      autoResubscribe: false,
+      disconnectTimeout: 1,
+      enableOfflineQueue: true,
+    })
     let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
     // An error reply is the server's answer and reaches the caller as the SUBSCRIBE's rejection;
@@ -298,7 +298,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       }
     } catch (err) {
       this.#retired.add(sub)
-      release(sub)
+      sub.disconnect()
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
         RedisRealtimePubSub.name,

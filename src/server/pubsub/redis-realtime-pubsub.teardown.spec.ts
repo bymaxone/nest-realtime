@@ -1,39 +1,36 @@
 /**
- * @fileoverview RedisRealtimePubSub disconnects a subscriber only while there is a connection to
- * take down, against a real ioredis client.
+ * @fileoverview RedisRealtimePubSub does not hold the process up when it retires a subscriber,
+ * against a real ioredis client.
  * @layer test
  *
- * ioredis arms a 2,000 ms timer when `disconnect()` is called and clears it only when the socket
- * emits `close`. A client already in the `end` state has no socket left to close, so a second
- * `disconnect()` on it leaves that timer running and keeps the process alive for about two seconds.
- * The cases count the 2,000 ms timers started while an operation runs, which holds under load
- * where a wait for a timer to expire would not.
+ * ioredis arms a timer in `disconnect()`, 2,000 ms by default, that only the socket's `close`
+ * clears. A client that has ended, or that is waiting to reconnect, has no open socket whose close
+ * is still to come, so that timer runs its whole length and keeps the process alive. The cases
+ * count the delays of the timers started while an operation runs, and wait for the subscriber's
+ * own events, so nothing here reads the clock.
  */
 import Redis from 'ioredis'
 import { FakeRespServer, healthyRedis } from '../../../test/fixtures/fake-resp-server'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
-/** The delay ioredis gives the socket to close before it destroys it. */
-const TEARDOWN_MS = 2_000
+/** The delay ioredis gives the socket to close before it destroys it, by default. */
+const IOREDIS_DEFAULT_MS = 2_000
 
-/** How many teardown timers `operation` started. */
-async function teardownTimersStartedBy(operation: () => Promise<unknown>): Promise<number> {
+/** The delay of every timer `operation` started. */
+async function timersStartedBy(operation: () => Promise<unknown>): Promise<number[]> {
   const timer = jest.spyOn(globalThis, 'setTimeout')
   try {
     await operation().catch(() => undefined)
-    return timer.mock.calls.filter(([, delay]) => delay === TEARDOWN_MS).length
+    return timer.mock.calls.map(([, delay]) => Number(delay))
   } finally {
     timer.mockRestore()
   }
 }
 
-/** Waits for `condition`; a condition that never holds is a failure, not a hang. */
-async function until(what: string, condition: () => boolean, ms = 1_500): Promise<void> {
-  const deadline = Date.now() + ms
-  while (!condition()) {
-    if (Date.now() > deadline) throw new Error(`timed out after ${ms} ms waiting for ${what}`)
-    await new Promise((resolve) => setTimeout(resolve, 10))
-  }
+/** Resolves once `sub` has the status named by `event`, which ioredis also emits on reaching it. */
+function reached(sub: Redis, event: 'end' | 'reconnecting'): Promise<void> {
+  if (sub.status === event) return Promise.resolve()
+  return new Promise((resolve) => sub.once(event, () => resolve()))
 }
 
 const clients: Redis[] = []
@@ -61,30 +58,49 @@ async function server(handler = healthyRedis): Promise<FakeRespServer> {
   return fake
 }
 
+/** A port nothing listens on. */
+async function closedPort(): Promise<number> {
+  const gone = await server()
+  const { port } = gone
+  await gone.stop()
+  return port
+}
+
 afterEach(async () => {
-  // Disconnecting a client that has ended would arm the very timer these cases look for.
-  for (const redis of clients.splice(0)) if (redis.status !== 'end') redis.disconnect()
+  for (const redis of clients.splice(0)) redis.disconnect()
   for (const fake of servers.splice(0)) await fake.stop()
 })
 
-describe('RedisRealtimePubSub teardown of a subscriber', () => {
+describe('RedisRealtimePubSub retiring a subscriber that has no open socket', () => {
   // Scenario: the retry strategy gives up, so the subscriber ends, and the subscription is then
-  // retired. Expected: retiring it starts no teardown timer, since there is no socket to close.
-  it('starts no teardown timer when it retires a subscriber that has ended', async () => {
-    const gone = await server()
-    const { port } = gone
-    await gone.stop()
-    const { redis, subs } = client(port, () => null)
+  // retired. Expected: no timer as long as ioredis's default is started.
+  it('starts no long timer when it retires a subscriber that has ended', async () => {
+    const { redis, subs } = client(await closedPort(), () => null)
     const unsubscribe = await new RedisRealtimePubSub({ client: redis }).subscribe(jest.fn())
-    await until('the subscriber to end', () => subs[0]?.status === 'end')
+    await reached(subs[0] as Redis, 'end')
 
-    expect(await teardownTimersStartedBy(unsubscribe)).toBe(0)
+    const delays = await timersStartedBy(unsubscribe)
+
+    expect(delays.filter((delay) => delay >= IOREDIS_DEFAULT_MS)).toEqual([])
+  })
+
+  // Scenario: Redis is down and the default retry strategy is waiting to try again, which is what
+  // a subscriber looks like for most of an outage. Expected: the same.
+  it('starts no long timer when it retires a subscriber that is waiting to reconnect', async () => {
+    const { redis, subs } = client(await closedPort(), () => 60_000)
+    const unsubscribe = await new RedisRealtimePubSub({ client: redis }).subscribe(jest.fn())
+    await reached(subs[0] as Redis, 'reconnecting')
+
+    const delays = await timersStartedBy(unsubscribe)
+
+    expect(delays.filter((delay) => delay >= IOREDIS_DEFAULT_MS)).toEqual([])
   })
 
   // Scenario: the server refuses the SUBSCRIBE of a subscriber that is connected. Expected: it is
   // still disconnected, which starts the one timer that its socket's close then clears. Why: the
-  // guard is for an ended client only, and this shows the count sees ioredis's timer at all.
-  it('still disconnects a subscriber that has a connection, which starts one teardown timer', async () => {
+  // shorter timer must not mean a subscriber is left connected, and this shows the count sees
+  // ioredis's timer at all.
+  it('still disconnects a subscriber that has a connection', async () => {
     const fake = await server((command, socket) =>
       command[0] === 'SUBSCRIBE'
         ? '-NOPERM refused by the scripted server\r\n'
@@ -92,11 +108,11 @@ describe('RedisRealtimePubSub teardown of a subscriber', () => {
     )
     const { redis, subs } = client(fake.port, () => 40)
 
-    const started = await teardownTimersStartedBy(() =>
+    const delays = await timersStartedBy(() =>
       new RedisRealtimePubSub({ client: redis }).subscribe(jest.fn()),
     )
 
-    expect(started).toBe(1)
-    await until('the subscriber to end', () => subs[0]?.status === 'end')
+    expect(delays).toHaveLength(1)
+    await reached(subs[0] as Redis, 'end')
   })
 })
