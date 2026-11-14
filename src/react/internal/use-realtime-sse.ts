@@ -64,14 +64,18 @@ const MAX_EVENTS = 100
 
 /**
  * The url a new stream is opened with: `url` as given until an event has been seen, then with the
- * id of the last one as the `lastEventId` query parameter, before any fragment.
+ * id of the last one as the `lastEventId` query parameter, before any fragment. A `lastEventId` the
+ * url already carries (a cursor the application started from) is replaced, since two of them
+ * reach the server as an array, which it reads as no id.
  */
 function withLastEventId(url: string, id: string | undefined): string {
   if (id === undefined) return url
   const hash = url.indexOf('#')
-  const path = hash === -1 ? url : url.slice(0, hash)
-  const fragment = hash === -1 ? '' : url.slice(hash)
-  return `${path}${path.includes('?') ? '&' : '?'}lastEventId=${encodeURIComponent(id)}${fragment}`
+  const head = hash < 0 ? url : url.slice(0, hash)
+  const mark = head.indexOf('?')
+  const query = new URLSearchParams(mark < 0 ? '' : head.slice(mark + 1))
+  query.set('lastEventId', id)
+  return `${mark < 0 ? head : head.slice(0, mark)}?${query}${hash < 0 ? '' : url.slice(hash)}`
 }
 
 /**

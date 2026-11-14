@@ -125,13 +125,39 @@ describe('useRealtimeSse: resuming after a new EventSource', () => {
     expect(lastInstance().url).toBe(expected)
   })
 
+  // Scenario: the application gave the first stream a cursor of its own in the url, as the README
+  // allows. Expected: the first stream opens as given, and once an event has been seen the id replaces
+  // the application's cursor and keeps the other parameters. Why: two `lastEventId` parameters
+  // arrive at the server as an array, which it reads as no id, so the gap would be lost.
+  it.each([
+    ['a cursor of its own', '/realtime/sse?lastEventId=e-1', '/realtime/sse?lastEventId=ev-7'],
+    [
+      'a cursor between other parameters',
+      '/realtime/sse?room=a&lastEventId=e-1&x=2',
+      '/realtime/sse?room=a&lastEventId=ev-7&x=2',
+    ],
+    [
+      'a cursor and a fragment',
+      '/realtime/sse?lastEventId=e-1#top',
+      '/realtime/sse?lastEventId=ev-7#top',
+    ],
+  ])('replaces %s instead of adding a second parameter', (_label, url, expected) => {
+    renderHook(() => useRealtimeSse({ url }))
+    expect(opened()).toEqual([url])
+    receive('ev-7')
+
+    failAndRetry()
+
+    expect(lastInstance().url).toBe(expected)
+  })
+
   it('encodes an id that is not a plain token', () => {
     renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
     receive('a b&c=d#e')
 
     failAndRetry()
 
-    expect(lastInstance().url).toBe('/realtime/sse?lastEventId=a%20b%26c%3Dd%23e')
+    expect(lastInstance().url).toBe('/realtime/sse?lastEventId=a+b%26c%3Dd%23e')
   })
 
   // Scenario: the url changes. Expected: the new stream starts from nothing. Why: another url is
