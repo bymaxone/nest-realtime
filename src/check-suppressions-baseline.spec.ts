@@ -101,6 +101,21 @@ describe('check-suppressions-baseline', () => {
     expect(result.output).toContain('the base revision has 0')
   })
 
+  // Scenario: two different (file, rule) pairs whose texts run together when joined with a tab: the
+  // base has file `src/a<TAB>b.ts` with rule `r`, the change has file `src/a` with rule `b.ts<TAB>r`.
+  // Expected: exit 1, the second is a new entry. Why: a key built by joining the two with a separator
+  // that can occur in either would treat them as one entry and let a new suppression through.
+  it('does not let two different file and rule pairs share one key', () => {
+    const entry = (file: string, rule: string): string =>
+      JSON.stringify({ [file]: { [rule]: { count: 1 } } })
+    const root = repository(entry('src/a\tb.ts', 'r'), entry('src/a', 'b.ts\tr'))
+
+    const result = run(root, '--base', 'HEAD')
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain('src/a: 1 `b.ts\tr` suppression(s), the base revision has 0')
+  })
+
   // Scenario: a base revision with no baseline, and no base at all. Expected: exit 0 for both. Why:
   // the change that introduces the baseline has nothing to be compared with, and a run with no base
   // (a manual run, a first push) checks only that the file parses.

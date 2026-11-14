@@ -141,9 +141,8 @@ describe('check-spec-headers', () => {
   })
 
   describe('the baseline', () => {
-    // Scenario: the baseline the repository ships. Expected: it lists no file. Why: the specs that
-    // lacked a header were given one instead of being grandfathered, so a spec without one is a new
-    // offender and fails.
+    // Scenario: the baseline the repository ships. Expected: it lists no file. Why: every tracked spec
+    // must have a valid header, so a spec without one is a new offender and fails.
     it('ships empty, so a spec without a header fails', () => {
       const shipped = JSON.parse(readFileSync(SHIPPED_BASELINE, 'utf8')) as { files: string[] }
       const root = scratch({ 'src/new.spec.ts': HEADERLESS })
