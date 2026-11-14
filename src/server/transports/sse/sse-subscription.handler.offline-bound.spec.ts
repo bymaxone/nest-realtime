@@ -11,6 +11,9 @@ import {
   mkReq,
   mkRes,
 } from '../../../../test/fixtures/sse/subscription-harness'
+import { AuthenticationGate } from '../../services/authentication-gate.service'
+import { ConnectionAdmission } from '../../services/connection-admission.service'
+import { ConnectionRegistry } from '../../services/connection-registry.service'
 import { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
 import { SseSubscriptionHandler } from './sse-subscription.handler'
 
@@ -80,5 +83,77 @@ describe('SseSubscriptionHandler: a reconnect whose offline queue does not answe
 
     expect(stream).toBeDefined()
     expect(retrieveSince).not.toHaveBeenCalled()
+  })
+
+  // Each wait is within its own bound, and together they outlast the time a place is held for
+  // (authenticateTimeoutMs + 5,000 ms = 15,000 ms by default): the place is taken again at registration.
+  describe('a slow authentication and a slow offline-queue read that together outlast the hold', () => {
+    /** A handler whose authenticator and offline queue each answer after 9,000 ms. */
+    function slowBoth() {
+      const registry = new ConnectionRegistry()
+      const options = mkOptions()
+      const admission = new ConnectionAdmission({ ...options, maxConnections: 1 }, registry)
+      const gate = new AuthenticationGate(options, {
+        authenticate: () =>
+          new Promise((resolve) => setTimeout(() => resolve({ userId: 'u1' }), 9_000)),
+      })
+      const registerConnection = jest.fn().mockResolvedValue(undefined)
+      const transport = mkTransport({
+        registerConnection,
+        admit: () => admission.admit(),
+        authenticate: (ctx: never) => gate.authenticate(ctx),
+      })
+      const delivery = new OfflineQueueDeliveryService(
+        {
+          retrieveSince: () =>
+            new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 9_000)),
+          acknowledge: jest.fn(),
+          append: jest.fn(),
+        },
+        undefined,
+        options,
+      )
+      const handler = new SseSubscriptionHandler(
+        transport,
+        mkHeartbeat(),
+        options,
+        undefined,
+        delivery,
+      )
+      return { admission, handler, registerConnection }
+    }
+
+    async function guardThrough(handler: SseSubscriptionHandler, between: () => void) {
+      const req = mkReq({ headers: { 'last-event-id': 'e-1' } })
+      const res = mkRes()
+      const guarded = handler.authenticateBeforeCommit(req, res)
+      await jest.advanceTimersByTimeAsync(16_000)
+      between()
+      await jest.advanceTimersByTimeAsync(2_000)
+      await guarded
+      return handler.handle(req, res)
+    }
+
+    it('is refused, and registers nothing, when another request took the place meanwhile', async () => {
+      const { admission, handler, registerConnection } = slowBoth()
+      const stream = await guardThrough(handler, () => void admission.admit())
+
+      const error = await new Promise<unknown>((resolve) =>
+        stream.subscribe({ error: resolve, complete: () => resolve(undefined) }),
+      )
+
+      expect(error).toBeInstanceOf(ServiceUnavailableException)
+      expect(registerConnection).not.toHaveBeenCalled()
+    })
+
+    it('registers once, and holds no place after the registry has it, when nobody took the place', async () => {
+      const { admission, handler, registerConnection } = slowBoth()
+      const stream = await guardThrough(handler, () => undefined)
+
+      stream.subscribe({ error: () => undefined })
+
+      expect(registerConnection).toHaveBeenCalledTimes(1)
+      expect(() => admission.admit()).not.toThrow()
+    })
   })
 })

@@ -177,12 +177,12 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
       )
       const { res } = mkClosableRes()
       const req = mkReq({ headers: { 'last-event-id': 'e-1' } })
-      await handler.authenticateBeforeCommit(req, res)
-      const opening = handler.handle(req, res)
-      jest.advanceTimersByTime(15_000)
+      const guarded = handler.authenticateBeforeCommit(req, res)
+      await jest.advanceTimersByTimeAsync(15_000)
       admission.admit()
       finish([])
-      const stream = await opening
+      await guarded
+      const stream = await handler.handle(req, res)
 
       const error = await new Promise<unknown>((resolve) =>
         stream.subscribe({ error: resolve, complete: () => resolve(undefined) }),
