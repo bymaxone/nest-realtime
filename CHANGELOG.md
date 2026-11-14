@@ -59,7 +59,7 @@ A user who legitimately holds more than five simultaneous WebSocket connections 
 
 ### Fixed
 
-- **Retiring the subscription of a subscriber that had already ended kept the process alive for about two seconds.** ioredis arms a 2,000 ms timer in `disconnect()` and clears it only when the socket emits `close`; a client in the `end` state has no socket left, so a second `disconnect()` on it leaves the timer running. `RedisRealtimePubSub` called `disconnect()` on its subscriber without looking at its state, so a subscriber whose retry strategy had given up (a `retryStrategy` that returns `null`, with Redis unreachable) and was then retired, at shutdown or when the last handler left, delayed the process by that timer. Both places that disconnect the subscriber now skip one that has ended; a connected or connecting subscriber is disconnected as before.
+- **Retiring the subscription of a subscriber that had already ended kept the process alive for about two seconds.** ioredis arms a 2,000 ms timer in `disconnect()` and clears it only when the socket emits `close`; a client in the `end` state has no socket left, so a second `disconnect()` on it leaves the timer running. `RedisRealtimePubSub` called `disconnect()` on its subscriber without looking at its state, so a subscriber whose retry strategy had given up (a `retryStrategy` that returns `null`, with Redis unreachable) and was then retired, at shutdown or when the last handler left, delayed the process by that timer. The subscriber is now disconnected only if it has not ended; one in any other state that was disconnected before still is.
 
 #### Apply to a derived backend
 
