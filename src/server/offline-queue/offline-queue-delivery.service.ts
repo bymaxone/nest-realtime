@@ -23,6 +23,9 @@ const RETRIEVE_LIMIT = 200
 /** `authenticateTimeoutMs` when it is not set. */
 const DEFAULT_TIMEOUT_MS = 10_000
 
+/** `maxPendingHandshakes` when it is not set. */
+const DEFAULT_MAX_PENDING = 1_000
+
 /** How long a window of timeouts is summarised in one log line. */
 const REPORT_WINDOW_MS = 10_000
 
@@ -49,6 +52,8 @@ export class OfflineQueueTimeoutError extends Error {
 export class OfflineQueueDeliveryService {
   private readonly logger = new Logger(OfflineQueueDeliveryService.name)
   private readonly timeoutMs: number
+  private readonly maxPending: number
+  private pending = 0
   private windowStartedAt = Number.NEGATIVE_INFINITY
   private timedOut = 0
 
@@ -64,6 +69,7 @@ export class OfflineQueueDeliveryService {
     options?: BymaxRealtimeModuleOptions,
   ) {
     this.timeoutMs = options?.authenticateTimeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.maxPending = options?.maxPendingHandshakes ?? DEFAULT_MAX_PENDING
   }
 
   /**
@@ -80,7 +86,9 @@ export class OfflineQueueDeliveryService {
    * @returns Gap events, or an empty array when no offline queue is configured or it fails.
    * @throws OfflineQueueTimeoutError when the queue has not answered in `authenticateTimeoutMs`: the
    *   read is part of the handshake, so a queue that hangs must not keep the request open. The call
-   *   to the storage cannot be cancelled and runs on; its late answer is ignored.
+   *   to the storage cannot be cancelled and runs on, and its late answer is ignored. It keeps its
+   *   place among the `maxPendingHandshakes` reads waiting at once until it settles, and a read that
+   *   finds them all taken is refused the same way without calling the storage.
    */
   async retrieve(
     userId: string,
@@ -88,12 +96,21 @@ export class OfflineQueueDeliveryService {
     ringBufferIds: Set<string>,
   ): Promise<OfflineQueuedEvent[]> {
     if (!this.storage) return []
+    if (this.pending >= this.maxPending) {
+      this.countTimeout()
+      throw new OfflineQueueTimeoutError()
+    }
 
     let events: OfflineQueuedEvent[]
     try {
-      events = await this.withinDeadline(
-        this.storage.retrieveSince(userId, lastEventId, RETRIEVE_LIMIT),
-      )
+      const call = this.storage.retrieveSince(userId, lastEventId, RETRIEVE_LIMIT)
+      // The call cannot be cancelled, so it keeps its place until it actually settles, not until it
+      // was given up on: a store that never answers fills the limit instead of piling up one more
+      // abandoned call for every reconnect.
+      this.pending += 1
+      const settled = (): void => void (this.pending -= 1)
+      call.then(settled, settled)
+      events = await this.withinDeadline(call)
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) {
         this.countTimeout()
@@ -166,7 +183,7 @@ export class OfflineQueueDeliveryService {
     const count = this.timedOut
     this.timedOut = 0
     this.logger.warn(
-      `reconnects given up on since the last report: ${count}, because the offline queue did not answer in ${this.timeoutMs} ms`,
+      `reconnects given up on since the last report: ${count}, because the offline queue did not answer in ${this.timeoutMs} ms or already had ${this.maxPending} reads waiting`,
     )
   }
 }
