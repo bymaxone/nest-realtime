@@ -863,6 +863,8 @@ The code travels on the error you catch; what reaches a client is decided by the
 
 The rejection of a call is Nest's own `ServiceUnavailableException`, so a controller that lets it escape answers `503` with the body `{"statusCode":503,"message":"Service Unavailable"}`. The library's message, which names the failed call, and the `cause`, which can hold a driver's text with a host and credentials, are on the instance for your logs and never in the response. Branch on `error.code`, not on the message.
 
+Nest's default exception filter does not log an `HttpException`, so a `503` from one of these calls leaves no line in your log, where a plain `Error` was logged with its stack. To keep a record, catch `ServiceUnavailableException` in an exception filter of your own and log `exception.code`, `exception.message` and `exception.cause`, as you would for any other `HttpException` you want to see.
+
 **An authenticator that wants a `503` throws `ServiceUnavailableException`.** On SSE an `HttpException` thrown from `authenticate` is sent as it is, so `throw new ServiceUnavailableException()` answers `503`; any other error answers a generic `500`. On WebSocket the handshake carries no HTTP status: an authenticator's own exception is answered with the generic message and no `data.code`. Only the library's own unavailable refusals carry `REALTIME_TRANSPORT_UNAVAILABLE`, which a client can treat as retryable.
 
 ### Shutdown
