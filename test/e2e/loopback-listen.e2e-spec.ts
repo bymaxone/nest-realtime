@@ -5,7 +5,7 @@
  * Goal: prove that `test/setup/jest.loopback-listen.ts`, loaded by the e2e configuration, binds a
  *   port-only `listen` to `127.0.0.1` and leaves every other `listen` signature as Node defines it;
  *   that a server bound this way cannot share its port with another `127.0.0.1` listener; and that
- *   a supertest request against a server that is not listening yet binds it there and reaches it.
+ *   a supertest request against a server that is not listening yet reaches it on `127.0.0.1`.
  *   The unpatched method, kept by the setup file, is the control: a port-only call through it binds
  *   a wildcard address, the one another process's `127.0.0.1` listener could share under BSD bind
  *   rules.
@@ -20,10 +20,8 @@ import request from 'supertest'
 
 import {
   installLoopbackListen,
-  installSupertestWait,
   LOOPBACK_HOST,
   ORIGINAL_LISTEN,
-  SUPERTEST_METHODS,
   withLoopbackHost,
 } from '../support/loopback-listen'
 
@@ -154,54 +152,31 @@ describe('Loopback listen (e2e)', () => {
   /**
    * supertest scenario.
    *
-   * A request against a server that is not listening binds it to `127.0.0.1` and reaches it
-   * there. Requests sent together, and the ones after, share that listener, which stays open for
-   * the server's owner to close.
+   * A request against a server that is not listening has supertest bind it, and the request is
+   * answered on `127.0.0.1`: the address the server saw the client reach, for requests sent
+   * together and for the one after the first has settled.
    */
-  it('lets supertest start one loopback listener and reach it', async () => {
+  it('lets supertest start a loopback listener and reach it', async () => {
     const target = server()
 
     const together = await Promise.all([request(target).get('/a'), request(target).get('/b')])
-    const port = addressOf(target).port
     const after = await request(target).get('/c')
 
     expect(together.map((response) => response.text)).toEqual([LOOPBACK_HOST, LOOPBACK_HOST])
     expect(after.text).toBe(LOOPBACK_HOST)
-    expect(target.listening).toBe(true)
-    expect(addressOf(target)).toEqual({ address: LOOPBACK_HOST, family: 'IPv4', port })
-  })
-
-  /**
-   * Coupling scenario.
-   *
-   * The installed supertest still has both methods the patch replaces, and an install on a
-   * prototype that lacks either one refuses rather than leaving the suite unpatched.
-   */
-  it('finds the supertest methods it patches and refuses without them', () => {
-    for (const name of SUPERTEST_METHODS) {
-      expect(typeof Reflect.get(request.Test.prototype, name)).toBe('function')
-      const missing: Record<string, unknown> = { serverAddress() {}, end() {} }
-      delete missing[name]
-      expect(() => installSupertestWait(missing)).toThrow(`supertest's Test has no ${name}()`)
-    }
   })
 
   /**
    * Single-install scenario.
    *
-   * Installing either patch again changes nothing, so the per-file setup load never wraps the
-   * method twice.
+   * Installing the patch again changes nothing, so the per-file setup load never wraps the method
+   * twice.
    */
-  it('installs each patch once', () => {
+  it('installs the patch once', () => {
     const listen: unknown = Reflect.get(NetServer.prototype, 'listen')
-    const serverAddress: unknown = Reflect.get(request.Test.prototype, 'serverAddress')
-    const end: unknown = Reflect.get(request.Test.prototype, 'end')
 
     installLoopbackListen()
-    installSupertestWait()
 
     expect(Reflect.get(NetServer.prototype, 'listen')).toBe(listen)
-    expect(Reflect.get(request.Test.prototype, 'serverAddress')).toBe(serverAddress)
-    expect(Reflect.get(request.Test.prototype, 'end')).toBe(end)
   })
 })
