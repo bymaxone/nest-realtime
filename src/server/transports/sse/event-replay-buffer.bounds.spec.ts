@@ -112,15 +112,17 @@ describe('EventReplayBuffer: the users it keeps', () => {
     expect(buffer.size('u1')).toBe(0)
   })
 
-  it('does not expire sooner when the wall clock is stepped back', () => {
+  it('expires an idle entry at its time, neither sooner nor later, when the wall clock is stepped back', () => {
     const buffer = bufferWith({ replayTtlMs: 1_000 })
     buffer.open('u1')
     buffer.append('u1', event('a'))
     buffer.close('u1')
 
     jest.setSystemTime(Date.now() - 3_600_000)
-    jest.advanceTimersByTime(1_000)
+    jest.advanceTimersByTime(999)
+    expect(buffer.size('u1')).toBe(1)
 
+    jest.advanceTimersByTime(1)
     expect(buffer.size('u1')).toBe(0)
   })
 

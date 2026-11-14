@@ -108,7 +108,7 @@ describe('WebSocket per-user connection cap (e2e)', () => {
   })
 
   it('keeps every socket when the cap is switched off with 0', async () => {
-    // An explicit 0 keeps the meaning it had: no per-user bound.
+    // An explicit 0 disables the per-user connection cap.
     await boot({ maxConnectionsPerUser: 0 })
     for (let i = 0; i < 8; i += 1) await connect()
 
