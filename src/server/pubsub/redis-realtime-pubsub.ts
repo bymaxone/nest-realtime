@@ -234,7 +234,16 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it. The offline queue
     // is forced on, whatever the host client chose: the first SUBSCRIBE is issued before the
     // connection exists.
-    const sub = this.#pub.duplicate({ autoResubscribe: false, enableOfflineQueue: true })
+    // `disconnectTimeout` is how long ioredis lets a socket close after `disconnect()` before it
+    // destroys it, 2,000 ms by default. The timer that waits is cleared only by the socket's
+    // `close`, which a subscriber that has ended, or is waiting to reconnect, no longer has coming,
+    // so the default would keep the process alive that long. A retired subscriber has nothing in
+    // flight worth waiting for.
+    const sub = this.#pub.duplicate({
+      autoResubscribe: false,
+      disconnectTimeout: 1,
+      enableOfflineQueue: true,
+    })
     let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
     // An error reply is the server's answer and reaches the caller as the SUBSCRIBE's rejection;
