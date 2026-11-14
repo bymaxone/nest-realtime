@@ -45,6 +45,10 @@ const published = (fake: FakeRespServer): number =>
   fake.seen.filter((command) => command[0] === 'PUBLISH').length
 
 afterEach(async () => {
+  // A case that is abandoned at its time limit never reaches its own `finally`, and fake timers left
+  // installed would hang the cases after it.
+  jest.useRealTimers()
+  jest.restoreAllMocks()
   for (const redis of clients.splice(0)) redis.disconnect()
   for (const fake of servers.splice(0)) await fake.stop()
 })

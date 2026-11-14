@@ -46,6 +46,8 @@ describe('closing an application with SSE connections whose onDisconnect never s
   const streams: ClientRequest[] = []
 
   afterEach(() => {
+    // A case abandoned at its time limit never reaches its own `finally`.
+    jest.useRealTimers()
     for (const stream of streams.splice(0)) stream.destroy()
     jest.restoreAllMocks()
   })
