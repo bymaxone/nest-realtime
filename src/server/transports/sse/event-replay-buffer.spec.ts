@@ -25,6 +25,7 @@ describe('EventReplayBuffer', () => {
   // append stores events and size reports the count.
   it('appends events for a user', () => {
     const buf = bufferWith(10)
+    buf.open('u1')
     buf.append('u1', mkEvent('a'))
     buf.append('u1', mkEvent('b'))
     expect(buf.size('u1')).toBe(2)
@@ -33,6 +34,7 @@ describe('EventReplayBuffer', () => {
   // since returns the events emitted after the given id.
   it('returns events after the given id', () => {
     const buf = bufferWith(10)
+    buf.open('u1')
     buf.append('u1', mkEvent('a'))
     buf.append('u1', mkEvent('b'))
     buf.append('u1', mkEvent('c'))
@@ -42,6 +44,7 @@ describe('EventReplayBuffer', () => {
   // A missing last-event id (gap) returns an empty array.
   it('returns [] on a buffer miss', () => {
     const buf = bufferWith(10)
+    buf.open('u1')
     buf.append('u1', mkEvent('a'))
     expect(buf.since('u1', 'missing')).toEqual([])
   })
@@ -56,6 +59,7 @@ describe('EventReplayBuffer', () => {
   // The buffer evicts the oldest event once it exceeds the configured cap.
   it('evicts FIFO beyond the configured cap', () => {
     const buf = bufferWith(3)
+    buf.open('u1')
     for (const id of ['a', 'b', 'c', 'd', 'e']) buf.append('u1', mkEvent(id))
     expect(buf.size('u1')).toBe(3)
     // 'a' and 'b' were evicted, so since('a') is a miss.
@@ -66,6 +70,7 @@ describe('EventReplayBuffer', () => {
   // With no sse options configured, the default cap of 100 applies.
   it('applies the default cap when sse options are absent', () => {
     const buf = bufferWith(undefined)
+    buf.open('u1')
     for (let i = 0; i < 150; i += 1) buf.append('u1', mkEvent(`id-${i}`))
     expect(buf.size('u1')).toBe(100)
   })
@@ -73,6 +78,8 @@ describe('EventReplayBuffer', () => {
   // Buffers are isolated per user.
   it('isolates users from each other', () => {
     const buf = bufferWith(10)
+    buf.open('u1')
+    buf.open('u2')
     buf.append('u1', mkEvent('a'))
     buf.append('u2', mkEvent('b'))
     expect(buf.size('u1')).toBe(1)

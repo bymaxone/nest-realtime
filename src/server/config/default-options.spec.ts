@@ -27,6 +27,13 @@ describe('DEFAULT_SSE', () => {
     expect(DEFAULT_SSE.maxConnectionsPerUser).toBe(5)
   })
 
+  // The replay buffer keeps the users that have, or lately had, a connection, and not more idle ones
+  // than this, so what it holds is bounded by the connections plus a number.
+  it('keeps idle users for 5 minutes, at most 1,000 of them, by default', () => {
+    expect(DEFAULT_SSE.replayTtlMs).toBe(300_000)
+    expect(DEFAULT_SSE.replayMaxIdleUsers).toBe(1_000)
+  })
+
   // A client that does not read must not be able to grow the server without bound, so these are on.
   it('bounds what a client may leave unread by default', () => {
     expect(DEFAULT_SSE.maxQueuedBytes).toBe(2 * 1024 * 1024)

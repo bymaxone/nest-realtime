@@ -195,6 +195,7 @@ export class SseTransport implements ITransport {
       },
     }
     this.connections.register(record)
+    this.replayBuffer.open(params.auth.userId)
     this.track(params)
     this.rooms.join(params.connectionId, composeRoomId('USER', params.auth.userId))
     if (params.auth.tenantId !== undefined) {
@@ -219,6 +220,7 @@ export class SseTransport implements ITransport {
    */
   private release(connectionId: string): ConnectionRecord | undefined {
     const record = this.connections.unregister(connectionId)
+    if (record) this.replayBuffer.close(record.userId)
     // Idempotent for a connection that is already gone, so there is nothing to branch on.
     this.rooms.leaveAll(connectionId)
     this.heartbeat.stop(connectionId)

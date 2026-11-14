@@ -135,6 +135,42 @@ describe('validateOptions', () => {
     ).not.toThrow()
   })
 
+  // `replayTtlMs` is compared with the clock, not run as a timer, but it keeps the same ceiling so that
+  // a duration option means one thing everywhere; `replayMaxIdleUsers` is a count.
+  it('rejects a sse.replayTtlMs that is not an integer from 1 to 2147483647, and accepts both ends', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '300000', null, 2_147_483_648]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, sse: { replayTtlMs: bad as never } }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.replayTtlMs must be an integer >= 1 and <= 2147483647, got ${String(bad)}`,
+      )
+    }
+    for (const good of [1, 300_000, 2_147_483_647]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, sse: { replayTtlMs: good } }),
+      ).not.toThrow()
+    }
+  })
+
+  it('rejects a sse.replayMaxIdleUsers that is not an integer >= 1, and accepts 1 and more', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '1000', null]) {
+      expect(() =>
+        validateOptions({
+          transport: 'sse',
+          authenticator,
+          sse: { replayMaxIdleUsers: bad as never },
+        }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.replayMaxIdleUsers must be an integer >= 1, got ${String(bad)}`,
+      )
+    }
+    for (const good of [1, 1_000, 2 ** 53 - 1]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, sse: { replayMaxIdleUsers: good } }),
+      ).not.toThrow()
+    }
+  })
+
   // A timer cannot run longer than 2,147,483,647 ms: Node treats a longer delay as 1 ms, so an option
   // that feeds one has to stop there.
   it('rejects a hookTimeoutMs that is not an integer from 1 to 2147483647, and accepts both ends', () => {

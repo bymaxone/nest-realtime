@@ -134,6 +134,8 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
       { who: 'BymaxRealtimeModule' },
     )
   }
+  assertInteger('sse.replayTtlMs', sse?.replayTtlMs, 1, MAX_TIMER_MS)
+  assertInteger('sse.replayMaxIdleUsers', sse?.replayMaxIdleUsers, 1)
   for (const name of ['maxQueuedBytes', 'maxQueuedEvents', 'stallHeartbeats'] as const) {
     const value: unknown = sse?.[name]
     if (

@@ -12,6 +12,8 @@ export const DEFAULT_SSE: Required<SseOptions> = {
   endpoint: '/realtime/sse',
   heartbeatMs: 30_000,
   replayBufferSize: 100,
+  replayTtlMs: 300_000,
+  replayMaxIdleUsers: 1_000,
   maxConnectionsPerUser: 5,
   emitConnectionEvent: true,
   maxQueuedBytes: 2 * 1024 * 1024,
