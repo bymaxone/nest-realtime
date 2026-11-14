@@ -185,7 +185,7 @@ describe.each([
     }
   })
 
-  // Claude's finding: a store that stays down must not refuse every reconnect. The first read has
+  // A store that stays down must not refuse every reconnect. The first read has
   // degraded, so the reconnect is served as it always has been, and the store is not asked again.
   it('serves a reconnect whose store is down, with one read and no error, when the first read fails', async () => {
     const port = await boot()
@@ -198,7 +198,7 @@ describe.each([
     expect(queue.reads).toBe(1)
   })
 
-  // Codex's finding: the first read succeeded and the second failed, so a stream served with the first
+  // The first read succeeded and the second failed, so a stream served with the first
   // read's events alone would move the client's cursor past the ones the second was for. The attempt
   // ends before anything is delivered or acknowledged, and the cause reaches no one.
   it('ends the attempt, delivering and acknowledging nothing, when the second read fails after a first that succeeded', async () => {

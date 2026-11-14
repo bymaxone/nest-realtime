@@ -31,34 +31,26 @@ const at = (id: string): OfflineQueuedEvent => ({
 })
 const hangs = (): Promise<never> => new Promise(() => undefined)
 
+/** What a scripted read does: answer with an event, never answer, or fail. */
+function answerFor(how: First | Second, id: string): () => Promise<OfflineQueuedEvent[]> {
+  if (how === 'ok') return () => Promise.resolve([at(id)])
+  if (how === 'timeout') return hangs
+  return () => Promise.reject(new Error('down'))
+}
+
 /**
- * One reconnect, with its first and second read scripted. `cap` takes the only place for a read
- * with a call that never answers, before the first read for `First`, between the reads for `Second`.
- * Returns what the client was answered, and how many times the store was called for the reconnect.
+ * A real service over a store that does what the scenario says on its first and second call, and
+ * counts the calls. `occupy` takes the only place for a read with a call that never answers.
  */
-async function reconnect(first: First, second: Second): Promise<Outcome> {
-  let calls = 0
-  let occupying = 0
-  const script: Array<() => Promise<OfflineQueuedEvent[]>> = [
-    () =>
-      first === 'ok'
-        ? Promise.resolve([at('q-1')])
-        : first === 'timeout'
-          ? hangs()
-          : Promise.reject(new Error('down')),
-    () =>
-      second === 'ok'
-        ? Promise.resolve([at('q-2')])
-        : second === 'timeout'
-          ? hangs()
-          : Promise.reject(new Error('down')),
-  ]
+function scriptedService(first: First, second: Second) {
+  const state = { calls: 0, occupying: 0, occupants: 0 }
+  const script = [answerFor(first, 'q-1'), answerFor(second, 'q-2')]
   const options = mkOptions({ authenticateTimeoutMs: 1_000, maxPendingHandshakes: 1 })
   const service = new OfflineQueueDeliveryService(
     {
       retrieveSince: () => {
-        calls += 1
-        return occupying > 0 ? hangs() : (script.shift() ?? (() => Promise.resolve([])))()
+        state.calls += 1
+        return state.occupying > 0 ? hangs() : (script.shift() ?? (() => Promise.resolve([])))()
       },
       acknowledge: async () => undefined,
       append: async () => undefined,
@@ -66,50 +58,71 @@ async function reconnect(first: First, second: Second): Promise<Outcome> {
     undefined,
     options,
   )
-  /** Take the only place for a read, with a call that never answers. */
   const occupy = (): void => {
-    occupying += 1
+    state.occupying += 1
+    state.occupants += 1
     service.retrieve('other', 'x', new Set()).catch(() => undefined)
-    occupying -= 1
+    state.occupying -= 1
   }
+  return { service, options, occupy, reads: (): number => state.calls - state.occupants }
+}
+
+/** What the client was answered, from the error or the stream a request came to. */
+function outcomeOf(result: unknown, reads: number): Outcome {
+  if (result instanceof ServiceUnavailableException) return { answer: '503', reads }
+  if (result instanceof InternalServerErrorException) return { answer: '500', reads }
+  const stream = result as Parameters<typeof collect>[0]
+  return { answer: 'served', delivered: collect(stream).map((e) => String(e.id)), reads }
+}
+
+/** The guard of a reconnect, run for as long as its first read takes; the error it refused with. */
+async function runGuard(
+  handler: SseSubscriptionHandler,
+  req: ReturnType<typeof mkReq>,
+  first: First,
+) {
+  const guarded = handler.authenticateBeforeCommit(req, mkRes()).then(
+    () => undefined,
+    (error: unknown) => error,
+  )
+  await jest.advanceTimersByTimeAsync(first === 'timeout' ? 1_000 : 0)
+  return guarded
+}
+
+/** The route of a reconnect, run for as long as its second read takes; the stream or the error. */
+async function runRoute(
+  handler: SseSubscriptionHandler,
+  req: ReturnType<typeof mkReq>,
+  second: Second,
+) {
+  const handled = handler.handle(req, mkRes()).then(
+    (stream) => stream,
+    (error: unknown) => error,
+  )
+  await jest.advanceTimersByTimeAsync(second === 'timeout' ? 1_000 : 0)
+  return handled
+}
+
+/**
+ * One reconnect, with its first and second read scripted. `cap` takes the only place for a read
+ * before the first read for `First`, and between the reads for `Second`. Returns what the client was
+ * answered, and how many times the store was called for the reconnect.
+ */
+async function reconnect(first: First, second: Second): Promise<Outcome> {
+  const { service, options, occupy, reads } = scriptedService(first, second)
   const transport = mkTransport({
     emitConnectionEvent: false,
     admit: () => ({ release: jest.fn(), renew: jest.fn() }),
   })
   const handler = new SseSubscriptionHandler(transport, mkHeartbeat(), options, undefined, service)
   const req = mkReq({ headers: { 'last-event-id': 'q-0' } })
-  const res = mkRes()
 
   if (first === 'cap') occupy()
-  const occupants = first === 'cap' ? 1 : 0
-  const guarded = handler.authenticateBeforeCommit(req, res).then(
-    () => undefined,
-    (error: unknown) => error,
-  )
-  await jest.advanceTimersByTimeAsync(first === 'timeout' ? 1_000 : 0)
-  const refused = await guarded
-  const reads = (): number =>
-    calls - occupants - (second === 'cap' && refused === undefined ? 1 : 0)
-  if (refused !== undefined)
-    return {
-      answer: refused instanceof ServiceUnavailableException ? '503' : '500',
-      reads: reads(),
-    }
+  const refused = await runGuard(handler, req, first)
+  if (refused !== undefined) return outcomeOf(refused, reads())
 
   if (second === 'cap') occupy()
-  const handled = handler.handle(req, res).then(
-    (stream) => stream,
-    (error: unknown) => error,
-  )
-  await jest.advanceTimersByTimeAsync(second === 'timeout' ? 1_000 : 0)
-  const result = await handled
-  if (result instanceof ServiceUnavailableException) return { answer: '503', reads: reads() }
-  if (result instanceof InternalServerErrorException) return { answer: '500', reads: reads() }
-  return {
-    answer: 'served',
-    delivered: collect(result as Parameters<typeof collect>[0]).map((e) => String(e.id)),
-    reads: reads(),
-  }
+  return outcomeOf(await runRoute(handler, req, second), reads())
 }
 
 describe('SseSubscriptionHandler: the two reads of the offline-queue gap, case by case', () => {
