@@ -83,14 +83,15 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
 
   /**
    * Messages the subscriber cannot act on, counted and reported once for each window. The line
-   * carries counts and the class of the last failure: the op and the failure's message can echo
-   * what whoever publishes to the channel wrote, so neither is ever written.
+   * carries the count and the reason in a fixed vocabulary: an unknown op, or the class of the last
+   * failure. The op and the failure's message can echo what whoever publishes to the channel
+   * wrote, so neither is ever written.
    */
   private readonly dropped = windowedReport(
-    () => ({ unknownOp: 0, failed: 0, lastFailure: 'none' }),
-    ({ unknownOp, failed, lastFailure }) => {
+    () => ({ count: 0, last: 'none' }),
+    ({ count, last }) => {
       this.logger.warn(
-        `Pub/sub messages dropped since the last report: ${unknownOp} with an unknown op, ${failed} whose handling failed (last: ${lastFailure})`,
+        `Pub/sub dropped ${count} message(s) it could not act on since the last report (last: ${last})`,
       )
     },
   )
@@ -134,12 +135,15 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
         }
         default: {
           msg.op satisfies never
-          this.dropped((counts) => ({ ...counts, unknownOp: counts.unknownOp + 1 }))
+          this.drop('unknown op')
         }
       }
     } catch (err) {
-      const lastFailure = String(Object(err).constructor?.name ?? 'Error')
-      this.dropped((counts) => ({ ...counts, failed: counts.failed + 1, lastFailure }))
+      this.drop(String(Object(err).constructor?.name ?? 'Error'))
     }
+  }
+
+  private drop(last: string): void {
+    this.dropped(({ count }) => ({ count: count + 1, last }))
   }
 }

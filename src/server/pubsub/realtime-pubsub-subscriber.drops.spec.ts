@@ -58,7 +58,7 @@ describe('messages the subscriber cannot act on', () => {
 
     expect(warn).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenLastCalledWith(
-      'Pub/sub messages dropped since the last report: 3 with an unknown op, 0 whose handling failed (last: none)',
+      'Pub/sub dropped 3 message(s) it could not act on since the last report (last: unknown op)',
     )
   })
 
@@ -73,7 +73,7 @@ describe('messages the subscriber cannot act on', () => {
 
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(
-      'Pub/sub messages dropped since the last report: 0 with an unknown op, 1 whose handling failed (last: TypeError)',
+      'Pub/sub dropped 1 message(s) it could not act on since the last report (last: TypeError)',
     )
   })
 
@@ -88,7 +88,7 @@ describe('messages the subscriber cannot act on', () => {
     expect(() => deliver(null)).not.toThrow()
 
     expect(warn).toHaveBeenCalledWith(
-      'Pub/sub messages dropped since the last report: 0 with an unknown op, 1 whose handling failed (last: TypeError)',
+      'Pub/sub dropped 1 message(s) it could not act on since the last report (last: TypeError)',
     )
   })
 
@@ -143,5 +143,28 @@ describe('messages the subscriber cannot act on', () => {
     const line = String(warn.mock.calls[0]?.[0])
     expect(line).not.toContain('secret')
     expect(line).not.toMatch(/[\r\n]/)
+  })
+
+  /*
+   * Given handling that throws an object with no constructor
+   * When the message reaches the subscriber
+   * Then the failure is still counted, under the generic class
+   */
+  it('counts a failure whose thrown value has no constructor', async () => {
+    const deliver = await build({
+      emitToUserLocal: jest.fn(() => {
+        throw Object.create(null)
+      }),
+    })
+
+    deliver({
+      op: 'emitToUser',
+      origin: 'other',
+      args: { userId: 'u', event: 'e', data: 1, id: '1' },
+    })
+
+    expect(warn).toHaveBeenCalledWith(
+      'Pub/sub dropped 1 message(s) it could not act on since the last report (last: Error)',
+    )
   })
 })

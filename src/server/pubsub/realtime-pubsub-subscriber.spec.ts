@@ -233,7 +233,7 @@ describe('RealtimePubSubSubscriber', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       getHandler()!({ op: 'badOp' as never, args: {}, origin: 'remote' })
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 with an unknown op'))
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('(last: unknown op)'))
       expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('badOp'))
     } finally {
       warnSpy.mockRestore()
