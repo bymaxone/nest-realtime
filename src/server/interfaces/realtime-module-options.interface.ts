@@ -89,6 +89,7 @@ export interface BymaxRealtimeModuleOptions {
    */
   tenantResolver?: (auth: AuthenticationResult) => string | undefined | null
   hooks?: IConnectionLifecycleHooks
+  hookTimeoutMs?: number
   pubsub?: IRealtimePubSub
   offlineQueue?: IOfflineQueueStorage
   presence?: IPresenceStorage

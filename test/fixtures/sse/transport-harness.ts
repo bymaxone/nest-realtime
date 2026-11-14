@@ -21,11 +21,12 @@ import { HeartbeatService } from '../../../src/server/transports/sse/heartbeat.s
 import { EventReplayBuffer } from '../../../src/server/transports/sse/event-replay-buffer'
 import { SseTransport } from '../../../src/server/transports/sse/sse.transport'
 
-function makeOptions(sse?: SseOptions): BymaxRealtimeModuleOptions {
+function makeOptions(sse?: SseOptions, hookTimeoutMs?: number): BymaxRealtimeModuleOptions {
   return {
     transport: 'sse',
     authenticator: { authenticate: async () => null },
     ...(sse ? { sse } : {}),
+    ...(hookTimeoutMs !== undefined ? { hookTimeoutMs } : {}),
   }
 }
 
@@ -35,10 +36,11 @@ export function build(opts?: {
   hooks?: IConnectionLifecycleHooks
   instanceId?: string
   offlineQueue?: IOfflineQueueStorage
+  hookTimeoutMs?: number
 }) {
   const connections = new ConnectionRegistry()
   const rooms = new RoomRegistry()
-  const options = makeOptions(opts?.sse)
+  const options = makeOptions(opts?.sse, opts?.hookTimeoutMs)
   const replay = new EventReplayBuffer(options)
   const idGen = new EventIdGenerator()
   const heartbeat = new HeartbeatService()

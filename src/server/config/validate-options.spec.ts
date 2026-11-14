@@ -135,6 +135,71 @@ describe('validateOptions', () => {
     ).not.toThrow()
   })
 
+  // A timer cannot run longer than 2,147,483,647 ms: Node treats a longer delay as 1 ms, so an option
+  // that feeds one has to stop there.
+  it('rejects a hookTimeoutMs that is not an integer from 1 to 2147483647, and accepts both ends', () => {
+    for (const bad of [
+      0,
+      -1,
+      1.5,
+      Number.NaN,
+      Infinity,
+      '5000',
+      null,
+      2_147_483_648,
+      3_000_000_000,
+      2 ** 53 - 1,
+    ]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, hookTimeoutMs: bad as never }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.hookTimeoutMs must be an integer >= 1 and <= 2147483647, got ${String(bad)}`,
+      )
+    }
+    for (const good of [1, 5_000, 60_000, 2_147_483_647]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, hookTimeoutMs: good }),
+      ).not.toThrow()
+    }
+  })
+
+  // Socket.IO runs these as timers, so they stop where Node's timers do.
+  it.each(['pingIntervalMs', 'pingTimeoutMs'] as const)(
+    'rejects a websocket.%s that is not an integer from 1 to 2147483647, and accepts both ends',
+    (name) => {
+      for (const bad of [
+        0,
+        -1,
+        1.5,
+        Number.NaN,
+        Infinity,
+        '25000',
+        null,
+        2_147_483_648,
+        2 ** 53 - 1,
+      ]) {
+        expect(() =>
+          validateOptions({
+            transport: 'websocket',
+            authenticator,
+            websocket: { [name]: bad } as never,
+          }),
+        ).toThrow(
+          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.${name} must be an integer >= 1 and <= 2147483647, got ${String(bad)}`,
+        )
+      }
+      for (const good of [1, 25_000, 2_147_483_647]) {
+        expect(() =>
+          validateOptions({
+            transport: 'websocket',
+            authenticator,
+            websocket: { [name]: good },
+          }),
+        ).not.toThrow()
+      }
+    },
+  )
+
   it.each(['maxQueuedBytes', 'maxQueuedEvents', 'stallHeartbeats'] as const)(
     'rejects a sse.%s that is not an integer >= 0, and accepts 0 and a positive integer',
     (name) => {
@@ -154,34 +219,41 @@ describe('validateOptions', () => {
   )
 
   // The interval, the timeout and the concurrency are positive whole numbers, and the cache window
-  // a non-negative one: a timer cannot run at 0 or at a fraction, and nothing runs 0.5 at a time.
+  // a non-negative one: a timer cannot run at 0 or at a fraction, nothing runs 0.5 at a time, and a
+  // timer option stops where Node's timers do.
   it.each([
-    ['intervalSeconds', 1],
-    ['cacheTtlMs', 0],
-    ['revalidateTimeoutMs', 1],
-    ['concurrency', 1],
-  ] as const)('rejects a reauthenticationPolicy.%s that is not an integer >= %s', (name, least) => {
-    for (const bad of [least - 1, least + 0.5, Number.NaN, Infinity, '5', null]) {
-      expect(() =>
-        validateOptions({
-          transport: 'sse',
-          authenticator,
-          reauthenticationPolicy: { [name]: bad } as never,
-        }),
-      ).toThrow(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.${name} must be an integer >= ${least}, got ${String(bad)}`,
-      )
-    }
-    for (const good of [least, least + 1, 300]) {
-      expect(() =>
-        validateOptions({
-          transport: 'sse',
-          authenticator,
-          reauthenticationPolicy: { [name]: good },
-        }),
-      ).not.toThrow()
-    }
-  })
+    ['intervalSeconds', 1, 2_147_483],
+    ['cacheTtlMs', 0, undefined],
+    ['revalidateTimeoutMs', 1, 2_147_483_647],
+    ['concurrency', 1, undefined],
+  ] as const)(
+    'rejects a reauthenticationPolicy.%s outside its range, and accepts both ends',
+    (name, least, most) => {
+      const range = `>= ${least}${most === undefined ? '' : ` and <= ${most}`}`
+      const outside = [least - 1, least + 0.5, Number.NaN, Infinity, '5', null]
+      if (most !== undefined) outside.push(most + 1, 2 ** 53 - 1)
+      for (const bad of outside) {
+        expect(() =>
+          validateOptions({
+            transport: 'sse',
+            authenticator,
+            reauthenticationPolicy: { [name]: bad } as never,
+          }),
+        ).toThrow(
+          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.${name} must be an integer ${range}, got ${String(bad)}`,
+        )
+      }
+      for (const good of [least, least + 1, 300, ...(most === undefined ? [] : [most])]) {
+        expect(() =>
+          validateOptions({
+            transport: 'sse',
+            authenticator,
+            reauthenticationPolicy: { [name]: good },
+          }),
+        ).not.toThrow()
+      }
+    },
+  )
 
   it("rejects an onFailure other than 'disconnect' or 'event'", () => {
     expect(() =>

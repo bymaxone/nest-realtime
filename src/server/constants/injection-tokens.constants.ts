@@ -26,6 +26,9 @@ export const REALTIME_INSTANCE_ID_TOKEN = Symbol('BYMAX_REALTIME_INSTANCE_ID')
  */
 export const DEFAULT_HEARTBEAT_MS = 30_000
 
+/** How long the library waits for a lifecycle hook it awaits before giving up on it. */
+export const DEFAULT_HOOK_TIMEOUT_MS = 5_000
+
 /**
  * Minimum acceptable heartbeat interval in milliseconds.
  *

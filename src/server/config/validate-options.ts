@@ -41,32 +41,52 @@ export function validateOptions(options: BymaxRealtimeModuleOptions): void {
       { who: 'BymaxRealtimeModule' },
     )
   }
+  validateHookTimeout(options)
   validateSseOptions(options)
   validateReauthPolicy(options)
 }
 
-/** The integer options of the re-authentication policy and the least each may be. */
+/**
+ * The longest a Node timer can run: a delay above this is treated as 1 ms, so an option that feeds
+ * a timer has to stop here or it silently means the opposite of what it says.
+ */
+const MAX_TIMER_MS = 2_147_483_647
+
+/** Refuse `value` unless it is an integer in `[least, most]`; `most` absent means no upper bound. */
+function assertInteger(path: string, value: unknown, least: number, most?: number): void {
+  if (value === undefined) return
+  const valid =
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= least &&
+    (most === undefined || value <= most)
+  if (valid) return
+  throw realtimeError(
+    REALTIME_ERROR_CODES.INVALID_OPTIONS,
+    `options.${path} must be an integer >= ${least}${most === undefined ? '' : ` and <= ${most}`}, got ${String(value)}`,
+    { who: 'BymaxRealtimeModule' },
+  )
+}
+
+function validateHookTimeout(options: BymaxRealtimeModuleOptions): void {
+  assertInteger('hookTimeoutMs', options.hookTimeoutMs, 1, MAX_TIMER_MS)
+  // Socket.IO runs these two as timers.
+  assertInteger('websocket.pingIntervalMs', options.websocket?.pingIntervalMs, 1, MAX_TIMER_MS)
+  assertInteger('websocket.pingTimeoutMs', options.websocket?.pingTimeoutMs, 1, MAX_TIMER_MS)
+}
+
+/** The integer options of the re-authentication policy, the least each may be and, for a timer, the most. */
 const REAUTH_INTEGER_OPTIONS = [
-  ['intervalSeconds', 1],
-  ['cacheTtlMs', 0],
-  ['revalidateTimeoutMs', 1],
-  ['concurrency', 1],
+  ['intervalSeconds', 1, Math.floor(MAX_TIMER_MS / 1000)],
+  ['cacheTtlMs', 0, undefined],
+  ['revalidateTimeoutMs', 1, MAX_TIMER_MS],
+  ['concurrency', 1, undefined],
 ] as const
 
 function validateReauthPolicy(options: BymaxRealtimeModuleOptions): void {
   const policy = options.reauthenticationPolicy
-  for (const [name, least] of REAUTH_INTEGER_OPTIONS) {
-    const value: unknown = policy?.[name]
-    if (
-      value !== undefined &&
-      !(typeof value === 'number' && Number.isInteger(value) && value >= least)
-    ) {
-      throw realtimeError(
-        REALTIME_ERROR_CODES.INVALID_OPTIONS,
-        `options.reauthenticationPolicy.${name} must be an integer >= ${least}, got ${String(value)}`,
-        { who: 'BymaxRealtimeModule' },
-      )
-    }
+  for (const [name, least, most] of REAUTH_INTEGER_OPTIONS) {
+    assertInteger(`reauthenticationPolicy.${name}`, policy?.[name], least, most)
   }
   const onFailure: unknown = policy?.onFailure
   if (onFailure !== undefined && onFailure !== 'disconnect' && onFailure !== 'event') {

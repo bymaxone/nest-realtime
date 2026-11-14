@@ -20,6 +20,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PRESENCE_EVENT_NAMES, RESERVED_EVENT_NAMES } from '../../shared'
+import { nextBackoff, validDelay } from './backoff'
 /** Options for the SSE internal hook. */
 export interface UseRealtimeSseOptions {
   /** SSE endpoint URL, e.g. `'/realtime/sse'`. */
@@ -150,7 +151,7 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
   const [error, setError] = useState<Error | undefined>(undefined)
   const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const sourceRef = useRef<EventSource | null>(null)
-  const reconnectMsRef = useRef<number>(opts.reconnectInitialMs ?? 1_000)
+  const reconnectMsRef = useRef<number>(validDelay(opts.reconnectInitialMs, 1_000))
   const attemptsRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -199,7 +200,7 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
       // that just came back.
       clearReconnectTimer()
       // Reset backoff and the attempt counter on successful open.
-      reconnectMsRef.current = opts.reconnectInitialMs ?? 1_000
+      reconnectMsRef.current = validDelay(opts.reconnectInitialMs, 1_000)
       attemptsRef.current = 0
       setReconnectAttempts(0)
     }
@@ -221,7 +222,7 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
       // the pending timer rather than stacking one keeps a single retry in flight —
       // otherwise an orphaned earlier timer survives a recovery and fires anyway.
       clearReconnectTimer()
-      const delay = Math.min(reconnectMsRef.current * 2, opts.reconnectMaxMs ?? 30_000)
+      const delay = nextBackoff(reconnectMsRef.current, validDelay(opts.reconnectMaxMs, 30_000))
       reconnectMsRef.current = delay
       timerRef.current = setTimeout(connect, delay)
     }
@@ -281,7 +282,7 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
   }, [connect, opts.enabled, clearReconnectTimer])
 
   const reconnect = useCallback(() => {
-    reconnectMsRef.current = opts.reconnectInitialMs ?? 1_000
+    reconnectMsRef.current = validDelay(opts.reconnectInitialMs, 1_000)
     attemptsRef.current = 0
     setReconnectAttempts(0)
     connect()
