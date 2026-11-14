@@ -19,6 +19,9 @@ import type { ConnectionRecord } from '../../../src/server/services/connection-r
 import type { IConnectionLifecycleHooks } from '../../../src/server/interfaces/connection-lifecycle-hooks.interface'
 import type { HeartbeatService } from '../../../src/server/transports/sse/heartbeat.service'
 import type { SseTransport } from '../../../src/server/transports/sse/sse.transport'
+import { OfflineQueueDeliveryService } from '../../../src/server/offline-queue/offline-queue-delivery.service'
+import type { OfflineQueueRead } from '../../../src/server/offline-queue/offline-queue-delivery.service'
+import type { OfflineQueuedEvent } from '../../../src/server/interfaces/offline-queue-storage.interface'
 import { SseSubscriptionHandler } from '../../../src/server/transports/sse/sse-subscription.handler'
 
 /** Collect the synchronous emissions (of/EMPTY) the stream produces on subscribe. */
@@ -108,4 +111,43 @@ export function build(
   hooks?: IConnectionLifecycleHooks,
 ): SseSubscriptionHandler {
   return new SseSubscriptionHandler(transport, heartbeat, options, hooks)
+}
+
+/** What a handler test stubs of the delivery service: the first read's answer and the second's. */
+interface DeliveryStub {
+  retrieve: jest.Mock
+  acknowledge: jest.Mock
+  retrieveAppended?: jest.Mock
+}
+
+/**
+ * The delivery service with its reads answered by mocks: `retrieve` answers the first read (as the
+ * gap, never degraded) and `retrieveAppended` the second, which adds no events unless it says so.
+ */
+export class StubDelivery extends OfflineQueueDeliveryService {
+  constructor(private readonly stub: DeliveryStub) {
+    super()
+  }
+
+  override async retrieveGap(userId: string, lastEventId: string): Promise<OfflineQueueRead> {
+    const events = (await this.stub.retrieve(
+      userId,
+      lastEventId,
+      new Set(),
+    )) as OfflineQueuedEvent[]
+    return { events, degraded: false }
+  }
+
+  override async retrieveAppended(
+    userId: string,
+    lastEventId: string,
+    read: OfflineQueueRead,
+  ): Promise<OfflineQueuedEvent[]> {
+    if (this.stub.retrieveAppended === undefined) return []
+    return (await this.stub.retrieveAppended(userId, lastEventId, read)) as OfflineQueuedEvent[]
+  }
+
+  override acknowledge(userId: string, events: readonly OfflineQueuedEvent[]): Promise<void> {
+    return this.stub.acknowledge(userId, events) as Promise<void>
+  }
 }

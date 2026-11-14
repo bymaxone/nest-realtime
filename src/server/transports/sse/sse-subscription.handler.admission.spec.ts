@@ -17,6 +17,7 @@ import {
   mkOptions,
   mkReq,
   build,
+  StubDelivery,
 } from '../../../../test/fixtures/sse/subscription-harness'
 import {
   ConnectionAdmission,
@@ -141,8 +142,8 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
     beforeEach(() => jest.useFakeTimers())
     afterEach(() => jest.useRealTimers())
 
-    // The offline-queue read before registration has no bound: a handshake can outlive its place,
-    // which another request then takes. It must not register past the limit.
+    // The waits before registration add up, so a handshake can outlive its place, which another
+    // request then takes. It must not register past the limit.
     it('ends the stream with a 503, and registers nothing, when its place was given back and taken', async () => {
       const { admission, handler, registerConnection } = setup(1)
       const { res } = mkClosableRes()
@@ -160,35 +161,37 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
       expect(registerConnection).not.toHaveBeenCalled()
     })
 
-    // The reconnect's offline-queue read is the one wait before registration that nothing bounds.
+    // A slow offline-queue read is one of the waits before registration; it can outlast the place.
     it('ends the stream with a 503, and registers nothing, when a slow offline-queue read outlives its place', async () => {
       let finish: (events: never[]) => void = () => undefined
-      const offlineDelivery = {
-        retrieve: jest.fn(() => new Promise<never[]>((resolve) => (finish = resolve))),
+      const retrieve = jest.fn(() => new Promise<never[]>((resolve) => (finish = resolve)))
+      const offlineDelivery = new StubDelivery({
+        retrieve,
+        retrieveAppended: jest.fn().mockResolvedValue([]),
         acknowledge: jest.fn(),
-      }
+      })
       const { admission, registerConnection, transport } = setup(1)
       const handler = new SseSubscriptionHandler(
         transport,
         mkHeartbeat(),
         mkOptions(),
         undefined,
-        offlineDelivery as never,
+        offlineDelivery,
       )
       const { res } = mkClosableRes()
       const req = mkReq({ headers: { 'last-event-id': 'e-1' } })
-      await handler.authenticateBeforeCommit(req, res)
-      const opening = handler.handle(req, res)
-      jest.advanceTimersByTime(15_000)
+      const guarded = handler.authenticateBeforeCommit(req, res)
+      await jest.advanceTimersByTimeAsync(15_000)
       admission.admit()
       finish([])
-      const stream = await opening
+      await guarded
+      const stream = await handler.handle(req, res)
 
       const error = await new Promise<unknown>((resolve) =>
         stream.subscribe({ error: resolve, complete: () => resolve(undefined) }),
       )
 
-      expect(offlineDelivery.retrieve).toHaveBeenCalledTimes(1)
+      expect(retrieve).toHaveBeenCalledTimes(1)
       expect(error).toBeInstanceOf(ServiceUnavailableException)
       expect(registerConnection).not.toHaveBeenCalled()
     })

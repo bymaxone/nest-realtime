@@ -21,8 +21,8 @@ import {
   mkReq,
   mkRes,
   build,
+  StubDelivery,
 } from '../../../../test/fixtures/sse/subscription-harness'
-import type { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
 import { AuthenticationUnavailableError } from '../../services/authentication-gate.service'
 import { SseSubscriptionHandler } from './sse-subscription.handler'
 
@@ -107,12 +107,12 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
   it('turns an HttpException from the offline-queue read into a generic 500', async () => {
     const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     try {
-      const offlineDelivery = {
+      const offlineDelivery = new StubDelivery({
         retrieve: jest
           .fn()
           .mockRejectedValue(new HttpException('cache 10.20.30.40:6379 down', 503)),
         acknowledge: jest.fn(),
-      } as unknown as OfflineQueueDeliveryService
+      })
       const handler = new SseSubscriptionHandler(
         mkTransport(),
         mkHeartbeat(),
@@ -161,13 +161,13 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
   it('answers a generic 500 when the offline-queue read fails after the guard', async () => {
     const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     try {
-      const offlineDelivery = {
+      const offlineDelivery = new StubDelivery({
         retrieve: jest.fn(async () => {
           await sleep(5)
           throw new Error('connect ECONNREFUSED 10.20.30.40:6379')
         }),
         acknowledge: jest.fn(),
-      } as unknown as OfflineQueueDeliveryService
+      })
       const handler = new SseSubscriptionHandler(
         mkTransport(),
         mkHeartbeat(),

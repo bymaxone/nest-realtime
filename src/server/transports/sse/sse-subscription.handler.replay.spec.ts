@@ -12,7 +12,8 @@ import type { MessageEvent } from '@nestjs/common'
 import type { Subject } from 'rxjs'
 import { firstValueFrom } from 'rxjs'
 import { take } from 'rxjs/operators'
-import type { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
+import type { OfflineQueuedEvent } from '../../interfaces/offline-queue-storage.interface'
+import { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
 import {
   collect,
   mkTransport,
@@ -21,8 +22,15 @@ import {
   mkReq,
   mkRes,
   build,
+  StubDelivery,
 } from '../../../../test/fixtures/sse/subscription-harness'
 import { SseSubscriptionHandler } from './sse-subscription.handler'
+
+/** A queue's read as the library's contract has it: the events after the cursor, in queue order. */
+function afterCursor(events: OfflineQueuedEvent[]) {
+  return async (_userId: string, sinceId: string): Promise<OfflineQueuedEvent[]> =>
+    events.slice(events.findIndex((event) => event.id === sinceId) + 1)
+}
 
 describe('SseSubscriptionHandler — replay and offline queue', () => {
   // A Last-Event-ID replays the buffered events after that id.
@@ -72,12 +80,13 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
   // Offline queue events are mapped to MessageEvents and emitted after ring-buffer replay.
   it('emits offline queue events as MessageEvents when Last-Event-ID is set', async () => {
     const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
-    const offlineDelivery = {
+    const offlineDelivery = new StubDelivery({
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest
         .fn()
         .mockResolvedValue([{ id: 'q1', event: 'queued', data: { x: 1 }, emittedAt: new Date() }]),
       acknowledge: jest.fn().mockResolvedValue(undefined),
-    } as unknown as OfflineQueueDeliveryService
+    })
     const handler = new SseSubscriptionHandler(
       transport,
       mkHeartbeat(),
@@ -132,14 +141,15 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
       emitConnectionEvent: false,
       getReplayEvents: jest.fn().mockReturnValue([]),
     })
-    const offlineDelivery = {
+    const offlineDelivery = new StubDelivery({
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest
         .fn()
         .mockResolvedValue([
           { id: 'off-1', event: 'offline', data: { q: 1 }, emittedAt: new Date() },
         ]),
       acknowledge: jest.fn().mockResolvedValue(undefined),
-    } as unknown as OfflineQueueDeliveryService
+    })
     const handler = new SseSubscriptionHandler(
       transport,
       mkHeartbeat(),
@@ -178,31 +188,55 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
     expect(events[0]?.type).toBe('x')
   })
 
-  // Kills L194 StringLiteral: `e.id ?? ''` → `e.id ?? "Stryker was here!"`.
-  // The ringBufferIds Set is passed as 3rd arg to retrieve; undefined ids must fall back to ''.
-  it('passes empty-string fallback in ringBufferIds when a replay event has no id', async () => {
+  // The ring is read when the stream is built and reconciled with the queue's events then, so an
+  // event that is in both is delivered once, and a replay event with no id drops none of them.
+  it('delivers an event that is in both the ring buffer and the offline queue once', async () => {
+    const inRing: MessageEvent = { id: 'a', type: 'evt', data: {} }
+    const queued = (id: string) => ({ id, event: 'evt', data: {}, emittedAt: new Date() })
+    const transport = mkTransport({
+      getReplayEvents: jest.fn().mockReturnValue([inRing]),
+      emitConnectionEvent: false,
+    })
+    const offlineDelivery = new OfflineQueueDeliveryService({
+      retrieveSince: afterCursor([queued('a'), queued('b')]),
+      acknowledge: async () => undefined,
+      append: async () => undefined,
+    })
+    const handler = new SseSubscriptionHandler(
+      transport,
+      mkHeartbeat(),
+      mkOptions(),
+      undefined,
+      offlineDelivery,
+    )
+
+    const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
+
+    expect(collect(stream).map((e) => e.id)).toEqual(['a', 'b'])
+  })
+
+  it('drops no queued event for a replay event that has no id', async () => {
     const replayEvent: MessageEvent = { type: 'x', data: {} }
-    const retrieveMock = jest.fn().mockResolvedValue([])
     const transport = mkTransport({
       getReplayEvents: jest.fn().mockReturnValue([replayEvent]),
       emitConnectionEvent: false,
     })
-    const offlineDelivery = {
-      retrieve: retrieveMock,
-      acknowledge: jest.fn().mockResolvedValue(undefined),
-    } as unknown as OfflineQueueDeliveryService
+    const offlineDelivery = new OfflineQueueDeliveryService({
+      retrieveSince: afterCursor([{ id: 'q1', event: 'evt', data: {}, emittedAt: new Date() }]),
+      acknowledge: async () => undefined,
+      append: async () => undefined,
+    })
     const handler = new SseSubscriptionHandler(
       transport,
       mkHeartbeat(),
-      mkOptions({ sse: { emitConnectionEvent: false } }),
+      mkOptions(),
       undefined,
       offlineDelivery,
     )
+
     const stream = await handler.handle(mkReq({ headers: { 'last-event-id': '0' } }), mkRes())
-    collect(stream)
-    expect(retrieveMock).toHaveBeenCalledWith('u1', '0', expect.any(Set))
-    const ids = retrieveMock.mock.calls[0]?.[2] as Set<string>
-    expect(ids.has('')).toBe(true)
+
+    expect(collect(stream).map((e) => e.id)).toEqual([undefined, 'q1'])
   })
 
   // Kills L237 ConditionalExpression (`true`) and L237 EqualityOperator (`>= 0`).
@@ -213,10 +247,11 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
       getReplayEvents: jest.fn().mockReturnValue([]),
       emitConnectionEvent: false,
     })
-    const offlineDelivery = {
+    const offlineDelivery = new StubDelivery({
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest.fn().mockResolvedValue([]),
       acknowledge,
-    } as unknown as OfflineQueueDeliveryService
+    })
     const handler = new SseSubscriptionHandler(
       transport,
       mkHeartbeat(),
@@ -236,10 +271,11 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
     const queued = { id: 'q1', event: 'queued', data: { x: 1 }, emittedAt: new Date() }
     const acknowledge = jest.fn().mockResolvedValue(undefined)
     const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
-    const offlineDelivery = {
+    const offlineDelivery = new StubDelivery({
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest.fn().mockResolvedValue([queued]),
       acknowledge,
-    } as unknown as OfflineQueueDeliveryService
+    })
     const handler = new SseSubscriptionHandler(
       transport,
       mkHeartbeat(),
@@ -262,12 +298,13 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
   it('does not acknowledge the offline queue when the stream is never subscribed', async () => {
     const acknowledge = jest.fn().mockResolvedValue(undefined)
     const transport = mkTransport({ getReplayEvents: jest.fn().mockReturnValue([]) })
-    const offlineDelivery = {
+    const offlineDelivery = new StubDelivery({
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest
         .fn()
         .mockResolvedValue([{ id: 'q1', event: 'queued', data: {}, emittedAt: new Date() }]),
       acknowledge,
-    } as unknown as OfflineQueueDeliveryService
+    })
     const handler = new SseSubscriptionHandler(
       transport,
       mkHeartbeat(),
@@ -283,10 +320,10 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
   // Kills the && → || mutation in the queueEvents ternary condition.
   it('does not call retrieve when offlineDelivery is configured but Last-Event-ID is absent', async () => {
     const retrieve = jest.fn().mockResolvedValue([])
-    const offlineDelivery = {
+    const offlineDelivery = new StubDelivery({
       retrieve,
       acknowledge: jest.fn().mockResolvedValue(undefined),
-    } as unknown as OfflineQueueDeliveryService
+    })
     const handler = new SseSubscriptionHandler(
       mkTransport({ emitConnectionEvent: false }),
       mkHeartbeat(),
@@ -306,12 +343,13 @@ describe('SseSubscriptionHandler — replay and offline queue', () => {
       getReplayEvents: jest.fn().mockReturnValue([]),
       emitConnectionEvent: false,
     })
-    const offlineDelivery = {
+    const offlineDelivery = new StubDelivery({
+      retrieveAppended: jest.fn().mockResolvedValue([]),
       retrieve: jest
         .fn()
         .mockResolvedValue([{ id: 'q1', event: 'queued', data: {}, emittedAt: new Date() }]),
       acknowledge,
-    } as unknown as OfflineQueueDeliveryService
+    })
     const handler = new SseSubscriptionHandler(
       transport,
       mkHeartbeat(),
