@@ -151,6 +151,44 @@ describe('useRealtimeSse: resuming after a new EventSource', () => {
     expect(lastInstance().url).toBe(expected)
   })
 
+  // Scenario: other parameters are in the url. Expected: they come back with the same meaning, but
+  // not always the same text, since they are read and written again once there is an id to add. Why:
+  // pinned so that a change of what the reconnect url looks like is a decision and not an accident.
+  it.each([
+    [
+      'a key with no value gains an equals sign',
+      '/realtime/sse?flag',
+      '/realtime/sse?flag=&lastEventId=ev-7',
+    ],
+    [
+      'an encoded plus stays a plus',
+      '/realtime/sse?q=a%2Bb',
+      '/realtime/sse?q=a%2Bb&lastEventId=ev-7',
+    ],
+    [
+      'an encoded space is written as a plus',
+      '/realtime/sse?q=a%20b',
+      '/realtime/sse?q=a+b&lastEventId=ev-7',
+    ],
+    [
+      'an empty parameter is dropped',
+      '/realtime/sse?a=1&&b=2',
+      '/realtime/sse?a=1&b=2&lastEventId=ev-7',
+    ],
+    [
+      'a repeated parameter is kept',
+      '/realtime/sse?a=1&a=2',
+      '/realtime/sse?a=1&a=2&lastEventId=ev-7',
+    ],
+  ])('writes the other parameters again: %s', (_label, url, expected) => {
+    renderHook(() => useRealtimeSse({ url }))
+    receive('ev-7')
+
+    failAndRetry()
+
+    expect(lastInstance().url).toBe(expected)
+  })
+
   it('encodes an id that is not a plain token', () => {
     renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
     receive('a b&c=d#e')
