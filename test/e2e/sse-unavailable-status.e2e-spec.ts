@@ -68,7 +68,7 @@ describe('A transport rejection that reaches HTTP (e2e)', () => {
 
   // Scenario: the user is offline here, the offline queue fails and so does the bus. Expected: 503
   // with the generic body. Why: a plain Error answers 500, which reads as a defect in the
-  // application for what is an outage of its store, and its text would carry the driver's message.
+  // application for what is an outage of its store.
   it('answers 503 with the generic body when an emit has no delivery path', async () => {
     const res = await request((await boot()).getHttpServer()).post('/ops/emit')
 
