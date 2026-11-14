@@ -12,6 +12,10 @@
     "reason": "Tests scripts/check-file-length.mjs, a CI tooling script. It imports no mutated source."
   },
   {
+    "file": "src/extract-release-notes.spec.ts",
+    "reason": "Tests scripts/extract-release-notes.mjs, a release tooling script. It imports no mutated source."
+  },
+  {
     "file": "src/strip-bundle-comments.spec.ts",
     "reason": "Tests the build's bundle comment stripper, a tooling script. It imports no mutated source."
   },

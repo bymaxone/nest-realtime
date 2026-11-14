@@ -108,7 +108,7 @@
     "mutation": "stryker run",
     "mutation:full": "node -e \"require('node:fs').rmSync('reports/stryker-incremental.json',{force:true,recursive:true})\" && stryker run",
     "mutation:dry-run": "stryker run --dryRunOnly",
-    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm lint && pnpm check:mutants && pnpm check:file-length && pnpm test:cov:all && pnpm build && pnpm check:published && pnpm check:surface && pnpm check:runtime",
+    "prepublishOnly": "pnpm verify && pnpm check:runtime",
     "release": "npm publish --provenance --access public",
     "size": "node scripts/check-size.mjs",
     "test": "jest",
@@ -118,6 +118,7 @@
     "test:e2e": "jest --config jest.e2e.config.ts",
     "test:e2e:cross-instance": "jest --config jest.e2e.cross-instance.config.ts --runInBand",
     "test:watch": "jest --watch",
+    "verify": "pnpm clean && pnpm typecheck && pnpm lint && pnpm check:mutants && pnpm check:file-length && pnpm test:cov:all && pnpm build && pnpm check:published && pnpm check:surface && pnpm size && pnpm check:api",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
   "peerDependencies": {
