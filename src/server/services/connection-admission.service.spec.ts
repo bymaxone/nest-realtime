@@ -199,8 +199,8 @@ describe('ConnectionAdmission', () => {
     })
   })
 
-  // The read an SSE reconnect makes before it registers has no bound of its own, so a handshake can
-  // outlive its place; it must hold one again, or not register, rather than go past the limit.
+  // The waits before a connection registers add up, so a handshake can outlive its place; it must
+  // hold one again, or not register, rather than go past the limit.
   describe('a place taken again for a handshake that outlived it', () => {
     beforeEach(() => jest.useFakeTimers())
     afterEach(() => jest.useRealTimers())

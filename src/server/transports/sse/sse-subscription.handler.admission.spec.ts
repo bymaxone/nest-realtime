@@ -141,8 +141,8 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
     beforeEach(() => jest.useFakeTimers())
     afterEach(() => jest.useRealTimers())
 
-    // The offline-queue read before registration has no bound: a handshake can outlive its place,
-    // which another request then takes. It must not register past the limit.
+    // The waits before registration add up, so a handshake can outlive its place, which another
+    // request then takes. It must not register past the limit.
     it('ends the stream with a 503, and registers nothing, when its place was given back and taken', async () => {
       const { admission, handler, registerConnection } = setup(1)
       const { res } = mkClosableRes()
@@ -160,7 +160,7 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
       expect(registerConnection).not.toHaveBeenCalled()
     })
 
-    // The reconnect's offline-queue read is the one wait before registration that nothing bounds.
+    // A slow offline-queue read is one of the waits before registration; it can outlast the place.
     it('ends the stream with a 503, and registers nothing, when a slow offline-queue read outlives its place', async () => {
       let finish: (events: never[]) => void = () => undefined
       const offlineDelivery = {
