@@ -444,8 +444,9 @@ export class SseSubscriptionHandler {
    */
   private activateConnection(p: StreamParams, subscriber: Subscriber<MessageEvent>): void {
     const { connectionId, resolvedAuth, ip, userAgent, subject, close$ } = p
-    // The offline-queue read before this has no bound of its own, so the place may have been given
-    // back by time while the request was alive: it is taken again, or the stream ends, rather than
+    // The waits before this (authentication, the offline-queue read, whatever the application runs
+    // on the request) add up, and a place is given back by time: it may have been taken by another
+    // request while this one was alive. It is taken again, or the stream ends, rather than
     // registering a connection the instance has no room for.
     try {
       p.ticket.renew()
