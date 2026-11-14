@@ -6,6 +6,7 @@
 import Redis from 'ioredis'
 import { createTestInstances } from '../../../test/e2e/helpers/create-test-instance'
 import { FakeRespServer } from '../../../test/fixtures/fake-resp-server'
+import { settlesInThisTurn } from '../../../test/support/settles-in-this-turn'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
@@ -50,11 +51,15 @@ describe('RedisRealtimePubSub.publish during an outage', () => {
 
     await fake.stop()
     await until('the client to start reconnecting', () => redis.status === 'reconnecting')
-    const started = Date.now()
-    await expect(pubsub.publish(message)).rejects.toThrow(
-      '[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is reconnecting)',
-    )
-    expect(Date.now() - started).toBeLessThan(200)
+    // Refused in this turn of the event loop: a publish that queued behind the reconnect would still
+    // be waiting, and nothing here reads the clock.
+    expect(await settlesInThisTurn(() => pubsub.publish(message))).toMatchObject({
+      status: 'rejected',
+      reason: {
+        message:
+          '[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is reconnecting)',
+      },
+    })
 
     await fake.start()
     servers.push(fake)
@@ -79,14 +84,20 @@ describe('RedisRealtimePubSub.publish during an outage', () => {
 
     await fake.stop()
     await until('the client to start reconnecting', () => redis.status === 'reconnecting')
-    const started = Date.now()
-    await expect(instance!.transport.disconnect('c-remote', 'revoked')).rejects.toMatchObject({
-      code: 'REALTIME_PUBSUB_UNAVAILABLE',
+    // Each answers in this turn of the event loop, one by refusing and one by not waiting.
+    expect(
+      await settlesInThisTurn(() => instance!.transport.disconnect('c-remote', 'revoked')),
+    ).toMatchObject({
+      status: 'rejected',
+      reason: {
+        code: 'REALTIME_PUBSUB_UNAVAILABLE',
+        message:
+          '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of c-remote could not be published ([RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is reconnecting))',
+      },
     })
-    await expect(instance!.transport.disconnect('c-remote', 'revoked')).rejects.toThrow(
-      '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of c-remote could not be published ([RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is reconnecting))',
-    )
-    await expect(instance!.transport.emitToUser('u1', 'evt', {})).resolves.toBeUndefined()
-    expect(Date.now() - started).toBeLessThan(400)
+    expect(await settlesInThisTurn(() => instance!.transport.emitToUser('u1', 'evt', {}))).toEqual({
+      status: 'fulfilled',
+      value: undefined,
+    })
   })
 })

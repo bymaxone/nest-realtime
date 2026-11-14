@@ -46,5 +46,9 @@
   {
     "file": "test/fixtures/authenticators/ticket.authenticator.spec.ts",
     "reason": "Tests an example authenticator fixture that documents the IConnectionAuthenticator contract. The fixture is not shipped and is not mutated."
+  },
+  {
+    "file": "src/settles-in-this-turn.spec.ts",
+    "reason": "Tests test tooling, covers no shipped source: it checks the helper that says whether a call settled before the event loop took its next turn, and imports no mutated source."
   }
 ]
