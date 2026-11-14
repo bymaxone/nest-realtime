@@ -28,11 +28,6 @@ async function timersStartedBy(operation: () => Promise<unknown>): Promise<numbe
   }
 }
 
-/** Resolves once `condition` holds, trying again after each turn of the event loop. */
-async function until(condition: () => boolean): Promise<void> {
-  while (!condition()) await new Promise((resolve) => setImmediate(resolve))
-}
-
 /** Resolves once `sub` has the status named by `event`, which ioredis also emits on reaching it. */
 function reached(sub: Redis, event: 'end' | 'reconnecting'): Promise<void> {
   if (sub.status === event) return Promise.resolve()
@@ -151,14 +146,13 @@ describe('RedisRealtimePubSub subscriber that ioredis disconnects on its own', (
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     const fake = await server()
     const { redis } = client(fake.port, () => 40, { reconnectOnError: () => 1 })
+    let deliver: (message: unknown) => void = () => undefined
     const delivered = new Promise<unknown>((resolve) => {
-      void new RedisRealtimePubSub({ client: redis })
-        .subscribe(resolve)
-        .then((unsubscribe) => retire.push(unsubscribe))
+      deliver = resolve
     })
-    // Settle the boot, then script the refusal: the first SUBSCRIBE after the drop is refused, the
+    retire.push(await new RedisRealtimePubSub({ client: redis }).subscribe((m) => deliver(m)))
+    // The boot is settled: script the refusal. The first SUBSCRIBE after the drop is refused, the
     // next one, made after ioredis disconnected the subscriber itself, is answered.
-    await until(() => retire.length > 0)
     let subscribes = 0
     const resubscribed = new Promise<void>((resolve) => {
       fake.respond((command, socket) => {
