@@ -353,7 +353,7 @@ All options are passed to `forRoot()` / `forRootAsync()`. Only `transport` and `
 | **websocket**              | `namespace`, `cors`, `maxHttpBufferSize`, `pingIntervalMs`, `pingTimeoutMs`, `maxConnectionsPerUser`, `emitConnectionEvent`, `redisAdapter`                       | `'/'`, — (Socket.IO defaults)                                        |
 | **reauthenticationPolicy** | `intervalSeconds`, `onFailure` (`'disconnect'` \| `'event'`), `cacheTtlMs`, `revalidateTimeoutMs`, `concurrency`                                                  | `300`, `'disconnect'`, `60000`, `10000`, `8`                         |
 
-`sse.heartbeatMs` must be between 5,000 and 90,000 ms. Any other value, including `NaN` and a non-number, stops the application at start-up with `REALTIME_INVALID_OPTIONS`. `sse.maxQueuedBytes`, `sse.maxQueuedEvents` and `sse.stallHeartbeats` must be integers of 0 or more, and `0` switches that bound off.
+`sse.heartbeatMs` must be between 5,000 and 90,000 ms. Any other value, including `NaN` and a non-number, stops the application at start-up with `REALTIME_INVALID_OPTIONS`. `websocket.pingIntervalMs` and `websocket.pingTimeoutMs` must be integers from 1 to 2147483647 (Socket.IO runs both as timers, and Node runs a longer one as 1 ms). `sse.maxQueuedBytes`, `sse.maxQueuedEvents` and `sse.stallHeartbeats` must be integers of 0 or more, and `0` switches that bound off.
 
 #### Hooks the library waits for
 

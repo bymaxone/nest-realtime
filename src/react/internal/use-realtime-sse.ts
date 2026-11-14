@@ -20,6 +20,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PRESENCE_EVENT_NAMES, RESERVED_EVENT_NAMES } from '../../shared'
+import { nextBackoff } from './backoff'
 /** Options for the SSE internal hook. */
 export interface UseRealtimeSseOptions {
   /** SSE endpoint URL, e.g. `'/realtime/sse'`. */
@@ -221,7 +222,7 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
       // the pending timer rather than stacking one keeps a single retry in flight —
       // otherwise an orphaned earlier timer survives a recovery and fires anyway.
       clearReconnectTimer()
-      const delay = Math.min(reconnectMsRef.current * 2, opts.reconnectMaxMs ?? 30_000)
+      const delay = nextBackoff(reconnectMsRef.current, opts.reconnectMaxMs ?? 30_000)
       reconnectMsRef.current = delay
       timerRef.current = setTimeout(connect, delay)
     }

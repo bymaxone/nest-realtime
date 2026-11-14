@@ -163,6 +163,43 @@ describe('validateOptions', () => {
     }
   })
 
+  // Socket.IO runs these as timers, so they stop where Node's timers do.
+  it.each(['pingIntervalMs', 'pingTimeoutMs'] as const)(
+    'rejects a websocket.%s that is not an integer from 1 to 2147483647, and accepts both ends',
+    (name) => {
+      for (const bad of [
+        0,
+        -1,
+        1.5,
+        Number.NaN,
+        Infinity,
+        '25000',
+        null,
+        2_147_483_648,
+        2 ** 53 - 1,
+      ]) {
+        expect(() =>
+          validateOptions({
+            transport: 'websocket',
+            authenticator,
+            websocket: { [name]: bad } as never,
+          }),
+        ).toThrow(
+          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.${name} must be an integer >= 1 and <= 2147483647, got ${String(bad)}`,
+        )
+      }
+      for (const good of [1, 25_000, 2_147_483_647]) {
+        expect(() =>
+          validateOptions({
+            transport: 'websocket',
+            authenticator,
+            websocket: { [name]: good },
+          }),
+        ).not.toThrow()
+      }
+    },
+  )
+
   it.each(['maxQueuedBytes', 'maxQueuedEvents', 'stallHeartbeats'] as const)(
     'rejects a sse.%s that is not an integer >= 0, and accepts 0 and a positive integer',
     (name) => {
