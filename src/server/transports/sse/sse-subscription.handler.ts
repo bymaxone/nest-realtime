@@ -284,8 +284,9 @@ export class SseSubscriptionHandler {
     const replayEvents = lastEventId
       ? this.transport.getReplayEvents(resolvedAuth.userId, lastEventId)
       : []
-    const ringBufferIds = new Set(replayEvents.map((e) => e.id ?? ''))
-    const queueEvents = authenticated.queueEvents.filter((e) => !ringBufferIds.has(e.id))
+    const queueEvents = authenticated.queueEvents.filter(
+      (queued) => !replayEvents.some((replayed) => replayed.id === queued.id),
+    )
     // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — `of()` with no arguments emits nothing and completes, exactly as `EMPTY` does; the guard picks the clearer expression, not a different stream
     const replay$ = replayEvents.length > 0 ? of(...replayEvents) : EMPTY
 
