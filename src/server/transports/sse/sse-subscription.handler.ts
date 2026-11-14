@@ -364,8 +364,9 @@ export class SseSubscriptionHandler {
    * This runs with the authentication, in the guard, because a refusal that needs I/O is a status
    * only if it is decided before Nest commits the response: with an interceptor registered it
    * commits `200` from a timer once the route returns, and a refusal after that can only end the
-   * stream. A queue that did not answer in time is a `503` with the generic body, and one that failed
-   * is a generic `500`, whatever its error says.
+   * stream. A queue that did not answer in time is a `503` with the generic body; a queue that fails
+   * is reported by the service and gives an empty gap, and anything else it throws is a generic
+   * `500`, whatever its error says.
    */
   private async readGap(req: SseRequest, userId: string): Promise<AuthenticatedRequest['gap']> {
     const lastEventId = singleHeader(req.headers['last-event-id'])
