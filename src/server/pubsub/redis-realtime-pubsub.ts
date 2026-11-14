@@ -36,6 +36,14 @@ const CANNOT_PUBLISH: ReadonlySet<string> = new Set([
  */
 const PUBLISHER_WAIT_MS = 2_000
 
+/**
+ * How long a PUBLISH waits for the server's answer before it is given up on. A healthy Redis
+ * answers in milliseconds, so the bound only matters when it does not: a paused or partitioned
+ * server leaves a connected client reporting `ready` and never replies, and a publish that waited
+ * for it would hold every emit and every revocation behind it.
+ */
+const PUBLISH_WAIT_MS = 2_000
+
 /** The events that name a status other than connecting: each ends a first connection attempt. */
 const CONNECTION_OVER = ['ready', 'close', 'reconnecting', 'end'] as const
 
@@ -128,6 +136,14 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * returns, and never gives up on one waiting behind a peer that does not answer, so a revocation
    * would wait out the whole outage and then be sent after its caller was told it failed. It is
    * refused at once instead, and never handed to the client.
+   *
+   * A client that can publish but whose server stops answering is given {@link PUBLISH_WAIT_MS}:
+   * after it the publish rejects the same way. That rejection means the server did not confirm the
+   * publish in time, not that it was not delivered: the command was already written to the socket
+   * and Redis can still process it when it answers, so a message can arrive after its caller was
+   * told it failed. The command also stays queued in the client until the server answers or the
+   * connection drops; `commandTimeout` on the host's ioredis client is what rejects the command
+   * itself.
    */
   async publish(message: RealtimePubSubMessage): Promise<void> {
     const status = this.#pub.status
@@ -135,7 +151,20 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.connectLazyClient()
       throw this.cannotPublish(`the Redis client is ${status}`)
     }
-    await this.#pub.publish(this.channel, JSON.stringify(message))
+    const sent = this.#pub.publish(this.channel, JSON.stringify(message))
+    let timer: NodeJS.Timeout | undefined
+    const expired = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`)),
+        PUBLISH_WAIT_MS,
+      )
+      timer.unref()
+    })
+    try {
+      await Promise.race([sent, expired])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   /**
