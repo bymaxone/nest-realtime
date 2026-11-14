@@ -28,6 +28,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import request from 'supertest'
 import type { IConnectionAuthenticator } from '../../src/server/interfaces/connection-authenticator.interface'
 import { BymaxRealtimeModule } from '../../src/server/realtime.module'
+import { listeningServer } from '../support/listening-server'
 
 const ENDPOINT = '/realtime/sse'
 
@@ -84,7 +85,9 @@ describe.each([
       withInterceptor,
     )
 
-    const res = await request(app.getHttpServer()).get(ENDPOINT).set('Accept', 'text/event-stream')
+    const res = await request(await listeningServer(app))
+      .get(ENDPOINT)
+      .set('Accept', 'text/event-stream')
 
     expect(res.status).toBe(401)
     expect(res.headers['content-type']).not.toMatch(/text\/event-stream/)
@@ -104,7 +107,9 @@ describe.each([
       withInterceptor,
     )
 
-    const res = await request(app.getHttpServer()).get(ENDPOINT).set('Accept', 'text/event-stream')
+    const res = await request(await listeningServer(app))
+      .get(ENDPOINT)
+      .set('Accept', 'text/event-stream')
 
     expect(res.status).toBe(500)
     expect(res.headers['content-type']).not.toMatch(/text\/event-stream/)
@@ -124,7 +129,9 @@ describe.each([
       withInterceptor,
     )
 
-    const res = await request(app.getHttpServer()).get(ENDPOINT).set('Accept', 'text/event-stream')
+    const res = await request(await listeningServer(app))
+      .get(ENDPOINT)
+      .set('Accept', 'text/event-stream')
 
     expect(res.status).toBe(500)
   })

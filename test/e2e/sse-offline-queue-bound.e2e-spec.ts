@@ -23,6 +23,7 @@ import type { AddressInfo } from 'node:net'
 import request from 'supertest'
 import { BymaxRealtimeModule } from '../../src/server/realtime.module'
 import { ConnectionRegistry } from '../../src/server/services/connection-registry.service'
+import { listeningServer } from '../support/listening-server'
 
 const ENDPOINT = '/realtime/sse'
 
@@ -73,7 +74,7 @@ describe.each([
     await boot()
     const started = Date.now()
 
-    const res = await request(app!.getHttpServer())
+    const res = await request(await listeningServer(app!))
       .get(ENDPOINT)
       .set('Accept', 'text/event-stream')
       .set('Last-Event-ID', 'e-1')
