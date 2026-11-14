@@ -5,6 +5,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { REALTIME_OPTIONS_TOKEN } from '../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { windowedReport } from '../utils/windowed-report'
 import { ConnectionRegistry } from './connection-registry.service'
 
 /** `authenticateTimeoutMs` when it is not set. */
@@ -17,7 +18,6 @@ export const DEFAULT_MAX_CONNECTIONS = 10_000
 const HOLD_MARGIN_MS = 5_000
 
 /** How long a window of refusals is summarised in one log line. */
-const REPORT_WINDOW_MS = 10_000
 
 /** A handshake was refused because the instance already holds `maxConnections` connections. */
 export class ConnectionLimitError extends Error {
@@ -65,8 +65,15 @@ export class ConnectionAdmission {
   private readonly holdMs: number
   /** The places held, oldest first, each with the time it is given back at whatever happens. */
   private readonly held = new Map<symbol, number>()
-  private windowStartedAt = Number.NEGATIVE_INFINITY
-  private refused = 0
+  private readonly refusals = windowedReport(
+    () => 0,
+    (count) => {
+      this.logger.warn(
+        `connections refused since the last report: ${count}, because the instance already holds ` +
+          `${this.max} (maxConnections)`,
+      )
+    },
+  )
 
   constructor(
     @Inject(REALTIME_OPTIONS_TOKEN) options: BymaxRealtimeModuleOptions,
@@ -119,15 +126,6 @@ export class ConnectionAdmission {
 
   /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */
   private refuse(): void {
-    this.refused += 1
-    const now = performance.now()
-    if (now - this.windowStartedAt < REPORT_WINDOW_MS) return
-    this.windowStartedAt = now
-    const count = this.refused
-    this.refused = 0
-    this.logger.warn(
-      `connections refused since the last report: ${count}, because the instance already holds ` +
-        `${this.max} (maxConnections)`,
-    )
+    this.refusals((count) => count + 1)
   }
 }

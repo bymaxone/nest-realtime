@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  17,809 B → 17,815 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  17,854 B → 17,884 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -43,7 +43,9 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     short disconnect timeout of the subscriber, so that retiring one that has ended or is waiting
 //     to reconnect does not wait out ioredis's 2,000 ms default, and the bounded close: a QUIT waited
 //     for up to two seconds, then the connection disconnected, shared by the subscriber's retire and
-//     by the Socket.IO adapter's close)
+//     by the Socket.IO adapter's close, and the one windowed report that the three rate-limited log
+//     lines share: the helper is a closure, which measures 17,854 B; the same helper as a class
+//     measures 17,892 B, so the closure is the shape that stays)
 //   websocket  5,540 B →  5,567 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -68,7 +70,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 17_815 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 17_884 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_567 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_500 },

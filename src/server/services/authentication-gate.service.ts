@@ -14,9 +14,9 @@ import type {
   IConnectionAuthenticator,
 } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { windowedReport } from '../utils/windowed-report'
 
 /** How long a window of refusals is summarised in one log line. */
-const REPORT_WINDOW_MS = 10_000
 
 /**
  * A handshake was refused because the authenticator could not be asked or did not answer in time:
@@ -47,8 +47,15 @@ export class AuthenticationGate {
   private readonly maxPending: number
   private readonly timeoutMs: number
   private pending = 0
-  private windowStartedAt = Number.NEGATIVE_INFINITY
-  private refused = { saturated: 0, timeout: 0 }
+  private readonly refusals = windowedReport(
+    () => ({ saturated: 0, timeout: 0 }),
+    ({ saturated, timeout }) => {
+      this.logger.warn(
+        `handshakes refused since the last report: ${saturated} because ${this.maxPending} were already ` +
+          `waiting for the authenticator, ${timeout} because it did not answer in ${this.timeoutMs} ms`,
+      )
+    },
+  )
 
   constructor(
     @Inject(REALTIME_OPTIONS_TOKEN) options: BymaxRealtimeModuleOptions,
@@ -96,15 +103,6 @@ export class AuthenticationGate {
 
   /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */
   private refuse(reason: 'saturated' | 'timeout'): void {
-    this.refused[reason] += 1
-    const now = performance.now()
-    if (now - this.windowStartedAt < REPORT_WINDOW_MS) return
-    this.windowStartedAt = now
-    const { saturated, timeout } = this.refused
-    this.refused = { saturated: 0, timeout: 0 }
-    this.logger.warn(
-      `handshakes refused since the last report: ${saturated} because ${this.maxPending} were already ` +
-        `waiting for the authenticator, ${timeout} because it did not answer in ${this.timeoutMs} ms`,
-    )
+    this.refusals((refused) => ({ ...refused, [reason]: refused[reason] + 1 }))
   }
 }

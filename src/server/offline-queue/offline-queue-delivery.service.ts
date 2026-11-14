@@ -17,6 +17,7 @@ import type {
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { describeError } from '../utils/describe-error'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
+import { windowedReport } from '../utils/windowed-report'
 
 const RETRIEVE_LIMIT = 200
 
@@ -27,7 +28,6 @@ const DEFAULT_TIMEOUT_MS = 10_000
 const DEFAULT_MAX_PENDING = 1_000
 
 /** How long a window of timeouts is summarised in one log line. */
-const REPORT_WINDOW_MS = 10_000
 
 /** What the first read of a reconnect's gap came to. */
 export interface OfflineQueueRead {
@@ -65,8 +65,14 @@ export class OfflineQueueDeliveryService {
   private readonly timeoutMs: number
   private readonly maxPending: number
   private pending = 0
-  private windowStartedAt = Number.NEGATIVE_INFINITY
-  private timedOut = 0
+  private readonly timeouts = windowedReport(
+    () => 0,
+    (count) => {
+      this.logger.warn(
+        `reconnects given up on since the last report: ${count}, because the offline queue did not answer in ${this.timeoutMs} ms or already had ${this.maxPending} reads waiting`,
+      )
+    },
+  )
 
   constructor(
     @Optional()
@@ -250,14 +256,6 @@ export class OfflineQueueDeliveryService {
 
   /** Count a timeout, and log at most one line for each window, so a hung queue cannot flood the log. */
   private countTimeout(): void {
-    this.timedOut += 1
-    const now = performance.now()
-    if (now - this.windowStartedAt < REPORT_WINDOW_MS) return
-    this.windowStartedAt = now
-    const count = this.timedOut
-    this.timedOut = 0
-    this.logger.warn(
-      `reconnects given up on since the last report: ${count}, because the offline queue did not answer in ${this.timeoutMs} ms or already had ${this.maxPending} reads waiting`,
-    )
+    this.timeouts((count) => count + 1)
   }
 }
