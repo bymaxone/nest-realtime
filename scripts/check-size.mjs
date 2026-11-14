@@ -48,7 +48,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     for a handshake until its socket is registered or its engine connection closes, and the
 //     transport code that marks a refusal the client can retry)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
-//   react      2,456 B →  2,470 B (the resume parameter: the last event id the hook saw, and the
+//   react      2,449 B →  2,470 B (the resume parameter: the last event id the hook saw, and the
 //     url it is added to, before any fragment)
 //
 // What an SSE application pays on the server is `server` + `internal`, since the

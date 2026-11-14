@@ -204,9 +204,10 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
     clearReconnectTimer()
 
     // A new EventSource has seen no event, so it sends no `Last-Event-ID`: the last id seen on this
-    // url goes in the query instead.
-    const resumeAfter = lastIdRef.current?.url === opts.url ? lastIdRef.current.id : undefined
-    const source = new EventSource(withLastEventId(opts.url, resumeAfter), {
+    // url goes in the query instead. An id never outlives a change of url, so one from before a
+    // detour to another url is not brought back.
+    if (lastIdRef.current?.url !== opts.url) lastIdRef.current = undefined
+    const source = new EventSource(withLastEventId(opts.url, lastIdRef.current?.id), {
       withCredentials: opts.withCredentials ?? false,
     })
     sourceRef.current = source

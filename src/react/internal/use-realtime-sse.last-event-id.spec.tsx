@@ -152,4 +152,19 @@ describe('useRealtimeSse: resuming after a new EventSource', () => {
 
     expect(opened()).toEqual(['/realtime/sse', '/other/sse', '/other/sse'])
   })
+
+  // Scenario: the url goes to another stream and back, with no event on the other one. Expected: the
+  // stream for the first url opens bare. Why: an id from before the detour may be arbitrarily old,
+  // and "forgets" has to hold for a url that was seen earlier too.
+  it('does not bring an id back when the url returns to one it had before', () => {
+    const { rerender } = renderHook(({ url }) => useRealtimeSse({ url }), {
+      initialProps: { url: '/realtime/sse' },
+    })
+    receive('ev-7')
+
+    rerender({ url: '/other/sse' })
+    rerender({ url: '/realtime/sse' })
+
+    expect(opened()).toEqual(['/realtime/sse', '/other/sse', '/realtime/sse'])
+  })
 })
