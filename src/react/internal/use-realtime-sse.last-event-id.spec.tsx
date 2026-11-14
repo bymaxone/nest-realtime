@@ -186,6 +186,16 @@ describe('useRealtimeSse: resuming after a new EventSource', () => {
       '/realtime/sse?a=1&a=2',
       '/realtime/sse?a=1&a=2&lastEventId=ev-7',
     ],
+    [
+      'a percent-encoded byte that is not valid UTF-8 is written as the replacement character',
+      '/realtime/sse?q=%FF',
+      '/realtime/sse?q=%EF%BF%BD&lastEventId=ev-7',
+    ],
+    [
+      'a percent-encoded sequence that is valid UTF-8 is unchanged',
+      '/realtime/sse?q=%E2%82%AC',
+      '/realtime/sse?q=%E2%82%AC&lastEventId=ev-7',
+    ],
   ])('writes the other parameters again: %s', (_label, url, expected) => {
     renderHook(() => useRealtimeSse({ url }))
     receive('ev-7')
