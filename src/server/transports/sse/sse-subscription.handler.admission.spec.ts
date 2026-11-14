@@ -24,6 +24,7 @@ import {
 } from '../../services/connection-admission.service'
 import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
+import { SseSubscriptionHandler } from './sse-subscription.handler'
 
 /** A response that lets the test end it, as a client leaving would. */
 function mkClosableRes() {
@@ -56,6 +57,7 @@ function setup(
     admission,
     authenticate,
     registerConnection,
+    transport,
     handler: build(transport, mkHeartbeat(), mkOptions()),
   }
 }
@@ -154,6 +156,39 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
         stream.subscribe({ error: resolve, complete: () => resolve(undefined) }),
       )
 
+      expect(error).toBeInstanceOf(ServiceUnavailableException)
+      expect(registerConnection).not.toHaveBeenCalled()
+    })
+
+    // The reconnect's offline-queue read is the one wait before registration that nothing bounds.
+    it('ends the stream with a 503, and registers nothing, when a slow offline-queue read outlives its place', async () => {
+      let finish: (events: never[]) => void = () => undefined
+      const offlineDelivery = {
+        retrieve: jest.fn(() => new Promise<never[]>((resolve) => (finish = resolve))),
+        acknowledge: jest.fn(),
+      }
+      const { admission, registerConnection, transport } = setup(1)
+      const handler = new SseSubscriptionHandler(
+        transport,
+        mkHeartbeat(),
+        mkOptions(),
+        undefined,
+        offlineDelivery as never,
+      )
+      const { res } = mkClosableRes()
+      const req = mkReq({ headers: { 'last-event-id': 'e-1' } })
+      await handler.authenticateBeforeCommit(req, res)
+      const opening = handler.handle(req, res)
+      jest.advanceTimersByTime(15_000)
+      admission.admit()
+      finish([])
+      const stream = await opening
+
+      const error = await new Promise<unknown>((resolve) =>
+        stream.subscribe({ error: resolve, complete: () => resolve(undefined) }),
+      )
+
+      expect(offlineDelivery.retrieve).toHaveBeenCalledTimes(1)
       expect(error).toBeInstanceOf(ServiceUnavailableException)
       expect(registerConnection).not.toHaveBeenCalled()
     })
