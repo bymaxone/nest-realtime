@@ -38,6 +38,15 @@ const PUBLISHER_WAIT_MS = 2_000
 /** The events that name a status other than connecting: each ends a first connection attempt. */
 const CONNECTION_OVER = ['ready', 'close', 'reconnecting', 'end'] as const
 
+/**
+ * Takes a subscriber's connection down, unless it has already ended. ioredis arms a 2,000 ms timer
+ * in `disconnect()` that only the socket's `close` clears, and a client in the `end` state has no
+ * socket left to close, so a second `disconnect()` would keep the process alive for two seconds.
+ */
+function release(sub: Redis): void {
+  if (sub.status !== 'end') sub.disconnect()
+}
+
 /** A connection failure as text: ioredis wraps a refused connect in an error with no message. */
 function connectionReason(err: unknown): string {
   const code = (err as { code?: unknown } | null)?.code
@@ -211,7 +220,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         try {
           // QUIT queues behind a connection that never came up and would never answer.
           if (connected) await sub.quit()
-          else sub.disconnect()
+          else release(sub)
         } catch {
           // Quit failures are non-fatal; the reference is already cleared so the
           // next subscribe rebuilds a fresh client.
@@ -289,7 +298,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       }
     } catch (err) {
       this.#retired.add(sub)
-      sub.disconnect()
+      release(sub)
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
         RedisRealtimePubSub.name,
