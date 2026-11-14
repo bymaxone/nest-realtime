@@ -105,24 +105,26 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       handedOver = true
       next()
     } catch (err) {
-      // The gate and the admission count and log these once for each window; one line for each
-      // handshake would let an attack flood the log.
-      const unavailable =
-        err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError
-      if (!unavailable) {
-        this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
-      }
-      // The message stays generic. A refusal that is the instance's capacity or the
-      // authenticator's availability carries the transport code, so a client can retry it; any
-      // other failure is not something a client can act on and carries none.
-      next(
-        unavailable
-          ? this.unavailable('Internal Server Error')
-          : new Error('Internal Server Error'),
-      )
+      next(this.refusalFor(socket, err))
     } finally {
       if (!handedOver) ticket?.release()
     }
+  }
+
+  /**
+   * The error a handshake that failed is answered with, after the log line the failure earns.
+   *
+   * The gate and the admission count and log their own refusals once for each window; one line for
+   * each handshake would let an attack flood the log. The message stays generic. A refusal that is
+   * the instance's capacity or the authenticator's availability carries the transport code, so a
+   * client can retry it; any other failure is not something a client can act on and carries none.
+   */
+  private refusalFor(socket: Socket, err: unknown): Error {
+    if (err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError) {
+      return this.unavailable('Internal Server Error')
+    }
+    this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
+    return new Error('Internal Server Error')
   }
 
   /** A `connect_error` carrying `data.code` `REALTIME_TRANSPORT_UNAVAILABLE`, for a handshake the instance cannot take now. */
