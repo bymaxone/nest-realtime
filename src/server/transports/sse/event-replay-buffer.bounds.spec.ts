@@ -228,10 +228,11 @@ describe('EventReplayBuffer: the idle users it keeps', () => {
 
   // The idle limit is about idle entries: a ring with a connection behind it is bounded by the
   // connections, and is never evicted to make room.
-  it('opens a new live user, and evicts no live ring, when every entry is live and the idle limit is full', () => {
+  it('opens a new live user, and evicts neither a live ring nor the idle entry, when the idle limit is full', () => {
     const buffer = bufferWith({ replayMaxIdleUsers: 1 })
-    const users = ['u1', 'u2', 'u3', 'u4', 'u5']
-    for (const user of users) {
+    visit(buffer, 'idle')
+    const live = ['u1', 'u2', 'u3', 'u4', 'u5']
+    for (const user of live) {
       buffer.open(user)
       buffer.append(user, event('a'))
     }
@@ -239,7 +240,9 @@ describe('EventReplayBuffer: the idle users it keeps', () => {
     buffer.open('u6')
     buffer.append('u6', event('a'))
 
-    expect([...users, 'u6'].map((user) => buffer.size(user))).toStrictEqual([1, 1, 1, 1, 1, 1])
+    expect(['idle', ...live, 'u6'].map((user) => buffer.size(user))).toStrictEqual([
+      1, 1, 1, 1, 1, 1, 1,
+    ])
   })
 
   it('evicts the oldest idle entry, not a live one, when a user goes idle past the limit', () => {

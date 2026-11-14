@@ -96,7 +96,7 @@ describe('SseTransport: the events it keeps for replay', () => {
     expect(replay.size('u1')).toBe(1)
   })
 
-  it('keeps the events of every user at shutdown only until the time', async () => {
+  it('stops keeping the events of a user whose connection shutdown closed, once the time has passed', async () => {
     const { transport, replay } = build({ sse: { replayTtlMs: 1_000 } })
     await register(transport, 'c1', 'u1')
     await transport.emitToUser('u1', 'e', { n: 1 })
