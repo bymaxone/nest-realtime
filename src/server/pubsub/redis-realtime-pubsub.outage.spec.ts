@@ -53,7 +53,7 @@ describe('RedisRealtimePubSub.publish during an outage', () => {
     await until('the client to start reconnecting', () => redis.status === 'reconnecting')
     // Refused in this turn of the event loop: a publish that queued behind the reconnect would still
     // be waiting, and nothing here reads the clock.
-    expect(await settlesInThisTurn(pubsub.publish(message))).toMatchObject({
+    expect(await settlesInThisTurn(() => pubsub.publish(message))).toMatchObject({
       status: 'rejected',
       reason: {
         message:
@@ -86,7 +86,7 @@ describe('RedisRealtimePubSub.publish during an outage', () => {
     await until('the client to start reconnecting', () => redis.status === 'reconnecting')
     // Each answers in this turn of the event loop, one by refusing and one by not waiting.
     expect(
-      await settlesInThisTurn(instance!.transport.disconnect('c-remote', 'revoked')),
+      await settlesInThisTurn(() => instance!.transport.disconnect('c-remote', 'revoked')),
     ).toMatchObject({
       status: 'rejected',
       reason: {
@@ -95,7 +95,7 @@ describe('RedisRealtimePubSub.publish during an outage', () => {
           '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of c-remote could not be published ([RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is reconnecting))',
       },
     })
-    expect(await settlesInThisTurn(instance!.transport.emitToUser('u1', 'evt', {}))).toEqual({
+    expect(await settlesInThisTurn(() => instance!.transport.emitToUser('u1', 'evt', {}))).toEqual({
       status: 'fulfilled',
       value: undefined,
     })

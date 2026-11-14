@@ -9,6 +9,7 @@ import type { AddressInfo } from 'node:net'
 import { Logger } from '@nestjs/common'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import type { TestingModule } from '@nestjs/testing'
 import { BymaxRealtimeModule } from '../../realtime.module'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
 
@@ -41,6 +42,74 @@ function openStream(port: number): Promise<ClientRequest> {
   })
 }
 
+/** An application listening for SSE whose `onDisconnect` hook never settles. */
+interface HangingHookApp {
+  readonly app: INestApplication
+  readonly module: TestingModule
+  /** Settles once `onDisconnect` has been called for every stream. */
+  readonly everyHookHasStarted: Promise<void>
+}
+
+/** Boot the application, listening on a free port, with a hook that holds every disconnect open. */
+async function listenWithHangingHooks(): Promise<HangingHookApp> {
+  let started = 0
+  let everyHookStarted: () => void = () => undefined
+  const everyHookHasStarted = new Promise<void>((resolve) => {
+    everyHookStarted = resolve
+  })
+  const hooks = {
+    onDisconnect: (): Promise<void> => {
+      started += 1
+      if (started === STREAMS) everyHookStarted()
+      return new Promise<void>(() => undefined)
+    },
+  }
+  const module = await Test.createTestingModule({
+    imports: [
+      BymaxRealtimeModule.forRoot({
+        transport: 'sse',
+        authenticator: { authenticate: async () => ({ userId: 'u1' }) },
+        hooks,
+        hookTimeoutMs: HOOK_TIMEOUT_MS,
+        sse: { maxConnectionsPerUser: 0 },
+      }),
+    ],
+  }).compile()
+  const app = module.createNestApplication()
+  await app.listen(0)
+  return { app, module, everyHookHasStarted }
+}
+
+/**
+ * Close the application on a clock the test owns. Every stream's hook starts, and its timer is
+ * armed, before any one of them is given up on, so one hook timeout of the clock is enough to
+ * close. Hooks run one after another would never start the last stream's hook, and the close would
+ * stay pending.
+ */
+async function closeOnATestClock(
+  app: INestApplication,
+  everyHookHasStarted: Promise<void>,
+): Promise<void> {
+  jest.useFakeTimers({
+    doNotFake: [
+      'setImmediate',
+      'clearImmediate',
+      'nextTick',
+      'queueMicrotask',
+      'Date',
+      'performance',
+    ],
+  })
+  try {
+    const closing = app.close()
+    await everyHookHasStarted
+    await jest.advanceTimersByTimeAsync(HOOK_TIMEOUT_MS)
+    await closing
+  } finally {
+    jest.useRealTimers()
+  }
+}
+
 describe('closing an application with SSE connections whose onDisconnect never settles', () => {
   let app: INestApplication
   const streams: ClientRequest[] = []
@@ -57,58 +126,14 @@ describe('closing an application with SSE connections whose onDisconnect never s
   it('closes within a few hook timeouts, and ends every stream', async () => {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
-    let started = 0
-    let everyHookStarted: () => void = () => undefined
-    const everyHookHasStarted = new Promise<void>((resolve) => {
-      everyHookStarted = resolve
-    })
-    const hooks = {
-      onDisconnect: (): Promise<void> => {
-        started += 1
-        if (started === STREAMS) everyHookStarted()
-        return new Promise<void>(() => undefined)
-      },
-    }
-    const module = await Test.createTestingModule({
-      imports: [
-        BymaxRealtimeModule.forRoot({
-          transport: 'sse',
-          authenticator: { authenticate: async () => ({ userId: 'u1' }) },
-          hooks,
-          hookTimeoutMs: HOOK_TIMEOUT_MS,
-          sse: { maxConnectionsPerUser: 0 },
-        }),
-      ],
-    }).compile()
-    app = module.createNestApplication()
-    await app.listen(0)
+    const hanging = await listenWithHangingHooks()
+    app = hanging.app
     const port = (app.getHttpServer().address() as AddressInfo).port
     for (let i = 0; i < STREAMS; i++) streams.push(await openStream(port))
-    const connections = module.get(ConnectionRegistry)
+    const connections = hanging.module.get(ConnectionRegistry)
     expect(connections.allByTransport('sse')).toHaveLength(STREAMS)
 
-    // The clock belongs to the test. Every stream's hook starts, and its timer is armed, before any
-    // one of them is given up on, so a single hook timeout of the clock is enough to close. Hooks
-    // run one after another would never start the last stream's hook, and the close would stay
-    // pending: a sequence of hook timeouts is what the old bound on elapsed time was guarding.
-    jest.useFakeTimers({
-      doNotFake: [
-        'setImmediate',
-        'clearImmediate',
-        'nextTick',
-        'queueMicrotask',
-        'Date',
-        'performance',
-      ],
-    })
-    try {
-      const closing = app.close()
-      await everyHookHasStarted
-      await jest.advanceTimersByTimeAsync(HOOK_TIMEOUT_MS)
-      await closing
-    } finally {
-      jest.useRealTimers()
-    }
+    await closeOnATestClock(app, hanging.everyHookHasStarted)
 
     expect(connections.allByTransport('sse')).toHaveLength(0)
   }, 10_000)

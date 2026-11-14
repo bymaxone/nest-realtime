@@ -9,9 +9,12 @@ describe('settlesInThisTurn', () => {
   // Scenario: a promise that is already settled, either way. Expected: its outcome. Why: a refusal
   // and an answer from memory are the calls the helper exists to recognise.
   it('reports what a promise that settles at once came to', async () => {
-    expect(await settlesInThisTurn(Promise.resolve(7))).toEqual({ status: 'fulfilled', value: 7 })
+    expect(await settlesInThisTurn(async () => 7)).toEqual({ status: 'fulfilled', value: 7 })
     const reason = new Error('refused')
-    expect(await settlesInThisTurn(Promise.reject(reason))).toEqual({ status: 'rejected', reason })
+    expect(await settlesInThisTurn(() => Promise.reject(reason))).toEqual({
+      status: 'rejected',
+      reason,
+    })
   })
 
   // Scenario: a promise that settles after a long chain of microtasks. Expected: still its outcome.
@@ -22,7 +25,7 @@ describe('settlesInThisTurn', () => {
       return 'done'
     }
 
-    expect(await settlesInThisTurn(hops())).toEqual({ status: 'fulfilled', value: 'done' })
+    expect(await settlesInThisTurn(hops)).toEqual({ status: 'fulfilled', value: 'done' })
   })
 
   // Scenario: a promise that waits for a macrotask, which is what a reconnect or a reply is.
@@ -31,14 +34,25 @@ describe('settlesInThisTurn', () => {
   it('reports a promise that waits for the next turn as pending, and leaves it to finish', async () => {
     const waiting = new Promise<string>((resolve) => setTimeout(() => resolve('late'), 0))
 
-    expect(await settlesInThisTurn(waiting)).toEqual({ status: 'pending' })
+    expect(await settlesInThisTurn(() => waiting)).toEqual({ status: 'pending' })
     expect(await waiting).toBe('late')
+  })
+
+  // Scenario: a call that defers its answer to a setImmediate callback queued before the helper
+  // ran. Expected: pending. Why: that is a macrotask, so the call did not answer at once, however
+  // early in the turn its callback is queued.
+  it('reports a call that answers from a setImmediate as pending', async () => {
+    const outcome = await settlesInThisTurn(
+      () => new Promise<string>((resolve) => setImmediate(() => resolve('late'))),
+    )
+
+    expect(outcome).toEqual({ status: 'pending' })
   })
 
   // Scenario: a promise that never settles. Expected: pending, not a hang. Why: a broken call
   // must fail its case at once instead of waiting for the test runner's timeout.
   it('reports a promise that never settles as pending', async () => {
-    expect(await settlesInThisTurn(new Promise<void>(() => undefined))).toEqual({
+    expect(await settlesInThisTurn(() => new Promise<void>(() => undefined))).toEqual({
       status: 'pending',
     })
   })
