@@ -43,6 +43,7 @@ function makeSocket(
       },
       query: overrides.query ?? {},
     },
+    conn: { once: jest.fn() },
     disconnect: jest.fn(),
     emit: jest.fn(),
     join: jest.fn().mockResolvedValue(undefined),
@@ -58,6 +59,7 @@ describe('RealtimeGateway — handshake auth extraction', () => {
   beforeEach(async () => {
     transportMock = {
       setServer: jest.fn(),
+      admit: jest.fn(() => ({ release: jest.fn() })),
       authenticate: jest.fn(),
       registerSocket: jest.fn().mockResolvedValue(undefined),
       unregisterSocket: jest.fn().mockResolvedValue(undefined),

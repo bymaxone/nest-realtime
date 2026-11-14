@@ -19,6 +19,7 @@ function makeSocket() {
   return {
     id: 'sock-1',
     handshake: { address: '1.2.3.4', auth: {}, headers: { cookie: '' }, query: {} },
+    conn: { once: jest.fn() },
     disconnect: jest.fn(),
     emit: jest.fn(),
     join: jest.fn().mockResolvedValue(undefined),
@@ -29,6 +30,7 @@ describe('RealtimeGateway: a handshake refused as unavailable', () => {
   let gateway: RealtimeGateway
   let transport: {
     setServer: jest.Mock
+    admit: jest.Mock
     authenticate: jest.Mock
     registerSocket: jest.Mock
     shuttingDown: boolean
@@ -37,6 +39,7 @@ describe('RealtimeGateway: a handshake refused as unavailable', () => {
   beforeEach(async () => {
     transport = {
       setServer: jest.fn(),
+      admit: jest.fn(() => ({ release: jest.fn() })),
       authenticate: jest.fn(),
       registerSocket: jest.fn().mockResolvedValue(undefined),
       shuttingDown: false,

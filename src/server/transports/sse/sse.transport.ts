@@ -36,6 +36,8 @@ import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import { composeRoomId } from '../../utils/compose-room-id'
 import { AuthenticationGate } from '../../services/authentication-gate.service'
+import { ConnectionAdmission, UNBOUNDED_TICKET } from '../../services/connection-admission.service'
+import type { AdmissionTicket } from '../../services/connection-admission.service'
 import { describeError } from '../../utils/describe-error'
 import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
@@ -109,6 +111,10 @@ export class SseTransport implements ITransport {
     @Optional()
     @Inject(REALTIME_OFFLINE_QUEUE_TOKEN)
     private readonly offlineQueue?: IOfflineQueueStorage,
+    // Optional so a transport built by hand keeps working; the module always provides it.
+    @Optional()
+    @Inject(ConnectionAdmission)
+    private readonly admission?: ConnectionAdmission,
   ) {}
 
   /**
@@ -161,6 +167,15 @@ export class SseTransport implements ITransport {
   /** Whether the `connection:established` event should be emitted on connect. */
   get emitConnectionEvent(): boolean {
     return this.options.sse?.emitConnectionEvent !== false
+  }
+
+  /**
+   * Take a place for a connection before it is authenticated.
+   *
+   * @throws ConnectionLimitError when the instance already holds `maxConnections`.
+   */
+  admit(): AdmissionTicket {
+    return this.admission?.admit() ?? UNBOUNDED_TICKET
   }
 
   /** Authenticate a connection through the consumer-provided authenticator. */

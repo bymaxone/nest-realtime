@@ -67,7 +67,21 @@ export interface SseResponse {
   write(chunk: string): unknown
   /** The socket, when the response has one: `bytesWritten` counts what is still buffered in it. */
   readonly socket?:
-    { readonly bytesWritten?: number; readonly writableLength?: number } | null | undefined
+    | {
+        readonly bytesWritten?: number
+        readonly writableLength?: number
+        once?(event: 'close', listener: () => void): unknown
+      }
+    | null
+    | undefined
   /** Bytes the response is holding until the client reads. */
   readonly writableLength?: number | undefined
+  /**
+   * Subscribe once to the response's `close`, which a Node response emits when the connection ends
+   * or the response completes. Express hands the handler such a response; Fastify hands it a reply,
+   * which has no `once` and carries the Node response as `raw`.
+   */
+  once?(event: 'close', listener: () => void): unknown
+  /** The underlying Node response, on a framework whose own response object is a wrapper (Fastify). */
+  readonly raw?: { once?(event: 'close', listener: () => void): unknown } | undefined
 }

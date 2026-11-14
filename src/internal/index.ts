@@ -50,6 +50,12 @@ export {
   AuthenticationGate,
   AuthenticationUnavailableError,
 } from '../server/services/authentication-gate.service'
+export {
+  ConnectionAdmission,
+  ConnectionLimitError,
+  UNBOUNDED_TICKET,
+} from '../server/services/connection-admission.service'
+export type { AdmissionTicket } from '../server/services/connection-admission.service'
 export { RoomRegistry } from '../server/services/room-registry.service'
 export { OfflineQueueDeliveryService } from '../server/offline-queue/offline-queue-delivery.service'
 

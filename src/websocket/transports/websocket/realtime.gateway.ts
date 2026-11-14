@@ -8,6 +8,7 @@ import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets'
 import type { Server, Socket } from 'socket.io'
 import {
   AuthenticationUnavailableError,
+  ConnectionLimitError,
   describeError,
   REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
@@ -18,6 +19,7 @@ import {
   resolveAuthTenant,
 } from '@bymax-one/nest-realtime/internal'
 import type {
+  AdmissionTicket,
   AuthenticationResult,
   ConnectionAuthContext,
   BymaxRealtimeModuleOptions,
@@ -64,16 +66,27 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   /** Identities the handshake middleware resolved, until `handleConnection` takes them. */
   private readonly authenticated = new WeakMap<Socket, AuthenticationResult>()
 
+  /** The place held for a socket from before its handshake is authenticated until it is registered. */
+  private readonly tickets = new WeakMap<Socket, AdmissionTicket>()
+
   /** Authenticate before accept: a refusal is a `connect_error` with `data.code`; a failure is generic. */
   private readonly authenticateHandshake = async (
     socket: Socket,
     next: (err?: Error) => void,
   ): Promise<void> => {
+    let ticket: AdmissionTicket | undefined
+    let handedOver = false
     try {
       if (this.transport.shuttingDown) {
         next(this.unavailable())
         return
       }
+      // Room is taken before the authenticator is asked, and given back when the socket is
+      // registered or its engine connection closes, whichever comes first: a client that leaves
+      // while it is being authenticated never reaches `handleConnection`.
+      const held = this.transport.admit()
+      ticket = held
+      socket.conn.once('close', () => held.release())
       const auth = await this.transport.authenticate(this.buildAuthContext(socket))
       // Authentication is asynchronous, so shutdown may have begun while this handshake waited.
       if (this.transport.shuttingDown) {
@@ -89,14 +102,18 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       const resolvedAuth = resolveAuthTenant(this.options, auth)
       assertIdentityIsNotBlank(resolvedAuth)
       this.authenticated.set(socket, admitRooms(resolvedAuth))
+      this.tickets.set(socket, held)
+      handedOver = true
       next()
     } catch (err) {
-      // The gate counts and logs these once for each window; one line for each handshake would let
-      // an attack flood the log.
-      if (!(err instanceof AuthenticationUnavailableError)) {
+      // The gate and the admission count and log these once for each window; one line for each
+      // handshake would let an attack flood the log.
+      if (!(err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError)) {
         this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
       }
       next(new Error('Internal Server Error'))
+    } finally {
+      if (!handedOver) ticket?.release()
     }
   }
 
@@ -187,6 +204,8 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   }
 
   async handleConnection(socket: Socket): Promise<void> {
+    let ticket = this.tickets.get(socket)
+    this.tickets.delete(socket)
     try {
       // The middleware normally authenticated already; otherwise do it here, failing closed.
       let resolvedAuth = this.authenticated.get(socket)
@@ -196,6 +215,9 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
           socket.disconnect(true)
           return
         }
+        const held = this.transport.admit()
+        ticket = held
+        socket.conn.once('close', () => held.release())
         const auth = await this.transport.authenticate(this.buildAuthContext(socket))
         if (!auth) {
           socket.disconnect(true)
@@ -219,12 +241,14 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         })
       }
     } catch (err) {
-      if (!(err instanceof AuthenticationUnavailableError)) {
+      if (!(err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError)) {
         this.logger.error(
           `handleConnection threw for socket ${socket.id} — disconnecting: ${describeError(err)}`,
         )
       }
       socket.disconnect(true)
+    } finally {
+      ticket?.release()
     }
   }
 

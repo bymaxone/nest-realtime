@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  16,345 B → 16,370 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  16,914 B → 16,950 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -34,12 +34,15 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     the frame Nest writes, the bounded authentication gate, the stall check and the close with its logged reason, and the
 //     hook runner that keeps a consumer's failing lifecycle hook from reaching a connection, and
 //     the bounded re-authentication cycle: the call timeout, the concurrency cap, the per-connection
-//     guard and the boot validation of its options)
-//   websocket  4,882 B →  4,900 B (the Socket.IO stack alone: the start-up message that names the
+//     guard and the boot validation of its options, and the instance-wide connection bound: the
+//     admission service with its rate-limited log line, the place held for a handshake until it is
+//     registered or its response closes, and the 503 that refuses one past `maxConnections`)
+//   websocket  5,098 B →  5,120 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server
-//     is attached, and the refusal of a handshake that arrives once shutdown has begun)
+//     is attached, the refusal of a handshake that arrives once shutdown has begun, and the place held
+//     for a handshake until its socket is registered or its engine connection closes)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
 //   react      2,171 B →  2,400 B
 //
@@ -53,8 +56,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 16_370 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 4_900 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 16_950 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_120 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_400 },
 ]

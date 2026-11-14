@@ -43,6 +43,7 @@ function mkTransport(
   emitConnectionEvent = false,
 ) {
   return {
+    admit: jest.fn(() => ({ release: jest.fn() })),
     authenticate: jest.fn().mockResolvedValue(auth),
     registerConnection: jest.fn().mockResolvedValue(undefined),
     unregisterConnection: jest.fn().mockResolvedValue(undefined),

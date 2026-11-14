@@ -151,12 +151,39 @@ const redisAdapterRegisters = async () => {
   }
 }
 
+// The transports take the instance's admission as an optional dependency, so a second copy of it
+// would not fail to boot: the cap would silently not apply. This is the check that sees that.
+const connectionCapApplies = async () => {
+  const app = await NestFactory.createApplicationContext(
+    ws.BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator, maxConnections: 1 }),
+    { logger: false },
+  )
+  try {
+    const transport = app.get(ws.WebSocketTransport)
+    transport.admit()
+    try {
+      transport.admit()
+    } catch (error) {
+      return error && error.limit === 1 ? '' : 'refused with something other than the limit: ' + error
+    }
+    return 'a second connection was admitted with maxConnections 1: the cap does not apply'
+  } finally {
+    await app.close()
+  }
+}
+
 const main = async () => {
   try {
     const detail = await redisAdapterRegisters()
     if (detail) failures.push('redisAdapter — ' + detail)
   } catch (error) {
     failures.push('redisAdapter — threw: ' + error.message)
+  }
+  try {
+    const detail = await connectionCapApplies()
+    if (detail) failures.push('maxConnections — ' + detail)
+  } catch (error) {
+    failures.push('maxConnections — threw: ' + error.message)
   }
   const cases = [
     ['websocket via ./websocket', () => ws.BymaxRealtimeWebSocketModule.forRoot(options('websocket'))],
@@ -191,7 +218,7 @@ const main = async () => {
     for (const failure of failures) console.error('  ✗ ' + failure)
     process.exit(1)
   }
-  console.log('  ✓ ' + FORMAT + ': Redis adapter registers, ' + cases.length + ' registrations, ' +
+  console.log('  ✓ ' + FORMAT + ': Redis adapter registers, the connection cap applies, ' + cases.length + ' registrations, ' +
     ${EXPORTED_TOKENS.length} + ' tokens each, resolved through the package root')
 }
 

@@ -39,6 +39,7 @@ function mkRecord(userId = 'u1'): ConnectionRecord {
 function mkTransport(authenticator: BymaxRealtimeModuleOptions['authenticator']): SseTransport {
   const record = mkRecord()
   return {
+    admit: jest.fn(() => ({ release: jest.fn() })),
     authenticate: (ctx) => authenticator.authenticate(ctx),
     registerConnection: jest.fn().mockResolvedValue(undefined),
     unregisterConnection: jest.fn().mockResolvedValue(undefined),

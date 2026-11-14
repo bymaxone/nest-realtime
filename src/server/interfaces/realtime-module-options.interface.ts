@@ -98,6 +98,13 @@ export interface BymaxRealtimeModuleOptions {
   hookTimeoutMs?: number
   authenticateTimeoutMs?: number
   maxPendingHandshakes?: number
+  /**
+   * Connections one instance holds at once, both transports together. A handshake that arrives
+   * when the instance already holds this many is refused before the authenticator is asked: a
+   * `503` on SSE, a generic `connect_error` on WebSocket. An integer of 1 or more; defaults to
+   * `10000`. Keep it below the process's file-descriptor limit.
+   */
+  maxConnections?: number
   pubsub?: IRealtimePubSub
   offlineQueue?: IOfflineQueueStorage
   presence?: IPresenceStorage

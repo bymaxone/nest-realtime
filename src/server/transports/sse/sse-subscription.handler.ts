@@ -39,10 +39,13 @@ import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { resolveClientAddress } from '../../utils/client-address'
 import { AuthenticationUnavailableError } from '../../services/authentication-gate.service'
+import { ConnectionLimitError } from '../../services/connection-admission.service'
+import type { AdmissionTicket } from '../../services/connection-admission.service'
 import { describeError } from '../../utils/describe-error'
 import { runHook } from '../../utils/run-hook'
 import { SseTransport } from './sse.transport'
 import { probeOf } from './outbound-backlog'
+import { onResponseClose } from './response-close'
 import { HeartbeatService } from './heartbeat.service'
 
 /** Coerce a possibly-multi-valued header to a single string. */
@@ -119,12 +122,15 @@ function buildMeta(record: ConnectionRecord) {
 interface AuthenticatedRequest {
   context: ConnectionAuthContext
   auth: AuthenticationResult
+  /** The place held for this connection until it is registered or its response closes. */
+  ticket: AdmissionTicket
 }
 
 /** Parameters forwarded from `handle()` into `buildStream()`. */
 interface StreamParams {
   connectionId: string
   resolvedAuth: AuthenticationResult
+  ticket: AdmissionTicket
   ip: string
   userAgent: string | undefined
   res: SseResponse
@@ -230,7 +236,7 @@ export class SseSubscriptionHandler {
     this.authenticated.delete(req)
     let authenticated: AuthenticatedRequest
     try {
-      authenticated = done ?? (await this.authenticateRequest(req))
+      authenticated = done ?? (await this.authenticateRequest(req, res))
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
@@ -238,10 +244,16 @@ export class SseSubscriptionHandler {
     try {
       stream = await this.openStream(req, res, authenticated)
     } catch (err) {
+      authenticated.ticket.release()
       throw this.serverError(err, 'SSE handshake failed')
     }
     // Authentication is asynchronous, so shutdown may have begun while this request waited.
-    this.refuseDuringShutdown()
+    try {
+      this.refuseDuringShutdown()
+    } catch (err) {
+      authenticated.ticket.release()
+      throw err
+    }
     return stream
   }
 
@@ -257,7 +269,7 @@ export class SseSubscriptionHandler {
     res: SseResponse,
     authenticated: AuthenticatedRequest,
   ): Promise<Observable<MessageEvent>> {
-    const { context, auth: resolvedAuth } = authenticated
+    const { context, auth: resolvedAuth, ticket } = authenticated
 
     const connectionId = randomUUID()
     const subject = new Subject<MessageEvent>()
@@ -290,6 +302,7 @@ export class SseSubscriptionHandler {
     return this.buildStream({
       connectionId,
       resolvedAuth,
+      ticket,
       ip: context.ip,
       userAgent: context.userAgent,
       res,
@@ -305,9 +318,9 @@ export class SseSubscriptionHandler {
    * Authenticate ahead of the route, from a guard: with an interceptor registered Nest commits
    * `200` on the next macrotask, so a refusal that needs I/O is a status only if it comes first.
    */
-  async authenticateBeforeCommit(req: SseRequest): Promise<void> {
+  async authenticateBeforeCommit(req: SseRequest, res?: SseResponse): Promise<void> {
     try {
-      this.authenticated.set(req, await this.authenticateRequest(req))
+      this.authenticated.set(req, await this.authenticateRequest(req, res))
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
@@ -318,7 +331,9 @@ export class SseSubscriptionHandler {
     // A handshake the authenticator could not be asked about, or did not answer in time, is the
     // system being unavailable: a 503 with the generic body, counted and logged by the gate once for
     // each window rather than once for each request.
-    if (err instanceof AuthenticationUnavailableError) return new ServiceUnavailableException()
+    if (err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError) {
+      return new ServiceUnavailableException()
+    }
     return err instanceof HttpException ? err : this.serverError(err, what)
   }
 
@@ -327,12 +342,24 @@ export class SseSubscriptionHandler {
     return new InternalServerErrorException()
   }
 
-  private async authenticateRequest(req: SseRequest): Promise<AuthenticatedRequest> {
-    // The authorization header is stripped (not valid for SSE).
-    const context = buildAuthContext(req)
-    const auth = await this.transport.authenticate(context)
-    if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
-    return { context, auth: this.resolveAndValidateIdentity(auth) }
+  private async authenticateRequest(
+    req: SseRequest,
+    res?: SseResponse,
+  ): Promise<AuthenticatedRequest> {
+    // Room for the connection is taken before the authenticator is asked, and given back when the
+    // connection is registered or when the response closes, whichever comes first.
+    const ticket = this.transport.admit()
+    onResponseClose(res, () => ticket.release())
+    try {
+      // The authorization header is stripped (not valid for SSE).
+      const context = buildAuthContext(req)
+      const auth = await this.transport.authenticate(context)
+      if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
+      return { context, auth: this.resolveAndValidateIdentity(auth), ticket }
+    } catch (err) {
+      ticket.release()
+      throw err
+    }
   }
 
   /**
@@ -350,6 +377,7 @@ export class SseSubscriptionHandler {
       // may have begun in between: its snapshot of the connections was taken without this one, so
       // nothing would end it. Nothing has been read from the pipeline or registered yet.
       if (this.transport.shuttingDown) {
+        p.ticket.release()
         subscriber.complete()
         return undefined
       }
@@ -413,8 +441,12 @@ export class SseSubscriptionHandler {
         userAgent,
         outbound: probeOf(p.res),
       })
-      .then(() => this.onRegistered(p, subscriber))
+      .then(() => {
+        p.ticket.release()
+        this.onRegistered(p, subscriber)
+      })
       .catch((err: unknown) => {
+        p.ticket.release()
         this.fireHook(() =>
           this.hooks?.onError?.({ connectionId, error: err as Error, transport: 'sse' }),
         )
