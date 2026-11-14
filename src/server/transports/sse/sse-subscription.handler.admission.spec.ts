@@ -4,7 +4,12 @@
  * @layer transport
  */
 import { EventEmitter } from 'node:events'
-import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
+import {
+  InternalServerErrorException,
+  Logger,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common'
 import type { Response } from 'express'
 import {
   mkTransport,
@@ -40,8 +45,18 @@ function setup(
     { transport: 'sse', authenticator: { authenticate: async () => null }, maxConnections },
     new ConnectionRegistry(),
   )
-  const transport = mkTransport({ authenticate, admit: () => admission.admit() })
-  return { admission, authenticate, handler: build(transport, mkHeartbeat(), mkOptions()) }
+  const registerConnection = jest.fn().mockResolvedValue(undefined)
+  const transport = mkTransport({
+    authenticate,
+    registerConnection,
+    admit: () => admission.admit(),
+  })
+  return {
+    admission,
+    authenticate,
+    registerConnection,
+    handler: build(transport, mkHeartbeat(), mkOptions()),
+  }
 }
 
 describe('SseSubscriptionHandler: the place held for a connection', () => {
@@ -117,5 +132,72 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
 
       expect(() => admission.admit()).not.toThrow()
     })
+  })
+
+  describe('registration, once the handshake has been admitted', () => {
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    // The offline-queue read before registration has no bound: a handshake can outlive its place,
+    // which another request then takes. It must not register past the limit.
+    it('ends the stream with a 503, and registers nothing, when its place was given back and taken', async () => {
+      const { admission, handler, registerConnection } = setup(1)
+      const { res } = mkClosableRes()
+      const req = mkReq()
+      await handler.authenticateBeforeCommit(req, res)
+      jest.advanceTimersByTime(15_000)
+      admission.admit()
+      const stream = await handler.handle(req, res)
+
+      const error = await new Promise<unknown>((resolve) =>
+        stream.subscribe({ error: resolve, complete: () => resolve(undefined) }),
+      )
+
+      expect(error).toBeInstanceOf(ServiceUnavailableException)
+      expect(registerConnection).not.toHaveBeenCalled()
+    })
+
+    // The registry holds a connection from the moment registration is called, so a place held for
+    // the rest of it would count the connection twice, and a burst would be refused at half capacity.
+    it('gives the place back as registration begins, not when it ends', async () => {
+      const { admission, handler, registerConnection } = setup(1)
+      registerConnection.mockReturnValue(new Promise<void>(() => undefined))
+      const { res } = mkClosableRes()
+      const req = mkReq()
+      await handler.authenticateBeforeCommit(req, res)
+      const stream = await handler.handle(req, res)
+
+      stream.subscribe({ error: () => undefined })
+
+      expect(registerConnection).toHaveBeenCalledTimes(1)
+      expect(() => admission.admit()).not.toThrow()
+    })
+  })
+
+  // Only a ConnectionLimitError is expected from taking the place again; anything else is a fault of
+  // ours and is a generic 500 with the detail in the log, as every other fault is.
+  it('answers a generic 500, and logs the cause, when taking the place again fails for another reason', async () => {
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    const transport = mkTransport({
+      admit: () => ({
+        release: jest.fn(),
+        renew: () => {
+          throw new Error('broken')
+        },
+      }),
+    })
+    const handler = build(transport, mkHeartbeat(), mkOptions())
+    const { res } = mkClosableRes()
+    const req = mkReq()
+    await handler.authenticateBeforeCommit(req, res)
+    const stream = await handler.handle(req, res)
+
+    const failure = await new Promise<unknown>((resolve) =>
+      stream.subscribe({ error: resolve, complete: () => resolve(undefined) }),
+    )
+
+    expect(failure).toBeInstanceOf(InternalServerErrorException)
+    expect(error).toHaveBeenCalledWith('SSE registration refused — responding 500: broken')
+    error.mockRestore()
   })
 })

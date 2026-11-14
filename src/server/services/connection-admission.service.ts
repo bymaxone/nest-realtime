@@ -30,10 +30,21 @@ export class ConnectionLimitError extends Error {
 export interface AdmissionTicket {
   /** Give the place back. Safe to call more than once: only the first call counts. */
   release(): void
+  /**
+   * Take the place again if the time bound gave it back while the handshake was still alive, as a
+   * connection that is about to be registered must hold one. Does nothing for a place that is still
+   * held or was released.
+   *
+   * @throws ConnectionLimitError when the place was given back and the instance has since filled.
+   */
+  renew(): void
 }
 
 /** The ticket of a transport with no admission, which holds nothing. */
-export const UNBOUNDED_TICKET: AdmissionTicket = { release: () => undefined }
+export const UNBOUNDED_TICKET: AdmissionTicket = {
+  release: () => undefined,
+  renew: () => undefined,
+}
 
 /**
  * Decides, before a handshake is authenticated, whether the instance has room for one more
@@ -72,14 +83,29 @@ export class ConnectionAdmission {
    * @throws ConnectionLimitError when the instance already holds `maxConnections`.
    */
   admit(): AdmissionTicket {
+    const place = Symbol('place')
+    this.take(place)
+    let released = false
+    return {
+      release: () => {
+        released = true
+        this.held.delete(place)
+      },
+      renew: () => {
+        this.reclaim()
+        if (!released && !this.held.has(place)) this.take(place)
+      },
+    }
+  }
+
+  /** Hold `place` if the instance has room, after giving back the places whose time has passed. */
+  private take(place: symbol): void {
     this.reclaim()
     if (this.registry.count() + this.held.size >= this.max) {
       this.refuse()
       throw new ConnectionLimitError(this.max)
     }
-    const place = Symbol('place')
     this.held.set(place, performance.now() + this.holdMs)
-    return { release: () => void this.held.delete(place) }
   }
 
   /** Give back the places whose time has passed; they were taken in order, so the oldest come first. */

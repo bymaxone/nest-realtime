@@ -168,4 +168,30 @@ describe('RealtimeGateway: the place held for a socket', () => {
     finish({ userId: 'u1' })
     await pending
   })
+
+  // The registry holds a socket from the moment registration is called, so a place held for the rest
+  // of it, an `onConnect` hook included, would count the socket twice.
+  it('gives the place back as registration begins, not when a slow onConnect hook ends', async () => {
+    const { admission, gateway, middleware, transport } = await setup(
+      jest.fn().mockResolvedValue({ userId: 'u1' }),
+    )
+    transport.registerSocket.mockReturnValue(new Promise<void>(() => undefined))
+    const { socket } = makeSocket()
+    await middleware(socket, jest.fn())
+
+    void gateway.handleConnection(socket as never)
+
+    expect(transport.registerSocket).toHaveBeenCalledTimes(1)
+    expect(() => admission.admit()).not.toThrow()
+  })
+
+  it('gives the place back when a socket the middleware never saw is refused its credentials', async () => {
+    const { admission, gateway } = await setup(jest.fn().mockResolvedValue(null))
+    const { socket } = makeSocket()
+
+    await gateway.handleConnection(socket as never)
+
+    expect(socket.disconnect).toHaveBeenCalledWith(true)
+    expect(() => admission.admit()).not.toThrow()
+  })
 })

@@ -46,7 +46,7 @@ function mkTransport(
   replayEvents: MessageEvent[] = [],
 ): SseTransport {
   return {
-    admit: jest.fn(() => ({ release: jest.fn() })),
+    admit: jest.fn(() => ({ release: jest.fn(), renew: jest.fn() })),
     authenticate: jest.fn().mockResolvedValue(auth),
     registerConnection: jest.fn().mockResolvedValue(undefined),
     unregisterConnection: jest.fn().mockResolvedValue(undefined),

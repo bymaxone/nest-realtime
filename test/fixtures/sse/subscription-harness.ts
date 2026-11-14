@@ -55,7 +55,7 @@ export function mkRecord(
 export function mkTransport(over: Partial<Record<string, unknown>> = {}): SseTransport {
   const defaultRecord = mkRecord('conn-1', 'u1')
   return {
-    admit: jest.fn(() => ({ release: jest.fn() })),
+    admit: jest.fn(() => ({ release: jest.fn(), renew: jest.fn() })),
     authenticate: jest.fn().mockResolvedValue({ userId: 'u1', tenantId: 't1' }),
     registerConnection: jest.fn().mockResolvedValue(undefined),
     unregisterConnection: jest.fn().mockResolvedValue(undefined),

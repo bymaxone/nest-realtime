@@ -198,4 +198,50 @@ describe('ConnectionAdmission', () => {
       expect(() => admission.admit()).toThrow(ConnectionLimitError)
     })
   })
+
+  // The read an SSE reconnect makes before it registers has no bound of its own, so a handshake can
+  // outlive its place; it must hold one again, or not register, rather than go past the limit.
+  describe('a place taken again for a handshake that outlived it', () => {
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    it('is held again when there is room', () => {
+      const { admission } = build(1, 1_000)
+      const ticket = admission.admit()
+      jest.advanceTimersByTime(6_000)
+
+      ticket.renew()
+
+      expect(() => admission.admit()).toThrow(ConnectionLimitError)
+    })
+
+    it('is refused when the instance has filled since, and the one that filled it keeps its place', () => {
+      const { admission } = build(1, 1_000)
+      const late = admission.admit()
+      jest.advanceTimersByTime(6_000)
+      admission.admit()
+
+      expect(() => late.renew()).toThrow(ConnectionLimitError)
+      expect(() => admission.admit()).toThrow(ConnectionLimitError)
+    })
+
+    it('does nothing for a place that is still held', () => {
+      const { admission } = build(2, 1_000)
+      const ticket = admission.admit()
+      admission.admit()
+
+      expect(() => ticket.renew()).not.toThrow()
+      expect(() => admission.admit()).toThrow(ConnectionLimitError)
+    })
+
+    it('does not bring back a place that was released', () => {
+      const { admission } = build(1, 1_000)
+      const ticket = admission.admit()
+      ticket.release()
+
+      ticket.renew()
+
+      expect(() => admission.admit()).not.toThrow()
+    })
+  })
 })

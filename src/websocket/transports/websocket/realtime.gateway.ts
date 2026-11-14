@@ -228,7 +228,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         resolvedAuth = admitRooms(resolvedAuth)
       }
 
-      await this.transport.registerSocket(socket, resolvedAuth)
+      const registering = this.transport.registerSocket(socket, resolvedAuth)
+      // The registry holds the socket from the call on, so the place would be counted twice for as
+      // long as the rest of the registration, a consumer's `onConnect` hook included, takes.
+      ticket?.release()
+      await registering
 
       if (this.options.websocket?.emitConnectionEvent !== false) {
         socket.emit(RESERVED_EVENT_NAMES.CONNECTION_ESTABLISHED, {

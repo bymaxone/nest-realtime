@@ -39,7 +39,7 @@ describe('RealtimeGateway: a handshake refused as unavailable', () => {
   beforeEach(async () => {
     transport = {
       setServer: jest.fn(),
-      admit: jest.fn(() => ({ release: jest.fn() })),
+      admit: jest.fn(() => ({ release: jest.fn(), renew: jest.fn() })),
       authenticate: jest.fn(),
       registerSocket: jest.fn().mockResolvedValue(undefined),
       shuttingDown: false,

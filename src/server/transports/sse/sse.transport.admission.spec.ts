@@ -27,7 +27,11 @@ describe('SseTransport.admit', () => {
   it('holds nothing, and bounds nothing, when it was built without an admission', () => {
     const { transport } = build()
 
-    for (let i = 0; i < 5; i += 1) transport.admit().release()
+    for (let i = 0; i < 5; i += 1) {
+      const ticket = transport.admit()
+      ticket.renew()
+      ticket.release()
+    }
     expect(() => transport.admit()).not.toThrow()
   })
 })

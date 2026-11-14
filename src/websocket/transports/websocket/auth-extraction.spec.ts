@@ -59,7 +59,7 @@ describe('RealtimeGateway — handshake auth extraction', () => {
   beforeEach(async () => {
     transportMock = {
       setServer: jest.fn(),
-      admit: jest.fn(() => ({ release: jest.fn() })),
+      admit: jest.fn(() => ({ release: jest.fn(), renew: jest.fn() })),
       authenticate: jest.fn(),
       registerSocket: jest.fn().mockResolvedValue(undefined),
       unregisterSocket: jest.fn().mockResolvedValue(undefined),

@@ -431,22 +431,30 @@ export class SseSubscriptionHandler {
    */
   private activateConnection(p: StreamParams, subscriber: Subscriber<MessageEvent>): void {
     const { connectionId, resolvedAuth, ip, userAgent, subject, close$ } = p
-    this.transport
-      .registerConnection({
-        connectionId,
-        auth: resolvedAuth,
-        subject,
-        close$,
-        ip,
-        userAgent,
-        outbound: probeOf(p.res),
-      })
-      .then(() => {
-        p.ticket.release()
-        this.onRegistered(p, subscriber)
-      })
+    // The offline-queue read before this has no bound of its own, so the place may have been given
+    // back by time while the request was alive: it is taken again, or the stream ends, rather than
+    // registering a connection the instance has no room for.
+    try {
+      p.ticket.renew()
+    } catch (err) {
+      subscriber.error(this.toClientError(err, 'SSE registration refused'))
+      return
+    }
+    const registering = this.transport.registerConnection({
+      connectionId,
+      auth: resolvedAuth,
+      subject,
+      close$,
+      ip,
+      userAgent,
+      outbound: probeOf(p.res),
+    })
+    // The registry holds the connection from the call on, so the place would be counted twice for as
+    // long as the rest of the registration takes.
+    p.ticket.release()
+    registering
+      .then(() => this.onRegistered(p, subscriber))
       .catch((err: unknown) => {
-        p.ticket.release()
         this.fireHook(() =>
           this.hooks?.onError?.({ connectionId, error: err as Error, transport: 'sse' }),
         )
