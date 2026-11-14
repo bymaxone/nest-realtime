@@ -15,13 +15,15 @@
  * rejects every public token with `UnknownElementException` while the source
  * suite, the type tests and `attw` all stay green.
  *
- * Usage: `node scripts/check-consumer-runtime.mjs` (run after `pnpm build`).
+ * Usage: `node scripts/check-consumer-runtime.mjs` (run after `pnpm build`) packs the repository
+ * itself. With `PACKAGE_TARBALL` set to the path of a tarball, it boots that file instead and packs
+ * nothing, so a release can run this gate on the exact file it publishes.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -248,13 +250,46 @@ function run(command, args, options = {}) {
   return execFileSync(command, args, { encoding: 'utf8', stdio: 'pipe', ...options })
 }
 
+/**
+ * Packs this repository into `packDir` and returns the tarball's path.
+ *
+ * `--ignore-scripts` keeps `prepublishOnly` from rebuilding underneath the artifact this gate is
+ * meant to inspect. The tarball is located by reading the directory it was packed into, not by
+ * parsing `npm pack`'s stdout: inside a publish, npm writes notices around the filename, so taking
+ * the last line yields a path with trailing text and `tar` fails on a name that does not exist. The
+ * directory is freshly created and holds exactly one archive. `npm_config_dry_run` is cleared for
+ * the child: a `npm publish --dry-run` pre-flight exports it, the nested pack inherits it, and a dry
+ * pack writes no file, so the gate would report a missing tarball for a reason that has nothing to
+ * do with the package. Cleared, the gate means the same thing in every context it can be invoked
+ * from. `cwd: rootDir`: the package to pack is this repository's, whatever directory the script was
+ * invoked from; without it the gate would inspect whichever package npm resolved from the caller's
+ * cwd.
+ */
+function packRepository() {
+  const packEnv = { ...process.env }
+  delete packEnv['npm_config_dry_run']
+  run('npm', ['pack', '--ignore-scripts', '--silent', '--pack-destination', packDir], {
+    cwd: rootDir,
+    env: packEnv,
+  })
+  const packed = readdirSync(packDir).filter((name) => name.endsWith('.tgz'))
+  if (packed.length !== 1) {
+    throw new Error(`expected one tarball in ${packDir}, found ${packed.length}`)
+  }
+  return join(packDir, packed[0])
+}
+
 function cleanup() {
   rmSync(consumerDir, { recursive: true, force: true })
 }
 
 console.log('Consumer runtime gate')
 
-if (!existsSync(join(rootDir, 'dist'))) {
+// A tarball the caller supplies is the artifact under test; without one this gate packs the repository.
+// An empty variable is no tarball: `resolve('')` is the current directory, which `tar` cannot open.
+const suppliedTarball = process.env['PACKAGE_TARBALL'] || undefined
+
+if (suppliedTarball === undefined && !existsSync(join(rootDir, 'dist'))) {
   console.error('✗ dist/ is missing — run `pnpm build` first')
   process.exit(1)
 }
@@ -264,32 +299,8 @@ const packDir = mkdtempSync(join(tmpdir(), 'nest-realtime-pack-'))
 let failed = false
 
 try {
-  // `--ignore-scripts` keeps `prepublishOnly` from rebuilding underneath the
-  // artifact this gate is meant to inspect.
-  // The tarball is located by reading the directory it was packed into, not by
-  // parsing `npm pack`'s stdout. Inside a publish, npm writes notices around the
-  // filename, so taking the last line yields a path with trailing text and `tar`
-  // fails on a name that does not exist. The directory is freshly created and
-  // holds exactly one archive.
-  // `npm_config_dry_run` is cleared for the child: a `npm publish --dry-run`
-  // pre-flight exports it, the nested pack inherits it, and a dry pack writes no
-  // file — so the gate would report a missing tarball for a reason that has
-  // nothing to do with the package. Cleared, the gate means the same thing in
-  // every context it can be invoked from.
-  const packEnv = { ...process.env }
-  delete packEnv['npm_config_dry_run']
-  // `cwd: rootDir`: the package to pack is this repository's, whatever directory
-  // the script was invoked from. Without it the gate would inspect whichever
-  // package npm resolved from the caller's cwd.
-  run('npm', ['pack', '--ignore-scripts', '--silent', '--pack-destination', packDir], {
-    cwd: rootDir,
-    env: packEnv,
-  })
-  const packed = readdirSync(packDir).filter((name) => name.endsWith('.tgz'))
-  if (packed.length !== 1) {
-    throw new Error(`expected one tarball in ${packDir}, found ${packed.length}`)
-  }
-  const tarball = join(packDir, packed[0])
+  const tarball = suppliedTarball === undefined ? packRepository() : resolve(suppliedTarball)
+  if (!existsSync(tarball)) throw new Error(`the tarball ${tarball} does not exist`)
 
   const packageDir = join(consumerDir, 'node_modules', packageName)
   mkdirSync(packageDir, { recursive: true })
