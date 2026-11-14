@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Closing the application waited for ever on a Redis that had stopped answering.** The Redis pub/sub subscriber is closed with a `QUIT`, a command on a connection, and on a connection that accepts the socket and never replies (a paused or partitioned Redis) it never settles, so `app.close()` stayed pending until the process was killed. The close now waits two seconds for the reply and then disconnects the connection. The subscriber that `RealtimeIoAdapter` opens for the Socket.IO Redis adapter with `pubClient.duplicate()` was never closed at all; it now is, in `dispose()`, once every server has closed, and on one bound for all of them. Your `pubClient` is never closed or changed.
+- **A failing command of the Socket.IO Redis adapter's subscriber could end the process.** The adapter sends its `subscribe` and `unsubscribe` without awaiting them, so a command that failed, as every pending one does when its connection is closed, was an unhandled rejection. Each is now handled, and logged once per connection by the error's class only, never its message.
+
+#### Apply to a derived backend
+
+`RealtimeIoAdapter` gains a public `dispose()`, which closes the subscriber connection it opened; a class that extends it and overrides `dispose()` must call `super.dispose()`, or that connection stays open. Nothing else changes. Against a healthy Redis a shutdown is as it was; against one that does not answer it now finishes instead of never finishing, waiting a bounded time for each Redis connection it closes. The documentation said the library never opens its own Redis connection; the Socket.IO Redis adapter's subscriber is one, and `RealtimeIoAdapter` is what closes it.
+
 ## [1.2.14] - 2026-11-14
 
 ### Security
@@ -44,8 +53,6 @@ A `revalidate` that does not return `true` on every path now disconnects the con
 - **The memory kept for re-authentication no longer outlives the connection.** The cache of successful checks was a map that was cleared only on revocation and at shutdown, so every connection that was revalidated and then closed left an entry behind (1,000 closed connections left 1,000). It now lives on the connection's record.
 
 - **A re-authentication failure could leave a connection connected.** When a connection's credentials were refused, a `onReauthenticationFailed` hook that threw before it returned (a plain function, which the interface allows) aborted the failure handling before the connection was disconnected, so a failing notification hook could keep a connection whose credentials had been refused until the next cycle, and the same on every cycle after. The hook's failure is now logged and the connection is disconnected as before.
-
-### Security
 
 - **An authenticator that never answered held every handshake for ever, and nothing limited how many could be waiting.** `authenticate` was awaited with no time limit, on SSE and on WebSocket, so a backend that accepts the request and never answers left every request or handshake pending, each holding a socket and a request, with no cap: one slow dependency, or one attacker, could exhaust the instance. A call that has not settled in the new `authenticateTimeoutMs` (default 10,000 ms) is now given up on, and the client is refused: a `503` with the generic body on SSE, the generic `connect_error` on WebSocket, and nothing about the cause reaches the client. At most `maxPendingHandshakes` (default 1,000) calls are waiting at once across both transports, and a call keeps its place until it actually settles, so an authenticator that never answers fills the limit and further handshakes are refused at once without being asked, instead of being given a new call each. A slow backend can therefore hold the limit full for as long as it stays slow, which is intended. The refusals are logged once for each ten seconds with a count, and nothing of the request is in the line.
 

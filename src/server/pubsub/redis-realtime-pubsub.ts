@@ -10,6 +10,7 @@ import type {
   RealtimePubSubMessage,
 } from '../interfaces/realtime-pubsub.interface'
 import { describeError } from '../utils/describe-error'
+import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
 
 /** The shortest time between two reports of dropped malformed payloads. */
@@ -209,8 +210,9 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         const connected = this.#subscribed
         this.#subscribed = false
         try {
-          // QUIT queues behind a connection that never came up and would never answer.
-          if (connected) await sub.quit()
+          // QUIT queues behind a connection that never came up and would never answer, and on one
+          // that stopped answering it never settles: closing waits for it only up to a bound.
+          if (connected) await quitWithin(sub)
           else sub.disconnect()
         } catch {
           // Quit failures are non-fatal; the reference is already cleared so the

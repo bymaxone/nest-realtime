@@ -9,14 +9,18 @@ import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
 import type { Server, ServerOptions } from 'socket.io'
 import {
   describeError,
+  quitWithin,
   REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
   realtimeError,
 } from '@bymax-one/nest-realtime/internal'
-import type { BymaxRealtimeModuleOptions } from '@bymax-one/nest-realtime/internal'
+import type { BymaxRealtimeModuleOptions, QuitableClient } from '@bymax-one/nest-realtime/internal'
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
 type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
+
+/** The commands the Socket.IO Redis adapter sends on its subscriber connection. */
+const ADAPTER_COMMANDS = ['subscribe', 'psubscribe', 'unsubscribe', 'punsubscribe'] as const
 
 const realtimeServers = new WeakSet<object>()
 
@@ -52,6 +56,8 @@ export function isRealtimeIoServer(server: unknown): boolean {
 export class RealtimeIoAdapter extends IoAdapter {
   private readonly adapterLogger = new Logger(RealtimeIoAdapter.name)
   private readonly options: BymaxRealtimeModuleOptions
+  /** The subscriber connections this adapter opened for the Redis adapter, closed with it. */
+  private readonly subscribers = new Set<QuitableClient>()
 
   constructor(app: INestApplicationContext) {
     super(app)
@@ -119,17 +125,74 @@ export class RealtimeIoAdapter extends IoAdapter {
   }
 
   /**
+   * Closes the subscriber connections this adapter opened, after Nest has closed every server.
+   *
+   * The caller's `pubClient` is not touched: it belongs to the caller. Each connection is quit with
+   * a bound, and all of them at once, so a Redis that stopped answering costs one bound and not one
+   * per connection.
+   */
+  override async dispose(): Promise<void> {
+    await super.dispose()
+    const closing = [...this.subscribers].map((sub) => quitWithin(sub))
+    this.subscribers.clear()
+    await Promise.allSettled(closing)
+  }
+
+  /**
+   * Handles the rejection of the subscriber commands the Socket.IO Redis adapter sends and never
+   * awaits. Its `subscribe` at boot and its `unsubscribe` at close discard their promises, so a
+   * command that fails, as every pending one does when the connection is closed or gives up,
+   * would be an unhandled rejection that ends the process.
+   *
+   * Each command still returns its own promise, so anything that awaits it sees the rejection; a
+   * handler is attached beside it. The failure is logged once per connection, by its class only: the
+   * message of a connection error can carry the host or a credential.
+   */
+  private guardCommands(sub: QuitableClient): void {
+    const commands = sub as unknown as Record<string, ((...args: unknown[]) => unknown) | undefined>
+    let reported = false
+    for (const name of ADAPTER_COMMANDS) {
+      const original = commands[name]
+      if (original === undefined) continue
+      commands[name] = (...args: unknown[]) => {
+        const pending = original.apply(sub, args)
+        Promise.resolve(pending).catch((err: unknown) => {
+          if (reported) return
+          reported = true
+          const kind = (Object(err).constructor?.name as string | undefined) ?? 'Error'
+          this.adapterLogger.warn(`Redis adapter subscriber command failed (${kind})`)
+        })
+        return pending
+      }
+    }
+  }
+
+  /**
    * Install `@socket.io/redis-adapter`. A deterministic failure fails the boot: a
    * silent single-instance server drops cross-node messages. An unreachable Redis
    * is not one; reconnecting stays with the client.
    */
   private installRedisAdapter(server: { adapter: (a: unknown) => void }, pubClient: unknown): void {
+    let sub: QuitableClient | undefined
     try {
       const { createAdapter } = require('@socket.io/redis-adapter') as RedisAdapterModule
-      const pub = pubClient as { duplicate: () => unknown }
-      const sub = pub.duplicate()
+      const pub = pubClient as { duplicate: (overrides: object) => unknown }
+      // `disconnectTimeout` is how long ioredis lets a socket close after `disconnect()`; a closed
+      // connection has nothing left to clear it, so the default would hold the process for it.
+      sub = pub.duplicate({ disconnectTimeout: 1 }) as QuitableClient
+      this.subscribers.add(sub)
+      this.guardCommands(sub)
       server.adapter(createAdapter(pub as never, sub as never))
     } catch (err) {
+      // A connection opened for an adapter that failed to install has no owner left to close it.
+      if (sub !== undefined) {
+        this.subscribers.delete(sub)
+        try {
+          sub.disconnect()
+        } catch {
+          // The install failure below is the one to report; a failed release must not replace it.
+        }
+      }
       const reason = describeError(err)
       throw realtimeError(
         REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED,

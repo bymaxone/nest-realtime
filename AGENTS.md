@@ -288,8 +288,8 @@ hook signatures, the test patterns and the error-code table are in
 - `EventReplayBuffer` is a per-user ring buffer of the last `replayBufferSize` events. On reconnect,
   `SseSubscriptionHandler` replays what follows `Last-Event-ID` before the live stream.
 - The Redis adapter is wired in `RealtimeIoAdapter` when `websocket.redisAdapter.pubClient` is given; it
-  calls `.duplicate()` on that client for the subscriber, and the library never opens its own Redis
-  connection. An adapter that cannot be installed fails the boot (`REALTIME_REDIS_ADAPTER_FAILED`); an
+  calls `.duplicate()` on that client for the subscriber. That connection is the library's: `RealtimeIoAdapter.dispose()`
+  closes it after every server has closed, with a bounded QUIT, and the caller's client is never closed or changed. An adapter that cannot be installed fails the boot (`REALTIME_REDIS_ADAPTER_FAILED`); an
   unreachable Redis does not. The ESM bundle declares its own `require` for this load; `pnpm size` and
   `pnpm check:runtime` fail if that is lost.
 
