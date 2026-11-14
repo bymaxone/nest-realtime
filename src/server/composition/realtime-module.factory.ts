@@ -28,6 +28,7 @@ import { InMemoryPubSub } from '../pubsub/in-memory-pubsub'
 import { ConnectionRegistry } from '../services/connection-registry.service'
 import { EventIdGenerator } from '../services/event-id-generator.service'
 import { RealtimeService } from '../services/realtime.service'
+import { AuthenticationGate } from '../services/authentication-gate.service'
 import { ReauthenticationService } from '../services/reauthentication.service'
 import { RoomRegistry } from '../services/room-registry.service'
 import { EventReplayBuffer } from '../transports/sse/event-replay-buffer'
@@ -67,6 +68,7 @@ const SHARED_SERVICES = [
   RealtimeService,
   ReauthenticationService,
   OfflineQueueDeliveryService,
+  AuthenticationGate,
 ]
 
 /**

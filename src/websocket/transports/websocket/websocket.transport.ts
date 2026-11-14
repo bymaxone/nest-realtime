@@ -7,7 +7,6 @@ import type { Server, Socket } from 'socket.io'
 import {
   ConnectionRegistry,
   RoomRegistry,
-  REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
   REALTIME_OPTIONS_TOKEN,
   ROOM_PREFIXES,
@@ -16,10 +15,11 @@ import {
   describeError,
   runHook,
   DEFAULT_HOOK_TIMEOUT_MS,
+  AuthenticationGate,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   ITransport,
-  IConnectionAuthenticator,
+  ConnectionAuthContext,
   AuthenticationResult,
   IConnectionLifecycleHooks,
   BymaxRealtimeModuleOptions,
@@ -59,7 +59,7 @@ export class WebSocketTransport implements ITransport {
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
     @Inject(RoomRegistry) private readonly rooms: RoomRegistry,
-    @Inject(REALTIME_AUTHENTICATOR_TOKEN) private readonly auth: IConnectionAuthenticator,
+    @Inject(AuthenticationGate) private readonly gate: AuthenticationGate,
     @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks: IConnectionLifecycleHooks,
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
   ) {}
@@ -139,16 +139,15 @@ export class WebSocketTransport implements ITransport {
   }
 
   /**
-   * Expose the configured authenticator to the gateway.
+   * Authenticate a handshake through the gate both transports share: bounded in time, and in how
+   * many are waiting at once. The gateway calls this rather than the authenticator, which also
+   * avoids injecting the token in it.
    *
-   * The gateway uses this to avoid a circular injection: `RealtimeGateway` →
-   * `WebSocketTransport` → authenticator, rather than injecting the token
-   * directly in the gateway.
-   *
-   * @returns The consumer-provided `IConnectionAuthenticator` instance.
+   * @throws AuthenticationUnavailableError when too many handshakes are waiting, or this one did
+   *   not settle in time.
    */
-  authenticator(): IConnectionAuthenticator {
-    return this.auth
+  authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
+    return this.gate.authenticate(context)
   }
 
   /**

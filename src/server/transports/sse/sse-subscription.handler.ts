@@ -38,6 +38,7 @@ import { assertIdentityIsNotBlank, resolveAuthTenant } from '../../utils/assert-
 import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { resolveClientAddress } from '../../utils/client-address'
+import { AuthenticationUnavailableError } from '../../services/authentication-gate.service'
 import { describeError } from '../../utils/describe-error'
 import { runHook } from '../../utils/run-hook'
 import { SseTransport } from './sse.transport'
@@ -314,6 +315,10 @@ export class SseSubscriptionHandler {
 
   // Nest 11.2.3 streams `err.message`: only an authenticator's HTTP exception may pass as it is.
   private toClientError(err: unknown, what: string): HttpException {
+    // A handshake the authenticator could not be asked about, or did not answer in time, is the
+    // system being unavailable: a 503 with the generic body, counted and logged by the gate once for
+    // each window rather than once for each request.
+    if (err instanceof AuthenticationUnavailableError) return new ServiceUnavailableException()
     return err instanceof HttpException ? err : this.serverError(err, what)
   }
 

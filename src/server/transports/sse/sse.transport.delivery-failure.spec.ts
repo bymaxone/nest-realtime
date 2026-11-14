@@ -5,10 +5,10 @@
  * @layer test
  */
 import { Logger } from '@nestjs/common'
+import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
 import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
-import type { IConnectionAuthenticator } from '../../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
 import type { IOfflineQueueStorage } from '../../interfaces/offline-queue-storage.interface'
 import type { IRealtimePubSub } from '../../interfaces/realtime-pubsub.interface'
@@ -35,7 +35,7 @@ function build(opts?: {
     new EventReplayBuffer(options),
     new EventIdGenerator(),
     new HeartbeatService(),
-    { authenticate: jest.fn() } as unknown as IConnectionAuthenticator,
+    new AuthenticationGate(options, { authenticate: jest.fn() }),
     pubsub,
     opts?.hooks ?? {},
     options,

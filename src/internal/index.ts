@@ -46,6 +46,10 @@ export { ConnectionRegistry } from '../server/services/connection-registry.servi
 export { EventIdGenerator } from '../server/services/event-id-generator.service'
 export { RealtimeService } from '../server/services/realtime.service'
 export { ReauthenticationService } from '../server/services/reauthentication.service'
+export {
+  AuthenticationGate,
+  AuthenticationUnavailableError,
+} from '../server/services/authentication-gate.service'
 export { RoomRegistry } from '../server/services/room-registry.service'
 export { OfflineQueueDeliveryService } from '../server/offline-queue/offline-queue-delivery.service'
 

@@ -163,6 +163,47 @@ describe('validateOptions', () => {
     }
   })
 
+  // `authenticateTimeoutMs` feeds a timer; `maxPendingHandshakes` is a count, so it has no ceiling.
+  it('rejects an authenticateTimeoutMs that is not an integer from 1 to 2147483647, and accepts both ends', () => {
+    for (const bad of [
+      0,
+      -1,
+      1.5,
+      Number.NaN,
+      Infinity,
+      '10000',
+      null,
+      2_147_483_648,
+      2 ** 53 - 1,
+    ]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, authenticateTimeoutMs: bad as never }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.authenticateTimeoutMs must be an integer >= 1 and <= 2147483647, got ${String(bad)}`,
+      )
+    }
+    for (const good of [1, 10_000, 2_147_483_647]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, authenticateTimeoutMs: good }),
+      ).not.toThrow()
+    }
+  })
+
+  it('rejects a maxPendingHandshakes that is not an integer >= 1, and accepts 1 and more', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '1000', null]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, maxPendingHandshakes: bad as never }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.maxPendingHandshakes must be an integer >= 1, got ${String(bad)}`,
+      )
+    }
+    for (const good of [1, 1_000, 2 ** 53 - 1]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, maxPendingHandshakes: good }),
+      ).not.toThrow()
+    }
+  })
+
   // Socket.IO runs these as timers, so they stop where Node's timers do.
   it.each(['pingIntervalMs', 'pingTimeoutMs'] as const)(
     'rejects a websocket.%s that is not an integer from 1 to 2147483647, and accepts both ends',

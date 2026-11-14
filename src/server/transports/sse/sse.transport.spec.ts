@@ -438,7 +438,7 @@ describe('SseTransport', () => {
       transport: 'sse' as const,
     }
     await expect(transport.authenticate(ctx)).resolves.toBe(result)
-    expect(authenticate).toHaveBeenCalledWith(ctx)
+    expect(authenticate).toHaveBeenCalledWith(ctx, { signal: expect.any(AbortSignal) })
   })
 
   // FIFO eviction picks the genuine oldest even when insertion order differs from age.

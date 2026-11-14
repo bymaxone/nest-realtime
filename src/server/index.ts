@@ -50,7 +50,7 @@ export type {
   ITransport,
   OfflineQueuedEvent,
   PublicConnectionMeta,
-  RevalidateOptions,
+  AuthenticatorCallOptions,
   RealtimeErrorCode,
   RealtimeEvent,
   RealtimePubSubMessage,

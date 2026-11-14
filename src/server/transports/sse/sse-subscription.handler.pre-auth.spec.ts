@@ -11,6 +11,7 @@ import {
   HttpException,
   InternalServerErrorException,
   Logger,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common'
 import {
@@ -22,6 +23,7 @@ import {
   build,
 } from '../../../../test/fixtures/sse/subscription-harness'
 import type { OfflineQueueDeliveryService } from '../../offline-queue/offline-queue-delivery.service'
+import { AuthenticationUnavailableError } from '../../services/authentication-gate.service'
 import { SseSubscriptionHandler } from './sse-subscription.handler'
 
 describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
@@ -273,4 +275,32 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
       expect.objectContaining({ auth: expect.objectContaining({ rooms: ['workspace:w1'] }) }),
     )
   })
+
+  // The authenticator could not be asked, or did not answer: the system is unavailable, not the
+  // credentials wrong, and the gate counts it once for each window, so no line is logged here.
+  it.each(['saturated', 'timeout'] as const)(
+    'answers 503, and logs nothing of its own, when the handshake is refused as %s',
+    async (reason) => {
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      try {
+        const handler = build(
+          mkTransport({
+            authenticate: jest.fn().mockRejectedValue(new AuthenticationUnavailableError(reason)),
+          }),
+          mkHeartbeat(),
+          mkOptions(),
+        )
+
+        const thrown = await handler.authenticateBeforeCommit(mkReq()).catch((err: unknown) => err)
+
+        expect(thrown).toBeInstanceOf(ServiceUnavailableException)
+        expect(errorSpy).not.toHaveBeenCalled()
+        await expect(handler.handle(mkReq(), mkRes())).rejects.toBeInstanceOf(
+          ServiceUnavailableException,
+        )
+      } finally {
+        errorSpy.mockRestore()
+      }
+    },
+  )
 })

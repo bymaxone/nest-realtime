@@ -5,6 +5,7 @@
 import { Subject } from 'rxjs'
 import type { MessageEvent } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
+import { AuthenticationGate } from '../../../src/server/services/authentication-gate.service'
 import { ConnectionRegistry } from '../../../src/server/services/connection-registry.service'
 import { RoomRegistry } from '../../../src/server/services/room-registry.service'
 import { EventIdGenerator } from '../../../src/server/services/event-id-generator.service'
@@ -65,7 +66,7 @@ export function createTestInstances(
       replay,
       idGen,
       heartbeat,
-      auth,
+      new AuthenticationGate(options, auth),
       bus,
       {},
       options,

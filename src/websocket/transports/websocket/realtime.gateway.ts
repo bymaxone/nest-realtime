@@ -7,6 +7,7 @@ import type { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from '@n
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets'
 import type { Server, Socket } from 'socket.io'
 import {
+  AuthenticationUnavailableError,
   describeError,
   REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
@@ -73,7 +74,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         next(this.unavailable())
         return
       }
-      const auth = await this.transport.authenticator().authenticate(this.buildAuthContext(socket))
+      const auth = await this.transport.authenticate(this.buildAuthContext(socket))
       // Authentication is asynchronous, so shutdown may have begun while this handshake waited.
       if (this.transport.shuttingDown) {
         next(this.unavailable())
@@ -90,7 +91,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       this.authenticated.set(socket, admitRooms(resolvedAuth))
       next()
     } catch (err) {
-      this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
+      // The gate counts and logs these once for each window; one line for each handshake would let
+      // an attack flood the log.
+      if (!(err instanceof AuthenticationUnavailableError)) {
+        this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
+      }
       next(new Error('Internal Server Error'))
     }
   }
@@ -191,9 +196,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
           socket.disconnect(true)
           return
         }
-        const auth = await this.transport
-          .authenticator()
-          .authenticate(this.buildAuthContext(socket))
+        const auth = await this.transport.authenticate(this.buildAuthContext(socket))
         if (!auth) {
           socket.disconnect(true)
           return
@@ -216,9 +219,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         })
       }
     } catch (err) {
-      this.logger.error(
-        `handleConnection threw for socket ${socket.id} — disconnecting: ${describeError(err)}`,
-      )
+      if (!(err instanceof AuthenticationUnavailableError)) {
+        this.logger.error(
+          `handleConnection threw for socket ${socket.id} — disconnecting: ${describeError(err)}`,
+        )
+      }
       socket.disconnect(true)
     }
   }

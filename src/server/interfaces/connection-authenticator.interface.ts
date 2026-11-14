@@ -109,12 +109,13 @@ export interface AuthenticationResult {
   readonly metadata?: Record<string, unknown>
 }
 
-/** What `IConnectionAuthenticator.revalidate` is handed besides the connection. */
-export interface RevalidateOptions {
+/** What `IConnectionAuthenticator.authenticate` and `revalidate` are handed besides their subject. */
+export interface AuthenticatorCallOptions {
   /**
-   * Aborted when the call has not settled within `reauthenticationPolicy.revalidateTimeoutMs`,
-   * after which the connection is disconnected whatever the call returns. Pass it to the work behind
-   * the call so that it stops.
+   * Aborted when the call has not settled in time: `authenticateTimeoutMs` for `authenticate`, after
+   * which the handshake is refused, and `reauthenticationPolicy.revalidateTimeoutMs` for
+   * `revalidate`, after which the connection is disconnected, whatever the call returns later. Pass
+   * it to the work behind the call so that it stops.
    */
   readonly signal: AbortSignal
 }
@@ -152,7 +153,10 @@ export interface IConnectionAuthenticator {
    * because the credentials were accepted and the fault is in this method. Return
    * `null` to reject a client.
    */
-  authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null>
+  authenticate(
+    context: ConnectionAuthContext,
+    options?: AuthenticatorCallOptions,
+  ): Promise<AuthenticationResult | null>
 
   /**
    * Optionally re-validate during long sessions. Called periodically based on
@@ -167,6 +171,6 @@ export interface IConnectionAuthenticator {
   revalidate?(
     connectionId: string,
     originalAuth: AuthenticationResult,
-    options?: RevalidateOptions,
+    options?: AuthenticatorCallOptions,
   ): Promise<boolean>
 }
