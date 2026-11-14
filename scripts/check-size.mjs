@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  17,584 B → 17,620 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  17,614 B → 17,620 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -36,13 +36,15 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     the bounded re-authentication cycle: the call timeout, the concurrency cap, the per-connection
 //     guard and the boot validation of its options, and the instance-wide connection bound: the
 //     admission service with its rate-limited log line, the place held for a handshake until it is
-//     registered or its response closes, and the 503 that refuses one past `maxConnections`)
-//   websocket  5,217 B →  5,260 B (the Socket.IO stack alone: the start-up message that names the
+//     registered or its response closes, the 503 that refuses one past `maxConnections`, and the
+//     rejection of a call that found no path, which is a 503 exception)
+//   websocket  5,251 B →  5,260 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server
-//     is attached, the refusal of a handshake that arrives once shutdown has begun, and the place held
-//     for a handshake until its socket is registered or its engine connection closes)
+//     is attached, the refusal of a handshake that arrives once shutdown has begun, the place held
+//     for a handshake until its socket is registered or its engine connection closes, and the
+//     transport code that marks a refusal the client can retry)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
 //   react      2,171 B →  2,400 B
 //

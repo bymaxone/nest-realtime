@@ -14,6 +14,7 @@ import {
   subscribed,
 } from '../../../test/fixtures/fake-resp-server'
 import type { RespHandler } from '../../../test/fixtures/fake-resp-server'
+import { expectGenericServiceUnavailable } from '../../../test/fixtures/service-unavailable'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
@@ -178,7 +179,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       })
       const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
       const failure = await pubsub.subscribe(jest.fn()).catch((error: unknown) => error)
-      expect(failure).toBeInstanceOf(Error)
+      expectGenericServiceUnavailable(failure)
       expect((failure as Error).message).toBe(
         `[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: could not subscribe to "${CHANNEL}" (${code} refused by the scripted server)`,
       )

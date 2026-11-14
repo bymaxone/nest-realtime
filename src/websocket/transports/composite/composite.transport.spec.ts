@@ -7,6 +7,7 @@ import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
 import { SseTransport } from '@bymax-one/nest-realtime/internal'
+import { expectGenericServiceUnavailable } from '../../../../test/fixtures/service-unavailable'
 import { WebSocketTransport } from '../websocket/websocket.transport'
 import { CompositeTransport } from './composite.transport'
 
@@ -151,6 +152,7 @@ describe('CompositeTransport', () => {
       const failure = await (
         op === 'disconnect' ? composite.disconnect('conn-1') : composite[op]('conn-1', 'room:x')
       ).catch((error: unknown) => error)
+      expectGenericServiceUnavailable(failure)
       expect((failure as Error).message).toBe(
         `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} of conn-1 failed on both transports (sse fail; ws fail)`,
       )
@@ -198,7 +200,7 @@ describe('CompositeTransport', () => {
 
       const failure = await call(composite).catch((error: unknown) => error)
 
-      expect(failure).toBeInstanceOf(Error)
+      expectGenericServiceUnavailable(failure)
       expect((failure as Error).message).toBe(
         `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} failed on both transports (sse fail; ws fail)`,
       )

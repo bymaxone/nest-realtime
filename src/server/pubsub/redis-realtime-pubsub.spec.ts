@@ -7,6 +7,7 @@ import { inspect } from 'node:util'
 import { Logger } from '@nestjs/common'
 import RedisMock from 'ioredis-mock'
 import type { Redis } from 'ioredis'
+import { expectGenericServiceUnavailable } from '../../../test/fixtures/service-unavailable'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
@@ -294,7 +295,9 @@ describe('RedisRealtimePubSub', () => {
       const pubsub = new RedisRealtimePubSub({
         client: { status, publish, connect } as unknown as Redis,
       })
-      await expect(pubsub.publish(msg)).rejects.toThrow(
+      const failure = await pubsub.publish(msg).catch((error: unknown) => error)
+      expectGenericServiceUnavailable(failure)
+      expect((failure as Error).message).toBe(
         `[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is ${status})`,
       )
       expect(publish).not.toHaveBeenCalled()

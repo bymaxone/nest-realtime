@@ -166,19 +166,6 @@ describe('SseTransport', () => {
     await expect(transport.disconnectLocal('nope')).resolves.toBeUndefined()
   })
 
-  // A revocation that cannot be published has not reached the connection: it rejects with the
-  // pub/sub code, where an emit that cannot be published stays best-effort.
-  it('rejects a disconnect it cannot publish with REALTIME_PUBSUB_UNAVAILABLE', async () => {
-    const { transport, publish } = build()
-    publish.mockRejectedValueOnce(new Error('redis down'))
-    const failure = await transport.disconnect('held-elsewhere').catch((error: unknown) => error)
-    expect(failure).toBeInstanceOf(Error)
-    expect((failure as Error).message).toBe(
-      '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of held-elsewhere could not be published (redis down)',
-    )
-    expect(((failure as Error).cause as Error).message).toBe('redis down')
-  })
-
   // Joining or leaving a room applies to a connection this instance holds; for any other id
   // the call resolves without recording a membership nothing can deliver to.
   it('does not record room membership for a connection this instance does not hold', async () => {

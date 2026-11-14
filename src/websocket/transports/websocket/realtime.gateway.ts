@@ -105,20 +105,31 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       handedOver = true
       next()
     } catch (err) {
-      // The gate and the admission count and log these once for each window; one line for each
-      // handshake would let an attack flood the log.
-      if (!(err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError)) {
-        this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
-      }
-      next(new Error('Internal Server Error'))
+      next(this.refusalFor(socket, err))
     } finally {
       if (!handedOver) ticket?.release()
     }
   }
 
-  /** The refusal for a handshake that arrives once shutdown has begun: a `connect_error` carrying `data.code`. */
-  private unavailable(): Error {
-    const refusal = new Error(REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE) as Error & {
+  /**
+   * The error a handshake that failed is answered with, after the log line the failure earns.
+   *
+   * The gate and the admission count and log their own refusals once for each window; one line for
+   * each handshake would let an attack flood the log. The message stays generic. A refusal that is
+   * the instance's capacity or the authenticator's availability carries the transport code, so a
+   * client can retry it; any other failure is not something a client can act on and carries none.
+   */
+  private refusalFor(socket: Socket, err: unknown): Error {
+    if (err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError) {
+      return this.unavailable('Internal Server Error')
+    }
+    this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
+    return new Error('Internal Server Error')
+  }
+
+  /** A `connect_error` carrying `data.code` `REALTIME_TRANSPORT_UNAVAILABLE`, for a handshake the instance cannot take now. */
+  private unavailable(message: string = REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE): Error {
+    const refusal = new Error(message) as Error & {
       data: unknown
     }
     refusal.data = { code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE }

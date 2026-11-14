@@ -96,7 +96,9 @@ describe('RealtimeGateway: a handshake refused as unavailable', () => {
 
         await installMiddleware()(makeSocket(), next)
 
-        expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
+        const refusal = next.mock.calls[0]?.[0] as Error & { data?: unknown }
+        expect(refusal.message).toBe('Internal Server Error')
+        expect(refusal.data).toEqual({ code: 'REALTIME_TRANSPORT_UNAVAILABLE' })
         expect(transport.registerSocket).not.toHaveBeenCalled()
         expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('handshake refused'))
       } finally {
