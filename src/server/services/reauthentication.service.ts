@@ -161,6 +161,12 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   }
 
   private async revalidate(conn: ConnectionRecord, now: number): Promise<void> {
+    const revalidate = this.auth.revalidate?.bind(this.auth)
+    if (!revalidate) {
+      // No `revalidate` is a configuration with nothing to check, not an answer that refuses.
+      conn.revalidatedAt = now
+      return
+    }
     try {
       // Build an AuthenticationResult from the stored snapshot (optional fields
       // must be absent, not undefined, under exactOptionalPropertyTypes).
@@ -175,12 +181,11 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
           ? { metadata: conn.originalAuth.metadata }
           : {}),
       }
-      // Require strict true — a truthy non-boolean result (e.g. a user object) is not success.
-      // When revalidate is absent, optional-chaining returns undefined; ?? true normalises it.
-      const rawResult =
-        (await this.bounded('revalidate', (signal) =>
-          this.auth.revalidate?.(conn.connectionId, originalAuth, { signal }),
-        )) ?? true
+      // Only an explicit `true` keeps the connection: a result that is not a boolean (a
+      // `revalidate` that forgot to return, a user object) is a refusal, as `false` is.
+      const rawResult = await this.bounded('revalidate', (signal) =>
+        revalidate(conn.connectionId, originalAuth, { signal }),
+      )
       if (rawResult === true) {
         conn.revalidatedAt = now
         return

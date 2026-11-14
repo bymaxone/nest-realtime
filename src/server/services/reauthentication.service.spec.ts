@@ -615,7 +615,7 @@ describe('ReauthenticationService', () => {
     expect(() => svc.onApplicationShutdown()).not.toThrow()
   })
 
-  // runCycle when auth has no revalidate — revalidate?.() returns undefined → ?? true → === true → caches.
+  // runCycle when auth has no revalidate: there is nothing to check, so the connection is kept.
   it('caches connection as valid when auth has no revalidate (runCycle called directly)', async () => {
     const connections = mkConnections([mkRecord()])
     const realtime = mkRealtime()
@@ -623,7 +623,7 @@ describe('ReauthenticationService', () => {
     const svc = build(connections, realtime, auth, mkOptions({ intervalSeconds: 60 }))
     // Calling runCycle directly bypasses the onModuleInit guard.
     await svc.runCycle()
-    // undefined ?? true === true → treated as success (absent revalidate is not a failure).
+    // An absent revalidate is not a refusal.
     expect(realtime.disconnect).not.toHaveBeenCalled()
     expect(realtime.emitToUser).not.toHaveBeenCalled()
   })

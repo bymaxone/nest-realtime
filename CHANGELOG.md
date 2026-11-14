@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A `revalidate` that returned nothing kept the connection.** The result was defaulted to `true` when the call returned `undefined`, so an authenticator whose `revalidate` forgot to return (a missing `return`, a branch that falls through) approved every connection at every cycle, for ever, and so did one that resolved to `null`. Only an explicit `true` keeps a connection now; `false`, `undefined`, `null` and any other value disconnect it by the same path, with the same reason and hook. An authenticator with no `revalidate` at all is unchanged: there is nothing to check.
+
+#### Apply to a derived backend
+
+A `revalidate` that does not return `true` on every path now disconnects the connection at its next cycle where it used to keep it. Check that each branch of yours returns a boolean.
+
 - **The replay buffer kept the events of every user it was told about, for ever.** `emitToUser` appended to a per-user ring for any user id, whether or not that user had ever connected, and nothing removed an entry: a service that emitted to every user in its database made every instance hold up to `replayBufferSize` events for every one of them, without bound (20,000 users that never connected, 10 events each, were still held after the module closed). The buffer now keeps only the users that have a connection on the instance, or had one lately: an entry is created when a connection opens, kept for `sse.replayTtlMs` (default 300,000 ms) after the user's last connection closes, and at most `sse.replayMaxIdleUsers` (default 1,000) idle entries are kept at once, the one that closed longest ago going first. The ring of a user with a connection open is never evicted, so the most the buffer holds is (connections open + `replayMaxIdleUsers`) x `replayBufferSize` x the size of an event. Expiry is checked when the buffer is used, so there is no timer. **Behaviour change:** replay is per instance. An instance used to buffer the events of users that were not connected to it, so a client that reconnected to a different instance could be replayed events emitted before it arrived, when the ids happened to line up; ring ids are per instance, so that could skip or repeat events. It no longer happens: without sticky routing, a reconnect to another instance gets the offline queue (when configured), not replay.
 
 #### Apply to a derived backend
