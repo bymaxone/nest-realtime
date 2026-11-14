@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Apply to a derived backend
 
-`RealtimeIoAdapter` gains a public `dispose()`, which closes the subscriber connection it opened; a class that extends it and overrides `dispose()` must call `super.dispose()`, or that connection stays open. Nothing else changes. Against a healthy Redis a shutdown is as it was; against one that does not answer it now finishes instead of never finishing, waiting up to two seconds for each of the two phases of Nest's shutdown that close a Redis connection, so an application that uses both transports can wait up to four. The documentation said the library never opens its own Redis connection; the Socket.IO Redis adapter's subscriber is one, and `RealtimeIoAdapter` is what closes it.
+`RealtimeIoAdapter` gains a public `dispose()`, which closes the subscriber connection it opened; a class that extends it and overrides `dispose()` must call `super.dispose()`, or that connection stays open. Nothing else changes. Against a healthy Redis a shutdown is as it was; against one that does not answer it now finishes instead of never finishing, waiting a bounded time for each Redis connection it closes. The documentation said the library never opens its own Redis connection; the Socket.IO Redis adapter's subscriber is one, and `RealtimeIoAdapter` is what closes it.
 
 ## [1.2.14] - 2026-11-14
 
