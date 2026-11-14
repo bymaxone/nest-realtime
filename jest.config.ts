@@ -30,7 +30,8 @@ const config: Config = {
       ],
       testEnvironment: 'node',
       moduleFileExtensions: ['ts', 'js', 'json'],
-      setupFiles: ['reflect-metadata'],
+      // The suites that start a real HTTP server dial 127.0.0.1: see `test/support/loopback-listen.ts`.
+      setupFiles: ['reflect-metadata', '<rootDir>/test/setup/jest.loopback-listen.ts'],
       transform: {
         '^.+\\.ts$': [
           'ts-jest',

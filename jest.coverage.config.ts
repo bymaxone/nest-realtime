@@ -49,7 +49,7 @@ const config: Config = {
       ],
       testEnvironment: 'node',
       moduleFileExtensions: ['ts', 'js', 'json'],
-      setupFiles: ['reflect-metadata'],
+      setupFiles: ['reflect-metadata', '<rootDir>/test/setup/jest.loopback-listen.ts'],
       transform: {
         '^.+\\.ts$': [
           'ts-jest',

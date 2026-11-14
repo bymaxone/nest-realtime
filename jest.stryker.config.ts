@@ -26,7 +26,7 @@ const config: Config = {
   testEnvironment: `${process.cwd()}/test/setup/stryker-environment.cjs`,
   moduleFileExtensions: ['tsx', 'ts', 'js', 'json'],
   testRegex: '.*\\.spec\\.tsx?$',
-  setupFiles: ['reflect-metadata'],
+  setupFiles: ['reflect-metadata', '<rootDir>/../test/setup/jest.loopback-listen.ts'],
   setupFilesAfterEnv: ['<rootDir>/../test/setup/stryker-react-setup.ts'],
   transform: {
     '^.+\\.tsx?$': [
