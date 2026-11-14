@@ -714,7 +714,9 @@ describe('RealtimeGateway', () => {
 
         await installMiddleware()(makeSocket(), next)
 
-        expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
+        const refusal = next.mock.calls[0]?.[0] as Error & { data?: unknown }
+        expect(refusal.message).toBe('Internal Server Error')
+        expect(refusal.data).toBeUndefined()
         expect(transportMock.registerSocket).not.toHaveBeenCalled()
       } finally {
         errorSpy.mockRestore()

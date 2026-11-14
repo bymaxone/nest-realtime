@@ -13,6 +13,7 @@ import type { IConnectionLifecycleHooks } from '../../interfaces/connection-life
 import type { IOfflineQueueStorage } from '../../interfaces/offline-queue-storage.interface'
 import type { IRealtimePubSub } from '../../interfaces/realtime-pubsub.interface'
 import { InMemoryPubSub } from '../../pubsub/in-memory-pubsub'
+import { expectGenericServiceUnavailable } from '../../../../test/fixtures/service-unavailable'
 import { HeartbeatService } from './heartbeat.service'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { SseTransport } from './sse.transport'
@@ -149,7 +150,7 @@ describe('SseTransport delivery failures', () => {
     } as unknown as IOfflineQueueStorage
     const { transport } = build({ offlineQueue, pubsub: new InMemoryPubSub() })
     const failure = await transport.emitToUser('u1', 'foo', {}).catch((error: unknown) => error)
-    expect(failure).toBeInstanceOf(Error)
+    expectGenericServiceUnavailable(failure)
     expect((failure as Error).message).toBe(
       '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed (queue down)',
     )
@@ -209,5 +210,18 @@ describe('SseTransport delivery failures', () => {
     expect(onDeliveryFailure).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'REALTIME_TRANSPORT_UNAVAILABLE', op: 'offlineAppend' }),
     )
+  })
+
+  // A revocation that cannot be published has not reached the connection: it rejects with the
+  // pub/sub code, where an emit that cannot be published stays best-effort.
+  it('rejects a disconnect it cannot publish with REALTIME_PUBSUB_UNAVAILABLE', async () => {
+    const { transport, publish } = build()
+    publish.mockRejectedValueOnce(new Error('redis down'))
+    const failure = await transport.disconnect('held-elsewhere').catch((error: unknown) => error)
+    expectGenericServiceUnavailable(failure)
+    expect((failure as Error).message).toBe(
+      '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of held-elsewhere could not be published (redis down)',
+    )
+    expect(((failure as Error).cause as Error).message).toBe('redis down')
   })
 })

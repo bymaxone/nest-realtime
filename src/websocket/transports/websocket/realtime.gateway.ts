@@ -107,18 +107,27 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     } catch (err) {
       // The gate and the admission count and log these once for each window; one line for each
       // handshake would let an attack flood the log.
-      if (!(err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError)) {
+      const unavailable =
+        err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError
+      if (!unavailable) {
         this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
       }
-      next(new Error('Internal Server Error'))
+      // The message stays generic. A refusal that is the instance's capacity or the
+      // authenticator's availability carries the transport code, so a client can retry it; any
+      // other failure is not something a client can act on and carries none.
+      next(
+        unavailable
+          ? this.unavailable('Internal Server Error')
+          : new Error('Internal Server Error'),
+      )
     } finally {
       if (!handedOver) ticket?.release()
     }
   }
 
-  /** The refusal for a handshake that arrives once shutdown has begun: a `connect_error` carrying `data.code`. */
-  private unavailable(): Error {
-    const refusal = new Error(REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE) as Error & {
+  /** A `connect_error` carrying `data.code` `REALTIME_TRANSPORT_UNAVAILABLE`, for a handshake the instance cannot take now. */
+  private unavailable(message: string = REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE): Error {
+    const refusal = new Error(message) as Error & {
       data: unknown
     }
     refusal.data = { code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE }

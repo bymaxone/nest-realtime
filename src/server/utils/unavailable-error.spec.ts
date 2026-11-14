@@ -2,6 +2,10 @@
  * @fileoverview Tests for unavailableError, the rejection for a call that could not reach its target.
  * @layer utils
  */
+import {
+  expectGenericServiceUnavailable,
+  GENERIC_503_BODY,
+} from '../../../test/fixtures/service-unavailable'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { unavailableError } from './unavailable-error'
 
@@ -41,5 +45,26 @@ describe('unavailableError', () => {
 
     expect(error.message).toContain(`(${text})`)
     expect(error.cause).toBe(reason)
+  })
+
+  // Scenario: a consumer's controller lets the rejection escape. Expected: Nest answers 503 with
+  // the generic body, and nothing the operator reads (the call's text, the raiser, the cause with
+  // its host and credentials) is in what the client is sent. Why: a driver's error text leaked
+  // into an HTTP body is a disclosure, and a plain Error answers 500, which says "bug" for an outage.
+  it('is a 503 whose body names nothing of the failure', () => {
+    const error = unavailableError(
+      REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
+      'SseTransport',
+      'the revocation of c1 could not be published',
+      new Error('connect ECONNREFUSED redis://user:secret@10.0.0.5:6379'),
+    )
+
+    expectGenericServiceUnavailable(error)
+    expect(JSON.stringify(error.getResponse())).toBe(JSON.stringify(GENERIC_503_BODY))
+    expect(JSON.stringify(error.getResponse())).not.toMatch(
+      /redis|secret|10\.0|revocation|SseTransport|REALTIME/,
+    )
+    expect(error.code).toBe('REALTIME_PUBSUB_UNAVAILABLE')
+    expect(error.message).toContain('ECONNREFUSED')
   })
 })

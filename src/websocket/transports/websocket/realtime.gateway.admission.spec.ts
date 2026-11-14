@@ -105,7 +105,9 @@ describe('RealtimeGateway: the place held for a socket', () => {
 
     await middleware(makeSocket().socket, next)
 
-    expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
+    const refusal = next.mock.calls[0]?.[0] as Error & { data?: unknown }
+    expect(refusal.message).toBe('Internal Server Error')
+    expect(refusal.data).toEqual({ code: 'REALTIME_TRANSPORT_UNAVAILABLE' })
     expect(authenticate).not.toHaveBeenCalled()
   })
 
@@ -271,7 +273,9 @@ describe('RealtimeGateway: the place held for a socket', () => {
       await pending
 
       expect(next).toHaveBeenCalledTimes(1)
-      expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
+      const refusal = next.mock.calls[0]?.[0] as Error & { data?: unknown }
+      expect(refusal.message).toBe('Internal Server Error')
+      expect(refusal.data).toEqual({ code: 'REALTIME_TRANSPORT_UNAVAILABLE' })
       expect(() => admission.admit()).not.toThrow()
     })
   })

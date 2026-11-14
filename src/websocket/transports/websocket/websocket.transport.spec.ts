@@ -19,6 +19,7 @@ import type {
   IConnectionLifecycleHooks,
   BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
+import { expectGenericServiceUnavailable } from '../../../../test/fixtures/service-unavailable'
 import { WebSocketTransport } from './websocket.transport'
 
 /** Minimal mocked socket.io Socket. */
@@ -482,6 +483,7 @@ describe('WebSocketTransport', () => {
     // Without a wired server the revocation cannot reach any connection, here or on another
     // node, so the caller is told instead of being answered with a success.
     const failure = await transport.disconnect('sock-1').catch((error: unknown) => error)
+    expectGenericServiceUnavailable(failure)
     expect((failure as Error).message).toBe(
       '[WebSocketTransport] REALTIME_TRANSPORT_UNAVAILABLE: the WebSocket server is not attached, so sock-1 cannot be revoked (server not attached)',
     )
@@ -496,6 +498,7 @@ describe('WebSocketTransport', () => {
     })
     transport.setServer(server as never)
     const failure = await transport.disconnect('remote-id').catch((error: unknown) => error)
+    expectGenericServiceUnavailable(failure)
     expect((failure as Error).message).toBe(
       '[WebSocketTransport] REALTIME_TRANSPORT_UNAVAILABLE: the revocation of remote-id could not be sent (adapter down)',
     )
