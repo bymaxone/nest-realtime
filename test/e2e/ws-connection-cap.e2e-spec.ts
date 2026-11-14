@@ -74,9 +74,9 @@ describe('WebSocket per-user connection cap (e2e)', () => {
     await app.close()
   })
 
-  it('closes the oldest socket of a sixth connect with no option set, and never holds more than five', async () => {
-    // The default bound: six connects leave five sockets open on both ends, the evicted one is
-    // the first, and the server told it so (a close, not just a registry removal).
+  it('closes the oldest socket of a sixth connect with no option set, leaving five open', async () => {
+    // Six connects leave five sockets open on both ends once the eviction has run; the evicted one
+    // is the first, and the server told it so (a close, not just a registry removal).
     await boot()
     const first = await connect()
     const closed = new Promise<string>((resolve) => first.once('disconnect', resolve))
