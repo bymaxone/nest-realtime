@@ -103,6 +103,17 @@ describe('SseSubscriptionHandler: the last event id of a reconnect', () => {
     },
   )
 
+  // Scenario: an empty header with a good query. Expected: the query. Why: an empty id is not an
+  // id, so it is as if the header were absent, and the other source is still read.
+  it('falls back to the query when the header is empty', async () => {
+    const asked = await reconnect({
+      headers: { 'last-event-id': '' },
+      query: { lastEventId: 'q-4' },
+    })
+
+    expect(asked).toEqual(allAskedFor('q-4'))
+  })
+
   // Scenario: an oversized header with a good query. Expected: the query. Why: an id that is not
   // believed is as if it were absent, so the other source is still read.
   it('falls back to the query when the header is longer than the bound', async () => {
