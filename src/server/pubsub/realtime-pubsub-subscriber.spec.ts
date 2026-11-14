@@ -208,30 +208,33 @@ describe('RealtimePubSubSubscriber', () => {
     }
   })
 
-  // Warn message from a throwing SSE dispatch includes the error text.
-  it('logs the error message when SSE dispatch throws', async () => {
+  // A throwing SSE dispatch is reported by the class of the error, never by its message: the
+  // message can echo what a producer on the channel wrote.
+  it('names the class of the error when SSE dispatch throws, and not its message', async () => {
     const { subscriber, getHandler, sse } = build()
     ;(sse.broadcastLocal as jest.Mock).mockImplementation(() => {
-      throw new Error('dispatch-boom')
+      throw new RangeError('dispatch-boom')
     })
     await subscriber.onModuleInit()
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       getHandler()!({ op: 'broadcast', args: { event: 'x', data: {}, id: '1' }, origin: 'remote' })
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('dispatch-boom'))
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('(last: RangeError)'))
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('dispatch-boom'))
     } finally {
       warnSpy.mockRestore()
     }
   })
 
-  // The unknown-op warn message includes the op value so operators know which op was sent.
-  it('logs the unknown op value when an unrecognised op is received', async () => {
+  // An unrecognised op is counted, and its value is never written: it is the producer's text.
+  it('counts an unrecognised op without writing its value', async () => {
     const { subscriber, getHandler } = build()
     await subscriber.onModuleInit()
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       getHandler()!({ op: 'badOp' as never, args: {}, origin: 'remote' })
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('badOp'))
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 with an unknown op'))
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('badOp'))
     } finally {
       warnSpy.mockRestore()
     }

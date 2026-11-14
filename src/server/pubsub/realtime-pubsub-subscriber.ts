@@ -14,6 +14,7 @@ import type {
 } from '../interfaces/realtime-pubsub.interface'
 import { SseTransport } from '../transports/sse/sse.transport'
 import { describeError } from '../utils/describe-error'
+import { windowedReport } from '../utils/windowed-report'
 
 interface EmitUserArgs {
   userId: string
@@ -80,10 +81,24 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
     }
   }
 
+  /**
+   * Messages the subscriber cannot act on, counted and reported once for each window. The line
+   * carries counts and the class of the last failure: the op and the failure's message can echo
+   * what whoever publishes to the channel wrote, so neither is ever written.
+   */
+  private readonly dropped = windowedReport(
+    () => ({ unknownOp: 0, failed: 0, lastFailure: 'none' }),
+    ({ unknownOp, failed, lastFailure }) => {
+      this.logger.warn(
+        `Pub/sub messages dropped since the last report: ${unknownOp} with an unknown op, ${failed} whose handling failed (last: ${lastFailure})`,
+      )
+    },
+  )
+
   private handle(msg: RealtimePubSubMessage): void {
-    // Drop messages we originated — they were already delivered locally.
-    if (msg.origin === this.instanceId) return
     try {
+      // Drop messages we originated — they were already delivered locally.
+      if (msg.origin === this.instanceId) return
       switch (msg.op) {
         case 'emitToUser': {
           const a = msg.args as EmitUserArgs
@@ -118,12 +133,13 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
           break
         }
         default: {
-          const exhaustive: never = msg.op
-          this.logger.warn(`Unknown pub/sub op: ${String(exhaustive)}`)
+          msg.op satisfies never
+          this.dropped((counts) => ({ ...counts, unknownOp: counts.unknownOp + 1 }))
         }
       }
     } catch (err) {
-      this.logger.warn(`Pub/sub message handling failed: ${describeError(err)}`)
+      const lastFailure = String(Object(err).constructor?.name ?? 'Error')
+      this.dropped((counts) => ({ ...counts, failed: counts.failed + 1, lastFailure }))
     }
   }
 }
