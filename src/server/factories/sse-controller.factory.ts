@@ -26,7 +26,11 @@ export function createSseController(endpoint: string): Type<unknown> {
     constructor(@Inject(SseSubscriptionHandler) private readonly handler: SseSubscriptionHandler) {}
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
-      await this.handler.authenticateBeforeCommit(context.switchToHttp().getRequest<SseRequest>())
+      const http = context.switchToHttp()
+      await this.handler.authenticateBeforeCommit(
+        http.getRequest<SseRequest>(),
+        http.getResponse<SseResponse>(),
+      )
       return true
     }
   }

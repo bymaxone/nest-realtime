@@ -45,6 +45,7 @@ function mkTransport(auth: AuthenticationResult | null, record: ConnectionRecord
   let capturedClose$: Subject<void> | undefined
 
   const transport = {
+    admit: jest.fn(() => ({ release: jest.fn(), renew: jest.fn() })),
     authenticate: jest.fn().mockResolvedValue(auth),
     registerConnection: jest
       .fn()

@@ -7,6 +7,8 @@ import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
 import {
   AuthenticationGate,
+  ConnectionAdmission,
+  ConnectionLimitError,
   ConnectionRegistry,
   RoomRegistry,
   REALTIME_AUTHENTICATOR_TOKEN,
@@ -305,5 +307,35 @@ describe('evictBeyondLimit (maxConnectionsPerUser)', () => {
 
     expect(socket1.disconnect).not.toHaveBeenCalled()
     expect(socket2.disconnect).not.toHaveBeenCalled()
+  })
+
+  describe('admit', () => {
+    it('takes a place from the instance admission when the module provides one', async () => {
+      const module = await Test.createTestingModule({
+        providers: [
+          WebSocketTransport,
+          ConnectionRegistry,
+          RoomRegistry,
+          AuthenticationGate,
+          ConnectionAdmission,
+          { provide: REALTIME_AUTHENTICATOR_TOKEN, useValue: { authenticate: jest.fn() } },
+          { provide: REALTIME_HOOKS_TOKEN, useValue: {} },
+          { provide: REALTIME_OPTIONS_TOKEN, useValue: { maxConnections: 1 } },
+        ],
+      }).compile()
+      const t = module.get(WebSocketTransport)
+      const ticket = t.admit()
+
+      expect(() => t.admit()).toThrow(ConnectionLimitError)
+      ticket.release()
+      expect(() => t.admit()).not.toThrow()
+    })
+
+    it('holds nothing, and bounds nothing, when the transport was built without an admission', async () => {
+      const t = (await buildModule({})).get(WebSocketTransport)
+
+      for (let i = 0; i < 5; i += 1) t.admit().release()
+      expect(() => t.admit()).not.toThrow()
+    })
   })
 })

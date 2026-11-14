@@ -18,6 +18,7 @@ import type {
   SseOptions,
 } from '../../../src/server/interfaces/realtime-module-options.interface'
 import { AuthenticationGate } from '../../../src/server/services/authentication-gate.service'
+import type { ConnectionAdmission } from '../../../src/server/services/connection-admission.service'
 import { HeartbeatService } from '../../../src/server/transports/sse/heartbeat.service'
 import { EventReplayBuffer } from '../../../src/server/transports/sse/event-replay-buffer'
 import { SseTransport } from '../../../src/server/transports/sse/sse.transport'
@@ -38,6 +39,7 @@ export function build(opts?: {
   instanceId?: string
   offlineQueue?: IOfflineQueueStorage
   hookTimeoutMs?: number
+  admission?: ConnectionAdmission
 }) {
   const connections = new ConnectionRegistry()
   const rooms = new RoomRegistry()
@@ -64,6 +66,7 @@ export function build(opts?: {
     options,
     opts?.instanceId ?? 'inst-1',
     opts?.offlineQueue,
+    opts?.admission,
   )
   return {
     transport,

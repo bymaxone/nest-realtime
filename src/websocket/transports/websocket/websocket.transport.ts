@@ -2,7 +2,7 @@
  * @fileoverview ITransport implementation over Socket.IO (opt-in WebSocket transport).
  * @layer transport
  */
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import type { Server, Socket } from 'socket.io'
 import {
   ConnectionRegistry,
@@ -16,6 +16,8 @@ import {
   runHook,
   DEFAULT_HOOK_TIMEOUT_MS,
   AuthenticationGate,
+  ConnectionAdmission,
+  UNBOUNDED_TICKET,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   ITransport,
@@ -23,6 +25,7 @@ import type {
   AuthenticationResult,
   IConnectionLifecycleHooks,
   BymaxRealtimeModuleOptions,
+  AdmissionTicket,
 } from '@bymax-one/nest-realtime/internal'
 
 /**
@@ -65,6 +68,10 @@ export class WebSocketTransport implements ITransport {
     @Inject(AuthenticationGate) private readonly gate: AuthenticationGate,
     @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks: IConnectionLifecycleHooks,
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
+    // Optional so a transport built by hand keeps working; the module always provides it.
+    @Optional()
+    @Inject(ConnectionAdmission)
+    private readonly admission?: ConnectionAdmission,
   ) {}
 
   /**
@@ -360,6 +367,15 @@ export class WebSocketTransport implements ITransport {
         error,
       )
     }
+  }
+
+  /**
+   * Take a place for a connection before it is authenticated.
+   *
+   * @throws ConnectionLimitError when the instance already holds `maxConnections`.
+   */
+  admit(): AdmissionTicket {
+    return this.admission?.admit() ?? UNBOUNDED_TICKET
   }
 
   /**

@@ -54,16 +54,17 @@ describe('createSseController', () => {
     expect(guards).toHaveLength(1)
   })
 
-  // The guard asks the handler to authenticate this request and lets it through.
+  // The guard asks the handler to authenticate this request, with its response, and lets it through.
   it('guard authenticates the request through the handler and allows it', async () => {
     const authenticateBeforeCommit = jest.fn().mockResolvedValue(undefined)
     const handler = { authenticateBeforeCommit } as unknown as SseSubscriptionHandler
     const req = mkReq()
-    const context = { switchToHttp: () => ({ getRequest: () => req }) }
+    const res = { setHeader: jest.fn(), write: jest.fn() }
+    const context = { switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }) }
 
     const allowed = await new (guardOf('/events'))(handler).canActivate(context)
 
-    expect(authenticateBeforeCommit).toHaveBeenCalledWith(req)
+    expect(authenticateBeforeCommit).toHaveBeenCalledWith(req, res)
     expect(allowed).toBe(true)
   })
 
@@ -73,7 +74,9 @@ describe('createSseController', () => {
     const handler = {
       authenticateBeforeCommit: jest.fn().mockRejectedValue(failure),
     } as unknown as SseSubscriptionHandler
-    const context = { switchToHttp: () => ({ getRequest: () => mkReq() }) }
+    const context = {
+      switchToHttp: () => ({ getRequest: () => mkReq(), getResponse: () => ({}) }),
+    }
 
     await expect(new (guardOf('/events'))(handler).canActivate(context)).rejects.toBe(failure)
   })

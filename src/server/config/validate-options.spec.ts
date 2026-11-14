@@ -240,6 +240,21 @@ describe('validateOptions', () => {
     }
   })
 
+  it('rejects a maxConnections that is not an integer >= 1, and accepts 1 and more', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '10000', null]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, maxConnections: bad as never }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.maxConnections must be an integer >= 1, got ${String(bad)}`,
+      )
+    }
+    for (const good of [1, 10_000, 2 ** 53 - 1]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, maxConnections: good }),
+      ).not.toThrow()
+    }
+  })
+
   // Socket.IO runs these as timers, so they stop where Node's timers do.
   it.each(['pingIntervalMs', 'pingTimeoutMs'] as const)(
     'rejects a websocket.%s that is not an integer from 1 to 2147483647, and accepts both ends',

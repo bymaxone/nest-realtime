@@ -42,6 +42,7 @@ function makeSocket(
       },
       query: opts.query ?? {},
     },
+    conn: { once: jest.fn(), off: jest.fn() },
     disconnect: jest.fn(),
     emit: jest.fn(),
     join: jest.fn().mockResolvedValue(undefined),
@@ -51,7 +52,10 @@ function makeSocket(
 describe('RealtimeGateway', () => {
   let gateway: RealtimeGateway
   let transportMock: jest.Mocked<
-    Pick<WebSocketTransport, 'setServer' | 'authenticate' | 'registerSocket' | 'unregisterSocket'>
+    Pick<
+      WebSocketTransport,
+      'setServer' | 'admit' | 'authenticate' | 'registerSocket' | 'unregisterSocket'
+    >
   > & { shuttingDown: boolean }
   let authenticator: jest.Mocked<IConnectionAuthenticator>
   const validAuth: AuthenticationResult = { userId: 'u-1', tenantId: 't-1', roles: ['admin'] }
@@ -73,6 +77,7 @@ describe('RealtimeGateway', () => {
     authenticator = { authenticate: jest.fn() }
     transportMock = {
       setServer: jest.fn(),
+      admit: jest.fn(() => ({ release: jest.fn(), renew: jest.fn() })),
       authenticate: jest.fn((context: ConnectionAuthContext) =>
         authenticator.authenticate(context),
       ),
