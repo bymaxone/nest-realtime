@@ -15,6 +15,7 @@ import request from 'supertest'
 import { BymaxRealtimeModule } from '../../src/server/realtime.module'
 import { RealtimeService } from '../../src/server/services/realtime.service'
 import { GENERIC_503_BODY } from '../fixtures/service-unavailable'
+import { listeningServer } from '../support/listening-server'
 
 const DRIVER_TEXT = 'connect ECONNREFUSED redis://user:secret@10.0.0.5:6379'
 
@@ -85,7 +86,7 @@ describe('A transport rejection that reaches HTTP (e2e)', () => {
   // with the generic body. Why: a plain Error answers 500, which reads as a defect in the
   // application for what is an outage of its store.
   it('answers 503 with the generic body when an emit has no delivery path', async () => {
-    const res = await request((await boot()).getHttpServer()).post('/ops/emit')
+    const res = await request(await listeningServer(await boot())).post('/ops/emit')
 
     expect(res.status).toBe(503)
     expect(res.body).toEqual(GENERIC_503_BODY)
@@ -93,7 +94,7 @@ describe('A transport rejection that reaches HTTP (e2e)', () => {
 
   // Scenario: a revocation that cannot be published. Expected: the same 503 and body.
   it('answers 503 with the generic body when a revocation cannot be published', async () => {
-    const res = await request((await boot()).getHttpServer()).post('/ops/revoke')
+    const res = await request(await listeningServer(await boot())).post('/ops/revoke')
 
     expect(res.status).toBe(503)
     expect(res.body).toEqual(GENERIC_503_BODY)
@@ -102,7 +103,7 @@ describe('A transport rejection that reaches HTTP (e2e)', () => {
   // Scenario: either response, read as raw text. Expected: none of the driver's text, the raiser
   // or the code is in what the client is sent.
   it.each(['/ops/emit', '/ops/revoke'])('puts no driver text in the %s response', async (path) => {
-    const res = await request((await boot()).getHttpServer()).post(path)
+    const res = await request(await listeningServer(await boot())).post(path)
 
     expect(res.text).not.toMatch(/ECONNREFUSED|secret|10\.0\.0\.5|redis|SseTransport|REALTIME_/)
     expect(Object.keys(res.headers).join(' ')).not.toMatch(/redis|secret/i)
@@ -115,7 +116,7 @@ describe('A transport rejection that reaches HTTP (e2e)', () => {
   it('hands the instance, with its code, message and cause, to an exception filter', async () => {
     const filter = new RecordingFilter()
 
-    const res = await request((await boot(filter)).getHttpServer()).post('/ops/revoke')
+    const res = await request(await listeningServer(await boot(filter))).post('/ops/revoke')
 
     expect(res.status).toBe(503)
     expect(res.body).toEqual(GENERIC_503_BODY)

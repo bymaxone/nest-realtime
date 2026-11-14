@@ -26,6 +26,7 @@ import RedisMock from 'ioredis-mock'
 import { io } from 'socket.io-client'
 import request from 'supertest'
 import { ModuleKind, ScriptTarget, transpileModule } from 'typescript'
+import { listeningServer } from '../../test/support/listening-server'
 import * as websocket from '../websocket/index'
 import * as server from './index'
 
@@ -222,7 +223,7 @@ describe('README Quick Start — SSE', () => {
     expect(stream.contentType).toContain('text/event-stream')
     await stream.waitFor('event: connection:established')
 
-    await request(app.getHttpServer())
+    await request(await listeningServer(app))
       .post('/invoices/inv-1/pay')
       .send({ userId: 'user-1', amount: 42 })
       .expect(201)
