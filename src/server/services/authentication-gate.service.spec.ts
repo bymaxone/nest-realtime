@@ -6,13 +6,14 @@ import { Logger } from '@nestjs/common'
 import type { ConnectionAuthContext } from '../interfaces/connection-authenticator.interface'
 import { AuthenticationGate, AuthenticationUnavailableError } from './authentication-gate.service'
 
-const context = {
+const context: ConnectionAuthContext = {
   transport: 'sse',
   headers: { authorization: 'Bearer SECRET-TOKEN' },
   cookies: { session: 'SECRET-COOKIE' },
   query: {},
   ip: '203.0.113.9',
-} as unknown as ConnectionAuthContext
+  userAgent: undefined,
+}
 
 type Call = {
   context: ConnectionAuthContext
@@ -242,13 +243,20 @@ describe('AuthenticationGate', () => {
     })
 
     it('holds nothing per handshake after many have gone through', async () => {
-      const authenticate = jest.fn().mockResolvedValue({ userId: 'u1' })
+      let hold = false
+      const authenticate = jest.fn(() =>
+        hold ? new Promise(() => undefined) : Promise.resolve({ userId: 'u1' }),
+      )
       const gate = gateOf({ authenticate }, { maxPendingHandshakes: 5 })
 
       for (let i = 0; i < 1_000; i++) await gate.authenticate(context)
 
-      expect((gate as unknown as { pending: number }).pending).toBe(0)
       expect(jest.getTimerCount()).toBe(0)
+      // The whole capacity is available again: nothing is left counted from the handshakes before.
+      hold = true
+      void [1, 2, 3, 4, 5].map(() => rejection(gate.authenticate(context)))
+      expect(await rejection(gate.authenticate(context))).toMatchObject({ reason: 'saturated' })
+      expect(authenticate).toHaveBeenCalledTimes(1_005)
     })
 
     it('allows 1,000 pending handshakes by default', async () => {
