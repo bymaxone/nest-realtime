@@ -38,9 +38,9 @@ describe('settlesInThisTurn', () => {
     expect(await waiting).toBe('late')
   })
 
-  // Scenario: a call that defers its answer to a setImmediate callback queued before the helper
-  // ran. Expected: pending. Why: that is a macrotask, so the call did not answer at once, however
-  // early in the turn its callback is queued.
+  // Scenario: a call that defers its answer to a setImmediate callback, queued while the call runs.
+  // Expected: pending. Why: that is a macrotask, so the call did not answer at once, and the end of
+  // the turn was armed before the call started, so the callback cannot run ahead of it.
   it('reports a call that answers from a setImmediate as pending', async () => {
     const outcome = await settlesInThisTurn(
       () => new Promise<string>((resolve) => setImmediate(() => resolve('late'))),
