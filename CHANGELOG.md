@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.14] - 2026-11-14
+
 ### Security
 
 - **A reconnect could wait for a hung offline queue for ever.** The read of the offline queue that a `Last-Event-ID` reconnect makes before its stream opens had no time limit, so a store that accepts the call and never answers left every such request open, each holding a socket, a request and a place against `maxConnections`. The read is now made with the authentication, before the response is committed, and bounded by `authenticateTimeoutMs` (default 10,000 ms): a queue that has not answered in time ends the handshake with a `503` and the generic body, registers nothing and gives the place back, and the late answer is ignored. A queue that fails is unchanged: the error is reported and the client gets its live events with an empty gap. The timeouts are logged once for each ten seconds with a count. The queue is read a second time when the stream is built, for what was appended while the application's interceptors ran (an event emitted to the reconnecting user then is in the queue and in no replay ring), and what the first read came to decides what follows: when the store failed on the first read the reconnect is served without a gap, as an outage has always been served, with no second read; when the first read succeeded, a timeout of the second, its refusal because the reads waiting are all taken, or an error from the store ends the attempt before anything is delivered, so the client's cursor does not move past events that are still stored. The call to the store cannot be cancelled, so it runs on until the store gives up, and it keeps its place among the `maxPendingHandshakes` (default 1,000) offline reads waiting at once until it settles: a reconnect that finds them all taken gets the `503` at once, without a call to the store. Set `commandTimeout` on the ioredis client behind `RedisOfflineQueue`.
@@ -1083,7 +1085,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.13...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.14...HEAD
+[1.2.14]: https://github.com/bymaxone/nest-realtime/compare/v1.2.13...v1.2.14
 [1.2.13]: https://github.com/bymaxone/nest-realtime/compare/v1.2.12...v1.2.13
 [1.2.12]: https://github.com/bymaxone/nest-realtime/compare/v1.2.11...v1.2.12
 [1.2.11]: https://github.com/bymaxone/nest-realtime/compare/v1.2.10...v1.2.11
