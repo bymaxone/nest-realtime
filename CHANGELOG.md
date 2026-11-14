@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.16] - 2026-11-14
+
 ### Fixed
 
 - **A publish to a Redis that had stopped answering never settled.** `RedisRealtimePubSub.publish` awaited the `PUBLISH` with no limit once its client reported `ready`, and a paused or partitioned Redis accepts the socket and never replies, so every `emitToRoom`, `emitToTenant` and `broadcast` that waited on the bus, and every `disconnect()` of a connection held on another instance, stayed pending. A publish now gives up after two seconds and rejects with `REALTIME_PUBSUB_UNAVAILABLE`, the error it already raised when the client was not ready, so no caller changes: an emit reports the failure through `onDeliveryFailure`, and `disconnect()` rejects. The rejection means the server did not confirm the publish in time, not that it was not delivered: the command had already been written to the socket, so Redis can still process it when it answers, and an emit can arrive after it was reported failed.
@@ -1103,7 +1105,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.15...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.16...HEAD
+[1.2.16]: https://github.com/bymaxone/nest-realtime/compare/v1.2.15...v1.2.16
 [1.2.15]: https://github.com/bymaxone/nest-realtime/compare/v1.2.14...v1.2.15
 [1.2.14]: https://github.com/bymaxone/nest-realtime/compare/v1.2.13...v1.2.14
 [1.2.13]: https://github.com/bymaxone/nest-realtime/compare/v1.2.12...v1.2.13
