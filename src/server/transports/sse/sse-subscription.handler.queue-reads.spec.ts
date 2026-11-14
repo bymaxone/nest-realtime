@@ -163,3 +163,22 @@ describe('SseSubscriptionHandler: the two reads of the offline-queue gap, case b
     await expect(reconnect(first, second)).resolves.toEqual(expected)
   })
 })
+
+describe('SseSubscriptionHandler: what is logged for a second read that fails after a first that succeeded', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  // The client gets the generic 500; the cause goes to the log only.
+  it('logs the cause under the handshake failure, once', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+
+    await reconnect('ok', 'store error')
+
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('SSE handshake failed — responding 500: down')
+  })
+})

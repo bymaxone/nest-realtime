@@ -68,6 +68,18 @@ describe('OfflineQueueDeliveryService.retrieveGap', () => {
     warn.mockRestore()
   })
 
+  // The count and the log line of reads given up on are for the reads that timed out or were refused,
+  // not for a store that answered with an error.
+  it('does not count a store that fails as a read given up on', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const store = storage(() => Promise.reject(new Error('down')))
+
+    await build(store).retrieveGap('u1', 'e-0')
+
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('given up on'))
+    warn.mockRestore()
+  })
+
   it('takes no place, and answers degraded, for a store that throws as it is called', async () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const store = storage(() => {

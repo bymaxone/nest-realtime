@@ -393,6 +393,7 @@ export class SseSubscriptionHandler {
    */
   private async readQueue(req: SseRequest, userId: string): Promise<OfflineQueueRead> {
     const lastEventId = singleHeader(req.headers['last-event-id'])
+    // Stryker disable next-line BooleanLiteral: equivalent — with no Last-Event-ID or no queue there is no second read either, so this flag is never read
     if (!lastEventId || !this.offlineDelivery) return { events: [], degraded: false }
     try {
       return await this.offlineDelivery.retrieveGap(userId, lastEventId)
