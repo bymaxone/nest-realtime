@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A publish to a Redis that had stopped answering never settled.** `RedisRealtimePubSub.publish` awaited the `PUBLISH` with no limit once its client reported `ready`, and a paused or partitioned Redis accepts the socket and never replies, so every `emitToRoom`, `emitToTenant` and `broadcast` that waited on the bus, and every `disconnect()` of a connection held on another instance, stayed pending. A publish now gives up after two seconds and rejects with `REALTIME_PUBSUB_UNAVAILABLE`, the error it already raised when the client was not ready, so no caller changes: an emit reports the failure through `onDeliveryFailure`, and `disconnect()` rejects. The rejection means the server did not confirm the publish in time, not that it was not delivered: the command had already been written to the socket, so Redis can still process it when it answers, and an emit can arrive after it was reported failed.
+- **A pub/sub payload that was not an object was dropped without a trace, and the messages the subscriber could not act on flooded the log.** A payload that parsed to `null` threw inside the subscriber into a catch that discarded it, with no count and no line; a message with no known op, or a known op with no `args`, wrote one warning for each message, with no limit, and carried the op or the error's message, which whoever can publish to the channel controls. A payload that is not an object is now counted by the report of malformed payloads, and everything else the subscriber cannot act on is reported once for each ten seconds, with a count and a reason that is either `unknown op` or the class of the last failure, never the op, the payload or an error's message.
+
+#### Apply to a derived backend
+
+Set `commandTimeout` on the ioredis client you give `RedisRealtimePubSub` (for example `new Redis({ commandTimeout: 5000 })`) if you want the command itself rejected: the library's limit stops the caller waiting, but the command stays queued in the client until the server answers or the connection drops. If you alert on the log lines `Unknown pub/sub op: …` or `Pub/sub message handling failed: …`, they no longer exist: alert on `Pub/sub dropped N message(s) it could not act on since the last report` instead. Nothing else changes.
+
 ## [1.2.15] - 2026-11-14
 
 ### Fixed
