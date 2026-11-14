@@ -70,6 +70,8 @@ function assertInteger(path: string, value: unknown, least: number, most?: numbe
 
 function validateHookTimeout(options: BymaxRealtimeModuleOptions): void {
   assertInteger('hookTimeoutMs', options.hookTimeoutMs, 1, MAX_TIMER_MS)
+  assertInteger('authenticateTimeoutMs', options.authenticateTimeoutMs, 1, MAX_TIMER_MS)
+  assertInteger('maxPendingHandshakes', options.maxPendingHandshakes, 1)
   // Socket.IO runs these two as timers.
   assertInteger('websocket.pingIntervalMs', options.websocket?.pingIntervalMs, 1, MAX_TIMER_MS)
   assertInteger('websocket.pingTimeoutMs', options.websocket?.pingTimeoutMs, 1, MAX_TIMER_MS)

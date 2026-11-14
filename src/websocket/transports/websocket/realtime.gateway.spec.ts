@@ -12,6 +12,7 @@ import type { TestingModule } from '@nestjs/testing'
 import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
 import type {
   AuthenticationResult,
+  ConnectionAuthContext,
   IConnectionAuthenticator,
   BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
@@ -50,7 +51,7 @@ function makeSocket(
 describe('RealtimeGateway', () => {
   let gateway: RealtimeGateway
   let transportMock: jest.Mocked<
-    Pick<WebSocketTransport, 'setServer' | 'authenticator' | 'registerSocket' | 'unregisterSocket'>
+    Pick<WebSocketTransport, 'setServer' | 'authenticate' | 'registerSocket' | 'unregisterSocket'>
   > & { shuttingDown: boolean }
   let authenticator: jest.Mocked<IConnectionAuthenticator>
   const validAuth: AuthenticationResult = { userId: 'u-1', tenantId: 't-1', roles: ['admin'] }
@@ -72,7 +73,9 @@ describe('RealtimeGateway', () => {
     authenticator = { authenticate: jest.fn() }
     transportMock = {
       setServer: jest.fn(),
-      authenticator: jest.fn().mockReturnValue(authenticator),
+      authenticate: jest.fn((context: ConnectionAuthContext) =>
+        authenticator.authenticate(context),
+      ),
       registerSocket: jest.fn().mockResolvedValue(undefined),
       unregisterSocket: jest.fn().mockResolvedValue(undefined),
       shuttingDown: false,

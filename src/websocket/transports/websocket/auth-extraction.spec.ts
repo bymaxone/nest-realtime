@@ -58,7 +58,7 @@ describe('RealtimeGateway — handshake auth extraction', () => {
   beforeEach(async () => {
     transportMock = {
       setServer: jest.fn(),
-      authenticator: jest.fn(),
+      authenticate: jest.fn(),
       registerSocket: jest.fn().mockResolvedValue(undefined),
       unregisterSocket: jest.fn().mockResolvedValue(undefined),
     }
@@ -85,7 +85,9 @@ describe('RealtimeGateway — handshake auth extraction', () => {
         return null
       }),
     }
-    ;(transportMock.authenticator as jest.Mock).mockReturnValue(authenticator)
+    ;(transportMock.authenticate as jest.Mock).mockImplementation((ctx: never) =>
+      authenticator.authenticate(ctx),
+    )
 
     const { socket } = makeSocket({ cookieHeader: 'access_token=abc; theme=dark' })
     await gateway.handleConnection(socket as never)
@@ -104,7 +106,9 @@ describe('RealtimeGateway — handshake auth extraction', () => {
         return null
       }),
     }
-    ;(transportMock.authenticator as jest.Mock).mockReturnValue(authenticator)
+    ;(transportMock.authenticate as jest.Mock).mockImplementation((ctx: never) =>
+      authenticator.authenticate(ctx),
+    )
 
     const { socket } = makeSocket({ auth: { token: 'eyJhbGci.test' } })
     await gateway.handleConnection(socket as never)
@@ -123,7 +127,9 @@ describe('RealtimeGateway — handshake auth extraction', () => {
         return null
       }),
     }
-    ;(transportMock.authenticator as jest.Mock).mockReturnValue(authenticator)
+    ;(transportMock.authenticate as jest.Mock).mockImplementation((ctx: never) =>
+      authenticator.authenticate(ctx),
+    )
 
     const { socket } = makeSocket({ auth: { ticket: 'otp_12345' } })
     await gateway.handleConnection(socket as never)
@@ -142,7 +148,9 @@ describe('RealtimeGateway — handshake auth extraction', () => {
         return null
       }),
     }
-    ;(transportMock.authenticator as jest.Mock).mockReturnValue(authenticator)
+    ;(transportMock.authenticate as jest.Mock).mockImplementation((ctx: never) =>
+      authenticator.authenticate(ctx),
+    )
 
     const { socket } = makeSocket()
     await gateway.handleConnection(socket as never)
@@ -155,7 +163,9 @@ describe('RealtimeGateway — handshake auth extraction', () => {
     const authenticator: IConnectionAuthenticator = {
       authenticate: jest.fn().mockResolvedValue(null),
     }
-    ;(transportMock.authenticator as jest.Mock).mockReturnValue(authenticator)
+    ;(transportMock.authenticate as jest.Mock).mockImplementation((ctx: never) =>
+      authenticator.authenticate(ctx),
+    )
 
     const { socket } = makeSocket({ auth: {} })
     await expect(gateway.handleConnection(socket as never)).resolves.toBeUndefined()

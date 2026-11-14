@@ -9,7 +9,6 @@ import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.cons
 import {
   DEFAULT_HEARTBEAT_MS,
   DEFAULT_HOOK_TIMEOUT_MS,
-  REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
   REALTIME_INSTANCE_ID_TOKEN,
   REALTIME_OFFLINE_QUEUE_TOKEN,
@@ -23,7 +22,6 @@ import type {
 import type {
   AuthenticationResult,
   ConnectionAuthContext,
-  IConnectionAuthenticator,
 } from '../../interfaces/connection-authenticator.interface'
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
@@ -37,6 +35,7 @@ import type { ConnectionRecord } from '../../services/connection-registry.servic
 import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
 import { composeRoomId } from '../../utils/compose-room-id'
+import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { describeError } from '../../utils/describe-error'
 import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
@@ -102,7 +101,7 @@ export class SseTransport implements ITransport {
     @Inject(EventReplayBuffer) private readonly replayBuffer: EventReplayBuffer,
     @Inject(EventIdGenerator) private readonly idGen: EventIdGenerator,
     @Inject(HeartbeatService) private readonly heartbeat: HeartbeatService,
-    @Inject(REALTIME_AUTHENTICATOR_TOKEN) private readonly auth: IConnectionAuthenticator,
+    @Inject(AuthenticationGate) private readonly gate: AuthenticationGate,
     @Inject(REALTIME_PUBSUB_TOKEN) private readonly pubsub: IRealtimePubSub,
     @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks: IConnectionLifecycleHooks,
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
@@ -166,7 +165,7 @@ export class SseTransport implements ITransport {
 
   /** Authenticate a connection through the consumer-provided authenticator. */
   authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
-    return this.auth.authenticate(context)
+    return this.gate.authenticate(context)
   }
 
   /**

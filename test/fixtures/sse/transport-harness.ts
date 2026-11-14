@@ -17,6 +17,7 @@ import type {
   BymaxRealtimeModuleOptions,
   SseOptions,
 } from '../../../src/server/interfaces/realtime-module-options.interface'
+import { AuthenticationGate } from '../../../src/server/services/authentication-gate.service'
 import { HeartbeatService } from '../../../src/server/transports/sse/heartbeat.service'
 import { EventReplayBuffer } from '../../../src/server/transports/sse/event-replay-buffer'
 import { SseTransport } from '../../../src/server/transports/sse/sse.transport'
@@ -57,7 +58,7 @@ export function build(opts?: {
     replay,
     idGen,
     heartbeat,
-    auth,
+    new AuthenticationGate(options, auth),
     pubsub,
     hooks,
     options,

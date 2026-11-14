@@ -7,6 +7,7 @@ import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
 import {
+  AuthenticationGate,
   ConnectionRegistry,
   RoomRegistry,
   REALTIME_AUTHENTICATOR_TOKEN,
@@ -66,6 +67,8 @@ function makeNamespaceServer(sockets: Map<string, ReturnType<typeof makeSocket>>
   }
 }
 
+const authenticatorMock = { authenticate: jest.fn().mockResolvedValue(null) }
+
 describe('WebSocketTransport', () => {
   let transport: WebSocketTransport
   let connectionRegistry: ConnectionRegistry
@@ -91,7 +94,8 @@ describe('WebSocketTransport', () => {
         WebSocketTransport,
         ConnectionRegistry,
         RoomRegistry,
-        { provide: REALTIME_AUTHENTICATOR_TOKEN, useValue: { authenticate: jest.fn() } },
+        AuthenticationGate,
+        { provide: REALTIME_AUTHENTICATOR_TOKEN, useValue: authenticatorMock },
         { provide: REALTIME_HOOKS_TOKEN, useValue: hooks },
         { provide: REALTIME_OPTIONS_TOKEN, useValue: opts },
       ],
@@ -135,11 +139,15 @@ describe('WebSocketTransport', () => {
     }
   })
 
-  it('authenticator() returns the injected IConnectionAuthenticator', () => {
-    // The gateway uses authenticator() to get the auth instance without circular injection.
-    const auth = transport.authenticator()
-    expect(auth).toBeDefined()
-    expect(typeof auth.authenticate).toBe('function')
+  it('authenticate() asks the authenticator through the gate', async () => {
+    // The gateway calls authenticate() on the transport, which keeps it from injecting the token.
+    const context = { transport: 'websocket' } as never
+
+    await expect(transport.authenticate(context)).resolves.toBeNull()
+
+    expect(authenticatorMock.authenticate).toHaveBeenCalledWith(context, {
+      signal: expect.any(AbortSignal),
+    })
   })
 
   it('emitToUser is a safe no-op when server is unset', async () => {
