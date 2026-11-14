@@ -88,6 +88,7 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
    * wrote, so neither is ever written.
    */
   private readonly dropped = windowedReport(
+    // Stryker disable next-line StringLiteral: equivalent — a report is only written after a drop, and every drop sets `last` first
     () => ({ count: 0, last: 'none' }),
     ({ count, last }) => {
       this.logger.warn(

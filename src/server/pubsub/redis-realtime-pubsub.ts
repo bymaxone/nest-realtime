@@ -400,7 +400,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       const parsed: unknown = JSON.parse(payload)
       // Valid JSON that is not an object has no op to act on; a handler would be handed `null`.
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        throw new TypeError('not an object')
+        this.reportMalformed()
+        return
       }
       msg = parsed as RealtimePubSubMessage
     } catch {
