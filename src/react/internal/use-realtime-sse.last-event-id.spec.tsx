@@ -189,6 +189,22 @@ describe('useRealtimeSse: resuming after a new EventSource', () => {
     expect(lastInstance().url).toBe(expected)
   })
 
+  // Scenario: a url that begins with its query or its fragment, which resolves against the page. The
+  // `?` or `#` is at index 0 there, and a test for "found" that read 0 as "absent" would drop the
+  // query or the fragment.
+  it.each([
+    ['a url that is only a query', '?room=a', '?room=a&lastEventId=ev-7'],
+    ['a url that is only a fragment', '#top', '?lastEventId=ev-7#top'],
+    ['a url that is a query and a fragment', '?room=a#top', '?room=a&lastEventId=ev-7#top'],
+  ])('adds the parameter to %s', (_label, url, expected) => {
+    renderHook(() => useRealtimeSse({ url }))
+    receive('ev-7')
+
+    failAndRetry()
+
+    expect(lastInstance().url).toBe(expected)
+  })
+
   it('encodes an id that is not a plain token', () => {
     renderHook(() => useRealtimeSse({ url: '/realtime/sse' }))
     receive('a b&c=d#e')
