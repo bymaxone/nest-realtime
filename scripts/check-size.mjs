@@ -45,8 +45,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     for up to two seconds, then the connection disconnected, shared by the subscriber's retire and
 //     by the Socket.IO adapter's close, and the one windowed report that the three rate-limited log
 //     lines share: the helper is a closure, which measures 17,854 B; the same helper as a class
-//     measures 17,892 B, so the closure is the shape that stays, and the three copies it replaced
-//     had compressed to less than the helper costs)
+//     measures 17,892 B, so the closure is the shape that stays)
 //   websocket  5,540 B →  5,567 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
