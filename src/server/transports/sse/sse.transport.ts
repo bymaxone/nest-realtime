@@ -83,9 +83,10 @@ interface Failure {
  * self-originated messages are filtered there — so a single instance never
  * double-delivers and multiple instances never ping-pong.
  *
- * Teardown of an SSE stream is driven by the per-connection `close$` subject:
- * `disconnectLocal` completes it (which ends the `@Sse` Observable via
- * `takeUntil`) before unregistering. See `docs/technical_specification.md` §6.1.
+ * Teardown of an SSE stream is driven by the per-connection `close$` subject: `disconnectLocal`
+ * removes the connection from the registries, then completes `close$` (which ends the `@Sse`
+ * Observable via `takeUntil`), and only then runs the consumer's `onDisconnect`. See
+ * `docs/technical_specification.md` §6.1.
  */
 @Injectable()
 export class SseTransport implements ITransport {
