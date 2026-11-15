@@ -5,8 +5,7 @@
  *
  * Every check here exists because its absence let a defect reach npm:
  *
- * - `1.0.3` shipped a README whose "Example App" link returned 404. Nothing read
- *   the links.
+ * - `1.0.3` shipped a README whose "Example App" link returned 404. Nothing read the links.
  * - `1.0.4` fixed an exported type that rejected the very snippet the README
  *   shows. `test:types` compiles `src` through a `paths` mapping, so it never
  *   sees what a consumer resolving through `exports` sees, and the consumer
@@ -218,10 +217,9 @@ async function unroutableReason(url) {
   }
   let addresses
   try {
-    // Bounded like the fetch below is. A resolver that hangs would otherwise
-    // stall Promise.all indefinitely and take CI with it, and a lookup that
-    // cannot answer in five seconds tells us nothing anyway. `unref` so a
-    // pending timer never holds the process open.
+    // Bounded like the fetch below is. A resolver that hangs would otherwise stall Promise.all
+    // indefinitely and take CI with it, and a lookup that cannot answer in five seconds tells us
+    // nothing anyway. `unref` so a pending timer never holds the process open.
     addresses = await Promise.race([
       // The losing promise keeps running after the race resolves, so a lookup
       // that rejects late would surface as an unhandled rejection. Swallowed
@@ -268,9 +266,8 @@ async function fetchChecked(url, init, hops = 0) {
   if (!REDIRECT_STATUSES.has(res.status)) return res
   const location = res.headers.get('location')
   if (!location) return res
-  // Release the socket before the next hop: undici holds the connection until
-  // the body is read or cancelled, and this runs across every README link at
-  // once.
+  // Release the socket before the next hop: undici holds the connection until the body is read or
+  // cancelled, and this runs across every README link at once.
   await res.body?.cancel().catch(() => undefined)
   let next
   try {
@@ -385,6 +382,16 @@ async function checkLinks() {
         // failing here would block the very release that makes the link true.
         if (res.status === 404 && probe !== url) {
           console.log(`  note: ${url} is not live yet — expected until the first publish`)
+          return null
+        }
+        // A host that answers 5xx, or 429 again after the GET above, is in trouble of its own, and a link
+        // check cannot tell that from a dead link. Reported like a transport error, never fatal: this gate
+        // also guards `prepublishOnly`, and someone else's outage must not block a release. 404, 410 and the
+        // other client errors still fail.
+        if (res.status >= 500 || res.status === 429) {
+          console.log(
+            `  note: ${url} answered HTTP ${res.status}, the host's trouble and not proof that the link is dead`,
+          )
           return null
         }
         return `${url} → HTTP ${res.status}`
