@@ -217,10 +217,9 @@ async function unroutableReason(url) {
   }
   let addresses
   try {
-    // Bounded like the fetch below is. A resolver that hangs would otherwise
-    // stall Promise.all indefinitely and take CI with it, and a lookup that
-    // cannot answer in five seconds tells us nothing anyway. `unref` so a
-    // pending timer never holds the process open.
+    // Bounded like the fetch below is. A resolver that hangs would otherwise stall Promise.all
+    // indefinitely and take CI with it, and a lookup that cannot answer in five seconds tells us
+    // nothing anyway. `unref` so a pending timer never holds the process open.
     addresses = await Promise.race([
       // The losing promise keeps running after the race resolves, so a lookup
       // that rejects late would surface as an unhandled rejection. Swallowed
@@ -267,9 +266,8 @@ async function fetchChecked(url, init, hops = 0) {
   if (!REDIRECT_STATUSES.has(res.status)) return res
   const location = res.headers.get('location')
   if (!location) return res
-  // Release the socket before the next hop: undici holds the connection until
-  // the body is read or cancelled, and this runs across every README link at
-  // once.
+  // Release the socket before the next hop: undici holds the connection until the body is read or
+  // cancelled, and this runs across every README link at once.
   await res.body?.cancel().catch(() => undefined)
   let next
   try {
@@ -391,7 +389,9 @@ async function checkLinks() {
         // also guards `prepublishOnly`, and someone else's outage must not block a release. 404, 410 and the
         // other client errors still fail.
         if (res.status >= 500 || res.status === 429) {
-          console.log(`  note: ${url} answered HTTP ${res.status}, the host's trouble and not proof that the link is dead`)
+          console.log(
+            `  note: ${url} answered HTTP ${res.status}, the host's trouble and not proof that the link is dead`,
+          )
           return null
         }
         return `${url} → HTTP ${res.status}`
