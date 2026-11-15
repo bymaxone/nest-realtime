@@ -5,8 +5,7 @@
  *
  * Every check here exists because its absence let a defect reach npm:
  *
- * - `1.0.3` shipped a README whose "Example App" link returned 404. Nothing read
- *   the links.
+ * - `1.0.3` shipped a README whose "Example App" link returned 404. Nothing read the links.
  * - `1.0.4` fixed an exported type that rejected the very snippet the README
  *   shows. `test:types` compiles `src` through a `paths` mapping, so it never
  *   sees what a consumer resolving through `exports` sees, and the consumer
