@@ -99,7 +99,7 @@ export interface BymaxRealtimeModuleOptions {
   /**
    * What a failing `onConnect` does to the connection it was called for.
    *
-   * `'ignore'` (the default): the failure is logged and the connection stays, as it always has.
+   * `'ignore'` (the default): the failure is logged and the connection stays.
    * `'close'`: the failure is logged and the connection is closed, on both transports. On
    * WebSocket the connection is refused before it is announced; on SSE the hook is not awaited,
    * so events published in the meantime may already have been delivered. Scope a connection in
