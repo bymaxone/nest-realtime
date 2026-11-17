@@ -148,8 +148,10 @@ export function composeForRoot(
   moduleClass: Type<unknown>,
   wiring: TransportWiring,
   logger: Logger,
-  options: BymaxRealtimeModuleOptions,
+  raw: BymaxRealtimeModuleOptions,
 ): DynamicModule {
+  // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
+  const options = dropUnset(raw)
   validateOptions(options)
   assertModeSupported(wiring, options.transport, moduleClass.name)
   const resolved: ResolvedRealtimeOptions = applyDefaults(options)
@@ -219,6 +221,9 @@ function bindSseEndpoint(
 /**
  * Validate an async factory result and enforce the declared transport.
  *
+ * @returns The resolved options and the `sse.endpoint` the factory itself declared, read from the same
+ *   plain copy that was validated.
+ *
  * @throws when the factory returned nothing, the options are invalid, or the
  *   resolved transport disagrees with the one the module was registered for.
  */
@@ -229,22 +234,24 @@ function resolveAsyncOptions(
   source: string,
   logger: Logger,
   moduleName: string,
-): ResolvedRealtimeOptions {
+): { resolved: ResolvedRealtimeOptions; declaredEndpoint: string | undefined } {
   if (!raw) {
     throw realtimeError(REALTIME_ERROR_CODES.INVALID_OPTIONS, `${source} returned nothing`)
   }
-  validateOptions(raw)
-  if (raw.transport !== declaredMode) {
+  // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
+  const options = dropUnset(raw)
+  validateOptions(options)
+  if (options.transport !== declaredMode) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
       `forRootAsync was registered for ` +
-        `transport '${declaredMode}' but the factory resolved '${raw.transport}'`,
+        `transport '${declaredMode}' but the factory resolved '${options.transport}'`,
       { who: moduleName },
     )
   }
-  const resolved = applyDefaults(raw)
+  const resolved = applyDefaults(options)
   logger.log(`Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`)
-  return resolved
+  return { resolved, declaredEndpoint: options.sse?.endpoint }
 }
 
 /**
@@ -326,7 +333,7 @@ function buildResolver(
   moduleName: string,
 ): (raw: BymaxRealtimeModuleOptions | null | undefined, source: string) => ResolvedRealtimeOptions {
   return (raw, source) => {
-    const resolved = resolveAsyncOptions(
+    const { resolved, declaredEndpoint } = resolveAsyncOptions(
       raw,
       asyncOptions.transport,
       instanceId,
@@ -335,12 +342,7 @@ function buildResolver(
       moduleName,
     )
     if (asyncOptions.transport === 'websocket') return resolved
-    return bindSseEndpoint(
-      resolved,
-      dropUnset(raw as BymaxRealtimeModuleOptions).sse?.endpoint,
-      boundSseEndpoint,
-      moduleName,
-    )
+    return bindSseEndpoint(resolved, declaredEndpoint, boundSseEndpoint, moduleName)
   }
 }
 

@@ -6,6 +6,7 @@
  * bounds read downstream (`max <= 0`, `?? 0`) then mean "switched off". Unset keys are dropped before the
  * defaults are merged and before validation.
  */
+import { Test } from '@nestjs/testing'
 import { REALTIME_OPTIONS_TOKEN } from '../constants/injection-tokens.constants'
 import { BymaxRealtimeModule } from '../realtime.module'
 import type {
@@ -232,5 +233,55 @@ describe('the top level as a class instance', () => {
 
     expect('maxConnections' in kept).toBe(false)
     expect(kept.hookTimeoutMs).toBe(9_000)
+  })
+})
+
+describe('a getter is read once per registration', () => {
+  /** An sse group whose `maxConnectionsPerUser` answers a different value on every read. */
+  function flippingGroup(): { group: object; reads: () => number } {
+    let reads = 0
+    const group = {
+      get maxConnectionsPerUser(): number {
+        reads += 1
+        return reads === 1 ? 7 : 1_000_000
+      },
+    }
+    return { group, reads: () => reads }
+  }
+
+  // Scenario: a getter that is not stable. Expected: the value that is validated is the value that is
+  // resolved, because the group is read into a plain copy once and the copy is what travels on. Read
+  // twice, the first read would pass the ceiling check and the second would slip past it.
+  it('resolves the value it validated, from one read', () => {
+    const { group, reads } = flippingGroup()
+    const registration = BymaxRealtimeModule.forRoot({
+      transport: 'sse',
+      authenticator,
+      sse: group,
+    } as never)
+    const provided = registration.providers?.find(
+      (provider) => (provider as { provide?: unknown }).provide === REALTIME_OPTIONS_TOKEN,
+    ) as { useValue: { sse: { maxConnectionsPerUser: number } } }
+
+    expect(provided.useValue.sse.maxConnectionsPerUser).toBe(7)
+    expect(reads()).toBe(1)
+  })
+
+  it('resolves the value it validated, from one read, when the factory returns it', async () => {
+    const { group, reads } = flippingGroup()
+    const module = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useFactory: async () =>
+            ({ transport: 'sse' as const, authenticator, sse: group }) as never,
+        }),
+      ],
+    }).compile()
+
+    expect(
+      module.get<BymaxRealtimeModuleOptions>(REALTIME_OPTIONS_TOKEN).sse?.maxConnectionsPerUser,
+    ).toBe(7)
+    expect(reads()).toBe(1)
   })
 })
