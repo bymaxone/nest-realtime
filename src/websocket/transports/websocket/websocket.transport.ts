@@ -222,7 +222,11 @@ export class WebSocketTransport implements ITransport {
         }),
       this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
     )
-    if (failed) this.logger.error(`onConnect hook failed: ${describeError(failed.error)}`)
+    if (!failed) return
+    const message = `onConnect hook failed: ${describeError(failed.error)}`
+    // Raised, the failure reaches the gateway, which logs it and disconnects the socket.
+    if (this.options.onConnectFailure === 'close') throw new Error(message)
+    this.logger.error(message)
   }
 
   /**
