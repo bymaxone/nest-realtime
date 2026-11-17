@@ -53,18 +53,29 @@ export function validateOptions(options: BymaxRealtimeModuleOptions): void {
  */
 const MAX_TIMER_MS = 2_147_483_647
 
-/** Refuse `value` unless it is an integer in `[least, most]`; `most` absent means no upper bound. */
+/**
+ * Ceilings for the options whose size is memory or descriptors. A bound this large is one in name only
+ * (`Number.isInteger(1e300)` is true, and a comparison against it never fires), so each has a most.
+ */
+const MAX_PER_USER_CONNECTIONS = 100_000 // beyond the ports one client address has and the descriptors an instance has
+const MAX_REPLAY_EVENTS = 100_000 // events held per user stream: memory is this times the size of a frame
+const MAX_HTTP_BUFFER_BYTES = 100 * 1024 * 1024 // bytes one message may buffer while it assembles; Socket.IO defaults to 1,000,000
+
+/**
+ * Refuse `value` unless it is a safe integer in `[least, most]`; with no `most` the bound is the largest
+ * safe integer, so `1e300` and `2 ** 53` are refused as well.
+ */
 function assertInteger(path: string, value: unknown, least: number, most?: number): void {
   if (value === undefined) return
   const valid =
     typeof value === 'number' &&
-    Number.isInteger(value) &&
+    Number.isSafeInteger(value) &&
     value >= least &&
     (most === undefined || value <= most)
   if (valid) return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `options.${path} must be an integer >= ${least}${most === undefined ? '' : ` and <= ${most}`}, got ${String(value)}`,
+    `options.${path} must be an integer >= ${least}${most === undefined ? '' : ` and <= ${most}`}, got ${String(value)}${most === undefined && Number.isInteger(value) && !Number.isSafeInteger(value) ? ` (the most is ${Number.MAX_SAFE_INTEGER})` : ''}`,
     { who: 'BymaxRealtimeModule' },
   )
 }
@@ -85,6 +96,19 @@ function validateHookTimeout(options: BymaxRealtimeModuleOptions): void {
   assertInteger('authenticateTimeoutMs', options.authenticateTimeoutMs, 1, MAX_TIMER_MS)
   assertInteger('maxPendingHandshakes', options.maxPendingHandshakes, 1)
   assertInteger('maxConnections', options.maxConnections, 1)
+  // Bounds written as a comparison (`length > max`, `size > limit`) are switched off by NaN, so each is an integer.
+  assertInteger(
+    'websocket.maxConnectionsPerUser',
+    options.websocket?.maxConnectionsPerUser,
+    0,
+    MAX_PER_USER_CONNECTIONS,
+  )
+  assertInteger(
+    'websocket.maxHttpBufferSize',
+    options.websocket?.maxHttpBufferSize,
+    1,
+    MAX_HTTP_BUFFER_BYTES,
+  )
   // Socket.IO runs these two as timers.
   assertInteger('websocket.pingIntervalMs', options.websocket?.pingIntervalMs, 1, MAX_TIMER_MS)
   assertInteger('websocket.pingTimeoutMs', options.websocket?.pingTimeoutMs, 1, MAX_TIMER_MS)
@@ -140,20 +164,14 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
       { who: 'BymaxRealtimeModule' },
     )
   }
-  if (sse?.replayBufferSize !== undefined && sse.replayBufferSize < 0) {
-    throw realtimeError(
-      REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `options.sse.replayBufferSize must be >= 0`,
-      { who: 'BymaxRealtimeModule' },
-    )
-  }
+  assertInteger('sse.replayBufferSize', sse?.replayBufferSize, 0, MAX_REPLAY_EVENTS)
   assertInteger('sse.replayTtlMs', sse?.replayTtlMs, 1, MAX_TIMER_MS)
   assertInteger('sse.replayMaxIdleUsers', sse?.replayMaxIdleUsers, 1)
   for (const name of ['maxQueuedBytes', 'maxQueuedEvents', 'stallHeartbeats'] as const) {
     const value: unknown = sse?.[name]
     if (
       value !== undefined &&
-      !(typeof value === 'number' && Number.isInteger(value) && value >= 0)
+      !(typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
     ) {
       throw realtimeError(
         REALTIME_ERROR_CODES.INVALID_OPTIONS,
@@ -162,11 +180,10 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
       )
     }
   }
-  if (sse?.maxConnectionsPerUser !== undefined && sse.maxConnectionsPerUser < 0) {
-    throw realtimeError(
-      REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `options.sse.maxConnectionsPerUser must be >= 0 (0 disables the per-user connection cap)`,
-      { who: 'BymaxRealtimeModule' },
-    )
-  }
+  assertInteger(
+    'sse.maxConnectionsPerUser',
+    sse?.maxConnectionsPerUser,
+    0,
+    MAX_PER_USER_CONNECTIONS,
+  )
 }

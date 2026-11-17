@@ -53,7 +53,7 @@ describe('configuration errors carry their exact message and their code', () => 
           sse: { replayBufferSize: -1 },
         } as never),
       'REALTIME_INVALID_OPTIONS',
-      `[${module}] REALTIME_INVALID_OPTIONS: options.sse.replayBufferSize must be >= 0`,
+      `[${module}] REALTIME_INVALID_OPTIONS: options.sse.replayBufferSize must be an integer >= 0 and <= 100000, got -1`,
     ],
     [
       'a negative per-user connection cap',
@@ -64,7 +64,7 @@ describe('configuration errors carry their exact message and their code', () => 
           sse: { maxConnectionsPerUser: -1 },
         } as never),
       'REALTIME_INVALID_OPTIONS',
-      `[${module}] REALTIME_INVALID_OPTIONS: options.sse.maxConnectionsPerUser must be >= 0 (0 disables the per-user connection cap)`,
+      `[${module}] REALTIME_INVALID_OPTIONS: options.sse.maxConnectionsPerUser must be an integer >= 0 and <= 100000, got -1`,
     ],
     [
       'a transport the module does not serve',
