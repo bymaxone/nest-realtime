@@ -110,10 +110,10 @@ describe('the text of a third party in a serialised error', () => {
         configurable: true,
       })
       expect(() => {
-        ;(error as { [key: string]: unknown })[field] = 'replaced'
+        record[field] = 'replaced'
         Object.defineProperty(error, field, { value: 'redefined' })
       }).not.toThrow()
-      expect((error as unknown as Record<string, unknown>)[field]).toBe('redefined')
+      expect(record[field]).toBe('redefined')
     },
   )
 
