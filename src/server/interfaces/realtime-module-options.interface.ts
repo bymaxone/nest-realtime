@@ -96,6 +96,16 @@ export interface BymaxRealtimeModuleOptions {
   tenantResolver?: (auth: AuthenticationResult) => string | undefined | null
   hooks?: IConnectionLifecycleHooks
   hookTimeoutMs?: number
+  /**
+   * What a failing `onConnect` does to the connection it was called for.
+   *
+   * `'ignore'` (the default): the failure is logged and the connection stays, as it always has.
+   * `'close'`: the failure is logged and the connection is closed, on both transports. On
+   * WebSocket the connection is refused before it is announced; on SSE the hook is not awaited,
+   * so events published in the meantime may already have been delivered. Scope a connection in
+   * `AuthenticationResult.rooms`, not in the hook, when none may be missed.
+   */
+  onConnectFailure?: 'ignore' | 'close'
   authenticateTimeoutMs?: number
   maxPendingHandshakes?: number
   /**

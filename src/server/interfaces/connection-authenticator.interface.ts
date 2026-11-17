@@ -80,8 +80,9 @@ export interface AuthenticationResult {
    * They are joined before the connection is announced or `onConnect` runs, so no event
    * published to one of them can fall between admission and a later `joinRoom` — the
    * window a join from `onConnect` leaves open. On SSE `onConnect` is not awaited
-   * and a hook that throws is only logged, so a connection scoped from there can go
-   * live, and stay, without its room; scope in `rooms`, not in `onConnect`.
+   * and a hook that throws is only logged (unless `onConnectFailure` is `'close'`), so a
+   * connection scoped from there can go live, and stay, without its room; scope in `rooms`,
+   * not in `onConnect`.
    *
    * Each name must be a non-blank string of at most `ADMISSION_ROOM_LIMITS.MAX_ROOM_NAME_LENGTH`
    * characters, must not start with `user:`, `tenant:` or `connection:` (the library

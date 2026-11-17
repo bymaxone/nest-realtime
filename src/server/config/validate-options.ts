@@ -42,6 +42,7 @@ export function validateOptions(options: BymaxRealtimeModuleOptions): void {
     )
   }
   validateHookTimeout(options)
+  validateOnConnectFailure(options)
   validateSseOptions(options)
   validateReauthPolicy(options)
 }
@@ -64,6 +65,17 @@ function assertInteger(path: string, value: unknown, least: number, most?: numbe
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
     `options.${path} must be an integer >= ${least}${most === undefined ? '' : ` and <= ${most}`}, got ${String(value)}`,
+    { who: 'BymaxRealtimeModule' },
+  )
+}
+
+/** A value other than the two names is a typo that would silently mean `'ignore'`, so it is refused. */
+function validateOnConnectFailure(options: BymaxRealtimeModuleOptions): void {
+  const value: unknown = options.onConnectFailure
+  if (value === undefined || value === 'ignore' || value === 'close') return
+  throw realtimeError(
+    REALTIME_ERROR_CODES.INVALID_OPTIONS,
+    `options.onConnectFailure must be 'ignore' or 'close', got ${String(value)}`,
     { who: 'BymaxRealtimeModule' },
   )
 }

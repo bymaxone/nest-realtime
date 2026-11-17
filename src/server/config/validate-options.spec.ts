@@ -199,6 +199,24 @@ describe('validateOptions', () => {
     }
   })
 
+  // A misspelt value would silently mean the default, so a closed set of two names is enforced.
+  it("rejects an onConnectFailure that is not 'ignore' or 'close', and accepts both and none", () => {
+    for (const bad of ['closed', 'Close', '', null, true, 1]) {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, onConnectFailure: bad as never }),
+      ).toThrow(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.onConnectFailure must be 'ignore' or 'close', got ${String(bad)}`,
+      )
+    }
+    for (const good of [
+      { onConnectFailure: 'ignore' as const },
+      { onConnectFailure: 'close' as const },
+      {},
+    ]) {
+      expect(() => validateOptions({ transport: 'sse', authenticator, ...good })).not.toThrow()
+    }
+  })
+
   // `authenticateTimeoutMs` feeds a timer; `maxPendingHandshakes` is a count, so it has no ceiling.
   it('rejects an authenticateTimeoutMs that is not an integer from 1 to 2147483647, and accepts both ends', () => {
     for (const bad of [

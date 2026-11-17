@@ -578,7 +578,10 @@ export class SseSubscriptionHandler {
     }
     const record = this.transport.getConnection(connectionId)
     if (record) {
-      this.fireHook(() => this.hooks?.onConnect?.(buildMeta(record)))
+      this.fireHook(
+        () => this.hooks?.onConnect?.(buildMeta(record)),
+        this.options.onConnectFailure === 'close' ? () => subscriber.complete() : undefined,
+      )
     }
     const heartbeatMs = this.options.sse?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
     this.heartbeat.start(connectionId, res, heartbeatMs, () =>
@@ -591,10 +594,13 @@ export class SseSubscriptionHandler {
    * so it never disrupts the connection lifecycle or live event delivery.
    *
    * @param invoke - A zero-arg function that calls the hook (handles optionality).
+   * @param onFailure - What to do, once the failure is logged, when the hook failed.
    */
-  private fireHook(invoke: () => void | Promise<void>): void {
+  private fireHook(invoke: () => void | Promise<void>, onFailure?: () => void): void {
     void runHook(invoke).then((failed) => {
-      if (failed) this.logger.warn(`Lifecycle hook failed: ${describeError(failed.error)}`)
+      if (!failed) return
+      this.logger.warn(`Lifecycle hook failed: ${describeError(failed.error)}`)
+      onFailure?.()
     })
   }
 }

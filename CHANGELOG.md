@@ -7,6 +7,14 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Added
+
+- **`onConnectFailure: 'ignore' | 'close'`, a module option for what a failing `onConnect` does to its connection.** A hook that throws or rejects was only logged on both transports, so a host whose `onConnect` did work the connection depends on (a presence record, a scoped join) kept serving a connection that work had not reached. With `'close'` the failure is logged and the connection is closed: on WebSocket it is refused before it is announced and leaves no record; on SSE the stream is ended once the hook settles, and events published before then may already have been delivered, so scope a connection in `AuthenticationResult.rooms` when none may be missed. The default is `'ignore'`, the behaviour of every earlier release, and any other value is refused at start-up with `REALTIME_INVALID_OPTIONS`.
+
+#### Apply to a derived backend
+
+Nothing changes unless you set the option. If you do, make sure your `onConnect` fails only when the connection should not stand: a hook that throws for a transient reason (a metrics client down) will then close the connection, and an SSE client reconnects at once.
+
 ### Security
 
 - **The text of a driver or a broker travelled on the 503 errors the library raises when they were stringified.** `unavailableError` set the failure underneath, a driver's message naming a host and a port, on the instance's own enumerable `message` and `cause`. A controller's 503 body was generic, but a filter, a logger or a socket acknowledgement that ran `JSON.stringify` on the instance sent them on. Both are now non-enumerable: `error.message` and `error.cause` still hold the text for whoever logs it, and the stringified instance carries the generic response and the stable `code`.
