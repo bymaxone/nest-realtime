@@ -183,8 +183,7 @@ describe.each(['sse.emitConnectionEvent', 'websocket.emitConnectionEvent'])('%s'
 })
 
 describe('sse.endpoint', () => {
-  // Scenario: an endpoint that is not a non-blank string. Expected: refused with a typed error, where a number used
-  // to reach `endpoint.startsWith` and fail as a raw TypeError.
+  // Scenario: an endpoint that is not a non-blank string. Expected: refused with a typed error naming the option.
   it.each([
     ['', 'a string'],
     ['   ', 'a string'],
@@ -207,7 +206,7 @@ describe('sse.endpoint', () => {
 
 describe('forRoot', () => {
   // Scenario: an implementation without its required functions. Expected: forRoot itself refuses it with
-  // the stable code, instead of the application failing at init with a raw TypeError.
+  // the stable code, not the application at init.
   it.each([
     ['pubsub', {}],
     ['offlineQueue', {}],
