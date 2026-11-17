@@ -134,6 +134,20 @@ describe('WebSocket: a room name that is not a string', () => {
     expect(attacker.received).not.toContain('e')
   })
 
+  // Scenario: the refusal says which call refused and what kind of value it was given, and not the value.
+  it.each(['joinRoom', 'leaveRoom'] as const)(
+    'names the call and the kind of value in %s',
+    async (op) => {
+      const attacker = await connect()
+      await expect(transport[op](attacker.id, ['user:victim'] as never)).rejects.toThrow(
+        `[RealtimeService] REALTIME_AUTH_FAILED: ${op}: \`roomId\` must be a non-empty string, got an array`,
+      )
+      await expect(transport.emitToRoom(null as never, 'e', {})).rejects.toThrow(
+        '[RealtimeService] REALTIME_AUTH_FAILED: emitToRoom: `roomId` must be a non-empty string, got null',
+      )
+    },
+  )
+
   // Scenario: a free-form string still works end to end.
   it('still joins a free-form string room', async () => {
     const attacker = await connect()

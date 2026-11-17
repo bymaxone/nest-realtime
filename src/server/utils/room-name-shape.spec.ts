@@ -9,21 +9,31 @@
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { build as buildSse } from '../../../test/fixtures/sse/transport-harness'
+import 'reflect-metadata'
+import { Test } from '@nestjs/testing'
+import { SseTransport } from '@bymax-one/nest-realtime/internal'
+import { WebSocketTransport } from '../../websocket/transports/websocket/websocket.transport'
+import { CompositeTransport } from '../../websocket/transports/composite/composite.transport'
 import type { ITransport } from '../interfaces/transport.interface'
 import { RealtimeService } from '../services/realtime.service'
 
+/** The refusal a call with a value that is not a room name raises: the call, the field and the kind of value. */
+const refusal = (op: string, shape: string): string =>
+  `[RealtimeService] REALTIME_AUTH_FAILED: ${op}: \`roomId\` must be a non-empty string, got ${shape}`
+
 /** Values a host could forward from a request body or a query string. */
-const NOT_A_ROOM_NAME: ReadonlyArray<readonly [string, unknown]> = [
-  ['an array', ['user:victim']],
-  ['a nested array', [['user:victim']]],
-  ['an array mixing a free and a reserved name', ['ok', 'user:victim']],
-  ['a Set', new Set(['tenant:other'])],
-  ['an object with a toString', { toString: () => 'user:victim' }],
-  ['a number', 7],
-  ['null', null],
-  ['undefined', undefined],
-  ['a String object', new String('user:victim')],
-  ['the empty string', ''],
+/** Each value, what it is called in the refusal. */
+const NOT_A_ROOM_NAME: ReadonlyArray<readonly [string, unknown, string]> = [
+  ['an array', ['user:victim'], 'an array'],
+  ['a nested array', [['user:victim']], 'an array'],
+  ['an array mixing a free and a reserved name', ['ok', 'user:victim'], 'an array'],
+  ['a Set', new Set(['tenant:other']), 'object'],
+  ['an object with a toString', { toString: () => 'user:victim' }, 'object'],
+  ['a number', 7, 'number'],
+  ['null', null, 'null'],
+  ['undefined', undefined, 'undefined'],
+  ['a String object', new String('user:victim'), 'object'],
+  ['the empty string', '', 'string'],
 ]
 
 function mockTransport(): jest.Mocked<ITransport> {
@@ -52,7 +62,7 @@ describe('room name shape', () => {
   describe.each(['joinRoom', 'leaveRoom', 'emitToRoom'] as const)('RealtimeService.%s', (op) => {
     // Scenario: a host forwards a value that is not a string. Expected: a typed refusal before
     // any transport is asked, and the message never carries the value.
-    it.each(NOT_A_ROOM_NAME)('refuses %s', async (_label, value) => {
+    it.each(NOT_A_ROOM_NAME)('refuses %s', async (_label, value, shape) => {
       const transport = mockTransport()
       const service = new RealtimeService(transport, undefined as never)
       const call = (): Promise<void> =>
@@ -63,15 +73,14 @@ describe('room name shape', () => {
       const failure = await failureOf(call)
 
       expect(failure?.code).toBe(REALTIME_ERROR_CODES.AUTH_FAILED)
-      expect(failure?.message).toContain(`${op}: \`roomId\` must be a non-empty string`)
-      expect(failure?.message).not.toContain('victim')
+      expect(failure?.message).toBe(refusal(op, shape))
       expect(transport[op]).not.toHaveBeenCalled()
     })
   })
 
   describe.each(['joinRoom', 'leaveRoom', 'emitToRoom'] as const)('SseTransport.%s', (op) => {
     // Scenario: the transport is reached without the service. Expected: the same refusal.
-    it.each(NOT_A_ROOM_NAME)('refuses %s', async (_label, value) => {
+    it.each(NOT_A_ROOM_NAME)('refuses %s', async (_label, value, shape) => {
       const { transport } = buildSse()
       const call = (): Promise<void> =>
         op === 'emitToRoom'
@@ -81,6 +90,37 @@ describe('room name shape', () => {
       const failure = await failureOf(call)
 
       expect(failure?.code).toBe(REALTIME_ERROR_CODES.AUTH_FAILED)
+      expect(failure?.message).toBe(refusal(op, shape))
     })
+  })
+
+  describe.each(['joinRoom', 'leaveRoom', 'emitToRoom'] as const)('CompositeTransport.%s', (op) => {
+    // Scenario: the composite is reached without the service. Expected: the refusal comes before either
+    // transport is asked, so neither is left half-applied.
+    it.each(NOT_A_ROOM_NAME)(
+      'refuses %s before asking either transport',
+      async (_label, value, shape) => {
+        const sse = mockTransport()
+        const ws = mockTransport()
+        const module = await Test.createTestingModule({
+          providers: [
+            CompositeTransport,
+            { provide: SseTransport, useValue: sse },
+            { provide: WebSocketTransport, useValue: ws },
+          ],
+        }).compile()
+        const composite = module.get(CompositeTransport)
+        const call = (): Promise<void> =>
+          op === 'emitToRoom'
+            ? composite.emitToRoom(value as never, 'e', {})
+            : composite[op]('c-1', value as never)
+
+        const failure = await failureOf(call)
+
+        expect(failure?.message).toBe(refusal(op, shape))
+        expect(sse[op]).not.toHaveBeenCalled()
+        expect(ws[op]).not.toHaveBeenCalled()
+      },
+    )
   })
 })
