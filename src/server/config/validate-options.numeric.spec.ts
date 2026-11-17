@@ -4,7 +4,7 @@
  *
  * A bound written as a comparison (`value < 0`, `length > max`) is switched off by NaN, because every
  * comparison with NaN is false, and a string or a fraction passes a `< 0` check and is then coerced by
- * the comparison it feeds. Each option below is probed with the same six values.
+ * the comparison it feeds. Each option below is probed with the same values.
  */
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { BymaxRealtimeModule } from '../realtime.module'
@@ -12,7 +12,7 @@ import { validateOptions } from './validate-options'
 
 const authenticator = { authenticate: async () => null }
 
-/** The options of one probe: `transport` is one the option applies to, the value goes where the path says. */
+/** One option under probe: the value goes where the path says. */
 type Case = {
   readonly path: string
   readonly build: (value: unknown) => unknown
