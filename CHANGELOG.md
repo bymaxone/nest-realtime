@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.18] - 2026-11-17
+
 ### Security
 
 - **An option set to `undefined` resolved to "no bound", and a refusal echoed what it was given.** The defaults were merged with `{ ...DEFAULT_SSE, ...options.sse }`, so an own key holding `undefined` overwrote its default. Measured on 1.2.17 with `sse: { maxConnectionsPerUser: undefined, maxQueuedBytes: undefined, maxQueuedEvents: undefined, stallHeartbeats: undefined, replayBufferSize: undefined }`: the options the services receive carried `undefined` for all five, the per-user eviction returns early on `undefined` (no cap), and the three queue bounds are read with `?? 0`, which switches them off. A host that spelled an option as `cond ? value : undefined` therefore ran with the bound off instead of the default. Separately, the refusals of the numeric and enum options ended in `got <value>`, which printed whatever the host had passed: a token pasted into the wrong field, or the source text of a function. Now the keys that hold `undefined` or `null` are dropped, at the top level and in `sse`, `websocket` and `reauthenticationPolicy`, before the defaults are merged and before validation, so such an option resolves to its default and is validated as absent; a group handed over as a class instance is read through its fields and getters, as the services read it, so it is covered too. Every refusal of an option names the option and the type of what it received (`received a string`), prints a finite number, and echoes nothing else; the two `forRootAsync` endpoint refusals no longer print the paths.
@@ -26,6 +28,8 @@ A test double for the bus, the offline queue or presence that implements only th
 ### Documentation
 
 - **Three details the 1.2.17 notes did not state.** A subclass of `WebSocketTransport` that replaces `joinRooms` drops, besides the user, tenant and connection rooms, the rooms an authenticator returns (`AuthenticationResult.rooms`) and the update of the `RoomRegistry`; a `static` member named `joinRooms` or `runOnConnect` compiles, because only the instance members are private; and for `emitToRoom` the change a caller can observe in 1.2.17 is that a `roomId` that is not a non-empty string is refused as a rejected promise, an outcome 1.2.16 did not have. `CONTRIBUTING.md` no longer describes a `commit-msg` hook and a `pre-commit` hook that this repository does not have.
+
+- **A shutdown can wait six seconds for a client that stopped reading.** `app.close()` ends every stream at once, but Node's HTTP server then waits for the sockets of clients that no longer read, `keepAliveTimeout` of 5 s plus a 1 s check: 6,004 ms measured, against 3 ms with `forceCloseConnections: true`. The README's "Shutdown" section now says so. Apply: pass `{ forceCloseConnections: true }` to `NestFactory.create`, or give the process a termination grace of at least 7 seconds.
 
 ## [1.2.17] - 2026-11-17
 
@@ -1159,7 +1163,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.17...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.18...HEAD
+[1.2.18]: https://github.com/bymaxone/nest-realtime/compare/v1.2.17...v1.2.18
 [1.2.17]: https://github.com/bymaxone/nest-realtime/compare/v1.2.16...v1.2.17
 [1.2.16]: https://github.com/bymaxone/nest-realtime/compare/v1.2.15...v1.2.16
 [1.2.15]: https://github.com/bymaxone/nest-realtime/compare/v1.2.14...v1.2.15
