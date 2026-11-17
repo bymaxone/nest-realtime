@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  18,236 B → 18,429 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  18,236 B → 18,506 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -57,8 +57,9 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     shape check that refuses a room name that is not a non-empty string before any room API sees
 //     it, called by the service and by the SSE transport, with the reserved-prefix refusal of the
 //     SSE transport and the two checks exported to the other entries, 97 B, and the
-//     helpers of `composeForRootAsync`, which stay within the 50-line function limit, 66 B, measured
-//     on 2026-11-17)
+//     helpers of `composeForRootAsync`, which stay within the 50-line function limit, 66 B, and the
+//     start-up refusal of a value that is not a safe integer for the bound options, with a ceiling
+//     for each and the message that names it, 77 B, measured on 2026-11-17)
 //   websocket  5,571 B →  5,681 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -89,7 +90,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 18_429 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 18_506 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_681 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_847 },
