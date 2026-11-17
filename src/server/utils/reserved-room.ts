@@ -21,12 +21,11 @@ const RESERVED_ROOM_PREFIXES: readonly string[] = [
  * The reserved prefix a room name starts with, or `undefined` when the name is free.
  *
  * One rule for the rooms an authenticator returns and for `joinRoom` and `leaveRoom`, so the two
- * cannot disagree. Anything that is not a string is never reserved: callers check the shape first.
+ * cannot disagree. The caller has already checked that the name is a string.
  *
- * @param room - The room name, as given.
+ * @param room - The room name.
  */
-export function reservedRoomPrefix(room: unknown): string | undefined {
-  if (typeof room !== 'string') return undefined
+export function reservedRoomPrefix(room: string): string | undefined {
   return RESERVED_ROOM_PREFIXES.find((prefix) => room.startsWith(prefix))
 }
 
