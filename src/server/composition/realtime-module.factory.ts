@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import type { DynamicModule, Logger, Provider, Type } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { applyDefaults } from '../config/default-options'
+import { dropUnset } from '../config/drop-unset'
 import type { ResolvedRealtimeOptions } from '../config/default-options'
 import { validateOptions } from '../config/validate-options'
 import {
@@ -147,8 +148,10 @@ export function composeForRoot(
   moduleClass: Type<unknown>,
   wiring: TransportWiring,
   logger: Logger,
-  options: BymaxRealtimeModuleOptions,
+  raw: BymaxRealtimeModuleOptions,
 ): DynamicModule {
+  // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
+  const options = dropUnset(raw)
   validateOptions(options)
   assertModeSupported(wiring, options.transport, moduleClass.name)
   const resolved: ResolvedRealtimeOptions = applyDefaults(options)
@@ -182,8 +185,7 @@ function assertSseEndpointApplies(
   if (asyncOptions.sseEndpoint === undefined || asyncOptions.transport !== 'websocket') return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `sseEndpoint '${asyncOptions.sseEndpoint}' ` +
-      `was set but transport 'websocket' registers no SSE controller — use 'both' to serve SSE too`,
+    `sseEndpoint was set but transport 'websocket' registers no SSE controller — use 'both' to serve SSE too`,
     { who: moduleName },
   )
 }
@@ -207,9 +209,8 @@ function bindSseEndpoint(
   if (declared !== undefined && normalizeEndpointPath(declared) !== normalizeEndpointPath(bound)) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `the factory resolved sse.endpoint ` +
-        `'${declared}' but forRootAsync bound the SSE route to '${bound}' — controllers are ` +
-        `registered before the factory runs, so declare the path as 'sseEndpoint' on the ` +
+      `the factory resolved an sse.endpoint that differs from the SSE route forRootAsync bound — ` +
+        `controllers are registered before the factory runs, so declare the path as 'sseEndpoint' on the ` +
         `forRootAsync registration itself`,
       { who: moduleName },
     )
@@ -219,6 +220,9 @@ function bindSseEndpoint(
 
 /**
  * Validate an async factory result and enforce the declared transport.
+ *
+ * @returns The resolved options and the `sse.endpoint` the factory itself declared, read from the same
+ *   plain copy that was validated.
  *
  * @throws when the factory returned nothing, the options are invalid, or the
  *   resolved transport disagrees with the one the module was registered for.
@@ -230,22 +234,24 @@ function resolveAsyncOptions(
   source: string,
   logger: Logger,
   moduleName: string,
-): ResolvedRealtimeOptions {
+): { resolved: ResolvedRealtimeOptions; declaredEndpoint: string | undefined } {
   if (!raw) {
     throw realtimeError(REALTIME_ERROR_CODES.INVALID_OPTIONS, `${source} returned nothing`)
   }
-  validateOptions(raw)
-  if (raw.transport !== declaredMode) {
+  // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
+  const options = dropUnset(raw)
+  validateOptions(options)
+  if (options.transport !== declaredMode) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
       `forRootAsync was registered for ` +
-        `transport '${declaredMode}' but the factory resolved '${raw.transport}'`,
+        `transport '${declaredMode}' but the factory resolved '${options.transport}'`,
       { who: moduleName },
     )
   }
-  const resolved = applyDefaults(raw)
+  const resolved = applyDefaults(options)
   logger.log(`Bootstrapped (transport=${resolved.transport}, instanceId=${instanceId})`)
-  return resolved
+  return { resolved, declaredEndpoint: options.sse?.endpoint }
 }
 
 /**
@@ -327,7 +333,7 @@ function buildResolver(
   moduleName: string,
 ): (raw: BymaxRealtimeModuleOptions | null | undefined, source: string) => ResolvedRealtimeOptions {
   return (raw, source) => {
-    const resolved = resolveAsyncOptions(
+    const { resolved, declaredEndpoint } = resolveAsyncOptions(
       raw,
       asyncOptions.transport,
       instanceId,
@@ -336,7 +342,7 @@ function buildResolver(
       moduleName,
     )
     if (asyncOptions.transport === 'websocket') return resolved
-    return bindSseEndpoint(resolved, raw?.sse?.endpoint, boundSseEndpoint, moduleName)
+    return bindSseEndpoint(resolved, declaredEndpoint, boundSseEndpoint, moduleName)
   }
 }
 

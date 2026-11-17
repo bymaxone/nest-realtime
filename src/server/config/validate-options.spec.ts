@@ -4,6 +4,7 @@
  */
 import { Logger } from '@nestjs/common'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { describeReceived } from '../utils/describe-received'
 import { validateOptions } from './validate-options'
 
 const authenticator = { authenticate: async () => null }
@@ -86,7 +87,7 @@ describe('validateOptions', () => {
   // connection, so a value outside it stops the application starting and does not answer each
   // connection with a 500 later. A number that is not finite, and anything that is not a number,
   // is outside the range.
-  it.each([4_999, 1_000, 1, 0, -1, 90_001, Number.NaN, Infinity, -Infinity, '5000', null])(
+  it.each([4_999, 1_000, 1, 0, -1, 90_001, Number.NaN, Infinity, -Infinity, '5000'])(
     'rejects sse.heartbeatMs %p at boot, naming the range',
     (value) => {
       expect(() =>
@@ -94,7 +95,7 @@ describe('validateOptions', () => {
           asOptions({ transport: 'sse', authenticator, sse: { heartbeatMs: value } }),
         ),
       ).toThrow(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.heartbeatMs must be between 5000 and 90000 ms (got ${String(value)})`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.heartbeatMs must be between 5000 and 90000 ms, received ${describeReceived(value)}`,
       )
     },
   )
@@ -138,11 +139,11 @@ describe('validateOptions', () => {
   // `replayTtlMs` is compared with the clock, not run as a timer, but it keeps the same ceiling so that
   // a duration option means one thing everywhere; `replayMaxIdleUsers` is a count.
   it('rejects a sse.replayTtlMs that is not an integer from 1 to 2147483647, and accepts both ends', () => {
-    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '300000', null, 2_147_483_648]) {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '300000', 2_147_483_648]) {
       expect(() =>
         validateOptions({ transport: 'sse', authenticator, sse: { replayTtlMs: bad as never } }),
       ).toThrow(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.replayTtlMs must be an integer >= 1 and <= 2147483647, got ${String(bad)}`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.replayTtlMs must be an integer >= 1 and <= 2147483647, received ${describeReceived(bad)}`,
       )
     }
     for (const good of [1, 300_000, 2_147_483_647]) {
@@ -153,7 +154,7 @@ describe('validateOptions', () => {
   })
 
   it('rejects a sse.replayMaxIdleUsers that is not an integer >= 1, and accepts 1 and more', () => {
-    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '1000', null]) {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '1000']) {
       expect(() =>
         validateOptions({
           transport: 'sse',
@@ -161,7 +162,7 @@ describe('validateOptions', () => {
           sse: { replayMaxIdleUsers: bad as never },
         }),
       ).toThrow(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.replayMaxIdleUsers must be an integer >= 1, got ${String(bad)}`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.replayMaxIdleUsers must be an integer >= 1, received ${describeReceived(bad)}`,
       )
     }
     for (const good of [1, 1_000, 2 ** 53 - 1]) {
@@ -181,7 +182,6 @@ describe('validateOptions', () => {
       Number.NaN,
       Infinity,
       '5000',
-      null,
       2_147_483_648,
       3_000_000_000,
       2 ** 53 - 1,
@@ -189,7 +189,7 @@ describe('validateOptions', () => {
       expect(() =>
         validateOptions({ transport: 'sse', authenticator, hookTimeoutMs: bad as never }),
       ).toThrow(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.hookTimeoutMs must be an integer >= 1 and <= 2147483647, got ${String(bad)}`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.hookTimeoutMs must be an integer >= 1 and <= 2147483647, received ${describeReceived(bad)}`,
       )
     }
     for (const good of [1, 5_000, 60_000, 2_147_483_647]) {
@@ -201,11 +201,11 @@ describe('validateOptions', () => {
 
   // A misspelt value would silently mean the default, so a closed set of two names is enforced.
   it("rejects an onConnectFailure that is not 'ignore' or 'close', and accepts both and none", () => {
-    for (const bad of ['closed', 'Close', '', null, true, 1]) {
+    for (const bad of ['closed', 'Close', '', true, 1]) {
       expect(() =>
         validateOptions({ transport: 'sse', authenticator, onConnectFailure: bad as never }),
       ).toThrow(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.onConnectFailure must be 'ignore' or 'close', got ${String(bad)}`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.onConnectFailure must be 'ignore' or 'close', received ${describeReceived(bad)}`,
       )
     }
     for (const good of [
@@ -219,21 +219,11 @@ describe('validateOptions', () => {
 
   // `authenticateTimeoutMs` feeds a timer; `maxPendingHandshakes` is a count, so it has no ceiling.
   it('rejects an authenticateTimeoutMs that is not an integer from 1 to 2147483647, and accepts both ends', () => {
-    for (const bad of [
-      0,
-      -1,
-      1.5,
-      Number.NaN,
-      Infinity,
-      '10000',
-      null,
-      2_147_483_648,
-      2 ** 53 - 1,
-    ]) {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '10000', 2_147_483_648, 2 ** 53 - 1]) {
       expect(() =>
         validateOptions({ transport: 'sse', authenticator, authenticateTimeoutMs: bad as never }),
       ).toThrow(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.authenticateTimeoutMs must be an integer >= 1 and <= 2147483647, got ${String(bad)}`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.authenticateTimeoutMs must be an integer >= 1 and <= 2147483647, received ${describeReceived(bad)}`,
       )
     }
     for (const good of [1, 10_000, 2_147_483_647]) {
@@ -244,11 +234,11 @@ describe('validateOptions', () => {
   })
 
   it('rejects a maxPendingHandshakes that is not an integer >= 1, and accepts 1 and more', () => {
-    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '1000', null]) {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '1000']) {
       expect(() =>
         validateOptions({ transport: 'sse', authenticator, maxPendingHandshakes: bad as never }),
       ).toThrow(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.maxPendingHandshakes must be an integer >= 1, got ${String(bad)}`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.maxPendingHandshakes must be an integer >= 1, received ${describeReceived(bad)}`,
       )
     }
     for (const good of [1, 1_000, 2 ** 53 - 1]) {
@@ -259,11 +249,11 @@ describe('validateOptions', () => {
   })
 
   it('rejects a maxConnections that is not an integer >= 1, and accepts 1 and more', () => {
-    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '10000', null]) {
+    for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '10000']) {
       expect(() =>
         validateOptions({ transport: 'sse', authenticator, maxConnections: bad as never }),
       ).toThrow(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.maxConnections must be an integer >= 1, got ${String(bad)}`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.maxConnections must be an integer >= 1, received ${describeReceived(bad)}`,
       )
     }
     for (const good of [1, 10_000, 2 ** 53 - 1]) {
@@ -277,17 +267,7 @@ describe('validateOptions', () => {
   it.each(['pingIntervalMs', 'pingTimeoutMs'] as const)(
     'rejects a websocket.%s that is not an integer from 1 to 2147483647, and accepts both ends',
     (name) => {
-      for (const bad of [
-        0,
-        -1,
-        1.5,
-        Number.NaN,
-        Infinity,
-        '25000',
-        null,
-        2_147_483_648,
-        2 ** 53 - 1,
-      ]) {
+      for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '25000', 2_147_483_648, 2 ** 53 - 1]) {
         expect(() =>
           validateOptions({
             transport: 'websocket',
@@ -295,7 +275,7 @@ describe('validateOptions', () => {
             websocket: { [name]: bad } as never,
           }),
         ).toThrow(
-          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.${name} must be an integer >= 1 and <= 2147483647, got ${String(bad)}`,
+          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.${name} must be an integer >= 1 and <= 2147483647, received ${describeReceived(bad)}`,
         )
       }
       for (const good of [1, 25_000, 2_147_483_647]) {
@@ -313,11 +293,11 @@ describe('validateOptions', () => {
   it.each(['maxQueuedBytes', 'maxQueuedEvents', 'stallHeartbeats'] as const)(
     'rejects a sse.%s that is not an integer >= 0, and accepts 0 and a positive integer',
     (name) => {
-      for (const bad of [-1, 1.5, Number.NaN, Infinity, '5', null]) {
+      for (const bad of [-1, 1.5, Number.NaN, Infinity, '5']) {
         expect(() =>
           validateOptions({ transport: 'sse', authenticator, sse: { [name]: bad } as never }),
         ).toThrow(
-          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.${name} must be an integer >= 0 (0 switches the bound off), got ${String(bad)}`,
+          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.${name} must be an integer >= 0 (0 switches the bound off), received ${describeReceived(bad)}`,
         )
       }
       for (const good of [0, 1, 4096]) {
@@ -340,7 +320,7 @@ describe('validateOptions', () => {
     'rejects a reauthenticationPolicy.%s outside its range, and accepts both ends',
     (name, least, most) => {
       const range = `>= ${least}${most === undefined ? '' : ` and <= ${most}`}`
-      const outside = [least - 1, least + 0.5, Number.NaN, Infinity, '5', null]
+      const outside = [least - 1, least + 0.5, Number.NaN, Infinity, '5']
       if (most !== undefined) outside.push(most + 1, 2 ** 53 - 1)
       for (const bad of outside) {
         expect(() =>
@@ -350,7 +330,7 @@ describe('validateOptions', () => {
             reauthenticationPolicy: { [name]: bad } as never,
           }),
         ).toThrow(
-          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.${name} must be an integer ${range}, got ${String(bad)}`,
+          `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.${name} must be an integer ${range}, received ${describeReceived(bad)}`,
         )
       }
       for (const good of [least, least + 1, 300, ...(most === undefined ? [] : [most])]) {
@@ -373,7 +353,7 @@ describe('validateOptions', () => {
         reauthenticationPolicy: { onFailure: 'ignore' } as never,
       }),
     ).toThrow(
-      "[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.onFailure must be 'disconnect' or 'event', got ignore",
+      "[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.reauthenticationPolicy.onFailure must be 'disconnect' or 'event', received a string",
     )
     for (const good of ['disconnect', 'event'] as const) {
       expect(() =>

@@ -6,7 +6,9 @@ import { Logger } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { HEARTBEAT_MAX_MS, HEARTBEAT_MIN_MS } from '../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { describeReceived } from '../utils/describe-received'
 import { realtimeError } from '../utils/realtime-error'
+import { dropUnset } from './drop-unset'
 
 // Format-level validation only: 'websocket' and 'both' are accepted config values,
 // but the module rejects them at bootstrap until those transports are implemented.
@@ -19,11 +21,12 @@ const VALID_TRANSPORTS = new Set<string>(['sse', 'websocket', 'both'])
  * inversion), so a missing authenticator would otherwise expose every connection
  * as authenticated. The check is therefore a hard failure, not a warning.
  */
-export function validateOptions(options: BymaxRealtimeModuleOptions): void {
+export function validateOptions(raw: BymaxRealtimeModuleOptions): void {
+  const options = dropUnset(raw)
   if (!options.transport || !VALID_TRANSPORTS.has(options.transport)) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `options.transport must be one of 'sse' | 'websocket' | 'both' (got: ${String(options.transport)})`,
+      `options.transport must be one of 'sse' | 'websocket' | 'both', received ${describeReceived(options.transport)}`,
       { who: 'BymaxRealtimeModule' },
     )
   }
@@ -75,7 +78,7 @@ function assertInteger(path: string, value: unknown, least: number, most?: numbe
   if (valid) return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `options.${path} must be an integer >= ${least}${most === undefined ? '' : ` and <= ${most}`}, got ${String(value)}${most === undefined && Number.isInteger(value) && !Number.isSafeInteger(value) ? ` (the most is ${Number.MAX_SAFE_INTEGER})` : ''}`,
+    `options.${path} must be an integer >= ${least}${most === undefined ? '' : ` and <= ${most}`}, received ${describeReceived(value)}${most === undefined && Number.isInteger(value) && !Number.isSafeInteger(value) ? ` (the most is ${Number.MAX_SAFE_INTEGER})` : ''}`,
     { who: 'BymaxRealtimeModule' },
   )
 }
@@ -86,7 +89,7 @@ function validateOnConnectFailure(options: BymaxRealtimeModuleOptions): void {
   if (value === undefined || value === 'ignore' || value === 'close') return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `options.onConnectFailure must be 'ignore' or 'close', got ${String(value)}`,
+    `options.onConnectFailure must be 'ignore' or 'close', received ${describeReceived(value)}`,
     { who: 'BymaxRealtimeModule' },
   )
 }
@@ -131,7 +134,7 @@ function validateReauthPolicy(options: BymaxRealtimeModuleOptions): void {
   if (onFailure !== undefined && onFailure !== 'disconnect' && onFailure !== 'event') {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `options.reauthenticationPolicy.onFailure must be 'disconnect' or 'event', got ${String(onFailure)}`,
+      `options.reauthenticationPolicy.onFailure must be 'disconnect' or 'event', received ${describeReceived(onFailure)}`,
       { who: 'BymaxRealtimeModule' },
     )
   }
@@ -160,7 +163,7 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
   ) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `options.sse.heartbeatMs must be between ${HEARTBEAT_MIN_MS} and ${HEARTBEAT_MAX_MS} ms (got ${String(heartbeatMs)})`,
+      `options.sse.heartbeatMs must be between ${HEARTBEAT_MIN_MS} and ${HEARTBEAT_MAX_MS} ms, received ${describeReceived(heartbeatMs)}`,
       { who: 'BymaxRealtimeModule' },
     )
   }
@@ -175,7 +178,7 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
     ) {
       throw realtimeError(
         REALTIME_ERROR_CODES.INVALID_OPTIONS,
-        `options.sse.${name} must be an integer >= 0 (0 switches the bound off), got ${String(value)}`,
+        `options.sse.${name} must be an integer >= 0 (0 switches the bound off), received ${describeReceived(value)}`,
         { who: 'BymaxRealtimeModule' },
       )
     }

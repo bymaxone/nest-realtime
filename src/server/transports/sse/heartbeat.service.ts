@@ -5,6 +5,7 @@
 import { Injectable } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../../shared/constants/error-codes.constants'
 import { HEARTBEAT_MAX_MS, HEARTBEAT_MIN_MS } from '../../constants/injection-tokens.constants'
+import { describeReceived } from '../../utils/describe-received'
 import { realtimeError } from '../../utils/realtime-error'
 
 /** The raw SSE comment line written as a keepalive (not a named event). */
@@ -51,7 +52,7 @@ export class HeartbeatService {
     if (intervalMs < HEARTBEAT_MIN_MS || intervalMs > HEARTBEAT_MAX_MS) {
       throw realtimeError(
         REALTIME_ERROR_CODES.INVALID_OPTIONS,
-        `heartbeatMs must be between ${HEARTBEAT_MIN_MS} and ${HEARTBEAT_MAX_MS} ms (got ${intervalMs})`,
+        `heartbeatMs must be between ${HEARTBEAT_MIN_MS} and ${HEARTBEAT_MAX_MS} ms, received ${describeReceived(intervalMs)}`,
       )
     }
     this.stop(connectionId)

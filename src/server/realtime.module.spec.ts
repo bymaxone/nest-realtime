@@ -60,7 +60,7 @@ describe('BymaxRealtimeModule.forRoot', () => {
     expect(() =>
       BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator, sse: { heartbeatMs: 1_000 } }),
     ).toThrow(
-      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.heartbeatMs must be between 5000 and 90000 ms (got 1000)',
+      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.heartbeatMs must be between 5000 and 90000 ms, received 1000',
     )
   })
 
