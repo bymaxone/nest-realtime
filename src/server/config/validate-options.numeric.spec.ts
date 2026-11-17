@@ -27,7 +27,7 @@ type Case = {
 /** Ceilings: an integer past them is a bound in name only, since nothing real is that large. */
 const PER_USER_CEILING = 100_000 // beyond the ports one client address has, and the descriptors an instance has
 const REPLAY_CEILING = 100_000 // events held per user stream: memory is this times the frame size
-const BUFFER_CEILING = 100 * 1024 * 1024 // bytes one message may buffer while it assembles; Socket.IO's default is 1 MiB
+const BUFFER_CEILING = 100 * 1024 * 1024 // bytes one message may buffer while it assembles; Socket.IO's default is 1,000,000
 
 const CASES: readonly Case[] = [
   {

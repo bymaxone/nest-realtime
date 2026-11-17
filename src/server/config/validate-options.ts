@@ -59,7 +59,7 @@ const MAX_TIMER_MS = 2_147_483_647
  */
 const MAX_PER_USER_CONNECTIONS = 100_000 // beyond the ports one client address has and the descriptors an instance has
 const MAX_REPLAY_EVENTS = 100_000 // events held per user stream: memory is this times the size of a frame
-const MAX_HTTP_BUFFER_BYTES = 100 * 1024 * 1024 // bytes one message may buffer while it assembles; Socket.IO defaults to 1 MiB
+const MAX_HTTP_BUFFER_BYTES = 100 * 1024 * 1024 // bytes one message may buffer while it assembles; Socket.IO defaults to 1,000,000
 
 /**
  * Refuse `value` unless it is a safe integer in `[least, most]`; with no `most` the bound is the largest
