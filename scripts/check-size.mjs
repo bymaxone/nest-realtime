@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  18,236 B → 18,266 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  18,236 B → 18,363 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -53,8 +53,11 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     a stringified instance carries, 33 B, and the
 //     choice of what a failing `onConnect` does to its connection: the check of the option and the
 //     SSE stream's close, 76 B, and the
-//     one reserved-room rule that admission and `joinRoom` and `leaveRoom` share, 87 B)
-//   websocket  5,571 B →  5,601 B (the Socket.IO stack alone: the start-up message that names the
+//     one reserved-room rule that admission and `joinRoom` and `leaveRoom` share, 87 B, and the
+//     shape check that refuses a room name that is not a non-empty string before any room API sees
+//     it, called by the service and by the SSE transport, with the reserved-prefix refusal of the
+//     SSE transport and the two checks exported to the other entries, 97 B, measured on 2026-11-17)
+//   websocket  5,571 B →  5,650 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server
@@ -64,7 +67,9 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     connection the Redis adapter opens, in `dispose` once every server has closed and on one
 //     bound for all of them, and the guard on the commands that adapter never awaits, which keeps
 //     their rejection from ending the process and warns once per connection, by class only, and the
-//     refusal of a connection whose `onConnect` failed under `onConnectFailure: 'close'`, 31 B)
+//     refusal of a connection whose `onConnect` failed under `onConnectFailure: 'close'`, 31 B, and the room-name checks of the transport and of
+//     the composite, which refuse what is not a non-empty string and what starts with a reserved
+//     prefix, 49 B, measured on 2026-11-17)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
 //   react      2,484 B →  2,500 B (the resume parameter: the last event id the hook saw, replacing one
 //     the url already carries, before any fragment)
@@ -79,8 +84,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 18_266 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_601 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 18_363 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_650 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_500 },
 ]

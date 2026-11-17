@@ -41,6 +41,7 @@ import type { AdmissionTicket } from '../../services/connection-admission.servic
 import { describeError } from '../../utils/describe-error'
 import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
+import { refuseReservedRoom, requireRoomName } from '../../utils/reserved-room'
 import { unavailableError } from '../../utils/unavailable-error'
 import { InMemoryPubSub } from '../../pubsub/in-memory-pubsub'
 import { EventReplayBuffer } from './event-replay-buffer'
@@ -368,6 +369,7 @@ export class SseTransport implements ITransport {
   }
 
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
+    requireRoomName('emitToRoom', roomId)
     const id = this.idGen.next()
     this.emitToRoomLocal(roomId, event, data, id)
     await this.publish({ op: 'emitToRoom', args: { roomId, event, data, id } })
@@ -381,12 +383,14 @@ export class SseTransport implements ITransport {
 
   /** Join a connection this instance holds to a room; any other id is left alone. */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
+    refuseReservedRoom('joinRoom', roomId)
     if (this.connections.get(connectionId)?.transport === 'sse')
       this.rooms.join(connectionId, roomId)
   }
 
   /** Remove a connection this instance holds from a room; any other id is left alone. */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
+    refuseReservedRoom('leaveRoom', roomId)
     if (this.connections.get(connectionId)?.transport === 'sse')
       this.rooms.leave(connectionId, roomId)
   }

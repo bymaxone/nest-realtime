@@ -18,6 +18,8 @@ import {
   AuthenticationGate,
   ConnectionAdmission,
   UNBOUNDED_TICKET,
+  refuseReservedRoom,
+  requireRoomName,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   ITransport,
@@ -293,6 +295,7 @@ export class WebSocketTransport implements ITransport {
    * @param data - Payload forwarded to all connections in the room.
    */
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
+    requireRoomName('emitToRoom', roomId)
     this.attached('emitToRoom')?.to(roomId).emit(event, data)
   }
 
@@ -313,6 +316,7 @@ export class WebSocketTransport implements ITransport {
    * @param roomId - The room to join.
    */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
+    refuseReservedRoom('joinRoom', roomId)
     const socket = this.localSockets()?.get(connectionId)
     if (socket) {
       await socket.join(roomId)
@@ -327,6 +331,7 @@ export class WebSocketTransport implements ITransport {
    * @param roomId - The room to leave.
    */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
+    refuseReservedRoom('leaveRoom', roomId)
     const socket = this.localSockets()?.get(connectionId)
     if (socket) {
       await socket.leave(roomId)

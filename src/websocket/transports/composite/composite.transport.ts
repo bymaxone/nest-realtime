@@ -8,6 +8,8 @@ import {
   REALTIME_ERROR_CODES,
   SseTransport,
   unavailableError,
+  refuseReservedRoom,
+  requireRoomName,
 } from '@bymax-one/nest-realtime/internal'
 import type { ITransport } from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from '../websocket/websocket.transport'
@@ -79,6 +81,7 @@ export class CompositeTransport implements ITransport {
    * @param data - Payload forwarded to all connections in the room.
    */
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
+    requireRoomName('emitToRoom', roomId)
     await this.fanOut(
       'emitToRoom',
       () => this.sse.emitToRoom(roomId, event, data),
@@ -107,6 +110,7 @@ export class CompositeTransport implements ITransport {
    * failure of whichever transport failed.
    */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
+    refuseReservedRoom('joinRoom', roomId)
     await this.settleBoth('joinRoom', connectionId, [
       () => this.sse.joinRoom(connectionId, roomId),
       () => this.ws.joinRoom(connectionId, roomId),
@@ -121,6 +125,7 @@ export class CompositeTransport implements ITransport {
    * receiving that room's events.
    */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
+    refuseReservedRoom('leaveRoom', roomId)
     await this.settleBoth('leaveRoom', connectionId, [
       () => this.sse.leaveRoom(connectionId, roomId),
       () => this.ws.leaveRoom(connectionId, roomId),
