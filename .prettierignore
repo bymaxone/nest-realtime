@@ -1,0 +1,9 @@
+# The function-length check, its specs and the stryker-scope spec are the family templates' files,
+# kept byte-identical to bymaxone/.github's copy: reformatting them here would make every later
+# sync a diff, and the templates are written without trailing commas.
+scripts/check-function-length.mjs
+scripts/function-length-key.mjs
+src/check-function-length.spec.ts
+src/check-function-length.baseline.spec.ts
+src/check-function-length.key.spec.ts
+src/stryker-scope.spec.ts
