@@ -39,7 +39,7 @@ At start-up a value that is not an integer is refused where it used to be accept
 
 `RealtimeService.emitToRoom` is now an `async` method: it already returned `Promise<void>`, and a synchronous throw, including the refusal of a `roomId` that is not a non-empty string, now comes back as a rejected promise. `./internal` exports `requireRoomName` and `refuseReservedRoom`; `./internal` is not public API and carries no compatibility promise, so do not import them.
 
-On SSE the `reason` that `onDisconnect` receives is set when the library asked for the close (`disconnect(connectionId, reason)`, the connection bounds) and is `undefined` for a connection that ended on its own or that `onConnectFailure: 'close'` refused.
+On SSE the `reason` that `onDisconnect` receives is set when the library closed the connection with one (`disconnect(connectionId, reason)`, the connection bounds) and is `undefined` otherwise: a connection that ended on its own, one that `onConnectFailure: 'close'` refused, or one closed at shutdown.
 
 ## [1.2.16] - 2026-11-14
 
