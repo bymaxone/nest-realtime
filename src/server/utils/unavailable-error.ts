@@ -33,7 +33,14 @@ export function unavailableError(
   cause: unknown,
 ): UnavailableError {
   const { message } = realtimeError(code, `${what} (${describeError(cause)})`, { who })
-  // `cause` is assigned rather than passed to the constructor, which keeps it only when truthy: a
-  // rejection can carry any value, `null` included.
-  return Object.assign(new ServiceUnavailableException(), { code, message, cause })
+  // `cause` is defined rather than passed to the constructor, which keeps it only when truthy: a
+  // rejection can carry any value, `null` included. `message` and `cause` are not enumerable, so a
+  // filter, a logger or an ack that stringifies the instance sends the code and the generic body
+  // and not the text of a driver or a broker; `err.message` and `err.cause` still hold it.
+  const error = Object.assign(new ServiceUnavailableException(), { code })
+  Object.defineProperties(error, {
+    message: { value: message, enumerable: false, writable: true, configurable: true },
+    cause: { value: cause, enumerable: false, writable: true, configurable: true },
+  })
+  return error
 }
