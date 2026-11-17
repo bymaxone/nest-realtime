@@ -55,8 +55,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     SSE stream's close, 76 B, and the
 //     one reserved-room rule that admission and `joinRoom` and `leaveRoom` share, 87 B, and the
 //     shape check that refuses a room name that is not a non-empty string before any room API sees
-//     it, in the service and in the SSE transport, with the two checks exported to the other
-//     entries, 15 B, measured on 2026-11-17)
+//     it, called by the service and by the SSE transport, with the reserved-prefix refusal of the
+//     SSE transport and the two checks exported to the other entries, 97 B, measured on 2026-11-17)
 //   websocket  5,571 B →  5,650 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
