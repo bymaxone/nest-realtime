@@ -764,7 +764,7 @@ characters and must not start with `user:`, `tenant:` or `connection:`; at most
 `ADMISSION_ROOM_LIMITS.MAX_ROOMS` entries; duplicates join once. A result that breaks a rule
 is refused like a blank `userId` — a server fault (500 on SSE, a generic `connect_error` on
 WebSocket), not a 401 — and nothing is registered. The two limits are bounds against abuse, not
-measurements, and they apply to this field only: `joinRoom` has no limit on the number or length of rooms, and refuses only the reserved prefixes.
+measurements, and they apply to this field only: `joinRoom` is not held to them.
 
 The rooms are fixed at admission and handed back to `revalidate` in the original result. A
 different set returned later is not re-synchronized; use `joinRoom` and `leaveRoom` for changes
