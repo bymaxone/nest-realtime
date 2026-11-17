@@ -29,6 +29,76 @@ export interface TestInstance {
   shutdown(): Promise<void>
 }
 
+/** Wire one SSE transport over `bus` with fresh registries, the way a single process would. */
+function wireTransport(
+  bus: IRealtimePubSub,
+  instanceId: string,
+  connections: ConnectionRegistry,
+): SseTransport {
+  const options: BymaxRealtimeModuleOptions = {
+    transport: 'sse',
+    authenticator: { authenticate: async () => null } as IConnectionAuthenticator,
+  }
+  const auth = { authenticate: async () => null } as unknown as IConnectionAuthenticator
+  return new SseTransport(
+    connections,
+    new RoomRegistry(),
+    new EventReplayBuffer(options),
+    new EventIdGenerator(),
+    new HeartbeatService(),
+    new AuthenticationGate(options, auth),
+    bus,
+    {},
+    options,
+    instanceId,
+  )
+}
+
+/** Register a fake SSE connection and return the array its events are collected in. */
+function registerFakeConnection(
+  connections: ConnectionRegistry,
+  connectionId: string,
+  userId: string,
+  tenantId?: string,
+): MessageEvent[] {
+  const received: MessageEvent[] = []
+  const subject = new Subject<MessageEvent>()
+  const close$ = new Subject<void>()
+  subject.subscribe((m) => received.push(m))
+  connections.register({
+    connectionId,
+    userId,
+    tenantId,
+    transport: 'sse',
+    ip: '127.0.0.1',
+    userAgent: undefined,
+    connectedAt: new Date(),
+    subject,
+    close$,
+    originalAuth: { userId, tenantId, roles: undefined, metadata: undefined },
+  })
+  return received
+}
+
+/** One wired instance on `bus`. */
+function createTestInstance(bus: IRealtimePubSub): TestInstance {
+  const instanceId = randomUUID()
+  const connections = new ConnectionRegistry()
+  const transport = wireTransport(bus, instanceId, connections)
+  const subscriber = new RealtimePubSubSubscriber(bus, instanceId, transport)
+  return {
+    instanceId,
+    transport,
+    subscriber,
+    addConnection: (connectionId, userId, tenantId) =>
+      registerFakeConnection(connections, connectionId, userId, tenantId),
+    shutdown: async () => {
+      await subscriber.onApplicationShutdown()
+      await transport.onApplicationShutdown()
+    },
+  }
+}
+
 /**
  * Build fully-wired SSE transport instances sharing one InMemoryPubSub bus, or one bus each
  * when `busFor` is given.
@@ -44,68 +114,9 @@ export function createTestInstances(
   pubsub: InMemoryPubSub
 } {
   const pubsub = new InMemoryPubSub()
-
-  const instances: TestInstance[] = Array.from({ length: count }, () => {
-    // One bus per instance when the caller supplies them, as in a real deployment.
-    const bus = busFor ? busFor() : pubsub
-    const instanceId = randomUUID()
-    const connections = new ConnectionRegistry()
-    const rooms = new RoomRegistry()
-    const options: BymaxRealtimeModuleOptions = {
-      transport: 'sse',
-      authenticator: { authenticate: async () => null } as IConnectionAuthenticator,
-    }
-    const replay = new EventReplayBuffer(options)
-    const idGen = new EventIdGenerator()
-    const heartbeat = new HeartbeatService()
-    const auth = { authenticate: async () => null } as unknown as IConnectionAuthenticator
-
-    const transport = new SseTransport(
-      connections,
-      rooms,
-      replay,
-      idGen,
-      heartbeat,
-      new AuthenticationGate(options, auth),
-      bus,
-      {},
-      options,
-      instanceId,
-    )
-
-    const subscriber = new RealtimePubSubSubscriber(bus, instanceId, transport)
-
-    function addConnection(
-      connectionId: string,
-      userId: string,
-      tenantId?: string,
-    ): MessageEvent[] {
-      const received: MessageEvent[] = []
-      const subject = new Subject<MessageEvent>()
-      const close$ = new Subject<void>()
-      subject.subscribe((m) => received.push(m))
-      connections.register({
-        connectionId,
-        userId,
-        tenantId,
-        transport: 'sse',
-        ip: '127.0.0.1',
-        userAgent: undefined,
-        connectedAt: new Date(),
-        subject,
-        close$,
-        originalAuth: { userId, tenantId, roles: undefined, metadata: undefined },
-      })
-      return received
-    }
-
-    async function shutdown(): Promise<void> {
-      await subscriber.onApplicationShutdown()
-      await transport.onApplicationShutdown()
-    }
-
-    return { instanceId, transport, subscriber, addConnection, shutdown }
-  })
-
+  // One bus per instance when the caller supplies them, as in a real deployment.
+  const instances = Array.from({ length: count }, () =>
+    createTestInstance(busFor ? busFor() : pubsub),
+  )
   return { instances, pubsub }
 }

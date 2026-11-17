@@ -249,6 +249,98 @@ function resolveAsyncOptions(
 }
 
 /**
+ * Refuse a registration that names no factory pattern or more than one.
+ *
+ * @throws when the number of `useFactory`, `useClass` and `useExisting` given is not exactly one.
+ */
+function assertOneFactoryPattern(
+  asyncOptions: BymaxRealtimeModuleAsyncOptions,
+  moduleName: string,
+): void {
+  const patterns = [
+    asyncOptions.useFactory,
+    asyncOptions.useClass,
+    asyncOptions.useExisting,
+  ].filter((pattern) => pattern !== undefined)
+  if (patterns.length === 1) return
+  throw realtimeError(
+    REALTIME_ERROR_CODES.INVALID_OPTIONS,
+    `forRootAsync requires exactly one of useFactory, useClass, or useExisting (received ${patterns.length})`,
+    { who: moduleName },
+  )
+}
+
+/** The provider of the resolved options, fed by whichever factory pattern the registration used. */
+function buildOptionsProvider(
+  asyncOptions: BymaxRealtimeModuleAsyncOptions,
+  resolve: (
+    raw: BymaxRealtimeModuleOptions | null | undefined,
+    source: string,
+  ) => ResolvedRealtimeOptions,
+  factoryToken: symbol,
+): Provider {
+  if (asyncOptions.useFactory) {
+    return {
+      provide: REALTIME_OPTIONS_TOKEN,
+      useFactory: async (...args: unknown[]) =>
+        resolve(await asyncOptions.useFactory!(...args), 'useFactory'),
+      inject: [...(asyncOptions.inject ?? [])],
+    }
+  }
+  return {
+    provide: REALTIME_OPTIONS_TOKEN,
+    useFactory: async (factory: { createRealtimeOptions: () => unknown }) =>
+      resolve(
+        (await factory.createRealtimeOptions()) as BymaxRealtimeModuleOptions,
+        'createRealtimeOptions',
+      ),
+    inject: [asyncOptions.useExisting ?? factoryToken],
+  }
+}
+
+/** A provider that reads one value off the resolved options. */
+function fromOptions(token: symbol, read: (opts: BymaxRealtimeModuleOptions) => unknown): Provider {
+  return { provide: token, useFactory: read, inject: [REALTIME_OPTIONS_TOKEN] }
+}
+
+/** The providers each read off the resolved options, and the instance id the module was composed with. */
+function buildOptionDerivedProviders(logger: Logger, instanceId: string): Provider[] {
+  return [
+    fromOptions(REALTIME_AUTHENTICATOR_TOKEN, (opts) => opts.authenticator),
+    fromOptions(REALTIME_PUBSUB_TOKEN, (opts) => {
+      warnIfSingleInstance(opts.pubsub, opts.transport, logger)
+      return opts.pubsub ?? new InMemoryPubSub()
+    }),
+    fromOptions(REALTIME_HOOKS_TOKEN, (opts) => opts.hooks ?? {}),
+    { provide: REALTIME_INSTANCE_ID_TOKEN, useValue: instanceId },
+    fromOptions(REALTIME_OFFLINE_QUEUE_TOKEN, (opts) => opts.offlineQueue),
+    fromOptions(REALTIME_PRESENCE_TOKEN, (opts) => opts.presence),
+  ]
+}
+
+/** Resolve what a factory returned: validate it, then name the route the controller was bound to. */
+function buildResolver(
+  asyncOptions: BymaxRealtimeModuleAsyncOptions,
+  instanceId: string,
+  boundSseEndpoint: string,
+  logger: Logger,
+  moduleName: string,
+): (raw: BymaxRealtimeModuleOptions | null | undefined, source: string) => ResolvedRealtimeOptions {
+  return (raw, source) => {
+    const resolved = resolveAsyncOptions(
+      raw,
+      asyncOptions.transport,
+      instanceId,
+      source,
+      logger,
+      moduleName,
+    )
+    if (asyncOptions.transport === 'websocket') return resolved
+    return bindSseEndpoint(resolved, raw?.sse?.endpoint, boundSseEndpoint, moduleName)
+  }
+}
+
+/**
  * Compose the asynchronous dynamic module for an entry point.
  *
  * `transport` is required here, unlike a hint that could be omitted: providers
@@ -266,65 +358,18 @@ export function composeForRootAsync(
   asyncOptions: BymaxRealtimeModuleAsyncOptions,
 ): DynamicModule {
   const moduleName = moduleClass.name
-  const patterns = [
-    asyncOptions.useFactory,
-    asyncOptions.useClass,
-    asyncOptions.useExisting,
-  ].filter((pattern) => pattern !== undefined)
-  if (patterns.length !== 1) {
-    throw realtimeError(
-      REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `forRootAsync requires exactly one of useFactory, useClass, or useExisting (received ${patterns.length})`,
-      { who: moduleName },
-    )
-  }
+  assertOneFactoryPattern(asyncOptions, moduleName)
   assertModeSupported(wiring, asyncOptions.transport, moduleName)
   assertSseEndpointApplies(asyncOptions, moduleName)
 
   const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
   const instanceId = randomUUID()
   const boundSseEndpoint = asyncOptions.sseEndpoint ?? DEFAULT_ASYNC_SSE_ENDPOINT
-  const resolve = (
-    raw: BymaxRealtimeModuleOptions | null | undefined,
-    source: string,
-  ): ResolvedRealtimeOptions => {
-    const resolved = resolveAsyncOptions(
-      raw,
-      asyncOptions.transport,
-      instanceId,
-      source,
-      logger,
-      moduleName,
-    )
-    if (asyncOptions.transport === 'websocket') return resolved
-    return bindSseEndpoint(resolved, raw?.sse?.endpoint, boundSseEndpoint, moduleName)
-  }
-
-  const resolvedOptionsProvider: Provider = asyncOptions.useFactory
-    ? {
-        provide: REALTIME_OPTIONS_TOKEN,
-        useFactory: async (...args: unknown[]) =>
-          resolve(await asyncOptions.useFactory!(...args), 'useFactory'),
-        inject: [...(asyncOptions.inject ?? [])],
-      }
-    : {
-        provide: REALTIME_OPTIONS_TOKEN,
-        useFactory: async (factory: { createRealtimeOptions: () => unknown }) =>
-          resolve(
-            (await factory.createRealtimeOptions()) as BymaxRealtimeModuleOptions,
-            'createRealtimeOptions',
-          ),
-        inject: [asyncOptions.useExisting ?? FACTORY_TOKEN],
-      }
+  const resolve = buildResolver(asyncOptions, instanceId, boundSseEndpoint, logger, moduleName)
 
   const factoryClassProvider: Provider[] = asyncOptions.useClass
     ? [{ provide: FACTORY_TOKEN, useClass: asyncOptions.useClass }]
     : []
-
-  const fromOptions = (
-    token: symbol,
-    read: (opts: BymaxRealtimeModuleOptions) => unknown,
-  ): Provider => ({ provide: token, useFactory: read, inject: [REALTIME_OPTIONS_TOKEN] })
 
   const { providers: transportProviders, controllers } = wiring.buildAsync({
     mode: asyncOptions.transport,
@@ -337,16 +382,8 @@ export function composeForRootAsync(
     controllers,
     providers: [
       ...factoryClassProvider,
-      resolvedOptionsProvider,
-      fromOptions(REALTIME_AUTHENTICATOR_TOKEN, (opts) => opts.authenticator),
-      fromOptions(REALTIME_PUBSUB_TOKEN, (opts) => {
-        warnIfSingleInstance(opts.pubsub, opts.transport, logger)
-        return opts.pubsub ?? new InMemoryPubSub()
-      }),
-      fromOptions(REALTIME_HOOKS_TOKEN, (opts) => opts.hooks ?? {}),
-      { provide: REALTIME_INSTANCE_ID_TOKEN, useValue: instanceId },
-      fromOptions(REALTIME_OFFLINE_QUEUE_TOKEN, (opts) => opts.offlineQueue),
-      fromOptions(REALTIME_PRESENCE_TOKEN, (opts) => opts.presence),
+      buildOptionsProvider(asyncOptions, resolve, FACTORY_TOKEN),
+      ...buildOptionDerivedProviders(logger, instanceId),
       ...SHARED_SERVICES,
       ...transportProviders,
       ...(asyncOptions.extraProviders ?? []),
