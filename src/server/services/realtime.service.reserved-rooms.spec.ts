@@ -4,7 +4,8 @@
  *
  * `user:`, `tenant:` and `connection:` are composed from the identity the library resolved, or
  * reserved for revocation. Admission refuses them in `AuthenticationResult.rooms`; a call that
- * puts a connection in one by hand is the same hole, so it is refused by the same rule.
+ * puts a connection in one by hand is the same hole, so it is refused by the same rule. A value
+ * that is not a string is refused before this rule, in room-name-shape.spec.ts.
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { ITransport } from '../interfaces/transport.interface'
@@ -73,17 +74,6 @@ describe('RealtimeService — reserved room names', () => {
       await service[operation]('c-1', room)
 
       expect(transport[operation]).toHaveBeenCalledWith('c-1', room)
-    })
-
-    // Scenario: the value is not a string at runtime. Expected: it is not mistaken for a reserved
-    // name and is passed to the transport unchanged; the declared type is a promise, not a fact.
-    it.each([undefined, 7, null])('does not treat %s as a reserved name', async (room) => {
-      const transport = mockTransport()
-      const service = new RealtimeService(transport, undefined as never)
-
-      await service[operation]('c-1', room as never)
-
-      expect(transport[operation]).toHaveBeenCalledTimes(1)
     })
   })
 })

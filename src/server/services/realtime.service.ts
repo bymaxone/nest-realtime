@@ -9,7 +9,7 @@ import {
 } from '../constants/injection-tokens.constants'
 import type { IRealtimePubSub } from '../interfaces/realtime-pubsub.interface'
 import type { ITransport } from '../interfaces/transport.interface'
-import { refuseReservedRoom } from '../utils/reserved-room'
+import { refuseReservedRoom, requireRoomName } from '../utils/reserved-room'
 
 /**
  * Transport-agnostic realtime API.
@@ -63,8 +63,12 @@ export class RealtimeService {
   /**
    * Send to a logical room. Use the prefix convention (`user:{id}`,
    * `tenant:{id}`, `resource:{type}:{id}`) or a custom non-colliding id.
+   *
+   * @throws {Error} `REALTIME_AUTH_FAILED` when `roomId` is not a non-empty string: socket.io
+   *   reads an array or a set as several rooms.
    */
-  emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
+  async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
+    requireRoomName('emitToRoom', roomId)
     return this.transport.emitToRoom(roomId, event, data)
   }
 
@@ -78,7 +82,9 @@ export class RealtimeService {
    *
    * Rooms of the application's own are free-form, but a name that starts with `user:`,
    * `tenant:` or `connection:` is refused, the rule that `AuthenticationResult.rooms` is
-   * held to: joining `tenant:<other>` would receive that tenant's events.
+   * held to: joining `tenant:<other>` would receive that tenant's events. A `roomId` that is
+   * not a non-empty string is refused too, whatever it holds: socket.io reads an array or a
+   * set as several room names.
    *
    * Acts on a connection this instance holds; for any other id it resolves and changes
    * nothing. A failure of the transport that holds the connection rejects the call.
@@ -90,7 +96,7 @@ export class RealtimeService {
 
   /**
    * Remove a specific connection from a room. A name that starts with `user:`, `tenant:` or
-   * `connection:` is refused, as in `joinRoom`.
+   * `connection:` is refused, as in `joinRoom`, and so is a `roomId` that is not a non-empty string.
    *
    * Acts on a connection this instance holds; for any other id it resolves and changes
    * nothing. A failure of the transport that holds the connection rejects the call.
