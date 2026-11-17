@@ -929,6 +929,8 @@ Nest's default exception filter does not log an `HttpException`, so a `503` from
 
 From the `onModuleDestroy` phase on, which runs ahead of every `beforeApplicationShutdown`, a new SSE stream gets a 503 whose message is `REALTIME_TRANSPORT_UNAVAILABLE` and a new WebSocket handshake gets a `connect_error` whose `data.code` is that code. A slow `onModuleDestroy` in a module nearer the root than the realtime module still runs first, and until it returns a connection is accepted.
 
+A client that stopped reading holds its socket open after the library has ended its stream, and Node's HTTP server waits for it: `app.close()` took 6,004 ms with such clients and 3 ms with `forceCloseConnections: true`. Create the application with `NestFactory.create(AppModule, { forceCloseConnections: true })`, or give the process a termination grace of at least 7 seconds.
+
 ### DI Tokens
 
 `REALTIME_OPTIONS_TOKEN` · `REALTIME_TRANSPORT_TOKEN` · `REALTIME_AUTHENTICATOR_TOKEN` · `REALTIME_PUBSUB_TOKEN` · `REALTIME_OFFLINE_QUEUE_TOKEN` · `REALTIME_PRESENCE_TOKEN` · `REALTIME_HOOKS_TOKEN` · `REALTIME_INSTANCE_ID_TOKEN`
