@@ -72,9 +72,9 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     prefix, 49 B, measured on 2026-11-17)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
 //   react      2,817 B →  2,847 B (the resume parameter: the last event id the hook saw, replacing one
-//     the url already carries, before any fragment, and the split of the two hooks under the 50-line
-//     function limit: a context object for 11 members carries the state and refs to the helpers, 333 B
-//     on 2026-11-17)
+//     the url already carries, before any fragment, and the helpers of the two hooks, which stay
+//     within the 50-line function limit through a context object for 11 members that carries the state
+//     and refs, 333 B, measured on 2026-11-17)
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
