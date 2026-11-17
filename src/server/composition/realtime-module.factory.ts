@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import type { DynamicModule, Logger, Provider, Type } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { applyDefaults } from '../config/default-options'
+import { dropUnset } from '../config/drop-unset'
 import type { ResolvedRealtimeOptions } from '../config/default-options'
 import { validateOptions } from '../config/validate-options'
 import {
@@ -334,7 +335,12 @@ function buildResolver(
       moduleName,
     )
     if (asyncOptions.transport === 'websocket') return resolved
-    return bindSseEndpoint(resolved, raw?.sse?.endpoint, boundSseEndpoint, moduleName)
+    return bindSseEndpoint(
+      resolved,
+      dropUnset(raw as BymaxRealtimeModuleOptions).sse?.endpoint,
+      boundSseEndpoint,
+      moduleName,
+    )
   }
 }
 

@@ -8,8 +8,14 @@
  */
 import { REALTIME_OPTIONS_TOKEN } from '../constants/injection-tokens.constants'
 import { BymaxRealtimeModule } from '../realtime.module'
-import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import type {
+  BymaxRealtimeModuleOptions,
+  ReauthenticationPolicy,
+  SseOptions,
+  WebSocketOptions,
+} from '../interfaces/realtime-module-options.interface'
 import { applyDefaults, DEFAULT_SSE } from './default-options'
+import { dropUnset } from './drop-unset'
 import { validateOptions } from './validate-options'
 
 const authenticator = { authenticate: async () => null }
@@ -103,5 +109,128 @@ describe('the other groups and the top level', () => {
     expect(
       resolved.reauthenticationPolicy && 'concurrency' in resolved.reauthenticationPolicy,
     ).toBe(false)
+  })
+})
+
+/** Every key of each group, written out so that adding a key to the interface fails to compile here. */
+const EVERY_SSE_KEY = {
+  endpoint: '/x',
+  heartbeatMs: 6_000,
+  replayBufferSize: 1,
+  replayTtlMs: 2,
+  replayMaxIdleUsers: 3,
+  maxConnectionsPerUser: 4,
+  emitConnectionEvent: false,
+  maxQueuedBytes: 5,
+  maxQueuedEvents: 6,
+  stallHeartbeats: 7,
+} satisfies Required<SseOptions>
+const EVERY_WEBSOCKET_KEY = {
+  namespace: '/ns',
+  cors: { origin: '*' },
+  maxHttpBufferSize: 8,
+  pingIntervalMs: 9,
+  pingTimeoutMs: 10,
+  maxConnectionsPerUser: 11,
+  emitConnectionEvent: false,
+  redisAdapter: { pubClient: {} },
+} satisfies Required<WebSocketOptions>
+const EVERY_REAUTH_KEY = {
+  intervalSeconds: 12,
+  onFailure: 'event',
+  cacheTtlMs: 13,
+  revalidateTimeoutMs: 14,
+  concurrency: 15,
+} satisfies Required<ReauthenticationPolicy>
+const GROUPS = [
+  ['sse', EVERY_SSE_KEY],
+  ['websocket', EVERY_WEBSOCKET_KEY],
+  ['reauthenticationPolicy', EVERY_REAUTH_KEY],
+] as const
+
+describe.each(GROUPS)('the %s group as a class instance', (group, every) => {
+  // Scenario: the group is a class instance whose fields hold nothing, or whose getters return
+  // nothing. Expected: every such key is dropped, and a getter that returns a value is kept, because
+  // the services read properties and a getter is a property.
+  it.each(Object.keys(every))('drops %s when a field or a getter holds nothing', (key) => {
+    class WithFields {}
+    class WithGetter {}
+    Object.defineProperty(WithGetter.prototype, key, { get: () => undefined, enumerable: false })
+    const withFields = Object.assign(new WithFields(), { [key]: null })
+    const withGetter = new WithGetter()
+
+    for (const instance of [withFields, withGetter]) {
+      const kept = dropUnset({ [group]: instance } as never)[group] as Record<string, unknown>
+
+      expect(key in kept).toBe(false)
+    }
+  })
+
+  it('keeps a value that a getter returns, and a field', () => {
+    class WithGetter {
+      get [Object.keys(every)[0] as string](): unknown {
+        return Object.values(every)[0]
+      }
+    }
+    const kept = dropUnset({ [group]: new WithGetter() } as never)[group] as Record<string, unknown>
+
+    expect(kept[Object.keys(every)[0] as string]).toBe(Object.values(every)[0])
+  })
+
+  it('keeps every key of a plain group that holds a value', () => {
+    expect(dropUnset({ [group]: { ...every } } as never)[group]).toStrictEqual(every)
+  })
+})
+
+describe('the sse bounds as a class instance, end to end', () => {
+  // Scenario: a group handed over as a class whose bound fields hold undefined. Expected: the options
+  // the services receive carry the default, never no cap.
+  it('resolves to the defaults', () => {
+    class SseGroup {
+      maxConnectionsPerUser = undefined
+      maxQueuedBytes = undefined
+      maxQueuedEvents = null
+      stallHeartbeats = null
+    }
+    const resolved = applyDefaults({
+      transport: 'sse',
+      authenticator,
+      sse: new SseGroup(),
+    } as never)
+
+    expect(resolved.sse.maxConnectionsPerUser).toBe(DEFAULT_SSE.maxConnectionsPerUser)
+    expect(resolved.sse.maxQueuedBytes).toBe(DEFAULT_SSE.maxQueuedBytes)
+    expect(resolved.sse.maxQueuedEvents).toBe(DEFAULT_SSE.maxQueuedEvents)
+    expect(resolved.sse.stallHeartbeats).toBe(DEFAULT_SSE.stallHeartbeats)
+  })
+
+  it('is accepted by validateOptions and by forRoot', () => {
+    class SseGroup {
+      maxConnectionsPerUser = undefined
+    }
+    const options = { transport: 'sse', authenticator, sse: new SseGroup() } as never
+
+    expect(() => validateOptions(options)).not.toThrow()
+    expect(() => BymaxRealtimeModule.forRoot(options)).not.toThrow()
+  })
+})
+
+describe('the top level as a class instance', () => {
+  it('drops a getter that returns nothing and keeps one that returns a value', () => {
+    class TopLevel {
+      get maxConnections(): number | undefined {
+        return undefined
+      }
+      get hookTimeoutMs(): number {
+        return 9_000
+      }
+    }
+    const kept = dropUnset(Object.assign(new TopLevel(), { authenticator }) as never) as Record<
+      string,
+      unknown
+    >
+
+    expect('maxConnections' in kept).toBe(false)
+    expect(kept.hookTimeoutMs).toBe(9_000)
   })
 })

@@ -26,6 +26,22 @@ describe('BymaxRealtimeModule.forRootAsync SSE endpoint', () => {
     return mod.get<BymaxRealtimeModuleOptions>(REALTIME_OPTIONS_TOKEN)
   }
 
+  // An endpoint the factory leaves unset (undefined or null) is the same as one it does not name: the
+  // registration's own route stands and the default is published, with no crash on the empty value.
+  it.each([undefined, null])('reads a factory endpoint of %p as unset', async (endpoint) => {
+    const options = await resolvedOptions({
+      transport: 'sse',
+      sseEndpoint: '/realtime/sse',
+      useFactory: async () => ({
+        transport: 'sse' as const,
+        authenticator,
+        sse: { endpoint } as never,
+      }),
+    })
+
+    expect(options.sse?.endpoint).toBe('/realtime/sse')
+  })
+
   // The historical default: a registration that names no endpoint keeps serving
   // '/events', so upgrading never moves the route of a deployed application.
   it('binds the controller to /events when no sseEndpoint is declared', () => {
