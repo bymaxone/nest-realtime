@@ -3,19 +3,44 @@
  * @layer infrastructure
  */
 import type { Redis } from 'ioredis'
+import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type {
   IOfflineQueueStorage,
   OfflineQueuedEvent,
 } from '../interfaces/offline-queue-storage.interface'
+import { describeReceived } from '../utils/describe-received'
+import { realtimeError } from '../utils/realtime-error'
 
 /** Options for RedisOfflineQueue. */
 export interface RedisOfflineQueueOptions {
   /** The Redis client to use for all queue operations. */
   readonly client: Redis
-  /** Maximum events retained per user (oldest are trimmed). Defaults to 500. */
+  /** Maximum events retained per user (oldest are trimmed): an integer from 1 to 100,000. Defaults to 500. */
   readonly maxPerUser?: number
-  /** TTL for each user's key in seconds. Defaults to 3600 (1 hour). */
+  /** TTL for each user's key in seconds: an integer from 1 to 2,147,483,647. Defaults to 3600 (1 hour). */
   readonly ttlSeconds?: number
+}
+
+/** The most events one user's key may hold: past it a queue is memory, not a queue. */
+const MAX_PER_USER_CEILING = 100_000
+
+/** A TTL that `EXPIRE` is measured to accept on Redis 7; a value near 9.2e15 makes Redis reject the command. */
+const TTL_SECONDS_CEILING = 2_147_483_647
+
+/**
+ * Refuse an option that Redis would turn into a silent loss: `EXPIRE` with 0 or a negative deletes the
+ * key, a trim to a count of 0 removes every entry, and `NaN`, a fraction or a value Redis
+ * rejects fails the command after `ZADD` has already run.
+ */
+function requireInteger(name: string, value: unknown, least: number, most: number): number {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= least && value <= most) {
+    return value
+  }
+  throw realtimeError(
+    REALTIME_ERROR_CODES.INVALID_OPTIONS,
+    `options.${name} must be an integer >= ${least} and <= ${most}, received ${describeReceived(value)}`,
+    { who: 'RedisOfflineQueue' },
+  )
 }
 
 /**
@@ -60,8 +85,18 @@ export class RedisOfflineQueue implements IOfflineQueueStorage {
 
   constructor(options: RedisOfflineQueueOptions) {
     this.#client = options.client
-    this.maxPerUser = options.maxPerUser ?? 500
-    this.ttlSeconds = options.ttlSeconds ?? 3600
+    this.maxPerUser = requireInteger(
+      'maxPerUser',
+      options.maxPerUser ?? 500,
+      1,
+      MAX_PER_USER_CEILING,
+    )
+    this.ttlSeconds = requireInteger(
+      'ttlSeconds',
+      options.ttlSeconds ?? 3600,
+      1,
+      TTL_SECONDS_CEILING,
+    )
   }
 
   private key(userId: string): string {
