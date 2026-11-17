@@ -705,6 +705,8 @@ Read-side view of live connections — useful for admin endpoints and metrics. T
 
 Reference implementations shipped: `InMemoryPubSub` (default), `RedisRealtimePubSub`, `RedisOfflineQueue`.
 
+`RedisOfflineQueue` takes `maxPerUser` (default 500) and `ttlSeconds` (default 3600), each an integer: `maxPerUser` from 1 to 100,000 and `ttlSeconds` from 1 to 2,147,483,647. A value outside that is refused when the queue is constructed, with `REALTIME_INVALID_OPTIONS`, because Redis would otherwise turn it into a silent loss: see the changelog entry for what each value did.
+
 #### Identity must be present or absent, never blank
 
 `userId` must be a non-empty string, and `tenantId` either absent or a non-empty string. A connection whose authenticator, or whose `tenantResolver`, yields a blank one is **refused at bootstrap** as a server fault, not a `401`: blank is not missing. Every connection carrying `''` lands under the same registry key and joins the same `user:` or `tenant:` room, and a later emit reaches all of them. Whitespace counts as blank.
