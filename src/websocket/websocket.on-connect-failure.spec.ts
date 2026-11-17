@@ -26,7 +26,11 @@ describe('WebSocket: onConnectFailure', () => {
   let logged: jest.SpyInstance
   const sockets: Socket[] = []
 
-  async function boot(onConnectFailure?: 'ignore' | 'close'): Promise<void> {
+  async function boot(
+    onConnectFailure?: 'ignore' | 'close',
+    extra: { websocket?: { maxConnectionsPerUser: number }; healthyConnects?: number } = {},
+  ): Promise<void> {
+    let connects = 0
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     logged = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
@@ -35,7 +39,13 @@ describe('WebSocket: onConnectFailure', () => {
         BymaxRealtimeWebSocketModule.forRoot({
           transport: 'websocket',
           authenticator: { authenticate: async () => ({ userId: 'u1' }) },
-          hooks: { onConnect: async () => Promise.reject(new Error('presence store down')) },
+          hooks: {
+            onConnect: async () => {
+              connects += 1
+              if (connects > (extra.healthyConnects ?? 0)) throw new Error('presence store down')
+            },
+          },
+          ...(extra.websocket ? { websocket: extra.websocket } : {}),
           ...(onConnectFailure ? { onConnectFailure } : {}),
         }),
       ],
@@ -88,5 +98,22 @@ describe('WebSocket: onConnectFailure', () => {
     expect(logged).toHaveBeenCalledWith(
       expect.stringContaining('onConnect hook failed: presence store down'),
     )
+  })
+
+  // Scenario: a user at the cap connects again and the new connection's onConnect fails under
+  // 'close'. Expected: the oldest connection is already gone and the new one is refused. Why:
+  // eviction happens at admission, before onConnect, so this order is a contract a host can read
+  // in the README and not an accident of the implementation.
+  it("evicts the user's oldest connection before onConnect runs, so a connection 'close' refuses has already displaced it", async () => {
+    await boot('close', { websocket: { maxConnectionsPerUser: 1 }, healthyConnects: 1 })
+    const first = await connect()
+    expect(first.announced).toBe(true)
+
+    const second = await connect()
+    await sleep(300)
+
+    expect(second.announced).toBe(false)
+    expect(first.socket.connected).toBe(false)
+    expect(connections.allByTransport('websocket')).toHaveLength(0)
   })
 })
