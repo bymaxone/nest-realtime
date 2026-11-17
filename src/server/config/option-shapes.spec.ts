@@ -9,6 +9,7 @@
  */
 import { BymaxRealtimeModule } from '../realtime.module'
 import { validateOptions } from './validate-options'
+import { validateShapes } from './validate-shapes'
 
 const SENTINEL = 'SENTINEL-5c21d7'
 const authenticator = { authenticate: async () => null }
@@ -245,5 +246,41 @@ describe('what the refusals never echo', () => {
 
     expect(message).toContain(`options.${path}`)
     expect(message).not.toContain(SENTINEL)
+  })
+})
+
+describe('validateShapes called on options that still hold null', () => {
+  // `validateOptions` drops null before it calls `validateShapes`, so these cases call it directly: a
+  // null group or piece is not an object, and a null hook or resolver is unset.
+  it.each([
+    'sse',
+    'websocket',
+    'reauthenticationPolicy',
+    'hooks',
+    'pubsub',
+    'offlineQueue',
+    'presence',
+  ])('refuses %s set to null as not an object', (name) => {
+    expect(() =>
+      validateShapes({ transport: 'sse', authenticator, [name]: null } as never),
+    ).toThrow(refusal(name, 'an object', 'null'))
+  })
+
+  it.each([
+    'onConnect',
+    'onDisconnect',
+    'onError',
+    'onReauthenticationFailed',
+    'onDeliveryFailure',
+  ])('reads hooks.%s set to null as unset', (hook) => {
+    expect(() =>
+      validateShapes({ transport: 'sse', authenticator, hooks: { [hook]: null } } as never),
+    ).not.toThrow()
+  })
+
+  it('reads a tenantResolver set to null as unset', () => {
+    expect(() =>
+      validateShapes({ transport: 'sse', authenticator, tenantResolver: null } as never),
+    ).not.toThrow()
   })
 })
