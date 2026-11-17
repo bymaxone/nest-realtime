@@ -198,7 +198,7 @@ function useSseStreamState<TEvents extends Record<string, unknown>>(
   // recovered, closing a healthy `EventSource` and losing the `Last-Event-ID` state
   // the browser keeps per object. Called before arming a new timer, on a successful
   // open, and on teardown.
-  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
+  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds, and so does a `useMemo` whose only dependency is that callback; measured by running the React specs with a one-element list for the callback and an empty list for the memo
   const clearReconnectTimer = useCallback(() => {
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current)
@@ -206,7 +206,6 @@ function useSseStreamState<TEvents extends Record<string, unknown>>(
     }
   }, [])
 
-  // Stryker restore ArrayDeclaration
   const context = useMemo(
     () => ({
       setConnected,
@@ -223,6 +222,7 @@ function useSseStreamState<TEvents extends Record<string, unknown>>(
     }),
     [clearReconnectTimer],
   )
+  // Stryker restore ArrayDeclaration
   return { view: { connected, events, lastEvent, error, reconnectAttempts }, context }
 }
 
