@@ -22,6 +22,8 @@ const CASES = [
   { name: 'ttlSeconds', least: 1, most: TTL_CEILING },
 ] as const
 
+const DEFAULT_MAX_PER_USER = 500
+const DEFAULT_TTL_SECONDS = 3600
 const SENTINEL = 'SENTINEL-3b7e90'
 
 /** What a host could pass by mistake, and how the refusal names it: a finite number is printed, the rest by type. */
@@ -72,8 +74,30 @@ describe.each(CASES)('RedisOfflineQueue $name', ({ name, least, most }) => {
     expect(() => make(value)).not.toThrow()
   })
 
-  // Scenario: the option is present and holds nothing. Expected: it is read as unset, so it takes its default.
-  it.each([undefined, null])('reads %p as unset', (value) => {
-    expect(() => make(value)).not.toThrow()
+  // Scenario: the option is present and holds nothing. Expected: it is read as unset, so the pipeline the
+  // queue builds on append carries the default: the trim keeps 500 and the key expires after 3600 s.
+  it.each([undefined, null])('reads %p as unset and uses the default', async (value) => {
+    const pipeline = {
+      zadd: jest.fn(),
+      zremrangebyrank: jest.fn(),
+      expire: jest.fn(),
+      exec: jest.fn().mockResolvedValue([]),
+    }
+    const queue = new RedisOfflineQueue({
+      client: { pipeline: jest.fn().mockReturnValue(pipeline) } as unknown as Redis,
+      [name]: value,
+    } as never)
+
+    await queue.append('u', { id: '100-0', event: 'e', data: {}, emittedAt: new Date(0) })
+
+    if (name === 'maxPerUser') {
+      expect(pipeline.zremrangebyrank).toHaveBeenCalledWith(
+        'bymax:oq:u',
+        0,
+        -(DEFAULT_MAX_PER_USER + 1),
+      )
+    } else {
+      expect(pipeline.expire).toHaveBeenCalledWith('bymax:oq:u', DEFAULT_TTL_SECONDS)
+    }
   })
 })
