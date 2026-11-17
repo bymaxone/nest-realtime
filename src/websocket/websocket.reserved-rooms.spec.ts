@@ -95,8 +95,8 @@ describe('WebSocket: joinRoom with a name the library composes', () => {
     })
   })
 
-  // Scenario: a room of the application's own. Expected: it still works end to end.
-  it('still joins a free-form room', async () => {
+  // Scenario: a room of the application's own. Expected: it works end to end.
+  it('joins a free-form room', async () => {
     const attacker = await connect()
     await service.joinRoom(attacker.id, 'workspace:w1')
     await service.emitToRoom('workspace:w1', 'hello', {})

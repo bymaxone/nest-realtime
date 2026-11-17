@@ -76,7 +76,7 @@ describe('RealtimeService — reserved room names', () => {
     })
 
     // Scenario: the value is not a string at runtime. Expected: it is not mistaken for a reserved
-    // name and reaches the transport as before; the declared type is a promise, not a fact.
+    // name and is passed to the transport unchanged; the declared type is a promise, not a fact.
     it.each([undefined, 7, null])('does not treat %s as a reserved name', async (room) => {
       const transport = mockTransport()
       const service = new RealtimeService(transport, undefined as never)
