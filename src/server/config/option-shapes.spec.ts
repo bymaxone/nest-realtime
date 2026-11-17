@@ -3,9 +3,9 @@
  * @layer composition
  *
  * An implementation that lacks a required function, a hook that is not a function, a group that is not an
- * object, a flag that is not a boolean and an endpoint that is not a path used to be accepted and failed
- * later, as a raw `TypeError`, or not at all. Each is refused by `forRoot` with `REALTIME_INVALID_OPTIONS`,
- * naming the option and the type of what it received.
+ * object, a flag that is not a boolean and an endpoint that is not a non-empty string are each refused by
+ * `forRoot` with `REALTIME_INVALID_OPTIONS`, naming the option and the type of what it received, instead of
+ * failing later as a raw `TypeError` or being read as the opposite of what they say.
  */
 import { BymaxRealtimeModule } from '../realtime.module'
 import { validateOptions } from './validate-options'
