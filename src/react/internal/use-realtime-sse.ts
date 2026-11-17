@@ -20,7 +20,8 @@
  * compatibility — this module accesses `EventSource` and React state.
  */
 'use client'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { PRESENCE_EVENT_NAMES, RESERVED_EVENT_NAMES } from '../../shared'
 import { nextBackoff, validDelay } from './backoff'
 /** Options for the SSE internal hook. */
@@ -147,6 +148,233 @@ export interface UseRealtimeSseReturn<TEvents extends Record<string, unknown>> {
 }
 
 /**
+ * The state setters and the refs of one hook instance, bundled so that the handlers of a stream are
+ * built outside the hook. Every member keeps one identity for the life of the component.
+ */
+interface SseStreamContext<TEvents extends Record<string, unknown>> {
+  readonly setConnected: (connected: boolean) => void
+  readonly setError: (error: Error | undefined) => void
+  readonly setReconnectAttempts: (attempts: number) => void
+  readonly setEvents: Dispatch<SetStateAction<Array<SseEventEntry<TEvents>>>>
+  readonly setLastEvent: (entry: SseEventEntry<TEvents>) => void
+  readonly sourceRef: MutableRefObject<EventSource | null>
+  readonly reconnectMsRef: MutableRefObject<number>
+  readonly attemptsRef: MutableRefObject<number>
+  readonly timerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>
+  /** The id of the last event seen, and the url it belongs to: another url is another stream. */
+  readonly lastIdRef: MutableRefObject<{ url: string; id: string } | undefined>
+  readonly clearReconnectTimer: () => void
+}
+
+/** The options a stream reads once it is open, each present in the type even when unset. */
+type StreamSettings = { readonly url: string } & {
+  readonly [K in 'withCredentials' | 'reconnectInitialMs' | 'reconnectMaxMs' | 'maxAttempts']:
+    UseRealtimeSseOptions[K] | undefined
+}
+
+/** The state a hook instance returns, apart from `reconnect`. */
+type SseView<TEvents extends Record<string, unknown>> = Omit<
+  UseRealtimeSseReturn<TEvents>,
+  'reconnect'
+>
+
+/** The state, the refs and the timer cancellation of one hook instance. */
+function useSseStreamState<TEvents extends Record<string, unknown>>(
+  opts: UseRealtimeSseOptions,
+): { view: SseView<TEvents>; context: SseStreamContext<TEvents> } {
+  const [connected, setConnected] = useState(false)
+  const [events, setEvents] = useState<Array<SseEventEntry<TEvents>>>([])
+  const [lastEvent, setLastEvent] = useState<SseEventEntry<TEvents> | undefined>(undefined)
+  const [error, setError] = useState<Error | undefined>(undefined)
+  const [reconnectAttempts, setReconnectAttempts] = useState(0)
+  const sourceRef = useRef<EventSource | null>(null)
+  const reconnectMsRef = useRef<number>(validDelay(opts.reconnectInitialMs, 1_000))
+  const attemptsRef = useRef<number>(0)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastIdRef = useRef<{ url: string; id: string } | undefined>(undefined)
+
+  // Cancels a scheduled retry. A timer that outlives the failure it was scheduled
+  // for is destructive: it fires `connect` against a stream that has already
+  // recovered, closing a healthy `EventSource` and losing the `Last-Event-ID` state
+  // the browser keeps per object. Called before arming a new timer, on a successful
+  // open, and on teardown.
+  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds, and so does a `useMemo` whose only dependency is that callback; measured by running the React specs with a one-element list for the callback and an empty list for the memo
+  const clearReconnectTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+  }, [])
+
+  const context = useMemo(
+    () => ({
+      setConnected,
+      setError,
+      setReconnectAttempts,
+      setEvents,
+      setLastEvent,
+      sourceRef,
+      reconnectMsRef,
+      attemptsRef,
+      timerRef,
+      lastIdRef,
+      clearReconnectTimer,
+    }),
+    [clearReconnectTimer],
+  )
+  // Stryker restore ArrayDeclaration
+  return { view: { connected, events, lastEvent, error, reconnectAttempts }, context }
+}
+
+/**
+ * The names of the application's events, as one string.
+ *
+ * Carried as a newline-joined string rather than the array itself: an inline
+ * `eventNames={['order.created']}` literal has a new identity on every render, so
+ * depending on the array would rebuild `connect` each render and the effect would
+ * close and reopen the stream in a loop. A newline can never appear in an
+ * SSE event name (it terminates the field), so the round trip is lossless.
+ * Filtering happens here rather than at subscribe time so that a call passing only
+ * rejected names produces the same key as no names at all — no needless reopen.
+ */
+function joinEventNames(names: readonly string[] | undefined): string {
+  return (names ?? [])
+    .filter((name) => name !== '' && !BROWSER_SSE_EVENT_NAMES.includes(name))
+    .join('\n')
+}
+
+/** Start the backoff over: the next delay is the initial one and no attempt has failed yet. */
+function resetBackoff<TEvents extends Record<string, unknown>>(
+  context: SseStreamContext<TEvents>,
+  reconnectInitialMs: number | undefined,
+): void {
+  context.reconnectMsRef.current = validDelay(reconnectInitialMs, 1_000)
+  context.attemptsRef.current = 0
+  context.setReconnectAttempts(0)
+}
+
+/** The handler of a successful open: the stream is up, so the failures so far are forgotten. */
+function onOpenHandler<TEvents extends Record<string, unknown>>(
+  context: SseStreamContext<TEvents>,
+  opts: StreamSettings,
+): () => void {
+  return () => {
+    context.setConnected(true)
+    context.setError(undefined)
+    // The browser restarts a dropped stream by itself, and usually beats our own
+    // backoff to it. Drop the scheduled retry so it cannot tear down the stream
+    // that just came back.
+    context.clearReconnectTimer()
+    // Reset backoff and the attempt counter on successful open.
+    resetBackoff(context, opts.reconnectInitialMs)
+  }
+}
+
+/** The handler of a failure: count it, then give up or schedule `retry` after a backoff. */
+function onErrorHandler<TEvents extends Record<string, unknown>>(
+  context: SseStreamContext<TEvents>,
+  opts: StreamSettings,
+  source: EventSource,
+  retry: () => void,
+): () => void {
+  return () => {
+    context.setConnected(false)
+    context.setError(new Error('SSE connection error'))
+    context.attemptsRef.current += 1
+    context.setReconnectAttempts(context.attemptsRef.current)
+    // Give up once the caller's attempt budget is exhausted; `reconnect` resets it.
+    // Closing is what actually stops the retrying: a browser restarts a dropped
+    // EventSource on its own, so merely skipping our own timer would leave the
+    // endpoint being hammered forever. Only readyState CLOSED ends that.
+    if (opts.maxAttempts !== undefined && context.attemptsRef.current >= opts.maxAttempts) {
+      source.close()
+      return
+    }
+    // Exponential backoff: double each failure, capped at reconnectMaxMs. Replacing
+    // the pending timer rather than stacking one keeps a single retry in flight —
+    // otherwise an orphaned earlier timer survives a recovery and fires anyway.
+    context.clearReconnectTimer()
+    const delay = nextBackoff(
+      context.reconnectMsRef.current,
+      validDelay(opts.reconnectMaxMs, 30_000),
+    )
+    context.reconnectMsRef.current = delay
+    context.timerRef.current = setTimeout(retry, delay)
+  }
+}
+
+/**
+ * The handler for both the default `message` event and every named event.
+ *
+ * `e.type` is `'message'` for the default stream and the event name for named
+ * listeners, so the original event `type` is preserved either way. The
+ * `: keepalive` heartbeat is a raw comment and never surfaces here (spec §6.1, §13).
+ */
+function eventHandler<TEvents extends Record<string, unknown>>(
+  context: SseStreamContext<TEvents>,
+  url: string,
+): (e: MessageEvent) => void {
+  return (e) => {
+    // A frame without an id says nothing about where the stream stands.
+    if (e.lastEventId !== '') context.lastIdRef.current = { url, id: e.lastEventId }
+    let data: TEvents[keyof TEvents]
+    try {
+      data = JSON.parse(e.data as string) as TEvents[keyof TEvents]
+    } catch {
+      // A non-JSON frame cannot become a typed event. Surface it through `error`
+      // instead of throwing: an exception raised inside a DOM listener escapes to
+      // window.onerror, where the consumer of this hook never sees it.
+      context.setError(new Error(`Malformed SSE payload on "${e.type}"`))
+      return
+    }
+    const entry: SseEventEntry<TEvents> = {
+      type: e.type as keyof TEvents,
+      data,
+      id: e.lastEventId,
+    }
+    context.setEvents((prev) => [...prev, entry].slice(-MAX_EVENTS))
+    context.setLastEvent(entry)
+  }
+}
+
+/**
+ * Open a fresh `EventSource` and wire it to the hook's state, closing the previous one first.
+ *
+ * @param retry - What a failure schedules after its backoff: this same function, bound by the hook.
+ */
+function openStream<TEvents extends Record<string, unknown>>(
+  context: SseStreamContext<TEvents>,
+  opts: StreamSettings,
+  extraEventNames: string,
+  retry: () => void,
+): void {
+  // Close any existing source before opening a fresh one.
+  context.sourceRef.current?.close()
+  context.clearReconnectTimer()
+
+  // A new EventSource has seen no event, so it sends no `Last-Event-ID`: the last id seen on this
+  // url goes in the query instead. An id never outlives a change of url, so one from before a
+  // detour to another url is not brought back.
+  if (context.lastIdRef.current?.url !== opts.url) context.lastIdRef.current = undefined
+  const source = new EventSource(withLastEventId(opts.url, context.lastIdRef.current?.id), {
+    withCredentials: opts.withCredentials ?? false,
+  })
+  context.sourceRef.current = source
+  source.onopen = onOpenHandler(context, opts)
+  source.onerror = onErrorHandler(context, opts, source, retry)
+  const handleEvent = eventHandler(context, opts.url)
+  source.onmessage = handleEvent
+  // Browsers route named events only to per-name listeners — subscribe so events
+  // like `presence:online` keep their `type` instead of being dropped.
+  for (const name of NAMED_SSE_EVENTS) {
+    source.addEventListener(name, handleEvent as EventListener)
+  }
+  for (const name of extraEventNames === '' ? [] : extraEventNames.split('\n')) {
+    source.addEventListener(name, handleEvent as EventListener)
+  }
+}
+
+/**
  * Internal SSE hook — wraps `EventSource` with connection-state tracking,
  * event accumulation (last 100), and exponential backoff.
  *
@@ -163,128 +391,23 @@ export interface UseRealtimeSseReturn<TEvents extends Record<string, unknown>> {
 export function useRealtimeSse<TEvents extends Record<string, unknown>>(
   opts: UseRealtimeSseOptions,
 ): UseRealtimeSseReturn<TEvents> {
-  const [connected, setConnected] = useState(false)
-  const [events, setEvents] = useState<Array<SseEventEntry<TEvents>>>([])
-  const [lastEvent, setLastEvent] = useState<SseEventEntry<TEvents> | undefined>(undefined)
-  const [error, setError] = useState<Error | undefined>(undefined)
-  const [reconnectAttempts, setReconnectAttempts] = useState(0)
-  const sourceRef = useRef<EventSource | null>(null)
-  const reconnectMsRef = useRef<number>(validDelay(opts.reconnectInitialMs, 1_000))
-  const attemptsRef = useRef<number>(0)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // The id of the last event seen, and the url it belongs to: another url is another stream.
-  const lastIdRef = useRef<{ url: string; id: string } | undefined>(undefined)
+  const { view, context } = useSseStreamState<TEvents>(opts)
+  const extraEventNames = joinEventNames(opts.eventNames)
 
-  // Carried as a newline-joined string rather than the array itself: an inline
-  // `eventNames={['order.created']}` literal has a new identity on every render, so
-  // depending on the array would rebuild `connect` each render and the effect below
-  // would close and reopen the stream in a loop. A newline can never appear in an
-  // SSE event name (it terminates the field), so the round trip is lossless.
-  // Filtering happens here rather than at subscribe time so that a call passing only
-  // rejected names produces the same key as no names at all — no needless reopen.
-  const extraEventNames = (opts.eventNames ?? [])
-    .filter((name) => name !== '' && !BROWSER_SSE_EVENT_NAMES.includes(name))
-    .join('\n')
-
-  // Cancels a scheduled retry. A timer that outlives the failure it was scheduled
-  // for is destructive: it fires `connect` against a stream that has already
-  // recovered, closing a healthy `EventSource` and losing the `Last-Event-ID` state
-  // the browser keeps per object. Called before arming a new timer, on a successful
-  // open, and on teardown.
-  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
-  const clearReconnectTimer = useCallback(() => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-  }, [])
-
-  // Stryker restore ArrayDeclaration
   const connect = useCallback(() => {
     if (opts.enabled === false) return
-
-    // Close any existing source before opening a fresh one.
-    sourceRef.current?.close()
-    clearReconnectTimer()
-
-    // A new EventSource has seen no event, so it sends no `Last-Event-ID`: the last id seen on this
-    // url goes in the query instead. An id never outlives a change of url, so one from before a
-    // detour to another url is not brought back.
-    if (lastIdRef.current?.url !== opts.url) lastIdRef.current = undefined
-    const source = new EventSource(withLastEventId(opts.url, lastIdRef.current?.id), {
-      withCredentials: opts.withCredentials ?? false,
-    })
-    sourceRef.current = source
-
-    source.onopen = () => {
-      setConnected(true)
-      setError(undefined)
-      // The browser restarts a dropped stream by itself, and usually beats our own
-      // backoff to it. Drop the scheduled retry so it cannot tear down the stream
-      // that just came back.
-      clearReconnectTimer()
-      // Reset backoff and the attempt counter on successful open.
-      reconnectMsRef.current = validDelay(opts.reconnectInitialMs, 1_000)
-      attemptsRef.current = 0
-      setReconnectAttempts(0)
-    }
-
-    source.onerror = () => {
-      setConnected(false)
-      setError(new Error('SSE connection error'))
-      attemptsRef.current += 1
-      setReconnectAttempts(attemptsRef.current)
-      // Give up once the caller's attempt budget is exhausted; `reconnect` resets it.
-      // Closing is what actually stops the retrying: a browser restarts a dropped
-      // EventSource on its own, so merely skipping our own timer would leave the
-      // endpoint being hammered forever. Only readyState CLOSED ends that.
-      if (opts.maxAttempts !== undefined && attemptsRef.current >= opts.maxAttempts) {
-        source.close()
-        return
-      }
-      // Exponential backoff: double each failure, capped at reconnectMaxMs. Replacing
-      // the pending timer rather than stacking one keeps a single retry in flight —
-      // otherwise an orphaned earlier timer survives a recovery and fires anyway.
-      clearReconnectTimer()
-      const delay = nextBackoff(reconnectMsRef.current, validDelay(opts.reconnectMaxMs, 30_000))
-      reconnectMsRef.current = delay
-      timerRef.current = setTimeout(connect, delay)
-    }
-
-    // Single handler for both the default `message` event and every named event.
-    // `e.type` is `'message'` for the default stream and the event name for named
-    // listeners, so the original event `type` is preserved either way. The
-    // `: keepalive` heartbeat is a raw comment and never surfaces here (spec §6.1, §13).
-    const handleEvent = (e: MessageEvent): void => {
-      // A frame without an id says nothing about where the stream stands.
-      if (e.lastEventId !== '') lastIdRef.current = { url: opts.url, id: e.lastEventId }
-      let data: TEvents[keyof TEvents]
-      try {
-        data = JSON.parse(e.data as string) as TEvents[keyof TEvents]
-      } catch {
-        // A non-JSON frame cannot become a typed event. Surface it through `error`
-        // instead of throwing: an exception raised inside a DOM listener escapes to
-        // window.onerror, where the consumer of this hook never sees it.
-        setError(new Error(`Malformed SSE payload on "${e.type}"`))
-        return
-      }
-      const entry: SseEventEntry<TEvents> = {
-        type: e.type as keyof TEvents,
-        data,
-        id: e.lastEventId,
-      }
-      setEvents((prev) => [...prev, entry].slice(-MAX_EVENTS))
-      setLastEvent(entry)
-    }
-    source.onmessage = handleEvent
-    // Browsers route named events only to per-name listeners — subscribe so events
-    // like `presence:online` keep their `type` instead of being dropped.
-    for (const name of NAMED_SSE_EVENTS) {
-      source.addEventListener(name, handleEvent as EventListener)
-    }
-    for (const name of extraEventNames === '' ? [] : extraEventNames.split('\n')) {
-      source.addEventListener(name, handleEvent as EventListener)
-    }
+    openStream(
+      context,
+      {
+        url: opts.url,
+        withCredentials: opts.withCredentials,
+        reconnectInitialMs: opts.reconnectInitialMs,
+        reconnectMaxMs: opts.reconnectMaxMs,
+        maxAttempts: opts.maxAttempts,
+      },
+      extraEventNames,
+      connect,
+    )
   }, [
     opts.enabled,
     opts.url,
@@ -293,7 +416,7 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
     opts.reconnectMaxMs,
     opts.maxAttempts,
     extraEventNames,
-    clearReconnectTimer,
+    context,
   ])
 
   useEffect(() => {
@@ -301,18 +424,16 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
     if (opts.enabled === false) return
     connect()
     return () => {
-      clearReconnectTimer()
-      sourceRef.current?.close()
-      sourceRef.current = null
+      context.clearReconnectTimer()
+      context.sourceRef.current?.close()
+      context.sourceRef.current = null
     }
-  }, [connect, opts.enabled, clearReconnectTimer])
+  }, [connect, opts.enabled, context])
 
   const reconnect = useCallback(() => {
-    reconnectMsRef.current = validDelay(opts.reconnectInitialMs, 1_000)
-    attemptsRef.current = 0
-    setReconnectAttempts(0)
+    resetBackoff(context, opts.reconnectInitialMs)
     connect()
-  }, [connect, opts.reconnectInitialMs])
+  }, [connect, opts.reconnectInitialMs, context])
 
-  return { connected, events, lastEvent, error, reconnectAttempts, reconnect }
+  return { ...view, reconnect }
 }

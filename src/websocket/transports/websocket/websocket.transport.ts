@@ -196,6 +196,20 @@ export class WebSocketTransport implements ITransport {
       },
     })
 
+    await this.joinRooms(socket, auth)
+
+    await this.evictBeyondLimit(auth.userId)
+
+    const failed = await this.runOnConnect(socket, auth, connectedAt)
+    if (!failed) return
+    const message = `onConnect hook failed: ${describeError(failed.error)}`
+    // Raised, the failure reaches the gateway, which logs it and disconnects the socket.
+    if (this.options.onConnectFailure === 'close') throw new Error(message)
+    this.logger.error(message)
+  }
+
+  /** Join the socket to its canonical rooms and the ones the authenticator named, here and in the registry. */
+  private async joinRooms(socket: Socket, auth: AuthenticationResult): Promise<void> {
     await socket.join(`${ROOM_PREFIXES.USER}:${auth.userId}`)
     if (auth.tenantId) await socket.join(`${ROOM_PREFIXES.TENANT}:${auth.tenantId}`)
     // Per-connection room — enables adapter-aware cross-node revocation in disconnect().
@@ -206,10 +220,15 @@ export class WebSocketTransport implements ITransport {
     this.rooms.join(socket.id, `${ROOM_PREFIXES.USER}:${auth.userId}`)
     if (auth.tenantId) this.rooms.join(socket.id, `${ROOM_PREFIXES.TENANT}:${auth.tenantId}`)
     for (const room of auth.rooms ?? []) this.rooms.join(socket.id, room)
+  }
 
-    await this.evictBeyondLimit(auth.userId)
-
-    const failed = await runHook(
+  /** Run `onConnect` for a registered socket, bounded by `hookTimeoutMs`; resolves with its failure, if any. */
+  private runOnConnect(
+    socket: Socket,
+    auth: AuthenticationResult,
+    connectedAt: Date,
+  ): ReturnType<typeof runHook> {
+    return runHook(
       () =>
         this.hooks.onConnect?.({
           connectionId: socket.id,
@@ -224,11 +243,6 @@ export class WebSocketTransport implements ITransport {
         }),
       this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
     )
-    if (!failed) return
-    const message = `onConnect hook failed: ${describeError(failed.error)}`
-    // Raised, the failure reaches the gateway, which logs it and disconnects the socket.
-    if (this.options.onConnectFailure === 'close') throw new Error(message)
-    this.logger.error(message)
   }
 
   /**

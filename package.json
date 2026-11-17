@@ -97,6 +97,7 @@
     "check:exports": "attw --pack . --profile strict",
     "check:mutants": "node scripts/check-mutation-directives.mjs",
     "check:file-length": "node scripts/check-file-length.mjs",
+    "check:function-length": "node scripts/check-function-length.mjs",
     "check:spec-headers": "node scripts/check-spec-headers.mjs",
     "check:suppressions": "node scripts/check-suppressions-baseline.mjs",
     "check:api": "node scripts/check-api-surface.mjs",
@@ -120,7 +121,7 @@
     "test:e2e": "jest --config jest.e2e.config.ts",
     "test:e2e:cross-instance": "jest --config jest.e2e.cross-instance.config.ts --runInBand",
     "test:watch": "jest --watch",
-    "verify": "pnpm clean && pnpm typecheck && pnpm lint && pnpm check:mutants && pnpm check:file-length && pnpm test:cov:all && pnpm build && pnpm check:published && pnpm check:surface && pnpm size && pnpm check:api",
+    "verify": "pnpm clean && pnpm typecheck && pnpm lint && pnpm check:mutants && pnpm check:file-length && pnpm check:function-length && pnpm test:cov:all && pnpm build && pnpm check:published && pnpm check:surface && pnpm size && pnpm check:api",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
   "peerDependencies": {
