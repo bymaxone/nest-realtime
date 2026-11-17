@@ -64,7 +64,7 @@ const TOP_LEVEL_KEYS = {
   reauthenticationPolicy: true,
 } satisfies Record<keyof BymaxRealtimeModuleOptions, true>
 
-/** The option groups whose own keys are merged with defaults or read as bounds. */
+/** The option groups whose keys are merged with defaults or read as bounds. */
 const GROUPS = {
   sse: SSE_KEYS,
   websocket: WEBSOCKET_KEYS,
