@@ -13,6 +13,7 @@
  */
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 // CRITICAL: NO static `import … 'socket.io-client'` in this file.
 // The dynamic import inside `connect` keeps the SSE-only bundle ≤ 4 KiB brotli.
@@ -85,6 +86,97 @@ type SocketLike = {
 
 const MAX_EVENTS = 100
 
+/** The state setters a bound socket writes to. */
+interface SocketSinks<TEvents extends Record<string, unknown>> {
+  readonly setConnected: (connected: boolean) => void
+  readonly setError: (error: Error | undefined) => void
+  readonly setEvents: Dispatch<SetStateAction<Array<WsEventEntry<TEvents>>>>
+  readonly setLastEvent: (entry: WsEventEntry<TEvents>) => void
+}
+
+/** Whatever was thrown, as an `Error`. */
+function asError(e: unknown): Error {
+  return e instanceof Error ? e : new Error(String(e))
+}
+
+/** Route a socket's connection signals and every event it receives into the hook's state. */
+function bindSocket<TEvents extends Record<string, unknown>>(
+  socket: SocketLike,
+  sinks: SocketSinks<TEvents>,
+): void {
+  socket.on('connect', () => {
+    sinks.setConnected(true)
+    sinks.setError(undefined)
+  })
+  socket.on('disconnect', () => sinks.setConnected(false))
+  socket.on('error', (e: unknown) => sinks.setError(asError(e)))
+  socket.onAny((eventName: string, payload: unknown) => {
+    const entry: WsEventEntry<TEvents> = {
+      type: eventName as keyof TEvents,
+      data: payload as TEvents[keyof TEvents],
+    }
+    sinks.setEvents((prev) => [...prev, entry].slice(-MAX_EVENTS))
+    sinks.setLastEvent(entry)
+  })
+}
+
+/** Load `socket.io-client` and open a socket, sending the credentials that were given. */
+async function openSocket(
+  url: string,
+  path: string | undefined,
+  ticket: string | undefined,
+  token: string | undefined,
+): Promise<SocketLike> {
+  // DYNAMIC IMPORT — the bundler keeps socket.io-client out of the static graph.
+  const { io } = await import('socket.io-client')
+  const auth: WsAuth = {
+    ...(ticket !== undefined ? { ticket } : {}),
+    ...(token !== undefined ? { token } : {}),
+  }
+  return io(url, {
+    path: path ?? '/socket.io',
+    ...(ticket !== undefined || token !== undefined ? { auth } : {}),
+    withCredentials: true,
+  })
+}
+
+/**
+ * The socket handle of one hook instance, with the calls that tear it down and send through it.
+ *
+ * `disposeSocket` and `emit` keep one identity for the life of the component.
+ */
+function useSocketHandle(): {
+  socketRef: MutableRefObject<unknown>
+  disposeSocket: () => void
+  emit: (event: string, data: unknown) => void
+} {
+  // Typed as `unknown` and narrowed via inline casts — avoids a static type import.
+  const socketRef = useRef<unknown>(null)
+
+  // Tear down the current socket (remove listeners + disconnect) and clear the ref.
+  // Removing listeners first prevents the abandoned socket's `disconnect` handler from
+  // mutating state after a new socket has taken its place.
+  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
+  const disposeSocket = useCallback(() => {
+    const sock = socketRef.current as SocketLike | null
+    if (sock) {
+      sock.removeAllListeners()
+      sock.disconnect()
+    }
+    socketRef.current = null
+  }, [])
+
+  // Stryker restore ArrayDeclaration
+  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
+  const emit = useCallback((event: string, data: unknown): void => {
+    const sock = socketRef.current as SocketLike | null
+    sock?.emit(event, data)
+  }, [])
+
+  // Stryker restore ArrayDeclaration
+  return { socketRef, disposeSocket, emit }
+}
+
 /**
  * Internal WebSocket hook — loads socket.io-client via dynamic import and
  * exposes connection state, accumulated events, and a full-duplex `emit`.
@@ -105,23 +197,8 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
   const [events, setEvents] = useState<Array<WsEventEntry<TEvents>>>([])
   const [lastEvent, setLastEvent] = useState<WsEventEntry<TEvents> | undefined>(undefined)
   const [error, setError] = useState<Error | undefined>(undefined)
-  // Typed as `unknown` and narrowed via inline casts — avoids a static type import.
-  const socketRef = useRef<unknown>(null)
+  const { socketRef, disposeSocket, emit } = useSocketHandle()
 
-  // Tear down the current socket (remove listeners + disconnect) and clear the ref.
-  // Removing listeners first prevents the abandoned socket's `disconnect` handler from
-  // mutating state after a new socket has taken its place.
-  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
-  const disposeSocket = useCallback(() => {
-    const sock = socketRef.current as SocketLike | null
-    if (sock) {
-      sock.removeAllListeners()
-      sock.disconnect()
-    }
-    socketRef.current = null
-  }, [])
-
-  // Stryker restore ArrayDeclaration
   // Depend on the credential VALUES, never on the `auth` object identity. A consumer
   // that writes `auth={{ token }}` inline builds a new object on every render; keying
   // `connect` on that object rebuilt it every render, and the effect below then tore
@@ -138,37 +215,13 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
     disposeSocket()
     setConnected(false)
     try {
-      // DYNAMIC IMPORT — the bundler keeps socket.io-client out of the static graph.
-      const { io } = await import('socket.io-client')
-      const auth: WsAuth = {
-        ...(authTicket !== undefined ? { ticket: authTicket } : {}),
-        ...(authToken !== undefined ? { token: authToken } : {}),
-      }
-      const socket = io(opts.url, {
-        path: opts.path ?? '/socket.io',
-        ...(authTicket !== undefined || authToken !== undefined ? { auth } : {}),
-        withCredentials: true,
-      })
+      const socket = await openSocket(opts.url, opts.path, authTicket, authToken)
       socketRef.current = socket
-
-      socket.on('connect', () => {
-        setConnected(true)
-        setError(undefined)
-      })
-      socket.on('disconnect', () => setConnected(false))
-      socket.on('error', (e: unknown) => setError(e instanceof Error ? e : new Error(String(e))))
-      socket.onAny((eventName: string, payload: unknown) => {
-        const entry: WsEventEntry<TEvents> = {
-          type: eventName as keyof TEvents,
-          data: payload as TEvents[keyof TEvents],
-        }
-        setEvents((prev) => [...prev, entry].slice(-MAX_EVENTS))
-        setLastEvent(entry)
-      })
+      bindSocket(socket, { setConnected, setError, setEvents, setLastEvent })
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)))
+      setError(asError(e))
     }
-  }, [opts.enabled, opts.url, authTicket, authToken, opts.path, disposeSocket])
+  }, [opts.enabled, opts.url, authTicket, authToken, opts.path, disposeSocket, socketRef])
 
   useEffect(() => {
     // Stryker disable next-line ConditionalExpression: equivalent — `connect` returns at once when `enabled` is false and `disposeSocket` is idempotent, so a disabled hook behaves the same without this guard; measured by running the React specs without it
@@ -179,13 +232,6 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
     return () => disposeSocket()
   }, [connect, opts.enabled, disposeSocket])
 
-  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
-  const emit = useCallback((event: string, data: unknown): void => {
-    const sock = socketRef.current as SocketLike | null
-    sock?.emit(event, data)
-  }, [])
-
-  // Stryker restore ArrayDeclaration
   const reconnect = useCallback(() => {
     void connect()
   }, [connect])
