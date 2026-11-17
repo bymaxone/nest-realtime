@@ -9,7 +9,9 @@ import type {
   OfflineQueuedEvent,
 } from '../interfaces/offline-queue-storage.interface'
 import { describeReceived } from '../utils/describe-received'
+import { isPlainObject } from '../utils/is-plain-object'
 import { realtimeError } from '../utils/realtime-error'
+import { refuseObject } from '../utils/refuse-object'
 
 /** Options for RedisOfflineQueue. */
 export interface RedisOfflineQueueOptions {
@@ -84,6 +86,10 @@ export class RedisOfflineQueue implements IOfflineQueueStorage {
   private static readonly COUNTER_PAD = 6
 
   constructor(options: RedisOfflineQueueOptions) {
+    if (!isPlainObject(options)) refuseObject('RedisOfflineQueue', 'options', options)
+    if (typeof options.client !== 'object' || options.client === null) {
+      refuseObject('RedisOfflineQueue', 'options.client', options.client)
+    }
     this.#client = options.client
     this.maxPerUser = requireInteger(
       'maxPerUser',

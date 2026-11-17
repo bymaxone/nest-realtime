@@ -5,6 +5,8 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { describeReceived } from '../utils/describe-received'
+import { isPlainObject } from '../utils/is-plain-object'
+import { refuseObject } from '../utils/refuse-object'
 import { realtimeError } from '../utils/realtime-error'
 
 /** The functions each pluggable piece must have when it is set; what it lacks would fail at its first use. */
@@ -34,13 +36,9 @@ function refuse(path: string, expected: string, received: unknown): never {
   )
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 /** Refuse a set option that is not an object; an unset one is left to its default. */
 function assertObject(path: string, value: unknown): void {
-  if (value !== undefined && !isObject(value)) refuse(path, 'an object', value)
+  if (value !== undefined && !isPlainObject(value)) refuse(path, 'an object', value)
 }
 
 function assertFunction(path: string, value: unknown): void {
@@ -56,10 +54,31 @@ function assertBoolean(path: string, value: unknown): void {
   if (value !== undefined && typeof value !== 'boolean') refuse(path, 'a boolean', value)
 }
 
-function assertEndpoint(path: string, value: unknown): void {
-  if (value !== undefined && !(typeof value === 'string' && value.trim().length > 0)) {
+/**
+ * Refuse an endpoint that is not a non-blank string, or that holds whitespace: a space is encoded in a
+ * URL and the route is not, so no request reaches it. An unset one takes its default.
+ *
+ * @param path - The option, without its `options.` prefix.
+ * @param value - What the option held.
+ * @throws Error carrying `REALTIME_INVALID_OPTIONS`.
+ */
+export function assertSseEndpoint(path: string, value: unknown): void {
+  if (value === undefined || value === null) return
+  if (typeof value !== 'string' || value.trim().length === 0) {
     refuse(path, 'a non-blank string', value)
   }
+  if (/\s/.test(value as string)) refuse(path, 'a string without whitespace', value)
+}
+
+/**
+ * Refuse an options argument that is not an object, before any of its keys is read.
+ *
+ * @param value - The options argument, or what a factory answered.
+ * @param who - The module the refusal is attributed to.
+ * @throws Error carrying `REALTIME_INVALID_OPTIONS`.
+ */
+export function assertOptionsObject(value: unknown, who = 'BymaxRealtimeModule'): void {
+  if (!isPlainObject(value)) refuseObject(who, 'options', value)
 }
 
 function validatePieces(options: BymaxRealtimeModuleOptions): void {
@@ -98,5 +117,5 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
   assertOptionalFunction('tenantResolver', options.tenantResolver)
   assertBoolean('sse.emitConnectionEvent', options.sse?.emitConnectionEvent)
   assertBoolean('websocket.emitConnectionEvent', options.websocket?.emitConnectionEvent)
-  assertEndpoint('sse.endpoint', options.sse?.endpoint)
+  assertSseEndpoint('sse.endpoint', options.sse?.endpoint)
 }

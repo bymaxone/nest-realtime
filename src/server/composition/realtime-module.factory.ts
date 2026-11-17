@@ -9,6 +9,7 @@ import { applyDefaults } from '../config/default-options'
 import { dropUnset } from '../config/drop-unset'
 import type { ResolvedRealtimeOptions } from '../config/default-options'
 import { validateOptions } from '../config/validate-options'
+import { assertOptionsObject, assertSseEndpoint } from '../config/validate-shapes'
 import {
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
@@ -150,6 +151,7 @@ export function composeForRoot(
   logger: Logger,
   raw: BymaxRealtimeModuleOptions,
 ): DynamicModule {
+  assertOptionsObject(raw, moduleClass.name)
   // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
   const options = dropUnset(raw)
   validateOptions(options)
@@ -238,6 +240,7 @@ function resolveAsyncOptions(
   if (!raw) {
     throw realtimeError(REALTIME_ERROR_CODES.INVALID_OPTIONS, `${source} returned nothing`)
   }
+  assertOptionsObject(raw, moduleName)
   // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
   const options = dropUnset(raw)
   validateOptions(options)
@@ -364,8 +367,10 @@ export function composeForRootAsync(
   asyncOptions: BymaxRealtimeModuleAsyncOptions,
 ): DynamicModule {
   const moduleName = moduleClass.name
+  assertOptionsObject(asyncOptions, moduleName)
   assertOneFactoryPattern(asyncOptions, moduleName)
   assertModeSupported(wiring, asyncOptions.transport, moduleName)
+  assertSseEndpoint('sseEndpoint', asyncOptions.sseEndpoint)
   assertSseEndpointApplies(asyncOptions, moduleName)
 
   const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
