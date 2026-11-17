@@ -91,12 +91,30 @@ function relativeSpecifiers(text: string): string[] {
   )
 }
 
-/** The file a relative specifier resolves to from `from`, or `undefined` when it is not TypeScript source. */
-function resolveSpecifier(from: string, specifier: string): string | undefined {
+/** The runtime extension a TypeScript source file is imported by, and the source extensions that can back it. */
+const SOURCE_FOR_RUNTIME: Readonly<Record<string, readonly string[]>> = {
+  '.js': ['.ts', '.tsx'],
+  '.jsx': ['.tsx'],
+  '.mjs': ['.mts'],
+  '.cjs': ['.cts'],
+}
+
+/**
+ * The file a relative specifier resolves to from `from`, or `undefined` when it is not TypeScript source: the
+ * specifier as written, a runtime extension (`./a.js`) backed by its source, or a directory index.
+ */
+function resolveSpecifier(
+  from: string,
+  specifier: string,
+  exists: (path: string) => boolean = (path) => existsSync(join(ROOT, path)),
+): string | undefined {
   const base = posix.normalize(posix.join(posix.dirname(from), specifier))
-  return [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`].find((candidate) =>
-    existsSync(join(ROOT, candidate)),
-  )
+  const runtime = Object.keys(SOURCE_FOR_RUNTIME).find((extension) => base.endsWith(extension))
+  const candidates =
+    runtime === undefined
+      ? [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]
+      : SOURCE_FOR_RUNTIME[runtime]!.map((source) => `${base.slice(0, -runtime.length)}${source}`)
+  return candidates.find((candidate) => exists(candidate))
 }
 
 /** The source closure of the package entries: every non-spec file they reach through relative imports. */
@@ -395,10 +413,32 @@ describe('mutation scope', () => {
     expect(logicIn('export const A = -1')).toEqual([])
   })
 
+  /** A runtime extension is resolved to the source that backs it, and a directory to its index, `.tsx` included. */
+  it('resolves a .js specifier to its TypeScript source and a directory to its index', () => {
+    const files = new Set([
+      'src/runtime.ts',
+      'src/view.tsx',
+      'src/component/index.tsx',
+      'src/util/index.ts',
+    ])
+    const resolve = (specifier: string): string | undefined =>
+      resolveSpecifier('src/index.ts', specifier, (path) => files.has(path))
+
+    expect(resolve('./runtime.js')).toBe('src/runtime.ts')
+    expect(resolve('./view.js')).toBe('src/view.tsx')
+    expect(resolve('./component')).toBe('src/component/index.tsx')
+    expect(resolve('./util')).toBe('src/util/index.ts')
+    expect(resolve('./runtime')).toBe('src/runtime.ts')
+    expect(resolve('./missing.js')).toBeUndefined()
+  })
+
   /** The entries are read from the config text: every pair of an entry object counts, whatever its key is spelled like. */
   it('reads every entry of a tsup entry object, with quoted or bare keys', () => {
     expect(entriesOf("entry: { 'index': 'src/index.ts' }")).toEqual(['src/index.ts'])
-    expect(entriesOf("entry: { 'a': 'src/a.ts', 'b': 'src/b.ts' }")).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(entriesOf("entry: { 'a': 'src/a.ts', 'b': 'src/b.ts' }")).toEqual([
+      'src/a.ts',
+      'src/b.ts',
+    ])
     expect(entriesOf("entry: { index: 'src/index.ts', server: 'src/server.ts' }")).toEqual([
       'src/index.ts',
       'src/server.ts',
@@ -453,7 +493,7 @@ describe('mutation scope', () => {
   })
 
   /** An end-to-end-owned file is only excused while an end-to-end suite exercises its subpath. */
-  it('keeps every end-to-end-owned file exercised by an end-to-end suite', () => {
+  it('keeps an end-to-end suite that exercises the subpath of the end-to-end-owned files', () => {
     if (E2E_OWNED === null) {
       expect(listedOfKind('e2e-owned')).toEqual([])
       return
