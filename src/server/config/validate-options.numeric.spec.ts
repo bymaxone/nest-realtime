@@ -137,8 +137,8 @@ describe('the refusal of an integer past the safe integers', () => {
 })
 
 describe('registration', () => {
-  // Scenario: a module is registered with NaN as a bound. Expected: start-up fails, so no instance
-  // runs with the cap off. Why: the bound was reachable through forRoot, which is where it is set.
+  // Constraint: `forRoot` rejects an invalid bound before it returns a module registration, so no
+  // instance runs with the cap off. Scenario: a module is registered with NaN as a bound.
   it.each(CASES.map((c) => [c.path, c.build] as const))(
     'forRoot refuses NaN for %s',
     (_path, build) => {
