@@ -6,6 +6,7 @@ import type {
   BymaxRealtimeModuleOptions,
   SseOptions,
 } from '../interfaces/realtime-module-options.interface'
+import { dropUnset } from './drop-unset'
 
 /** Library defaults for the SSE transport. */
 export const DEFAULT_SSE: Required<SseOptions> = {
@@ -29,10 +30,12 @@ export type ResolvedRealtimeOptions = Readonly<
 /**
  * Merge consumer options with the library's SSE defaults.
  *
+ * An option that holds `undefined` or `null` resolves to its default, as if it were absent.
  * Returns a frozen object whose `sse` is fully populated — callers must not mutate
  * it. Only SSE defaults are filled because SSE is the transport this module wires.
  */
-export function applyDefaults(options: BymaxRealtimeModuleOptions): ResolvedRealtimeOptions {
+export function applyDefaults(raw: BymaxRealtimeModuleOptions): ResolvedRealtimeOptions {
+  const options = dropUnset(raw)
   return Object.freeze({
     ...options,
     sse: { ...DEFAULT_SSE, ...(options.sse ?? {}) },

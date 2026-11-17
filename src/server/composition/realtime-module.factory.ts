@@ -182,8 +182,7 @@ function assertSseEndpointApplies(
   if (asyncOptions.sseEndpoint === undefined || asyncOptions.transport !== 'websocket') return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `sseEndpoint '${asyncOptions.sseEndpoint}' ` +
-      `was set but transport 'websocket' registers no SSE controller — use 'both' to serve SSE too`,
+    `sseEndpoint was set but transport 'websocket' registers no SSE controller — use 'both' to serve SSE too`,
     { who: moduleName },
   )
 }
@@ -207,9 +206,8 @@ function bindSseEndpoint(
   if (declared !== undefined && normalizeEndpointPath(declared) !== normalizeEndpointPath(bound)) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `the factory resolved sse.endpoint ` +
-        `'${declared}' but forRootAsync bound the SSE route to '${bound}' — controllers are ` +
-        `registered before the factory runs, so declare the path as 'sseEndpoint' on the ` +
+      `the factory resolved an sse.endpoint that differs from the SSE route forRootAsync bound — ` +
+        `controllers are registered before the factory runs, so declare the path as 'sseEndpoint' on the ` +
         `forRootAsync registration itself`,
       { who: moduleName },
     )

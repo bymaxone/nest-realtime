@@ -365,7 +365,7 @@ describe('BymaxRealtimeWebSocketModule.forRootAsync SSE endpoint', () => {
       // Pinned whole: the message has to name the option, the transport, and the way
       // out ('both'), and a mutant that drops any of those still reads plausibly.
     ).toThrow(
-      "[BymaxRealtimeWebSocketModule] REALTIME_INVALID_OPTIONS: sseEndpoint '/realtime/sse' " +
+      '[BymaxRealtimeWebSocketModule] REALTIME_INVALID_OPTIONS: sseEndpoint ' +
         "was set but transport 'websocket' registers no SSE controller — use 'both' to serve SSE too",
     )
   })

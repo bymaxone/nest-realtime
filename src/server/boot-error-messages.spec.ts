@@ -30,7 +30,7 @@ describe('configuration errors carry their exact message and their code', () => 
       'an unknown transport',
       () => validateOptions({ transport: 'carrier-pigeon', authenticator } as never),
       'REALTIME_INVALID_OPTIONS',
-      `[${module}] REALTIME_INVALID_OPTIONS: options.transport must be one of 'sse' | 'websocket' | 'both' (got: carrier-pigeon)`,
+      `[${module}] REALTIME_INVALID_OPTIONS: options.transport must be one of 'sse' | 'websocket' | 'both', received a string`,
     ],
     [
       'a missing authenticator',
@@ -53,7 +53,7 @@ describe('configuration errors carry their exact message and their code', () => 
           sse: { replayBufferSize: -1 },
         } as never),
       'REALTIME_INVALID_OPTIONS',
-      `[${module}] REALTIME_INVALID_OPTIONS: options.sse.replayBufferSize must be an integer >= 0 and <= 100000, got -1`,
+      `[${module}] REALTIME_INVALID_OPTIONS: options.sse.replayBufferSize must be an integer >= 0 and <= 100000, received -1`,
     ],
     [
       'a negative per-user connection cap',
@@ -64,7 +64,7 @@ describe('configuration errors carry their exact message and their code', () => 
           sse: { maxConnectionsPerUser: -1 },
         } as never),
       'REALTIME_INVALID_OPTIONS',
-      `[${module}] REALTIME_INVALID_OPTIONS: options.sse.maxConnectionsPerUser must be an integer >= 0 and <= 100000, got -1`,
+      `[${module}] REALTIME_INVALID_OPTIONS: options.sse.maxConnectionsPerUser must be an integer >= 0 and <= 100000, received -1`,
     ],
     [
       'a transport the module does not serve',
@@ -82,7 +82,7 @@ describe('configuration errors carry their exact message and their code', () => 
       'a heartbeat interval outside the range',
       () => new HeartbeatService().start('c1', { write: () => true } as never, 1_000),
       'REALTIME_INVALID_OPTIONS',
-      'REALTIME_INVALID_OPTIONS: heartbeatMs must be between 5000 and 90000 ms (got 1000)',
+      'REALTIME_INVALID_OPTIONS: heartbeatMs must be between 5000 and 90000 ms, received 1000',
     ],
   ])('%s', (_label, call, code, message) => {
     const error = raised(call)

@@ -86,8 +86,8 @@ describe('BymaxRealtimeModule.forRootAsync SSE endpoint', () => {
     // learns that the fix is 'sseEndpoint' on the registration, and a message that
     // loses that half diagnoses nothing.
     await expect(testModule.compile()).rejects.toThrow(
-      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: the factory resolved sse.endpoint ' +
-        "'/realtime/sse' but forRootAsync bound the SSE route to '/events' — controllers are " +
+      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: the factory resolved an sse.endpoint ' +
+        'that differs from the SSE route forRootAsync bound — controllers are ' +
         "registered before the factory runs, so declare the path as 'sseEndpoint' on the " +
         'forRootAsync registration itself',
     )
@@ -134,7 +134,7 @@ describe('BymaxRealtimeModule.forRootAsync SSE endpoint', () => {
         }),
       }),
     ).rejects.toThrow(
-      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.heartbeatMs must be between 5000 and 90000 ms (got 100000)',
+      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.sse.heartbeatMs must be between 5000 and 90000 ms, received 100000',
     )
   })
 
