@@ -7,6 +7,14 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Security
+
+- **The text of a driver or a broker travelled on the 503 errors the library raises when they were stringified.** `unavailableError` (a revocation that could not be published, a publish to Redis that failed, an emit with no delivery path) set the failure underneath, a driver's message naming a host and a port, on the instance's own enumerable `message` and `cause`. A controller's 503 body was generic, but a filter, a logger or a socket acknowledgement that ran `JSON.stringify` on the instance sent them on. Both are now non-enumerable: `error.message` and `error.cause` still hold the text for whoever logs it, and the stringified instance carries the generic body and the stable `code`. A test now decides every error code, either in a table that stringifies an error built from a poisoned cause or exempt with the reason it cannot carry one.
+
+#### Apply to a derived backend
+
+Read the failure from `error.message` and `error.cause`, as before; do not rely on them appearing in `JSON.stringify(error)` or in `Object.keys(error)`, where only `code` and the generic response remain.
+
 ## [1.2.16] - 2026-11-14
 
 ### Fixed
