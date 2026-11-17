@@ -7,3 +7,8 @@ src/check-function-length.spec.ts
 src/check-function-length.baseline.spec.ts
 src/check-function-length.key.spec.ts
 src/stryker-scope.spec.ts
+
+# The suppressions-baseline check and its test are the family template's files, kept byte-identical for
+# the same reason.
+scripts/check-suppressions-baseline.mjs
+scripts/check-suppressions-baseline.test.mjs

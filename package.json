@@ -106,7 +106,7 @@
     "benchmark": "node scripts/benchmark/run.mjs",
     "check:surface": "node scripts/check-public-surface.mjs",
     "clean": "rm -rf dist coverage",
-    "lint": "eslint src && pnpm check:spec-headers && pnpm check:suppressions",
+    "lint": "eslint src && pnpm check:spec-headers && pnpm check:suppressions && node --test scripts/check-suppressions-baseline.test.mjs",
     "lint:fix": "eslint src --fix",
     "mutation": "stryker run",
     "mutation:full": "node -e \"require('node:fs').rmSync('reports/stryker-incremental.json',{force:true,recursive:true})\" && stryker run",
