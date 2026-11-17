@@ -23,7 +23,7 @@ export interface RedisOfflineQueueOptions {
 /** The most events one user's key may hold: past it a queue is memory, not a queue. */
 const MAX_PER_USER_CEILING = 100_000
 
-/** The most `EXPIRE` is measured to accept as seconds; larger values make Redis reject the command. */
+/** A TTL that `EXPIRE` is measured to accept on Redis 7; a value near 9.2e15 makes Redis reject the command. */
 const TTL_SECONDS_CEILING = 2_147_483_647
 
 /**
