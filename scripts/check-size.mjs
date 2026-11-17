@@ -71,8 +71,10 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     the composite, which refuse what is not a non-empty string and what starts with a reserved
 //     prefix, 49 B, measured on 2026-11-17)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
-//   react      2,484 B →  2,500 B (the resume parameter: the last event id the hook saw, replacing one
-//     the url already carries, before any fragment)
+//   react      2,817 B →  2,847 B (the resume parameter: the last event id the hook saw, replacing one
+//     the url already carries, before any fragment, and the split of the two hooks under the 50-line
+//     function limit: a context object for 11 members carries the state and refs to the helpers, 333 B
+//     on 2026-11-17)
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
@@ -87,7 +89,7 @@ const BUDGETS = [
   { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 18_363 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_650 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
-  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_500 },
+  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_847 },
 ]
 
 // The Socket.IO stack must not be reachable from anything an SSE application
