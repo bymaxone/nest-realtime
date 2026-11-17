@@ -35,6 +35,7 @@ describe('parseSuppressions', () => {
     assert.throws(() => parseSuppressions('[]', 'x'), /keyed by file/)
     assert.throws(() => parseSuppressions('{"a.ts":{"r":{"count":1.5}}}', 'x'), /no whole count/)
     assert.throws(() => parseSuppressions('{"a.ts":{"r":{}}}', 'x'), /no whole count/)
+    assert.throws(() => parseSuppressions('{"a.ts":{"r":{"count":-1}}}', 'x'), /no whole count/)
   })
 })
 
