@@ -4,7 +4,7 @@
  *
  * An implementation that lacks a required function, a hook that is not a function, a group that is not an
  * object, a flag that is not a boolean and an endpoint that is not a non-blank string are each refused by
- * `forRoot` with `REALTIME_INVALID_OPTIONS`, naming the option and the type of what it received, instead of
+ * `forRoot` with `REALTIME_INVALID_OPTIONS`, naming the option and describing what it received by type, instead of
  * failing later as a raw `TypeError` or being read as the opposite of what they say.
  */
 import { BymaxRealtimeModule } from '../realtime.module'
@@ -182,7 +182,7 @@ describe.each(['sse.emitConnectionEvent', 'websocket.emitConnectionEvent'])('%s'
 })
 
 describe('sse.endpoint', () => {
-  // Scenario: an endpoint that is not a non-blank string (a blank one routes nowhere). Expected: refused with a typed error, where a number used
+  // Scenario: an endpoint that is not a non-blank string. Expected: refused with a typed error, where a number used
   // to reach `endpoint.startsWith` and fail as a raw TypeError.
   it.each([
     ['', 'a string'],

@@ -85,7 +85,7 @@ function validateHooks(options: BymaxRealtimeModuleOptions): void {
  * object, a pluggable piece without its required functions, a hook or the tenant resolver that is not a
  * function, a flag that is not a boolean (a truthy "no" reads as true) and an endpoint that is not a non-blank string. A leading slash is not required: `@Sse()` reads
  * `'events'` and `'/events'` as the same route.
- * Each refusal is `REALTIME_INVALID_OPTIONS`, names the option and the type of what it received, and
+ * Each refusal is `REALTIME_INVALID_OPTIONS`, names the option and describes what it received by type (a finite number is printed), and
  * echoes nothing else.
  *
  * @param options - The options with their unset keys already dropped.
