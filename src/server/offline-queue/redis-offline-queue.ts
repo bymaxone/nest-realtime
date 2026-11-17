@@ -8,6 +8,7 @@ import type {
   IOfflineQueueStorage,
   OfflineQueuedEvent,
 } from '../interfaces/offline-queue-storage.interface'
+import { describeReceived } from '../utils/describe-received'
 import { realtimeError } from '../utils/realtime-error'
 
 /** Options for RedisOfflineQueue. */
@@ -37,7 +38,7 @@ function requireInteger(name: string, value: unknown, least: number, most: numbe
   }
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `options.${name} must be an integer >= ${least} and <= ${most}, got ${String(value)}`,
+    `options.${name} must be an integer >= ${least} and <= ${most}, received ${describeReceived(value)}`,
     { who: 'RedisOfflineQueue' },
   )
 }

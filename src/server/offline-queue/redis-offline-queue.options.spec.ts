@@ -22,26 +22,58 @@ const CASES = [
   { name: 'ttlSeconds', least: 1, most: TTL_CEILING },
 ] as const
 
-const REFUSED: readonly unknown[] = [Number.NaN, Infinity, -1, 0, 1.5, '3', 1e300, 2 ** 53]
+const SENTINEL = 'SENTINEL-3b7e90'
+
+/** What a host could pass by mistake, and how the refusal names it: a finite number is printed, the rest by type. */
+const REFUSED: ReadonlyArray<readonly [unknown, string]> = [
+  [Number.NaN, 'a number that is not finite'],
+  [Infinity, 'a number that is not finite'],
+  [-1, '-1'],
+  [0, '0'],
+  [1.5, '1.5'],
+  ['3', 'a string'],
+  [1e300, '1e+300'],
+  [2 ** 53, '9007199254740992'],
+  [SENTINEL, 'a string'],
+  [Symbol(SENTINEL), 'a symbol'],
+  [() => SENTINEL, 'a function'],
+  [{ toString: () => SENTINEL }, 'an object'],
+  [Object.create(null), 'an object'],
+  [[SENTINEL], 'an array'],
+  [true, 'a boolean'],
+]
 
 describe.each(CASES)('RedisOfflineQueue $name', ({ name, least, most }) => {
   const make = (value: unknown): RedisOfflineQueue =>
     new RedisOfflineQueue({ client, [name]: value } as never)
 
-  // Scenario: a value that is not an integer in range. Expected: construction throws the typed
-  // refusal naming the option, its range and the value, so no queue exists that drops or corrupts.
-  it.each([...REFUSED, most + 1])('refuses %p at construction', (value) => {
-    expect(() => make(value)).toThrow(
-      `[RedisOfflineQueue] REALTIME_INVALID_OPTIONS: options.${name} must be an integer >= ${least} and <= ${most}, got ${String(value)}`,
-    )
-  })
+  // Scenario: a value that is not an integer in range. Expected: construction throws the typed refusal
+  // naming the option, its range and what it received by type, so no queue exists that drops or corrupts
+  // and nothing the value held is echoed.
+  it.each([...REFUSED, [most + 1, String(most + 1)] as const])(
+    'refuses %p at construction',
+    (value, received) => {
+      let message = ''
+      try {
+        make(value)
+      } catch (error) {
+        message = (error as Error).message
+      }
+
+      expect(message).toBe(
+        `[RedisOfflineQueue] REALTIME_INVALID_OPTIONS: options.${name} must be an integer >= ${least} and <= ${most}, received ${received}`,
+      )
+      expect(message).not.toContain(SENTINEL)
+    },
+  )
 
   // Scenario: the values the option exists for, and leaving it unset. Expected: accepted.
   it.each([least, 3, most])('accepts %p', (value) => {
     expect(() => make(value)).not.toThrow()
   })
 
-  it('accepts the option unset', () => {
-    expect(() => make(undefined)).not.toThrow()
+  // Scenario: the option is present and holds nothing. Expected: it is read as unset, so it takes its default.
+  it.each([undefined, null])('reads %p as unset', (value) => {
+    expect(() => make(value)).not.toThrow()
   })
 })
