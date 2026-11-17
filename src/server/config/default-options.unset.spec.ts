@@ -45,7 +45,7 @@ describe.each(Object.keys(DEFAULT_SSE) as Array<keyof typeof DEFAULT_SSE>)('sse.
 })
 
 describe('the bounds that mean "off" when they are 0 or missing', () => {
-  // Scenario: the four bounds the PM named, set to undefined or null. Expected: the default, never 0 and
+  // Scenario: the bounds that mean "off" when they are missing or 0, set to undefined or null. Expected: the default, never 0 and
   // never a missing value that a comparison reads as no cap.
   it.each([
     'maxConnectionsPerUser',
