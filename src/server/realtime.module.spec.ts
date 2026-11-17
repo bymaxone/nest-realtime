@@ -566,7 +566,11 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
   // forRootAsync offline queue provider wires opts.offlineQueue through.
   it('wires opts.offlineQueue to REALTIME_OFFLINE_QUEUE_TOKEN via forRootAsync', async () => {
     // Kills ArrowFunction mutation: (opts) => opts.offlineQueue → () => undefined.
-    const offlineQueue = { enqueue: async () => undefined } as unknown
+    const offlineQueue = {
+      append: async () => undefined,
+      retrieveSince: async () => [],
+      acknowledge: async () => undefined,
+    } as unknown
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
@@ -586,7 +590,13 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
   // forRootAsync presence provider wires opts.presence through.
   it('wires opts.presence to REALTIME_PRESENCE_TOKEN via forRootAsync', async () => {
     // Kills ArrowFunction mutation: (opts) => opts.presence → () => undefined.
-    const presence = { trackPresence: async () => undefined } as unknown
+    const presence = {
+      setOnline: async () => undefined,
+      setOffline: async () => undefined,
+      isOnline: async () => false,
+      listOnlineByTenant: async () => [],
+      countOnline: async () => 0,
+    } as unknown
     const mod = await Test.createTestingModule({
       imports: [
         BymaxRealtimeModule.forRootAsync({
