@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  18,144 B → 18,174 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  18,236 B → 18,266 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -52,7 +52,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     non-enumerable `message` and `cause` of the 503 error, which keeps a driver's text out of what
 //     a stringified instance carries, 33 B, and the
 //     choice of what a failing `onConnect` does to its connection: the check of the option and the
-//     SSE stream's close, 76 B)
+//     SSE stream's close, 76 B, and the
+//     one reserved-room rule that admission and `joinRoom` and `leaveRoom` share, 87 B)
 //   websocket  5,571 B →  5,601 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -78,7 +79,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 18_174 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 18_266 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_601 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_500 },

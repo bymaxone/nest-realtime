@@ -9,6 +9,7 @@ import {
 } from '../constants/injection-tokens.constants'
 import type { IRealtimePubSub } from '../interfaces/realtime-pubsub.interface'
 import type { ITransport } from '../interfaces/transport.interface'
+import { refuseReservedRoom } from '../utils/reserved-room'
 
 /**
  * Transport-agnostic realtime API.
@@ -75,24 +76,27 @@ export class RealtimeService {
   /**
    * Add a specific connection to a room.
    *
-   * The room id is not checked. Never pass client-supplied input that could start
-   * with the reserved `user:` or `tenant:` prefixes: joining `tenant:<other>`
-   * receives that tenant's events.
+   * Rooms of the application's own are free-form, but a name that starts with `user:`,
+   * `tenant:` or `connection:` is refused, the rule that `AuthenticationResult.rooms` is
+   * held to: joining `tenant:<other>` would receive that tenant's events.
    *
    * Acts on a connection this instance holds; for any other id it resolves and changes
    * nothing. A failure of the transport that holds the connection rejects the call.
    */
-  joinRoom(connectionId: string, roomId: string): Promise<void> {
+  async joinRoom(connectionId: string, roomId: string): Promise<void> {
+    refuseReservedRoom('joinRoom', roomId)
     return this.transport.joinRoom(connectionId, roomId)
   }
 
   /**
-   * Remove a specific connection from a room.
+   * Remove a specific connection from a room. A name that starts with `user:`, `tenant:` or
+   * `connection:` is refused, as in `joinRoom`.
    *
    * Acts on a connection this instance holds; for any other id it resolves and changes
    * nothing. A failure of the transport that holds the connection rejects the call.
    */
-  leaveRoom(connectionId: string, roomId: string): Promise<void> {
+  async leaveRoom(connectionId: string, roomId: string): Promise<void> {
+    refuseReservedRoom('leaveRoom', roomId)
     return this.transport.leaveRoom(connectionId, roomId)
   }
 

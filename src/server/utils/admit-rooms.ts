@@ -4,20 +4,9 @@
  */
 import { ADMISSION_ROOM_LIMITS } from '../../shared/constants/admission-rooms.constants'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
-import { ROOM_PREFIXES } from '../../shared/constants/room-prefixes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
 import { realtimeError } from './realtime-error'
-
-/**
- * Prefixes `rooms` may not use. `user:` and `tenant:` are composed from the identity the
- * library resolved, so naming them would join a connection as another user or tenant;
- * `connection:` is the per-connection room the WebSocket transport uses to revoke one.
- */
-const RESERVED_ROOM_PREFIXES: readonly string[] = [
-  `${ROOM_PREFIXES.USER}:`,
-  `${ROOM_PREFIXES.TENANT}:`,
-  'connection:',
-]
+import { reservedRoomPrefix } from './reserved-room'
 
 function refuse(detail: string): never {
   throw realtimeError(
@@ -66,7 +55,7 @@ export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
     if (room.length > ADMISSION_ROOM_LIMITS.MAX_ROOM_NAME_LENGTH) {
       refuse(`a room name is longer than ${ADMISSION_ROOM_LIMITS.MAX_ROOM_NAME_LENGTH} characters`)
     }
-    const reserved = RESERVED_ROOM_PREFIXES.find((prefix) => room.startsWith(prefix))
+    const reserved = reservedRoomPrefix(room)
     if (reserved !== undefined) refuse(`a room name starts with the reserved prefix "${reserved}"`)
   }
   return { ...auth, rooms: Object.freeze(admitted as string[]) }

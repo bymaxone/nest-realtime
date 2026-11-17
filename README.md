@@ -651,7 +651,7 @@ All methods return `Promise<void>`.
 
 **Emits are at-most-once.** `emitToUser`, `emitToTenant`, `emitToRoom` and `broadcast` **resolve even when the publish to the other instances failed**; that failure is logged with `REALTIME_PUBSUB_UNAVAILABLE` and passed to the `onDeliveryFailure` hook, which is where to count it. An offline queue that could not keep an event for a user who is offline here is reported the same way, since another instance may have delivered it live; a failure on one transport of `'both'` is only logged. An emit rejects only when the event has no delivery path left: for `emitToUser`, the user is offline here, the queue failed, and the bus failed or cannot reach another instance (the default in-memory bus); with `'both'`, a failure on both transports rejects with `REALTIME_TRANSPORT_UNAVAILABLE`. A rejected emit is not proof that no client received it, so retry only where a duplicate is acceptable.
 
-`joinRoom` and `leaveRoom` act on a connection **this instance holds**; for any other id they resolve and change nothing. A failure of the transport that holds the connection rejects the call.
+`joinRoom` and `leaveRoom` act on a connection **this instance holds**; for any other id they resolve and change nothing. A failure of the transport that holds the connection rejects the call. Both refuse a room id that starts with `user:`, `tenant:` or `connection:`, the names the library composes, with `REALTIME_AUTH_FAILED`; any other name is free-form.
 
 **An instance must hear the others.** With `RedisRealtimePubSub`, a subscription the server refuses (a wrong password, a missing permission) **fails the boot**: retrying cannot fix it, and an instance that never hears a revocation must not look healthy. A Redis that is only unreachable does not block the boot. The instance starts, logs once that it is not subscribed, and subscribes when a connection succeeds. Until then, whenever the subscriber connection drops, and whenever the Redis client that publishes cannot publish, `isPubSubReady()` is false. A client built with `lazyConnect` is connected by the adapter. Put it in your readiness probe:
 
@@ -764,7 +764,7 @@ characters and must not start with `user:`, `tenant:` or `connection:`; at most
 `ADMISSION_ROOM_LIMITS.MAX_ROOMS` entries; duplicates join once. A result that breaks a rule
 is refused like a blank `userId` — a server fault (500 on SSE, a generic `connect_error` on
 WebSocket), not a 401 — and nothing is registered. The two limits are bounds against abuse, not
-measurements, and they apply to this field only: `joinRoom` stays free-form.
+measurements, and they apply to this field only: `joinRoom` is not held to them.
 
 The rooms are fixed at admission and handed back to `revalidate` in the original result. A
 different set returned later is not re-synchronized; use `joinRoom` and `leaveRoom` for changes
@@ -809,7 +809,7 @@ composeRoomId('RESOURCE', 'invoice', invoiceId) // → "resource:invoice:42"
 
 A `resource:` room is not tenant-scoped: two tenants using the same type and id share it. When ids are only unique within a tenant, pass the tenant as its own encoded part rather than gluing it to the id with a separator that ids may contain, such as `-`.
 
-Never pass client-supplied input to `joinRoom` or `emitToRoom` as a room id without checking that it cannot start with `user:` or `tenant:`. `joinRoom` is not guarded (only the `rooms` field is validated), and joining `tenant:<other>` receives that tenant's events.
+`joinRoom` and `leaveRoom` refuse a room id that starts with `user:`, `tenant:` or `connection:`, so a client-supplied id cannot put a connection in another user's or tenant's room. `emitToRoom` is not guarded: it can send to such a name, which only reaches that user's or tenant's own connections, so authorise who may emit before you pass it a client-supplied id.
 
 #### Role-scoped delivery
 
