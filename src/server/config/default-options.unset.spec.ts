@@ -70,7 +70,7 @@ describe('the bounds that mean "off" when they are 0 or missing', () => {
 
 describe('the other groups and the top level', () => {
   // Scenario: an integer option of another group set to null. Expected: it is read as unset, so it is
-  // accepted, where it used to be refused as "got null".
+  // accepted.
   it.each([
     ['websocket', 'maxConnectionsPerUser'],
     ['websocket', 'maxHttpBufferSize'],
@@ -167,7 +167,7 @@ describe.each(GROUPS)('the %s group as a class instance', (group, every) => {
     }
   })
 
-  it('keeps a value that a getter returns, and a field', () => {
+  it('keeps a value that a getter returns', () => {
     class WithGetter {
       get [Object.keys(every)[0] as string](): unknown {
         return Object.values(every)[0]

@@ -26,7 +26,7 @@ describe('dropUnset', () => {
   })
 
   // Scenario: values that carry behaviour. Expected: they are kept by reference, not copied.
-  it('keeps the authenticator, the hooks and a queue by reference', () => {
+  it('keeps the authenticator and the hooks by reference', () => {
     const authenticator = { authenticate: async () => null }
     const hooks = { onConnect: () => undefined }
     const result = dropUnset({ authenticator, hooks })
