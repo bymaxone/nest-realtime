@@ -58,5 +58,17 @@
   {
     "file": "src/settles-in-this-turn.spec.ts",
     "reason": "Tests test tooling, covers no shipped source: it checks the helper that says whether a call settled before the event loop took its next turn, and imports no mutated source."
+  },
+  {
+    "file": "src/check-function-length.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs as a child process and imports nothing from src/, so it judges no mutant."
+  },
+  {
+    "file": "src/check-function-length.baseline.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs as a child process and imports nothing from src/, so it judges no mutant."
+  },
+  {
+    "file": "src/check-function-length.key.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs as a child process and imports nothing from src/, so it judges no mutant."
   }
 ]
