@@ -72,7 +72,10 @@ describe('the options argument and the factory result of forRootAsync', () => {
   // bootstrap; nothing and null keep their own message, which names the method that returned nothing.
   it.each([
     [SENTINEL, 'a string'],
+    ['', 'a string'],
     [7, '7'],
+    [0, '0'],
+    [false, 'a boolean'],
     [[SENTINEL], 'an array'],
     [new Date(0), 'a built-in object'],
   ])('refuses a factory that answers %p', async (value, received) => {

@@ -237,7 +237,7 @@ function resolveAsyncOptions(
   logger: Logger,
   moduleName: string,
 ): { resolved: ResolvedRealtimeOptions; declaredEndpoint: string | undefined } {
-  if (!raw) {
+  if (raw === undefined || raw === null) {
     throw realtimeError(REALTIME_ERROR_CODES.INVALID_OPTIONS, `${source} returned nothing`)
   }
   assertOptionsObject(raw, moduleName)
