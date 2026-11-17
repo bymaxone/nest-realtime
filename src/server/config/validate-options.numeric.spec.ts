@@ -75,16 +75,22 @@ describe.each(CASES)('$path', ({ path, build, least, most, accepts }) => {
   // Scenario: NaN, Infinity, a negative, a fraction and a numeric string. Expected: each is refused
   // with the stable code and the least the option may be, and zero only where zero is allowed.
   it.each(PROBES.filter((probe) => probe !== 0 || least > 0))('refuses %p', (probe) => {
+    // An `Error` argument compares the whole message, so a suffix that does not belong fails it.
     expect(() => validateOptions(options(probe, build))).toThrow(
-      `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.${path} must be an integer >= ${least} and <= ${most}, got ${String(probe)}`,
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.${path} must be an integer >= ${least} and <= ${most}, got ${String(probe)}`,
+      ),
     )
   })
 
   // Scenario: an integer no real value is: past the ceiling, beyond the safe integers, or the largest
   // double. Expected: each is refused with the ceiling in the message, so the bound is a bound.
   it.each([most + 1, 2 ** 53, 1e300, Number.MAX_VALUE])('refuses %p', (probe) => {
+    // An `Error` argument compares the whole message, so a suffix that does not belong fails it.
     expect(() => validateOptions(options(probe, build))).toThrow(
-      `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.${path} must be an integer >= ${least} and <= ${most}, got ${String(probe)}`,
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.${path} must be an integer >= ${least} and <= ${most}, got ${String(probe)}`,
+      ),
     )
   })
 
@@ -131,7 +137,19 @@ describe('the refusal of an integer past the safe integers', () => {
   // the value is an integer and a reader would otherwise not see what is wrong with it.
   it('names the largest safe integer', () => {
     expect(() => validateOptions(options(1e300, (v) => ({ maxConnections: v })))).toThrow(
-      `options.maxConnections must be an integer >= 1, got 1e+300 (the most is ${Number.MAX_SAFE_INTEGER})`,
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.maxConnections must be an integer >= 1, got 1e+300 (the most is ${Number.MAX_SAFE_INTEGER})`,
+      ),
+    )
+  })
+
+  // Scenario: a value that is not an integer, or a safe integer below the least, for an option with no
+  // most. Expected: the message does not claim a most, because the value is not what the most refuses.
+  it.each([-1, 0, 1.5, Number.NaN])('does not name a most for %p', (probe) => {
+    expect(() => validateOptions(options(probe, (v) => ({ maxConnections: v })))).toThrow(
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.maxConnections must be an integer >= 1, got ${String(probe)}`,
+      ),
     )
   })
 })
