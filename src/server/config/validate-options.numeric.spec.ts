@@ -18,34 +18,45 @@ type Case = {
   readonly build: (value: unknown) => unknown
   /** The least the option may be: what the refusal message says. */
   readonly least: number
+  /** The most the option may be, with the reason it has one: what the refusal message says. */
+  readonly most: number
   /** Values the option must still accept. */
   readonly accepts: readonly number[]
 }
+
+/** Ceilings: an integer past them is a bound in name only, since nothing real is that large. */
+const PER_USER_CEILING = 100_000 // beyond the ports one client address has, and the descriptors an instance has
+const REPLAY_CEILING = 100_000 // events held per user stream: memory is this times the frame size
+const BUFFER_CEILING = 100 * 1024 * 1024 // bytes one message may buffer while it assembles; Socket.IO's default is 1 MiB
 
 const CASES: readonly Case[] = [
   {
     path: 'sse.maxConnectionsPerUser',
     build: (value) => ({ sse: { maxConnectionsPerUser: value } }),
     least: 0,
-    accepts: [0, 1, 5],
+    most: PER_USER_CEILING,
+    accepts: [0, 1, 5, PER_USER_CEILING],
   },
   {
     path: 'sse.replayBufferSize',
     build: (value) => ({ sse: { replayBufferSize: value } }),
     least: 0,
-    accepts: [0, 1, 100],
+    most: REPLAY_CEILING,
+    accepts: [0, 1, 100, REPLAY_CEILING],
   },
   {
     path: 'websocket.maxConnectionsPerUser',
     build: (value) => ({ websocket: { maxConnectionsPerUser: value } }),
     least: 0,
-    accepts: [0, 1, 5],
+    most: PER_USER_CEILING,
+    accepts: [0, 1, 5, PER_USER_CEILING],
   },
   {
     path: 'websocket.maxHttpBufferSize',
     build: (value) => ({ websocket: { maxHttpBufferSize: value } }),
     least: 1,
-    accepts: [1, 1_000_000],
+    most: BUFFER_CEILING,
+    accepts: [1, 1_000_000, BUFFER_CEILING],
   },
 ]
 
@@ -60,12 +71,20 @@ function options(value: unknown, build: Case['build']): BymaxRealtimeModuleOptio
   } as BymaxRealtimeModuleOptions
 }
 
-describe.each(CASES)('$path', ({ path, build, least, accepts }) => {
+describe.each(CASES)('$path', ({ path, build, least, most, accepts }) => {
   // Scenario: NaN, Infinity, a negative, a fraction and a numeric string. Expected: each is refused
   // with the stable code and the least the option may be, and zero only where zero is allowed.
   it.each(PROBES.filter((probe) => probe !== 0 || least > 0))('refuses %p', (probe) => {
     expect(() => validateOptions(options(probe, build))).toThrow(
-      `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.${path} must be an integer >= ${least}, got ${String(probe)}`,
+      `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.${path} must be an integer >= ${least} and <= ${most}, got ${String(probe)}`,
+    )
+  })
+
+  // Scenario: an integer no real value is: past the ceiling, beyond the safe integers, or the largest
+  // double. Expected: each is refused with the ceiling in the message, so the bound is a bound.
+  it.each([most + 1, 2 ** 53, 1e300, Number.MAX_VALUE])('refuses %p', (probe) => {
+    expect(() => validateOptions(options(probe, build))).toThrow(
+      `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.${path} must be an integer >= ${least} and <= ${most}, got ${String(probe)}`,
     )
   })
 
@@ -76,6 +95,33 @@ describe.each(CASES)('$path', ({ path, build, least, accepts }) => {
 
   it('accepts the option unset', () => {
     expect(() => validateOptions(options(undefined, build))).not.toThrow()
+  })
+})
+
+describe('options with no ceiling of their own', () => {
+  // Scenario: an integer past the safe integers where the option has a least and no most. Expected:
+  // refused, because `Number.isInteger(1e300)` is true and the cap would then never fire.
+  it.each([
+    ['maxConnections', (v: unknown) => ({ maxConnections: v })],
+    ['maxPendingHandshakes', (v: unknown) => ({ maxPendingHandshakes: v })],
+    ['sse.replayMaxIdleUsers', (v: unknown) => ({ sse: { replayMaxIdleUsers: v } })],
+    [
+      'reauthenticationPolicy.concurrency',
+      (v: unknown) => ({ reauthenticationPolicy: { concurrency: v } }),
+    ],
+    [
+      'reauthenticationPolicy.cacheTtlMs',
+      (v: unknown) => ({ reauthenticationPolicy: { cacheTtlMs: v } }),
+    ],
+  ] as const)('%s refuses 1e300 and 2 ** 53', (path, build) => {
+    for (const probe of [1e300, 2 ** 53]) {
+      expect(() => validateOptions(options(probe, build))).toThrow(
+        `options.${path} must be an integer >= `,
+      )
+      expect(() => validateOptions(options(probe, build))).toThrow(
+        `, got ${String(probe)} (the most is ${Number.MAX_SAFE_INTEGER})`,
+      )
+    }
   })
 })
 
