@@ -7,6 +7,14 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Security
+
+- **A per-user connection cap, the replay ring's size and the WebSocket payload bound could be switched off by a value that is not an integer.** The checks on `sse.maxConnectionsPerUser` and `sse.replayBufferSize` were comparisons (`< 0`), and `websocket.maxConnectionsPerUser` and `websocket.maxHttpBufferSize` had none, so `NaN`, which fails every comparison, passed and made the bounds they feed never trip. Measured: five connections of one user were all kept under `NaN` and `Infinity` on both transports; a replay ring given 1,000 events held all 1,000; and a Socket.IO server given `NaN`, `Infinity`, `-1` or `0` delivered a 2,000,000-byte payload that the default 1,000,000 bound refuses. A fraction and a numeric string were accepted too and then coerced by the comparison they fed. The four options are now validated as integers at start-up, `>= 0` for the three counts and `>= 1` for the payload bound, with `REALTIME_INVALID_OPTIONS`.
+
+#### Apply to a derived backend
+
+At start-up a value that is not an integer is refused where it used to be accepted: `NaN`, `Infinity`, fractions and numeric strings for `sse.maxConnectionsPerUser`, `sse.replayBufferSize`, `websocket.maxConnectionsPerUser` and `websocket.maxHttpBufferSize`, plus `-1` for `websocket.maxConnectionsPerUser` (it switched the cap off, as `0` does) and `0` or a negative for `websocket.maxHttpBufferSize` (each switched the payload bound off). `0` is still how to switch off the two per-user caps, and `0` still means no replay for `sse.replayBufferSize`. If you want an unbounded value, say it with `0` where that is allowed, not with `Infinity`.
+
 ## [1.2.17] - 2026-11-17
 
 ### Added

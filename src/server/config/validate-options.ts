@@ -85,6 +85,9 @@ function validateHookTimeout(options: BymaxRealtimeModuleOptions): void {
   assertInteger('authenticateTimeoutMs', options.authenticateTimeoutMs, 1, MAX_TIMER_MS)
   assertInteger('maxPendingHandshakes', options.maxPendingHandshakes, 1)
   assertInteger('maxConnections', options.maxConnections, 1)
+  // Bounds written as a comparison (`length > max`, `size > limit`) are switched off by NaN, so each is an integer.
+  assertInteger('websocket.maxConnectionsPerUser', options.websocket?.maxConnectionsPerUser, 0)
+  assertInteger('websocket.maxHttpBufferSize', options.websocket?.maxHttpBufferSize, 1)
   // Socket.IO runs these two as timers.
   assertInteger('websocket.pingIntervalMs', options.websocket?.pingIntervalMs, 1, MAX_TIMER_MS)
   assertInteger('websocket.pingTimeoutMs', options.websocket?.pingTimeoutMs, 1, MAX_TIMER_MS)
@@ -140,13 +143,7 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
       { who: 'BymaxRealtimeModule' },
     )
   }
-  if (sse?.replayBufferSize !== undefined && sse.replayBufferSize < 0) {
-    throw realtimeError(
-      REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `options.sse.replayBufferSize must be >= 0`,
-      { who: 'BymaxRealtimeModule' },
-    )
-  }
+  assertInteger('sse.replayBufferSize', sse?.replayBufferSize, 0)
   assertInteger('sse.replayTtlMs', sse?.replayTtlMs, 1, MAX_TIMER_MS)
   assertInteger('sse.replayMaxIdleUsers', sse?.replayMaxIdleUsers, 1)
   for (const name of ['maxQueuedBytes', 'maxQueuedEvents', 'stallHeartbeats'] as const) {
@@ -162,11 +159,5 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
       )
     }
   }
-  if (sse?.maxConnectionsPerUser !== undefined && sse.maxConnectionsPerUser < 0) {
-    throw realtimeError(
-      REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `options.sse.maxConnectionsPerUser must be >= 0 (0 disables the per-user connection cap)`,
-      { who: 'BymaxRealtimeModule' },
-    )
-  }
+  assertInteger('sse.maxConnectionsPerUser', sse?.maxConnectionsPerUser, 0)
 }
