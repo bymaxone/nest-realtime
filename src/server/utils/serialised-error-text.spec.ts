@@ -104,6 +104,7 @@ describe('the text of a third party in a serialised error', () => {
     'keeps %s writable and configurable, not enumerable',
     (field) => {
       const error = MAKERS[REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE]?.(POISON) as Error
+      const record = error as unknown as Record<string, unknown>
       expect(Object.getOwnPropertyDescriptor(error, field)).toMatchObject({
         enumerable: false,
         writable: true,
