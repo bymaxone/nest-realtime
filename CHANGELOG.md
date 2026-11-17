@@ -35,6 +35,12 @@ A host that puts connections in a `user:`, `tenant:` or `connection:` room by ha
 
 At start-up a value that is not an integer is refused where it used to be accepted: `NaN`, `Infinity`, fractions and numeric strings for `sse.maxConnectionsPerUser`, `sse.replayBufferSize`, `websocket.maxConnectionsPerUser` and `websocket.maxHttpBufferSize`, plus `-1` for `websocket.maxConnectionsPerUser` (it switched the cap off, as `0` does) and `0` or a negative for `websocket.maxHttpBufferSize` (each switched the payload bound off). `0` is still how to switch off the two per-user caps, and `0` still means no replay for `sse.replayBufferSize`. If you want an unbounded value, say it with `0` where that is allowed, not with `Infinity`. A value above 100,000 for either per-user cap or `sse.replayBufferSize`, or above 104,857,600 for `websocket.maxHttpBufferSize`, is refused too.
 
+`WebSocketTransport` gains two private members, `joinRooms` and `runOnConnect`, which `registerSocket` calls. A TypeScript subclass that declares a member with either name no longer compiles (TS2415, a private member of the base), and a JavaScript subclass that defines either replaces the joins of the user, tenant and connection rooms, or the call to `onConnect`, without any error. Do not declare members named `joinRooms` or `runOnConnect` in a subclass.
+
+`RealtimeService.emitToRoom` is now an `async` method: it already returned `Promise<void>`, and a synchronous throw, including the refusal of a `roomId` that is not a non-empty string, now comes back as a rejected promise. `./internal` exports `requireRoomName` and `refuseReservedRoom`; `./internal` is not public API and carries no compatibility promise, so do not import them.
+
+On SSE the `reason` that `onDisconnect` receives is set when the library asked for the close (`disconnect(connectionId, reason)`, the connection bounds) and is `undefined` for a connection that ended on its own or that `onConnectFailure: 'close'` refused.
+
 ## [1.2.16] - 2026-11-14
 
 ### Fixed
