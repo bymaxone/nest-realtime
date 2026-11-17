@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.17] - 2026-11-17
+
 ### Added
 
 - **`onConnectFailure: 'ignore' | 'close'`, a module option for what a failing `onConnect` does to its connection.** A hook that throws or rejects was only logged on both transports, so a host whose `onConnect` did work the connection depends on (a presence record, a scoped join) kept serving a connection that work had not reached. With `'close'` the failure is logged and the connection is closed: on WebSocket it is refused before it is announced and leaves no record; on SSE the stream is ended once the hook settles, and events published before then may already have been delivered, so scope a connection in `AuthenticationResult.rooms` when none may be missed. On WebSocket a hook that does not settle within `hookTimeoutMs` counts as a failure; on SSE the hook has no limit. The default is `'ignore'`, the behaviour of every earlier release, and any other value is refused at start-up with `REALTIME_INVALID_OPTIONS`.
@@ -1125,7 +1127,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.16...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.17...HEAD
+[1.2.17]: https://github.com/bymaxone/nest-realtime/compare/v1.2.16...v1.2.17
 [1.2.16]: https://github.com/bymaxone/nest-realtime/compare/v1.2.15...v1.2.16
 [1.2.15]: https://github.com/bymaxone/nest-realtime/compare/v1.2.14...v1.2.15
 [1.2.14]: https://github.com/bymaxone/nest-realtime/compare/v1.2.13...v1.2.14
