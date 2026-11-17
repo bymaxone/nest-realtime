@@ -39,7 +39,7 @@ function describeShape(value: unknown): string {
 /**
  * Refuse a room name that is not a non-empty string.
  *
- * socket.io's room calls take arrays and sets of names, so a value that is not a string would
+ * socket.io's room calls take an array of names, so a value that is not a string would
  * skip every check written for strings and still reach the rooms. The public type is `string`;
  * the shape is refused rather than each element checked.
  *

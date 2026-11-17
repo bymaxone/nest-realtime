@@ -3,7 +3,7 @@
  * hands it to a room API.
  * @layer application
  *
- * socket.io's `join`, `leave` and `to` accept arrays and sets of names, so a value that is not a
+ * socket.io's `join`, `leave` and `to` accept an array of names, so a value that is not a
  * string skips a check written for strings and still reaches the rooms. Every entry that takes a
  * room name refuses the shape first, with the same typed error.
  */

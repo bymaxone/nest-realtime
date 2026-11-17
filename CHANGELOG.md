@@ -29,7 +29,7 @@ Nothing changes unless you set the option. If you do, make sure your `onConnect`
 
 Read the failure from `error.message` and `error.cause`, as before; do not rely on them appearing in `JSON.stringify(error)` or in `Object.keys(error)`.
 
-A host that puts connections in a `user:`, `tenant:` or `connection:` room by hand now gets a rejected promise from `joinRoom` or `leaveRoom`; no call puts a connection in those rooms, because the library joins them itself from the identity it resolved. To send to one identity or tenant use `emitToUser` or `emitToTenant`; to send to one connection use `emitToRoom('connection:<id>', ...)`, which is not refused. A `roomId` that is not a non-empty string, an array included, is refused the same way. Application rooms are unaffected.
+A host that puts connections in a `user:`, `tenant:` or `connection:` room by hand now gets a rejected promise from `joinRoom` or `leaveRoom`; no call puts a connection in those rooms, because the library joins them itself from the identity it resolved. To send to one identity or tenant use `emitToUser` or `emitToTenant`; on WebSocket, to send to one connection use `emitToRoom('connection:<id>', ...)`, which is not refused. A `roomId` that is not a non-empty string, an array included, is refused the same way. Application rooms are unaffected.
 
 ## [1.2.16] - 2026-11-14
 

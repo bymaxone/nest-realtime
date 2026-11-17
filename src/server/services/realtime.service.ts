@@ -65,7 +65,7 @@ export class RealtimeService {
    * `tenant:{id}`, `resource:{type}:{id}`) or a custom non-colliding id.
    *
    * @throws {Error} `REALTIME_AUTH_FAILED` when `roomId` is not a non-empty string: socket.io
-   *   reads an array or a set as several rooms.
+   *   reads an array as several rooms.
    */
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
     requireRoomName('emitToRoom', roomId)
@@ -83,8 +83,8 @@ export class RealtimeService {
    * Rooms of the application's own are free-form, but a name that starts with `user:`,
    * `tenant:` or `connection:` is refused, the rule that `AuthenticationResult.rooms` is
    * held to: joining `tenant:<other>` would receive that tenant's events. A `roomId` that is
-   * not a non-empty string is refused too, whatever it holds: socket.io reads an array or a
-   * set as several room names.
+   * not a non-empty string is refused too, whatever it holds: socket.io reads an array as
+   * several room names.
    *
    * Acts on a connection this instance holds; for any other id it resolves and changes
    * nothing. A failure of the transport that holds the connection rejects the call.
