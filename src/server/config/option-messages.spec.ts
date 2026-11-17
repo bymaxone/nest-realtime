@@ -18,6 +18,8 @@ const HANDED_OVER: ReadonlyArray<readonly [string, unknown, string]> = [
   ['a function', () => 'SENTINEL-8f3a91', 'a function'],
   ['an object with a toString', { toString: () => SENTINEL }, 'an object'],
   ['an array', [SENTINEL], 'an array'],
+  // `String(value)` throws on it, so a message built that way fails with a TypeError instead of refusing.
+  ['an object with no prototype', Object.create(null), 'an object'],
   ['a boolean', true, 'a boolean'],
   ['NaN', Number.NaN, 'a number that is not finite'],
   ['Infinity', Infinity, 'a number that is not finite'],
