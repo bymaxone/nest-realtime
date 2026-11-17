@@ -96,6 +96,27 @@ describe('the text of a third party in a serialised error', () => {
     )
   })
 
+  // Scenario: a host's code reads, reassigns or redefines `message` and `cause` on the instance, as
+  // it could when they were plain assignments. Expected: both stay writable and configurable and
+  // differ from the earlier fields only in not being enumerable. Why: hiding them from
+  // `JSON.stringify` must not change what a logger or a wrapper can do with them.
+  it.each(['message', 'cause'] as const)(
+    'keeps %s writable and configurable, not enumerable',
+    (field) => {
+      const error = MAKERS[REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE]?.(POISON) as Error
+      expect(Object.getOwnPropertyDescriptor(error, field)).toMatchObject({
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      })
+      expect(() => {
+        ;(error as { [key: string]: unknown })[field] = 'replaced'
+        Object.defineProperty(error, field, { value: 'redefined' })
+      }).not.toThrow()
+      expect((error as unknown as Record<string, unknown>)[field]).toBe('redefined')
+    },
+  )
+
   // Scenario: the code is still what a caller branches on. Expected: it survives serialisation.
   it('keeps the stable code on the stringified instance', () => {
     const error = MAKERS[REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE]?.(POISON)
