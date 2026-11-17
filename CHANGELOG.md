@@ -7,6 +7,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Documentation
+
+- **Three details the 1.2.17 notes did not state.** A subclass of `WebSocketTransport` that replaces `joinRooms` drops, besides the user, tenant and connection rooms, the rooms an authenticator returns (`AuthenticationResult.rooms`) and the update of the `RoomRegistry`; a `static` member named `joinRooms` or `runOnConnect` compiles, because only the instance members are private; and for `emitToRoom` the change a caller can observe in 1.2.17 is that a `roomId` that is not a non-empty string is refused as a rejected promise, an outcome 1.2.16 did not have. `CONTRIBUTING.md` no longer describes a `commit-msg` hook and a `pre-commit` hook that this repository does not have.
+
 ## [1.2.17] - 2026-11-17
 
 ### Added
