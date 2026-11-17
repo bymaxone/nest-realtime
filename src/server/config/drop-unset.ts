@@ -90,7 +90,7 @@ function readSet(source: object, known: Readonly<Record<string, true>>): Record<
  * spelled, resolves to its default and is validated as absent. A group may be a class instance with
  * fields or getters, so each known key is read by property access rather than from the own keys alone.
  * Values that carry behaviour (the authenticator, a queue, a hook table) are kept by reference. A group
- * that is not an object is left as it is.
+ * that is not an object, or is an array, is left as it is.
  *
  * @param options - The options as the host wrote them.
  * @returns A plain copy in which every unset key is absent.

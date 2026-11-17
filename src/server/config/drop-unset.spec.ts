@@ -35,7 +35,7 @@ describe('dropUnset', () => {
     expect(result.hooks).toBe(hooks)
   })
 
-  // Scenario: a group that is not a plain object. Expected: it is left as it is, for the validator.
+  // Scenario: a group that is a string, a number or an array. Expected: it is left as it is.
   it.each([['text'], [5], [[1]]])('leaves the group %p untouched', (group) => {
     expect(dropUnset({ sse: group }).sse).toBe(group)
   })
