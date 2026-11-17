@@ -9,6 +9,7 @@ import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-o
 import { describeReceived } from '../utils/describe-received'
 import { realtimeError } from '../utils/realtime-error'
 import { dropUnset } from './drop-unset'
+import { validateShapes } from './validate-shapes'
 
 // Format-level validation only: 'websocket' and 'both' are accepted config values,
 // but the module rejects them at bootstrap until those transports are implemented.
@@ -44,6 +45,7 @@ export function validateOptions(raw: BymaxRealtimeModuleOptions): void {
       { who: 'BymaxRealtimeModule' },
     )
   }
+  validateShapes(options)
   validateHookTimeout(options)
   validateOnConnectFailure(options)
   validateSseOptions(options)
