@@ -19,9 +19,13 @@ Nothing changes unless you set the option. If you do, make sure your `onConnect`
 
 - **The text of a driver or a broker travelled on the 503 errors the library raises when they were stringified.** `unavailableError` set the failure underneath, a driver's message naming a host and a port, on the instance's own enumerable `message` and `cause`. A controller's 503 body was generic, but a filter, a logger or a socket acknowledgement that ran `JSON.stringify` on the instance sent them on. Both are now non-enumerable: `error.message` and `error.cause` still hold the text for whoever logs it, and the stringified instance carries the generic response and the stable `code`.
 
+- **`joinRoom` could put a connection in another user's or tenant's room.** `AuthenticationResult.rooms` refused names that start with `user:`, `tenant:` or `connection:`, but `RealtimeService.joinRoom` and `leaveRoom` took any name. On WebSocket `emitToUser` and `emitToTenant` are delivered to the room named after the identity, so a host that forwarded a client-supplied room id to `joinRoom` let that client receive `user:<victim>` or `tenant:<other>` events by naming the room. Both calls now refuse those three prefixes with `REALTIME_AUTH_FAILED`, by the same rule admission uses; the message names the call, the field and the prefix, never the room id. `emitToRoom` is unchanged: a name it is given only reaches that user's or tenant's own connections.
+
 #### Apply to a derived backend
 
 Read the failure from `error.message` and `error.cause`, as before; do not rely on them appearing in `JSON.stringify(error)` or in `Object.keys(error)`.
+
+A host that puts connections in a `user:`, `tenant:` or `connection:` room by hand now gets a rejected promise from `joinRoom` or `leaveRoom`; use `emitToUser`, `emitToTenant` or the authenticator's `rooms` instead. Application rooms are unaffected.
 
 ## [1.2.16] - 2026-11-14
 

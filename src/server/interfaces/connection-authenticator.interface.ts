@@ -90,7 +90,7 @@ export interface AuthenticationResult {
    * hold at most `ADMISSION_ROOM_LIMITS.MAX_ROOMS` entries; duplicates join once.
    * A result that breaks a rule is a contract violation, refused like a blank `userId`:
    * a server fault, not a 401. The limits are bounds against abuse, not measurements.
-   * They apply to this field only; `joinRoom` stays free-form.
+   * They apply to this field only; `joinRoom` has no limit on count or length and refuses only the reserved prefixes.
    *
    * The rooms are fixed at admission. `revalidate` is handed them back, but a different
    * set returned later is not re-synchronized; use `joinRoom` and `leaveRoom` for
