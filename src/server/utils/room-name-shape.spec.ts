@@ -7,13 +7,13 @@
  * string skips a check written for strings and still reaches the rooms. Every entry that takes a
  * room name refuses the shape first, with the same typed error.
  */
-import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
-import { build as buildSse } from '../../../test/fixtures/sse/transport-harness'
 import 'reflect-metadata'
 import { Test } from '@nestjs/testing'
 import { SseTransport } from '@bymax-one/nest-realtime/internal'
-import { WebSocketTransport } from '../../websocket/transports/websocket/websocket.transport'
+import { build as buildSse } from '../../../test/fixtures/sse/transport-harness'
+import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { CompositeTransport } from '../../websocket/transports/composite/composite.transport'
+import { WebSocketTransport } from '../../websocket/transports/websocket/websocket.transport'
 import type { ITransport } from '../interfaces/transport.interface'
 import { RealtimeService } from '../services/realtime.service'
 
