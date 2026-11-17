@@ -29,7 +29,7 @@ const TTL_SECONDS_CEILING = 2_147_483_647
 
 /**
  * Refuse an option that Redis would turn into a silent loss: `EXPIRE` with 0 or a negative deletes the
- * key, a trim to a count of 0 or less removes every entry, and `NaN`, a fraction or a value Redis
+ * key, a trim to a count of 0 removes every entry, a negative one the wrong entries, and `NaN`, a fraction or a value Redis
  * rejects fails the command after `ZADD` has already run.
  */
 function requireInteger(name: string, value: unknown, least: number, most: number): number {
