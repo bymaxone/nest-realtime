@@ -13,7 +13,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 #### Apply to a derived backend
 
-Nothing changes unless you set the option. If you do, make sure your `onConnect` fails only when the connection should not stand: a hook that throws for a transient reason (a metrics client down) will then close the connection, and an SSE client reconnects on its own.
+Nothing changes unless you set the option. If you do, make sure your `onConnect` fails only when the connection should not stand: a hook that throws for a transient reason (a metrics client down) will then close the connection.
 
 ### Security
 
