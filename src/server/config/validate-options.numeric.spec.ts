@@ -103,6 +103,9 @@ describe('options with no ceiling of their own', () => {
   // refused, because `Number.isInteger(1e300)` is true and the cap would then never fire.
   it.each([
     ['maxConnections', (v: unknown) => ({ maxConnections: v })],
+    ['sse.maxQueuedBytes', (v: unknown) => ({ sse: { maxQueuedBytes: v } })],
+    ['sse.maxQueuedEvents', (v: unknown) => ({ sse: { maxQueuedEvents: v } })],
+    ['sse.stallHeartbeats', (v: unknown) => ({ sse: { stallHeartbeats: v } })],
     ['maxPendingHandshakes', (v: unknown) => ({ maxPendingHandshakes: v })],
     ['sse.replayMaxIdleUsers', (v: unknown) => ({ sse: { replayMaxIdleUsers: v } })],
     [
@@ -118,10 +121,18 @@ describe('options with no ceiling of their own', () => {
       expect(() => validateOptions(options(probe, build))).toThrow(
         `options.${path} must be an integer >= `,
       )
-      expect(() => validateOptions(options(probe, build))).toThrow(
-        `, got ${String(probe)} (the most is ${Number.MAX_SAFE_INTEGER})`,
-      )
+      expect(() => validateOptions(options(probe, build))).toThrow(`, got ${String(probe)}`)
     }
+  })
+})
+
+describe('the refusal of an integer past the safe integers', () => {
+  // Scenario: 1e300 for an option with no most. Expected: the message says what the most is, because
+  // the value is an integer and a reader would otherwise not see what is wrong with it.
+  it('names the largest safe integer', () => {
+    expect(() => validateOptions(options(1e300, (v) => ({ maxConnections: v })))).toThrow(
+      `options.maxConnections must be an integer >= 1, got 1e+300 (the most is ${Number.MAX_SAFE_INTEGER})`,
+    )
   })
 })
 

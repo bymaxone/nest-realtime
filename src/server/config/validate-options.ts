@@ -171,7 +171,7 @@ function validateSseOptions(options: BymaxRealtimeModuleOptions): void {
     const value: unknown = sse?.[name]
     if (
       value !== undefined &&
-      !(typeof value === 'number' && Number.isInteger(value) && value >= 0)
+      !(typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
     ) {
       throw realtimeError(
         REALTIME_ERROR_CODES.INVALID_OPTIONS,
