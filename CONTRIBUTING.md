@@ -85,14 +85,16 @@ version — never on every PR.
 
 ## Commits — Conventional Commits
 
-Commit messages are validated by commitlint via the `commit-msg` hook:
+Commit messages follow Conventional Commits:
 
 ```
 <type>(<scope>): <subject>
 ```
 
 Types: `feat | fix | docs | refactor | perf | test | build | ci | chore | revert`.
-The `pre-commit` hook runs lint-staged (ESLint + Prettier on staged files).
+No hook enforces the format: review does, and the `No AI attribution` check fails a pull
+request whose title, body or commit messages name an AI tool as author or reviewer. Run
+`pnpm lint` before committing; it runs ESLint and the repository's own checks.
 
 ## Pull requests
 
