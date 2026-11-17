@@ -92,8 +92,8 @@ Commit messages follow Conventional Commits:
 ```
 
 Types: `feat | fix | docs | refactor | perf | test | build | ci | chore | revert`.
-No hook enforces the format: review does, and the `No AI attribution` check fails a pull
-request whose title, body or commit messages name an AI tool as author or reviewer. Run
+No hook enforces the format: review does, and the `No AI attribution` check runs on every pull
+request. Run
 `pnpm lint` before committing; it runs ESLint and the repository's own checks.
 
 ## Pull requests
