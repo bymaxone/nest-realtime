@@ -57,8 +57,8 @@ function assertBoolean(path: string, value: unknown): void {
 }
 
 function assertEndpoint(path: string, value: unknown): void {
-  if (value !== undefined && !(typeof value === 'string' && value.length > 0)) {
-    refuse(path, 'a non-empty string', value)
+  if (value !== undefined && !(typeof value === 'string' && value.trim().length > 0)) {
+    refuse(path, 'a non-blank string', value)
   }
 }
 
@@ -83,7 +83,7 @@ function validateHooks(options: BymaxRealtimeModuleOptions): void {
 /**
  * Refuse an option whose shape would fail later or do the opposite of what it says: a group that is not an
  * object, a pluggable piece without its required functions, a hook or the tenant resolver that is not a
- * function, a flag that is not a boolean (a truthy "no" reads as true) and an endpoint that is not a non-empty string. A leading slash is not required: `@Sse()` reads
+ * function, a flag that is not a boolean (a truthy "no" reads as true) and an endpoint that is not a non-blank string. A leading slash is not required: `@Sse()` reads
  * `'events'` and `'/events'` as the same route.
  * Each refusal is `REALTIME_INVALID_OPTIONS`, names the option and the type of what it received, and
  * echoes nothing else.

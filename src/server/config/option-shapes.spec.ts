@@ -3,7 +3,7 @@
  * @layer composition
  *
  * An implementation that lacks a required function, a hook that is not a function, a group that is not an
- * object, a flag that is not a boolean and an endpoint that is not a non-empty string are each refused by
+ * object, a flag that is not a boolean and an endpoint that is not a non-blank string are each refused by
  * `forRoot` with `REALTIME_INVALID_OPTIONS`, naming the option and the type of what it received, instead of
  * failing later as a raw `TypeError` or being read as the opposite of what they say.
  */
@@ -182,17 +182,19 @@ describe.each(['sse.emitConnectionEvent', 'websocket.emitConnectionEvent'])('%s'
 })
 
 describe('sse.endpoint', () => {
-  // Scenario: an endpoint that is not a non-empty string. Expected: refused with a typed error, where a number used
+  // Scenario: an endpoint that is not a non-blank string (a blank one routes nowhere). Expected: refused with a typed error, where a number used
   // to reach `endpoint.startsWith` and fail as a raw TypeError.
   it.each([
     ['', 'a string'],
+    ['   ', 'a string'],
+    ['\t\n', 'a string'],
     [5, '5'],
     [true, 'a boolean'],
     [['/x'], 'an array'],
     [{}, 'an object'],
   ])('refuses %p', (value, received) => {
     expect(() => validateOptions(optionsWith('sse.endpoint', value))).toThrow(
-      refusal('sse.endpoint', 'a non-empty string', received),
+      refusal('sse.endpoint', 'a non-blank string', received),
     )
   })
 
