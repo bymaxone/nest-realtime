@@ -55,7 +55,9 @@ describe('RealtimeService — reserved room names', () => {
       )
 
       expect(failure?.code).toBe(REALTIME_ERROR_CODES.AUTH_FAILED)
-      expect(failure?.message).toContain(`${operation}`)
+      expect(failure?.message).toMatch(
+        new RegExp(`^\\[RealtimeService\\] REALTIME_AUTH_FAILED: ${operation}: `),
+      )
       expect(failure?.message).toContain('`roomId`')
       expect(failure?.message).toMatch(/reserved prefix "(user|tenant|connection):"/)
       expect(failure?.message.split('reserved prefix')[0]).not.toContain(room)
