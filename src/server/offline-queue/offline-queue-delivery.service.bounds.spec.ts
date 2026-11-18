@@ -139,7 +139,9 @@ describe('OfflineQueueDeliveryService: the read is bounded', () => {
     await Promise.all(reads.map((r) => r.pending))
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenLastCalledWith(
-      expect.stringContaining('reconnects given up on since the last report: 1,'),
+      expect.objectContaining({
+        message: expect.stringContaining('reconnects given up on since the last report: 1,'),
+      }),
     )
 
     jest.advanceTimersByTime(8_999)
@@ -153,9 +155,13 @@ describe('OfflineQueueDeliveryService: the read is bounded', () => {
 
     expect(warn).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenLastCalledWith(
-      expect.stringContaining('reconnects given up on since the last report: 6,'),
+      expect.objectContaining({
+        message: expect.stringContaining('reconnects given up on since the last report: 6,'),
+      }),
     )
-    expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('did not answer in 1000 ms'))
+    expect(warn).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('did not answer in 1000 ms') }),
+    )
   })
 
   it('starts a new window exactly ten seconds after the line that opened the last one', async () => {

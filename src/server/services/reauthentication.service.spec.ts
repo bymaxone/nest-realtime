@@ -252,7 +252,9 @@ describe('ReauthenticationService', () => {
           expect(hooks.onReauthenticationFailed).toHaveBeenCalledTimes(1)
           expect(warnSpy).toHaveBeenCalledTimes(1)
           expect(warnSpy).toHaveBeenCalledWith(
-            `Reauthentication notification for c1 failed, disconnecting anyway: ${describeError(failure())}`,
+            expect.objectContaining({
+              message: `Reauthentication notification failed, disconnecting anyway: ${describeError(failure())}`,
+            }),
           )
         } finally {
           warnSpy.mockRestore()
@@ -280,7 +282,9 @@ describe('ReauthenticationService', () => {
 
       expect(realtime.disconnect).toHaveBeenCalledTimes(1)
       expect(warnSpy).toHaveBeenCalledWith(
-        'Reauthentication notification for c1 failed, disconnecting anyway: sync throw',
+        expect.objectContaining({
+          message: 'Reauthentication notification failed, disconnecting anyway: sync throw',
+        }),
       )
     } finally {
       warnSpy.mockRestore()
@@ -331,7 +335,9 @@ describe('ReauthenticationService', () => {
       await svc.runCycle()
 
       expect(warnSpy).toHaveBeenCalledWith(
-        'Revocation of c1 failed, retrying next cycle: REALTIME_PUBSUB_UNAVAILABLE',
+        expect.objectContaining({
+          message: 'Revocation failed, retrying next cycle: REALTIME_PUBSUB_UNAVAILABLE',
+        }),
       )
       await svc.runCycle()
       expect(realtime.disconnect).toHaveBeenCalledTimes(2)
@@ -384,7 +390,7 @@ describe('ReauthenticationService', () => {
         'c2',
         REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED,
       )
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('c1'))
+      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c1' }))
       await svc.runCycle()
       expect(realtime.disconnect).toHaveBeenCalledTimes(4)
     } finally {
@@ -406,7 +412,9 @@ describe('ReauthenticationService', () => {
       svc.onModuleInit()
       await jest.advanceTimersByTimeAsync(2_000)
       expect(cycle).toHaveBeenCalledTimes(2)
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cycle boom'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('cycle boom') }),
+      )
       svc.onApplicationShutdown()
     } finally {
       warnSpy.mockRestore()
@@ -642,7 +650,9 @@ describe('ReauthenticationService', () => {
     try {
       await svc.runCycle()
       await flush()
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hook-crash'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('hook-crash') }),
+      )
     } finally {
       warnSpy.mockRestore()
     }
@@ -675,7 +685,7 @@ describe('ReauthenticationService', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       await svc.runCycle()
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('conn-xy'))
+      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'conn-xy' }))
     } finally {
       warnSpy.mockRestore()
     }

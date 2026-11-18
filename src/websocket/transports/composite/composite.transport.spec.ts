@@ -89,7 +89,9 @@ describe('CompositeTransport', () => {
     sseMock.emitToUser.mockRejectedValue(new Error('SSE down'))
     await composite.emitToUser('u-1', 'evt', {})
     expect(wsMock.emitToUser).toHaveBeenCalled()
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('SSE down'))
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('SSE down') }),
+    )
   })
 
   it('WS emit rejection does not abort SSE emit', async () => {
@@ -97,7 +99,9 @@ describe('CompositeTransport', () => {
     wsMock.emitToUser.mockRejectedValue(new Error('WS down'))
     await composite.emitToUser('u-1', 'evt', {})
     expect(sseMock.emitToUser).toHaveBeenCalled()
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WS down'))
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('WS down') }),
+    )
   })
 
   it('joinRoom and leaveRoom reach both transports', async () => {
@@ -189,7 +193,9 @@ describe('CompositeTransport', () => {
       await expect(call(composite)).resolves.toBeUndefined()
 
       expect(warnSpy).toHaveBeenCalledTimes(1)
-      expect(warnSpy).toHaveBeenCalledWith(`Composite ${op} partially failed: ${reason}`)
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: `Composite ${op} partially failed: ${reason}` }),
+      )
       expect(sseMock[op]).toHaveBeenCalledTimes(1)
       expect(wsMock[op]).toHaveBeenCalledTimes(1)
     })
@@ -220,31 +226,41 @@ describe('CompositeTransport', () => {
     // When the rejection reason is not an Error, the reason itself is used in the warn.
     sseMock.emitToUser.mockRejectedValue('raw-string-reason')
     await composite.emitToUser('u-1', 'evt', {})
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('partially failed'))
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('partially failed') }),
+    )
   })
 
   it('fanOut warn includes the op name emitToTenant', async () => {
     sseMock.emitToTenant.mockRejectedValue(new Error('sse-tenant-down'))
     await composite.emitToTenant('t-1', 'evt', {})
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToTenant'))
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('emitToTenant') }),
+    )
   })
 
   it('fanOut warn includes the op name emitToRoom', async () => {
     sseMock.emitToRoom.mockRejectedValue(new Error('sse-room-down'))
     await composite.emitToRoom('room:x', 'evt', {})
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToRoom'))
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('emitToRoom') }),
+    )
   })
 
   it('fanOut warn includes the op name broadcast', async () => {
     sseMock.broadcast.mockRejectedValue(new Error('sse-broadcast-down'))
     await composite.broadcast('evt', {})
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('broadcast'))
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('broadcast') }),
+    )
   })
 
   it('fanOut warn includes the op name emitToUser', async () => {
     sseMock.emitToUser.mockRejectedValue(new Error('sse-user-down'))
     await composite.emitToUser('u-1', 'evt', {})
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('emitToUser'))
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('emitToUser') }),
+    )
   })
 
   // Kills L89 StringLiteral: `'broadcast'` → `""`.
@@ -252,13 +268,17 @@ describe('CompositeTransport', () => {
   it('fanOut warn for broadcast names the operation even when the error message does not contain broadcast', async () => {
     sseMock.broadcast.mockRejectedValue(new Error('transport-down'))
     await composite.broadcast('evt', {})
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('broadcast'))
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('broadcast') }),
+    )
   })
 
   it('fanOut warn contains the raw rejection reason when the reason has no .message', async () => {
     // Kills ?? → && mutation: without ??, undefined && reason = undefined, not the reason string.
     sseMock.emitToUser.mockRejectedValue('sentinel-reason-value')
     await composite.emitToUser('u-1', 'evt', {})
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('sentinel-reason-value'))
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('sentinel-reason-value') }),
+    )
   })
 })

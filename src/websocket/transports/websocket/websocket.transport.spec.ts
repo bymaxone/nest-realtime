@@ -166,7 +166,10 @@ describe('WebSocketTransport', () => {
       await transport.emitToRoom('room:r', 'evt', {})
       expect(warnSpy).toHaveBeenCalledTimes(1)
       expect(warnSpy).toHaveBeenCalledWith(
-        'REALTIME_TRANSPORT_UNAVAILABLE op=emitToUser: no WebSocket server is attached yet, so emits are dropped until the gateway initialises',
+        expect.objectContaining({
+          message:
+            'no WebSocket server is attached yet, so emits are dropped until the gateway initialises',
+        }),
       )
     } finally {
       warnSpy.mockRestore()
@@ -184,7 +187,12 @@ describe('WebSocketTransport', () => {
     try {
       await call(transport)
       expect(warnSpy).toHaveBeenCalledWith(
-        `REALTIME_TRANSPORT_UNAVAILABLE op=${op}: no WebSocket server is attached yet, so emits are dropped until the gateway initialises`,
+        expect.objectContaining({
+          event: 'REALTIME_SERVER_NOT_ATTACHED',
+          op,
+          message:
+            'no WebSocket server is attached yet, so emits are dropped until the gateway initialises',
+        }),
       )
     } finally {
       warnSpy.mockRestore()

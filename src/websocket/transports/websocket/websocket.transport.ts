@@ -17,6 +17,8 @@ import {
   DEFAULT_HOOK_TIMEOUT_MS,
   AuthenticationGate,
   ConnectionAdmission,
+  RealtimeMetricsTally,
+  logEvent,
   UNBOUNDED_TICKET,
   refuseReservedRoom,
   requireRoomName,
@@ -74,6 +76,10 @@ export class WebSocketTransport implements ITransport {
     @Optional()
     @Inject(ConnectionAdmission)
     private readonly admission?: ConnectionAdmission,
+    // Optional so a transport built by hand keeps working; the module always provides it.
+    @Optional()
+    @Inject(RealtimeMetricsTally)
+    private readonly tally?: RealtimeMetricsTally,
   ) {}
 
   /**
@@ -125,8 +131,12 @@ export class WebSocketTransport implements ITransport {
   private attached(op: string): Server | null {
     if (!this.server && !this.warnedUnattached) {
       this.warnedUnattached = true
-      this.logger.warn(
-        `${REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE} op=${op}: no WebSocket server is attached yet, so emits are dropped until the gateway initialises`,
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_SERVER_NOT_ATTACHED',
+        'no WebSocket server is attached yet, so emits are dropped until the gateway initialises',
+        { op },
       )
     }
     return this.server
@@ -205,7 +215,7 @@ export class WebSocketTransport implements ITransport {
     const message = `onConnect hook failed: ${describeError(failed.error)}`
     // Raised, the failure reaches the gateway, which logs it and disconnects the socket.
     if (this.options.onConnectFailure === 'close') throw new Error(message)
-    this.logger.error(message)
+    logEvent(this.logger, 'error', 'REALTIME_HOOK_FAILED', message, { hook: 'onConnect' })
   }
 
   /** Join the socket to its canonical rooms and the ones the authenticator named, here and in the registry. */
@@ -276,7 +286,17 @@ export class WebSocketTransport implements ITransport {
       () => this.hooks.onDisconnect?.(disconnectMeta),
       this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
     )
-    if (failed) this.logger.error(`onDisconnect hook failed: ${describeError(failed.error)}`)
+    if (failed) {
+      logEvent(
+        this.logger,
+        'error',
+        'REALTIME_HOOK_FAILED',
+        `onDisconnect hook failed: ${describeError(failed.error)}`,
+        {
+          hook: 'onDisconnect',
+        },
+      )
+    }
   }
 
   /**
@@ -288,6 +308,7 @@ export class WebSocketTransport implements ITransport {
    */
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
     this.attached('emitToUser')?.to(`${ROOM_PREFIXES.USER}:${userId}`).emit(event, data)
+    if (this.server) this.tally?.emitted('websocket')
   }
 
   /**
@@ -299,6 +320,7 @@ export class WebSocketTransport implements ITransport {
    */
   async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
     this.attached('emitToTenant')?.to(`${ROOM_PREFIXES.TENANT}:${tenantId}`).emit(event, data)
+    if (this.server) this.tally?.emitted('websocket')
   }
 
   /**
@@ -311,6 +333,7 @@ export class WebSocketTransport implements ITransport {
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
     requireRoomName('emitToRoom', roomId)
     this.attached('emitToRoom')?.to(roomId).emit(event, data)
+    if (this.server) this.tally?.emitted('websocket')
   }
 
   /**
@@ -321,6 +344,7 @@ export class WebSocketTransport implements ITransport {
    */
   async broadcast(event: string, data: unknown): Promise<void> {
     this.attached('broadcast')?.emit(event, data)
+    if (this.server) this.tally?.emitted('websocket')
   }
 
   /**
@@ -369,6 +393,12 @@ export class WebSocketTransport implements ITransport {
    *   fan-out throws: the revocation did not leave this node.
    */
   async disconnect(connectionId: string, _reason?: string): Promise<void> {
+    await this.close(connectionId)
+    this.tally?.evicted('revoked')
+  }
+
+  /** Close a connection on whichever node holds it, without counting why. */
+  private async close(connectionId: string): Promise<void> {
     const server = this.server
     if (!server) {
       throw unavailableError(
@@ -414,7 +444,8 @@ export class WebSocketTransport implements ITransport {
     let userConnections = this.connections.byUser(userId, 'websocket')
     while (userConnections.length > max) {
       const oldest = userConnections.reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))
-      await this.disconnect(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
+      this.tally?.evicted('per_user_cap')
+      await this.close(oldest.connectionId)
       await this.unregisterSocket(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
       userConnections = this.connections.byUser(userId, 'websocket')
     }

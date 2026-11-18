@@ -40,6 +40,7 @@ const snapshotPath = join(rootDir, 'test/types/public-surface.json')
 const SUBPATHS = {
   '.': 'dist/server/index.d.ts',
   './websocket': 'dist/websocket/index.d.ts',
+  './observability': 'dist/observability/index.d.ts',
   './shared': 'dist/shared/index.d.ts',
   './react': 'dist/react/index.d.ts',
 }

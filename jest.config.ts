@@ -25,6 +25,7 @@ const config: Config = {
         '<rootDir>/src/server/**/*.spec.ts',
         '<rootDir>/src/shared/**/*.spec.ts',
         '<rootDir>/src/websocket/**/*.spec.ts',
+        '<rootDir>/src/observability/**/*.spec.ts',
         '<rootDir>/test/fixtures/**/*.spec.ts',
         '<rootDir>/test/integration/**/*.spec.ts',
       ],

@@ -82,14 +82,15 @@ The default transport is **Server-Sent Events**: browser-native, plain HTTP, no 
 
 ## 📦 Subpath Exports
 
-One package, four entry points — import only what your app needs:
+One package, five entry points — import only what your app needs:
 
-| Subpath       | Import                               | Purpose                                        |                           Dependencies                            |
-| ------------- | ------------------------------------ | ---------------------------------------------- | :---------------------------------------------------------------: |
-| **Server**    | `@bymax-one/nest-realtime`           | NestJS module for SSE, services, contracts     |                          NestJS 11, rxjs                          |
-| **WebSocket** | `@bymax-one/nest-realtime/websocket` | NestJS module for `'websocket'` and `'both'`   | + `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io` |
-| **Shared**    | `@bymax-one/nest-realtime/shared`    | Types, room prefixes, event names, error codes |                               None                                |
-| **React**     | `@bymax-one/nest-realtime/react`     | Hooks & `RealtimeProvider`                     |                             React 19                              |
+| Subpath           | Import                                   | Purpose                                        |                           Dependencies                            |
+| ----------------- | ---------------------------------------- | ---------------------------------------------- | :---------------------------------------------------------------: |
+| **Server**        | `@bymax-one/nest-realtime`               | NestJS module for SSE, services, contracts     |                          NestJS 11, rxjs                          |
+| **WebSocket**     | `@bymax-one/nest-realtime/websocket`     | NestJS module for `'websocket'` and `'both'`   | + `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io` |
+| **Shared**        | `@bymax-one/nest-realtime/shared`        | Types, room prefixes, event names, error codes |                               None                                |
+| **React**         | `@bymax-one/nest-realtime/react`         | Hooks & `RealtimeProvider`                     |                             React 19                              |
+| **Observability** | `@bymax-one/nest-realtime/observability` | Metrics contributor, pub/sub health indicator  |        + `@bymax-one/nest-core`, `prom-client` (optional)         |
 
 ```
        shared (zero deps)
@@ -474,6 +475,62 @@ This section lists the bounds the library applies, what happens when each one is
 ### Shutdown order
 
 The Socket.IO server closes first, then the adapter's `dispose()` runs, and `dispose()` closes the adapter's own Redis subscriber connection. The pub/sub subscriber is unsubscribed in the application shutdown hook. When both transports run, the two Redis subscribers are closed in two successive phases, each waited for at most 2,000 ms. [Shutdown](#shutdown) describes how a shutdown starts.
+
+### Observability
+
+Everything here is optional. The root and the shared runtime import none of `@bymax-one/nest-core`, `prom-client` or `@opentelemetry/api`, so an application that publishes no metrics installs none of them.
+
+**Metrics.** Register `RealtimeMetrics` in a module of your application; `BymaxCoreModule` discovers it and calls it once at bootstrap with the registry its scrape endpoint serves. It injects what the realtime module exports, so nothing else is wired.
+
+```typescript
+import {
+  RealtimeMetrics,
+  RealtimePubSubHealthIndicator,
+} from '@bymax-one/nest-realtime/observability'
+
+@Module({ providers: [RealtimeMetrics, RealtimePubSubHealthIndicator] })
+export class ObservabilityModule {}
+```
+
+| Metric                                     | Type    | Labels                                                | Meaning                                               |
+| ------------------------------------------ | ------- | ----------------------------------------------------- | ----------------------------------------------------- |
+| `bymax_realtime_connections`               | gauge   | `transport` = `sse`, `websocket`                      | Connections open on this instance now.                |
+| `bymax_realtime_connections_refused_total` | counter | `reason` = `limit`, `unauthorized`, `unavailable`     | Handshakes refused since start.                       |
+| `bymax_realtime_evictions_total`           | counter | `reason` = `per_user_cap`, `slow_consumer`, `revoked` | Connections closed by the library or by a revocation. |
+| `bymax_realtime_events_emitted_total`      | counter | `transport` = `sse`, `websocket`                      | Events delivered on this instance.                    |
+| `bymax_realtime_slow_consumer_drops_total` | counter | none                                                  | Connections cut for not reading what they were sent.  |
+
+A label is one of the values listed and never an id, a tenant or a user. A revocation is counted on the instance that was asked to make it, once it has closed the connection or handed the request to the bus.
+
+**Health.** `RealtimePubSubHealthIndicator` (name `realtime-pubsub`) reports `down` when the bus says it is not subscribed, so what other instances publish no longer reaches this one. It reads the bus's own state, sends nothing and returns no detail. A bus that does not report its state, such as the in-memory one, counts as up.
+
+**Traces.** With `@opentelemetry/api` installed the library starts `realtime.handshake` around the admission and authentication of each connection (attribute `bymax.realtime.transport`, `sse` or `websocket`) and `realtime.reauthenticate` around each re-authentication cycle. A refused handshake ends its span with status ERROR and the library error code, never the message. With no SDK registered the API is a no-op, and without the package nothing is started.
+
+**Log events.** Every `warn` and `error` line the library writes is an object, `{ event, message, ...fields }`, so a structured logger writes each as a JSON field and Nest's default logger prints the object. The fields are counts, sizes, configured limits, transport names and a library-made connection id; a user id, a tenant id, a room or any value your application supplied is never in a message or a field, because the logger's own context carries identity. Lines that report that the library started stay plain strings.
+
+| Event                                  | Level | When                                                                                | Fields                                                                   |
+| -------------------------------------- | ----- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `REALTIME_REAUTH_CACHE_WEAKENS_POLICY` | warn  | At start-up, `reauthenticationPolicy.cacheTtlMs` is longer than the interval.       | `cacheTtlMs`, `intervalMs`                                               |
+| `REALTIME_HANDSHAKE_FAILED`            | error | A handshake failed with an error that is not a refusal and was answered as a 500.   | `socketId` (WebSocket)                                                   |
+| `REALTIME_HOOK_FAILED`                 | warn  | A lifecycle hook threw or did not settle within `hookTimeoutMs`.                    | `hook` where known                                                       |
+| `REALTIME_DELIVERY_FAILED`             | warn  | A delivery failed without failing its call.                                         | `connectionId` or `code`, `op`                                           |
+| `REALTIME_SLOW_CONSUMER`               | warn  | A connection was cut for not reading what it was sent.                              | `connectionId`, `queuedEvents`, `queuedBytes`, `heldBytes`               |
+| `REALTIME_DISCONNECT_FAILED`           | warn  | Closing a connection failed.                                                        | `connectionId`                                                           |
+| `REALTIME_RECONNECTS_GIVEN_UP`         | warn  | Reconnects were given up on because the offline queue did not answer (windowed).    | `count`, `timeoutMs`, `maxPending`                                       |
+| `REALTIME_OFFLINE_QUEUE_LIMIT`         | warn  | A read of the offline queue reached its event limit.                                | `limit`                                                                  |
+| `REALTIME_OFFLINE_QUEUE_ACK_FAILED`    | warn  | Acknowledging the offline queue failed.                                             | none                                                                     |
+| `REALTIME_PUBSUB_NOT_PROVIDED`         | warn  | In production, no `IRealtimePubSub` was provided: single instance only.             | none                                                                     |
+| `REALTIME_PUBSUB_UNSUBSCRIBE_FAILED`   | warn  | Unsubscribing from the bus failed at shutdown.                                      | none                                                                     |
+| `REALTIME_PUBSUB_DROPPED`              | warn  | The bus dropped messages it could not act on (windowed).                            | `count`, `last`                                                          |
+| `REALTIME_PUBSUB_UNAVAILABLE`          | warn  | The bus refused or lost the subscription; remote events do not reach this instance. | none                                                                     |
+| `REALTIME_CONNECTIONS_REFUSED`         | warn  | Connections were refused at `maxConnections` (windowed).                            | `count`, `maxConnections`                                                |
+| `REALTIME_HANDSHAKES_REFUSED`          | warn  | Handshakes were refused because the authenticator was saturated or slow (windowed). | `saturated`, `timedOut`, `maxPendingHandshakes`, `authenticateTimeoutMs` |
+| `REALTIME_REAUTH_FAILED`               | warn  | A re-authentication cycle, a check or its notification failed.                      | `connectionId` where known                                               |
+| `REALTIME_REVOCATION_FAILED`           | warn  | A revocation failed and is retried on the next cycle.                               | `connectionId`                                                           |
+| `REALTIME_ADAPTER_MISSING`             | error | `RealtimeIoAdapter` is not the active WebSocket adapter.                            | none                                                                     |
+| `REALTIME_ADAPTER_COMMAND_FAILED`      | warn  | A command of the Redis adapter's subscriber failed (once for each connection).      | none                                                                     |
+| `REALTIME_COMPOSITE_PARTIAL_FAILURE`   | warn  | One of the two transports failed an emit under `transport: 'both'`.                 | `op`                                                                     |
+| `REALTIME_SERVER_NOT_ATTACHED`         | warn  | An emit was made before the WebSocket server was attached (once).                   | `op`                                                                     |
 
 ### Before you deploy
 
@@ -930,6 +987,25 @@ Nest's default exception filter does not log an `HttpException`, so a `503` from
 From the `onModuleDestroy` phase on, which runs ahead of every `beforeApplicationShutdown`, a new SSE stream gets a 503 whose message is `REALTIME_TRANSPORT_UNAVAILABLE` and a new WebSocket handshake gets a `connect_error` whose `data.code` is that code. A slow `onModuleDestroy` in a module nearer the root than the realtime module still runs first, and until it returns a connection is accepted.
 
 A client that stopped reading holds its socket open after the library has ended its stream, and Node's HTTP server waits for it: `app.close()` took 6,004 ms with such clients and 3 ms with `forceCloseConnections: true`. Create the application with `NestFactory.create(AppModule, { forceCloseConnections: true })`, or give the process a termination grace of at least 7 seconds.
+
+### Types and constants
+
+Every name below is exported; the subpath says where to import it from. A type is erased at run time, a constant is a value.
+
+**Options.** `BymaxRealtimeModuleOptions` is the configuration of `forRoot`, and `BymaxRealtimeModuleAsyncOptions` that of `forRootAsync` (`useFactory`, `useClass`, `useExisting`, `inject`, `imports`, `sseEndpoint` and `extraProviders`, the providers to register beside the module, for instance an authenticator class that Nest manages). `SseOptions` and `WebSocketOptions` are the `sse` and `websocket` groups, `ReauthenticationPolicy` is `reauthenticationPolicy`, and `CorsConfig` is the CORS configuration both transports share. `RedisOfflineQueueOptions` and `RedisRealtimePubSubOptions` configure the two Redis implementations that ship with the package.
+
+**What a hook or an authenticator receives.** `AuthenticatorCallOptions` is what `authenticate` and `revalidate` are handed besides their subject. `DeliveryFailure` is what `onDeliveryFailure` receives when a delivery path failed without failing the call that depended on it. `PublicConnectionMeta` is the public-facing metadata of one connection.
+
+**Events and rooms** (from `@bymax-one/nest-realtime/shared`). `RealtimeEvent` is the shape of an event over a transport (`id`, `type` and `data`) and `ReservedEventName` the union of the names the library reserves. `ROOM_PREFIXES` is the table of canonical room prefixes and `RoomPrefix` the union of its values. `TransportMode` is `'sse' | 'websocket' | 'both'`. `REALTIME_ERROR_CODES` is the table of the stable error codes, such as `REALTIME_AUTH_FAILED`.
+
+**Queues and the bus.** `OfflineQueuedEvent` is one event held in a user's offline queue, and `RealtimePubSubMessage` is one message that crosses instances.
+
+**Members of the contracts you implement.**
+
+- `IOfflineQueueStorage`: `append` stores an event for a user, `retrieveSince` reads the ones after an id, and `acknowledge` marks events delivered up to an id, which an implementation may purge or keep.
+- `IPresenceStorage`: `setOnline` and `setOffline` record a connection, `isOnline` answers for a user, `listOnlineByTenant` lists a tenant's online users and `countOnline` counts everyone.
+- `IRealtimePubSub`: `publish` sends to the other instances, `subscribe` receives, and the optional `isSubscribed` says whether this instance is subscribed now. A bus that cannot be unsubscribed once subscribed omits it and counts as subscribed; the health indicator reads it.
+- `ITransport`: the optional `onModuleInit` and `onApplicationShutdown` are called by Nest on bootstrap and shutdown, as `beforeApplicationShutdown` is before the HTTP server closes.
 
 ### DI Tokens
 

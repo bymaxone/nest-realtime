@@ -70,6 +70,9 @@ const WEBSOCKET_EXPORTS = [
   'CompositeTransport',
 ]
 
+/** Values the observability subpath must expose. */
+const OBSERVABILITY_EXPORTS = ['RealtimeMetrics', 'RealtimePubSubHealthIndicator']
+
 /**
  * The probe, identical in both formats. Only the four bindings it opens with
  * differ, which is the point: the same assertions have to hold under `import`
@@ -94,6 +97,11 @@ const missing = (namespace, names) =>
 
 check('root exports', () => {
   const absent = missing(root, ${JSON.stringify(ROOT_EXPORTS)})
+  return absent && 'not exported: ' + absent
+})
+
+check('observability exports', () => {
+  const absent = missing(obs, ${JSON.stringify(OBSERVABILITY_EXPORTS)})
   return absent && 'not exported: ' + absent
 })
 
@@ -123,6 +131,28 @@ const resolveAll = async (label, dynamicModule) => {
       return label + ': RealtimeService instance is not an instance of the exported class'
     }
     return ''
+  } finally {
+    await app.close()
+  }
+}
+
+// The optional entry must resolve what it injects from the one shared runtime: registered as plain providers
+// of a host module it boots, publishes its five collectors and reports its indicator up. A second copy of the
+// shared runtime makes the boot fail with an unresolved dependency, as it does for the tokens above.
+const observabilityBoots = async () => {
+  class Host {}
+  Module({
+    imports: [root.BymaxRealtimeModule.forRoot(options('sse'))],
+    providers: [obs.RealtimeMetrics, obs.RealtimePubSubHealthIndicator],
+  })(Host)
+  const app = await NestFactory.createApplicationContext(Host, { logger: false })
+  try {
+    const registry = new prom.Registry()
+    app.get(obs.RealtimeMetrics).registerMetrics(registry)
+    const names = (await registry.getMetricsAsJSON()).map((metric) => metric.name)
+    if (names.length !== 5) return 'expected five collectors, found ' + names.length
+    const health = await app.get(obs.RealtimePubSubHealthIndicator).check()
+    return health.status === 'up' ? '' : 'the indicator reported ' + health.status + ' on a healthy bus'
   } finally {
     await app.close()
   }
@@ -187,6 +217,12 @@ const main = async () => {
   } catch (error) {
     failures.push('maxConnections — threw: ' + error.message)
   }
+  try {
+    const detail = await observabilityBoots()
+    if (detail) failures.push('observability — ' + detail)
+  } catch (error) {
+    failures.push('observability — threw: ' + error.message)
+  }
   const cases = [
     ['websocket via ./websocket', () => ws.BymaxRealtimeWebSocketModule.forRoot(options('websocket'))],
     ['both via ./websocket', () => ws.BymaxRealtimeWebSocketModule.forRoot(options('both'))],
@@ -232,16 +268,22 @@ main().catch((error) => {
 
 const esmProbe = `import 'reflect-metadata'
 import { NestFactory } from '@nestjs/core'
+import { Module } from '@nestjs/common'
+import * as prom from 'prom-client'
 import * as root from '${packageName}'
 import * as ws from '${packageName}/websocket'
+import * as obs from '${packageName}/observability'
 import IORedisMock from 'ioredis-mock'
 const FORMAT = 'ESM'
 ${probeBody}`
 
 const cjsProbe = `require('reflect-metadata')
 const { NestFactory } = require('@nestjs/core')
+const { Module } = require('@nestjs/common')
+const prom = require('prom-client')
 const root = require('${packageName}')
 const ws = require('${packageName}/websocket')
+const obs = require('${packageName}/observability')
 const IORedisMock = require('ioredis-mock')
 const FORMAT = 'CJS'
 ${probeBody}`
@@ -345,6 +387,7 @@ try {
     alias: {
       [packageName]: join(packageDir, 'dist/server/index.mjs'),
       [`${packageName}/websocket`]: join(packageDir, 'dist/websocket/index.mjs'),
+      [`${packageName}/observability`]: join(packageDir, 'dist/observability/index.mjs'),
       [`${packageName}/internal`]: join(packageDir, 'dist/internal/index.mjs'),
       [`${packageName}/shared`]: join(packageDir, 'dist/shared/index.mjs'),
     },

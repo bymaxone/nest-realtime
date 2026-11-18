@@ -20,6 +20,7 @@ export const EXCLUSIONS: readonly Exclusion[] = [
       'src/server/interfaces/index.ts',
       'src/shared/index.ts',
       'src/websocket/index.ts',
+      'src/observability/index.ts',
       'src/react/index.ts',
     ],
   },
@@ -45,11 +46,12 @@ export const EXCLUSIONS: readonly Exclusion[] = [
 
 /** What the closure of the package entries must contain, so that an empty closure cannot pass every check. */
 export const EXPECTED = {
-  entries: 5,
+  entries: 6,
   includes: [
     'src/internal/index.ts',
     'src/server/index.ts',
     'src/websocket/index.ts',
+    'src/observability/index.ts',
     'src/shared/index.ts',
     'src/react/index.ts',
   ],

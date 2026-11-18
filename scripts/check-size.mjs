@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  18,236 B → 19,737 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  18,236 B → 21,079 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -63,7 +63,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     before the defaults merge and the type-only wording of every option refusal, with the key tables that read a group's known keys, 436 B, and the construction-time check of
 //     `RedisOfflineQueue`'s two options, with its error, 117 B, and the start-up check of the shape of the
 //     option groups and of the pluggable pieces, 448 B, and the refusal of an options argument, of a registration endpoint and of one with whitespace in it, of a built-in object where a group is expected, and of a queue built without its options or its client, 188 B, and the one test that counts the factory patterns and chooses the provider, so that a pattern set to `null` is read as unset, 42 B, measured on 2026-11-17)
-//   websocket  5,571 B →  5,681 B (the Socket.IO stack alone: the start-up message that names the
+//   websocket  5,571 B →  6,079 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server
@@ -76,7 +76,10 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     refusal of a connection whose `onConnect` failed under `onConnectFailure: 'close'`, 31 B, and the room-name checks of the transport and of
 //     the composite, which refuse what is not a non-empty string and what starts with a reserved
 //     prefix, 49 B, and the helpers of `registerSocket`, which stay within the 50-line function
-//     limit, 31 B, measured on 2026-11-17)
+//     limit, 31 B, and the counting of the refusals, the revocations, the evictions and the deliveries in the tally the
+//     observability entry reads, then the seam that wraps a handshake and a re-authentication cycle in a span when the optional API is installed, then the object form of every warn and error line with its stable code; on the shared runtime they cost 451 B, 432 B and 455 B, 4 B more for the rest, and on the WebSocket bundle 137 B, 134 B and 127 B, measured on 2026-11-17)
+//   observability  1,079 B → 1,109 B (the metrics contributor and the pub/sub health indicator: five collectors read from the tally and the registry, the
+//     entry nobody installs unless they publish metrics, so it carries no weight for anyone else)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
 //   react      2,817 B →  2,847 B (the resume parameter: the last event id the hook saw, replacing one
 //     the url already carries, before any fragment, and the helpers of the two hooks, which stay
@@ -93,8 +96,13 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 19_737 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 5_681 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 21_079 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 6_079 },
+  {
+    name: 'observability (metrics contributor)',
+    path: 'dist/observability/index.mjs',
+    brotli: 1_109,
+  },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_847 },
 ]
@@ -109,10 +117,15 @@ const SSE_ONLY_BUNDLES = [
   'dist/internal/index.cjs',
 ]
 const SOCKET_IO_TOKENS = ['@nestjs/websockets', '@nestjs/platform-socket.io', 'socket.io']
+// The optional peers only the observability entry may name: an application that publishes no metrics does
+// not install them, so a static import in the root or the shared runtime would make the package unimportable.
+const OBSERVABILITY_PEER_TOKENS = ['@bymax-one/nest-core', 'prom-client', '@opentelemetry/api']
 
 const FORBIDDEN_STATIC = [
   { path: 'dist/react/index.mjs', token: 'socket.io-client' },
-  ...SSE_ONLY_BUNDLES.flatMap((path) => SOCKET_IO_TOKENS.map((token) => ({ path, token }))),
+  ...SSE_ONLY_BUNDLES.flatMap((path) =>
+    [...SOCKET_IO_TOKENS, ...OBSERVABILITY_PEER_TOKENS].map((token) => ({ path, token })),
+  ),
 ]
 
 // The mirror image: the entry points must *reach* the shared runtime rather than
@@ -125,6 +138,8 @@ const REQUIRED_STATIC = [
   'dist/server/index.cjs',
   'dist/websocket/index.mjs',
   'dist/websocket/index.cjs',
+  'dist/observability/index.mjs',
+  'dist/observability/index.cjs',
 ].map((path) => ({ path, token: '@bymax-one/nest-realtime/internal' }))
 
 function brotliSize(buffer) {

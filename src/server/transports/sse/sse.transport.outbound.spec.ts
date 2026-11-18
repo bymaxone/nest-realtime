@@ -61,10 +61,14 @@ describe('SseTransport: a client that does not read', () => {
     expect(received).toHaveLength(2)
     expect(connections.get('slow')).toBeUndefined()
     expect(reasons).toStrictEqual([REALTIME_ERROR_CODES.SLOW_CONSUMER])
-    expect(warn).toHaveBeenCalledWith(
-      `${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection slow, its client has not read what was sent ` +
-        '(2 events, 86 bytes queued, 10 bytes held by the response)',
-    )
+    expect(warn).toHaveBeenCalledWith({
+      event: 'REALTIME_SLOW_CONSUMER',
+      message: 'closing an SSE connection, its client has not read what was sent',
+      connectionId: 'slow',
+      queuedEvents: 2,
+      queuedBytes: 86,
+      heldBytes: 10,
+    })
   })
 
   it('closes only that connection: another receives the event', async () => {
@@ -124,7 +128,9 @@ describe('SseTransport: a client that does not read', () => {
 
     expect(bounded).toHaveLength(0)
     expect(unbounded).toHaveLength(1)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('SSE delivery failed for a'))
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('SSE delivery failed') }),
+    )
   })
 
   // Nest writes a string as it is, so its quotes and escapes are not on the wire and must not be counted.
@@ -190,10 +196,14 @@ describe('SseTransport: a client that does not read', () => {
 
       expect(connections.get('slow')).toBeUndefined()
       expect(reasons).toStrictEqual([REALTIME_ERROR_CODES.SLOW_CONSUMER])
-      expect(warn).toHaveBeenCalledWith(
-        `${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection slow, its socket has taken nothing for several heartbeats ` +
-          '(0 events, 0 bytes queued, 10 bytes held by the response)',
-      )
+      expect(warn).toHaveBeenCalledWith({
+        event: 'REALTIME_SLOW_CONSUMER',
+        message: 'closing an SSE connection, its socket has taken nothing for several heartbeats',
+        connectionId: 'slow',
+        queuedEvents: 0,
+        queuedBytes: 0,
+        heldBytes: 10,
+      })
     })
 
     it('does nothing for a connection it does not track', async () => {
@@ -223,6 +233,8 @@ describe('SseTransport: a client that does not read', () => {
     await transport.emitToUser('u1', 'e', 2)
     await new Promise((resolve) => setImmediate(resolve))
 
-    expect(warn).toHaveBeenCalledWith('Closing slow SSE connection slow failed: close failed')
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Closing a slow SSE connection failed: close failed' }),
+    )
   })
 })

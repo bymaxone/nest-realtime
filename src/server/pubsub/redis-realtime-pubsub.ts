@@ -10,6 +10,7 @@ import type {
   RealtimePubSubMessage,
 } from '../interfaces/realtime-pubsub.interface'
 import { describeError } from '../utils/describe-error'
+import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
 
@@ -355,8 +356,11 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     const reason = describeError(err)
     if (reason === this.#lastRefusal) return
     this.#lastRefusal = reason
-    this.logger.warn(
-      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: the server refused the subscription to "${this.channel}": ${reason}`,
+    logEvent(
+      this.logger,
+      'warn',
+      'REALTIME_PUBSUB_UNAVAILABLE',
+      `the server refused the subscription: ${reason}`,
     )
   }
 
@@ -374,8 +378,11 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     this.#subscribed = false
     if (this.#outageLogged) return
     this.#outageLogged = true
-    this.logger.warn(
-      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: not subscribed to "${this.channel}": ${reason}. Remote events and revocations will not reach this instance until it subscribes again`,
+    logEvent(
+      this.logger,
+      'warn',
+      'REALTIME_PUBSUB_UNAVAILABLE',
+      `not subscribed: ${reason}. Remote events and revocations will not reach this instance until it subscribes again`,
     )
   }
 
@@ -387,8 +394,12 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     this.malformedDropped++
     const now = Date.now()
     if (now - this.malformedReportedAt < MALFORMED_REPORT_INTERVAL_MS) return
-    this.logger.warn(
-      `${REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE}: dropped ${this.malformedDropped} malformed payload(s) on "${this.channel}" since the last report`,
+    logEvent(
+      this.logger,
+      'warn',
+      'REALTIME_PUBSUB_DROPPED',
+      `dropped ${this.malformedDropped} malformed payload(s) since the last report`,
+      { count: this.malformedDropped, last: 'malformed' },
     )
     this.malformedDropped = 0
     this.malformedReportedAt = now

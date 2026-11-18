@@ -62,7 +62,9 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
     expect(JSON.stringify(body)).not.toContain('real userId')
     expect(reason).toContain('REALTIME_AUTH_FAILED')
     expect(errorSpy).toHaveBeenCalledTimes(1)
-    expect(errorSpy).toHaveBeenCalledWith(`SSE connection refused — responding 500: ${reason}`)
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: `SSE connection refused — responding 500: ${reason}` }),
+    )
     errorSpy.mockRestore()
   })
 
@@ -82,7 +84,9 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
         message: 'Internal Server Error',
       })
       expect(transport.registerConnection).not.toHaveBeenCalled()
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('reserved prefix "user:"'))
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('reserved prefix "user:"') }),
+      )
     } finally {
       errorSpy.mockRestore()
     }

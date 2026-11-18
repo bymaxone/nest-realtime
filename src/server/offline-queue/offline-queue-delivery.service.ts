@@ -16,6 +16,7 @@ import type {
 } from '../interfaces/offline-queue-storage.interface'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { describeError } from '../utils/describe-error'
+import { logEvent } from '../utils/log-event'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
 import { windowedReport } from '../utils/windowed-report'
 
@@ -68,8 +69,12 @@ export class OfflineQueueDeliveryService {
   private readonly timeouts = windowedReport(
     () => 0,
     (count) => {
-      this.logger.warn(
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_RECONNECTS_GIVEN_UP',
         `reconnects given up on since the last report: ${count}, because the offline queue did not answer in ${this.timeoutMs} ms or already had ${this.maxPending} reads waiting`,
+        { count, timeoutMs: this.timeoutMs, maxPending: this.maxPending },
       )
     },
   )
@@ -149,8 +154,12 @@ export class OfflineQueueDeliveryService {
     }
 
     if (events.length === RETRIEVE_LIMIT) {
-      this.logger.warn(
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_OFFLINE_QUEUE_LIMIT',
         `Offline queue retrieve hit the ${RETRIEVE_LIMIT}-event limit for user; older gap events may be dropped.`,
+        { limit: RETRIEVE_LIMIT },
       )
     }
 
@@ -175,7 +184,12 @@ export class OfflineQueueDeliveryService {
     try {
       await this.storage.acknowledge(userId, lastId)
     } catch (err) {
-      this.logger.warn(`Offline queue acknowledge failed: ${describeError(err)}`)
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_OFFLINE_QUEUE_ACK_FAILED',
+        `Offline queue acknowledge failed: ${describeError(err)}`,
+      )
     }
   }
 

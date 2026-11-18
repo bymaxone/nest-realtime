@@ -59,7 +59,10 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
         '10.20.30.40',
       )
       expect(errorSpy).toHaveBeenCalledWith(
-        'SSE authentication failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+        expect.objectContaining({
+          message:
+            'SSE authentication failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+        }),
       )
     } finally {
       errorSpy.mockRestore()
@@ -81,7 +84,10 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
         InternalServerErrorException,
       )
       expect(errorSpy).toHaveBeenCalledWith(
-        'SSE authentication failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+        expect.objectContaining({
+          message:
+            'SSE authentication failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+        }),
       )
     } finally {
       errorSpy.mockRestore()
@@ -130,7 +136,9 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
         '10.20.30.40',
       )
       expect(errorSpy).toHaveBeenCalledWith(
-        'SSE handshake failed — responding 500: cache 10.20.30.40:6379 down',
+        expect.objectContaining({
+          message: 'SSE handshake failed — responding 500: cache 10.20.30.40:6379 down',
+        }),
       )
     } finally {
       errorSpy.mockRestore()
@@ -150,7 +158,9 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
       await expect(handler.authenticateBeforeCommit(mkReq())).rejects.toBeInstanceOf(
         InternalServerErrorException,
       )
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('null'))
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('null') }),
+      )
     } finally {
       errorSpy.mockRestore()
     }
@@ -185,7 +195,9 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
         '10.20.30.40',
       )
       expect(errorSpy).toHaveBeenCalledWith(
-        'SSE handshake failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+        expect.objectContaining({
+          message: 'SSE handshake failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+        }),
       )
     } finally {
       errorSpy.mockRestore()

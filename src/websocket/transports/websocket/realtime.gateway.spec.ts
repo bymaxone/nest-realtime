@@ -16,6 +16,7 @@ import type {
   IConnectionAuthenticator,
   BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
+import { lineOf } from '../../../../test/support/log-lines'
 import { WebSocketTransport } from './websocket.transport'
 import { RealtimeGateway } from './realtime.gateway'
 import { RealtimeIoAdapter } from './realtime-io-adapter'
@@ -231,7 +232,7 @@ describe('RealtimeGateway', () => {
       gateway.afterInit({ use: jest.fn() } as never)
 
       expect(errorSpy).toHaveBeenCalledTimes(1)
-      const message = String(errorSpy.mock.calls[0]?.[0])
+      const message = lineOf(errorSpy.mock.calls[0]?.[0])
       expect(message).toContain('RealtimeIoAdapter is not the active WebSocket adapter')
       expect(message).toContain('(cors, redisAdapter)')
       expect(message).toContain('origin: false')
@@ -244,7 +245,7 @@ describe('RealtimeGateway', () => {
       gateway.afterInit({ use: jest.fn() } as never)
 
       expect(errorSpy).toHaveBeenCalledTimes(1)
-      const message = String(errorSpy.mock.calls[0]?.[0])
+      const message = lineOf(errorSpy.mock.calls[0]?.[0])
       expect(message).toContain('so the websocket options are ignored and the gateway CORS')
       expect(message).not.toMatch(/websocket options \(/)
     })
@@ -252,7 +253,7 @@ describe('RealtimeGateway', () => {
     it('says in the README exactly what it logs', () => {
       // A consumer who meets the message looks it up in the README, so the text must match.
       gateway.afterInit({ use: jest.fn() } as never)
-      const message = String(errorSpy.mock.calls[0]?.[0])
+      const message = lineOf(errorSpy.mock.calls[0]?.[0])
       const readme = readFileSync(join(__dirname, '..', '..', '..', '..', 'README.md'), 'utf8')
 
       expect(readme).toContain(message)
@@ -282,7 +283,9 @@ describe('RealtimeGateway', () => {
     const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     try {
       await gateway.handleConnection(socket as never)
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('token-verify-fail'))
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('token-verify-fail') }),
+      )
     } finally {
       errorSpy.mockRestore()
     }
@@ -524,7 +527,7 @@ describe('RealtimeGateway', () => {
 
         expect(socket.disconnect).toHaveBeenCalledWith(true)
         expect(errorSpy).toHaveBeenCalledWith(
-          `handleConnection threw for socket sock-1 — disconnecting: ${logged}`,
+          expect.objectContaining({ message: `handleConnection threw — disconnecting: ${logged}` }),
         )
       } finally {
         errorSpy.mockRestore()
@@ -675,7 +678,11 @@ describe('RealtimeGateway', () => {
         const err = next.mock.calls[0]?.[0] as Error & { data?: unknown }
         expect(err.message).toBe('Internal Server Error')
         expect(err.data).toBeUndefined()
-        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('session store unreachable'))
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: expect.stringContaining('session store unreachable'),
+          }),
+        )
       } finally {
         errorSpy.mockRestore()
       }
@@ -699,7 +706,9 @@ describe('RealtimeGateway', () => {
 
           expect(next).toHaveBeenCalledTimes(1)
           expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
-          expect(errorSpy).toHaveBeenCalledWith(`handshake refused for socket sock-1: ${logged}`)
+          expect(errorSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ message: `handshake refused: ${logged}` }),
+          )
         } finally {
           errorSpy.mockRestore()
         }

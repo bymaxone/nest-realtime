@@ -572,7 +572,11 @@ describe('SseTransport', () => {
       await transport.emitToUser('u1', 'foo', {})
       // One microtask flush to let the fire-and-forget .catch run.
       await Promise.resolve()
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Offline queue append failed'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Offline queue append failed'),
+        }),
+      )
     } finally {
       warnSpy.mockRestore()
     }
@@ -599,7 +603,9 @@ describe('SseTransport', () => {
         await transport.emitToUser('u1', 'foo', {})
         await new Promise((resolve) => setImmediate(resolve))
         expect(warnSpy).toHaveBeenCalledWith(
-          `REALTIME_TRANSPORT_UNAVAILABLE op=offlineAppend: Offline queue append failed: ${logged}`,
+          expect.objectContaining({
+            message: `Offline queue append failed: ${logged}`,
+          }),
         )
         expect(unhandled).not.toHaveBeenCalled()
       } finally {
@@ -626,7 +632,9 @@ describe('SseTransport', () => {
     const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     try {
       await transport.unregisterConnection('c1')
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('hook-error'))
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('hook-error') }),
+      )
     } finally {
       errorSpy.mockRestore()
     }
@@ -686,7 +694,9 @@ describe('SseTransport', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       await transport.emitToUser('u1', 'foo', {})
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('redis-down'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('redis-down') }),
+      )
     } finally {
       warnSpy.mockRestore()
     }
@@ -715,7 +725,9 @@ describe('SseTransport', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       await transport.emitToUser('u1', 'foo', {})
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('deliver-error'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('deliver-error') }),
+      )
     } finally {
       warnSpy.mockRestore()
     }

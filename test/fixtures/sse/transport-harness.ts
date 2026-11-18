@@ -6,6 +6,7 @@
 import type { MessageEvent } from '@nestjs/common'
 import { Subject } from 'rxjs'
 import type { IOfflineQueueStorage } from '../../../src/server/interfaces/offline-queue-storage.interface'
+import type { RealtimeMetricsTally } from '../../../src/server/observability/realtime-metrics-tally'
 import { ConnectionRegistry } from '../../../src/server/services/connection-registry.service'
 import type { ConnectionRecord } from '../../../src/server/services/connection-registry.service'
 import { EventIdGenerator } from '../../../src/server/services/event-id-generator.service'
@@ -40,6 +41,7 @@ export function build(opts?: {
   offlineQueue?: IOfflineQueueStorage
   hookTimeoutMs?: number
   admission?: ConnectionAdmission
+  tally?: RealtimeMetricsTally
 }) {
   const connections = new ConnectionRegistry()
   const rooms = new RoomRegistry()
@@ -67,6 +69,7 @@ export function build(opts?: {
     opts?.instanceId ?? 'inst-1',
     opts?.offlineQueue,
     opts?.admission,
+    opts?.tally,
   )
   return {
     transport,

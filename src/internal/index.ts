@@ -66,6 +66,24 @@ export { SseSubscriptionHandler } from '../server/transports/sse/sse-subscriptio
 export { SseTransport } from '../server/transports/sse/sse.transport'
 export { createSseController } from '../server/factories/sse-controller.factory'
 
+// Counts the transports keep for the optional observability entry.
+export {
+  EVICTION_REASONS,
+  REFUSAL_REASONS,
+  RealtimeMetricsTally,
+  TALLY_TRANSPORTS,
+} from '../server/observability/realtime-metrics-tally'
+export { RealtimeTracing } from '../server/observability/realtime-tracing'
+export type {
+  RealtimeSpanAttributes,
+  RealtimeSpanName,
+} from '../server/observability/realtime-tracing'
+export type {
+  EvictionReason,
+  RefusalReason,
+  TallyTransport,
+} from '../server/observability/realtime-metrics-tally'
+
 // Pub/sub.
 export { InMemoryPubSub } from '../server/pubsub/in-memory-pubsub'
 export { RealtimePubSubSubscriber } from '../server/pubsub/realtime-pubsub-subscriber'
@@ -81,6 +99,8 @@ export { assertIdentityIsNotBlank, resolveAuthTenant } from '../server/utils/ass
 export { admitRooms } from '../server/utils/admit-rooms'
 export { composeRoomId } from '../server/utils/compose-room-id'
 export { describeError } from '../server/utils/describe-error'
+export { logEvent, REALTIME_LOG_EVENTS } from '../server/utils/log-event'
+export type { LogFields, RealtimeLogEvent } from '../server/utils/log-event'
 export { quitWithin } from '../server/utils/quit-within'
 export type { QuitableClient } from '../server/utils/quit-within'
 export { runHook } from '../server/utils/run-hook'

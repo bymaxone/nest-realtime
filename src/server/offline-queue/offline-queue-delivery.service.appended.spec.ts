@@ -63,7 +63,9 @@ describe('OfflineQueueDeliveryService.retrieveGap', () => {
     })
 
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('Offline queue retrieve failed: down'),
+      expect.objectContaining({
+        message: expect.stringContaining('Offline queue retrieve failed: down'),
+      }),
     )
     warn.mockRestore()
   })

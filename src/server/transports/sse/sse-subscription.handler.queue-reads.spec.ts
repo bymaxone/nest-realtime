@@ -178,6 +178,8 @@ describe('SseSubscriptionHandler: what is logged for a second read that fails af
     await reconnect('ok', 'store error')
 
     expect(error).toHaveBeenCalledTimes(1)
-    expect(error).toHaveBeenCalledWith('SSE handshake failed — responding 500: down')
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'SSE handshake failed — responding 500: down' }),
+    )
   })
 })

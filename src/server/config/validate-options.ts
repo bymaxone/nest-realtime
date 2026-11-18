@@ -147,7 +147,12 @@ function validateReauthPolicy(options: BymaxRealtimeModuleOptions): void {
     policy.cacheTtlMs > policy.intervalSeconds * 1000
   ) {
     Logger.warn(
-      `[BymaxRealtimeModule] reauthenticationPolicy.cacheTtlMs (${policy.cacheTtlMs} ms) exceeds intervalSeconds*1000 (${policy.intervalSeconds * 1000} ms): the positive reauth cache outlives the interval, so revalidate is skipped on ticks within the cache window — reauthentication is effectively weakened`,
+      {
+        event: 'REALTIME_REAUTH_CACHE_WEAKENS_POLICY',
+        message: `[BymaxRealtimeModule] reauthenticationPolicy.cacheTtlMs (${policy.cacheTtlMs} ms) exceeds intervalSeconds*1000 (${policy.intervalSeconds * 1000} ms): the positive reauth cache outlives the interval, so revalidate is skipped on ticks within the cache window — reauthentication is effectively weakened`,
+        cacheTtlMs: policy.cacheTtlMs,
+        intervalMs: policy.intervalSeconds * 1000,
+      },
       'BymaxRealtimeModule',
     )
   }

@@ -73,7 +73,9 @@ describe('OfflineQueueDeliveryService', () => {
         await service.retrieve('u1', 'last-1', new Set())
         await new Promise((resolve) => setImmediate(resolve))
         expect(warnSpy).toHaveBeenCalledWith(
-          'REALTIME_TRANSPORT_UNAVAILABLE op=offlineRetrieve: Offline queue retrieve failed: redis down',
+          expect.objectContaining({
+            message: 'Offline queue retrieve failed: redis down',
+          }),
         )
         expect(onDeliveryFailure).toHaveBeenCalledWith({
           code: 'REALTIME_TRANSPORT_UNAVAILABLE',
@@ -93,7 +95,9 @@ describe('OfflineQueueDeliveryService', () => {
       const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
       try {
         await service.retrieve('u1', 'last-1', new Set())
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('queue-down'))
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ message: expect.stringContaining('queue-down') }),
+        )
       } finally {
         warnSpy.mockRestore()
       }
@@ -111,7 +115,9 @@ describe('OfflineQueueDeliveryService', () => {
       try {
         const result = await service.retrieve('u1', 'last-1', new Set())
         expect(result).toHaveLength(RETRIEVE_LIMIT)
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('limit'))
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ message: expect.stringContaining('limit') }),
+        )
       } finally {
         warnSpy.mockRestore()
       }
@@ -157,7 +163,9 @@ describe('OfflineQueueDeliveryService', () => {
       const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
       try {
         await service.acknowledge('u1', [mkEvent('1')])
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ack-failure'))
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ message: expect.stringContaining('ack-failure') }),
+        )
       } finally {
         warnSpy.mockRestore()
       }

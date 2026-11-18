@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto'
 import {
   HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -17,6 +18,8 @@ import type { MessageEvent } from '@nestjs/common'
 import { EMPTY, merge, Observable, of, Subject } from 'rxjs'
 import type { Subscriber, Subscription } from 'rxjs'
 import { catchError, finalize, takeUntil } from 'rxjs/operators'
+import { RealtimeMetricsTally } from '../../observability/realtime-metrics-tally'
+import { RealtimeTracing } from '../../observability/realtime-tracing'
 import {
   OfflineQueueDeliveryService,
   OfflineQueueTimeoutError,
@@ -39,6 +42,7 @@ import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-modul
 import type { SseRequest, SseResponse } from '../../interfaces/sse-http.interface'
 import { admitRooms } from '../../utils/admit-rooms'
 import { assertIdentityIsNotBlank, resolveAuthTenant } from '../../utils/assert-identity'
+import { logEvent } from '../../utils/log-event'
 import { parseCookieHeader } from '../../utils/parse-cookie-header'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { resolveClientAddress } from '../../utils/client-address'
@@ -194,6 +198,14 @@ export class SseSubscriptionHandler {
     @Optional()
     @Inject(OfflineQueueDeliveryService)
     private readonly offlineDelivery?: OfflineQueueDeliveryService,
+    // Optional so the handler can be unit-constructed in isolation; the module always provides it.
+    @Optional()
+    @Inject(RealtimeMetricsTally)
+    private readonly tally?: RealtimeMetricsTally,
+    // Optional so the handler can be unit-constructed in isolation; the module always provides it.
+    @Optional()
+    @Inject(RealtimeTracing)
+    private readonly tracing?: RealtimeTracing,
   ) {}
 
   /**
@@ -225,7 +237,12 @@ export class SseSubscriptionHandler {
       assertIdentityIsNotBlank(resolvedAuth)
       resolvedAuth = admitRooms(resolvedAuth)
     } catch (err) {
-      this.logger.error(`SSE connection refused — responding 500: ${describeError(err)}`)
+      logEvent(
+        this.logger,
+        'error',
+        'REALTIME_HANDSHAKE_FAILED',
+        `SSE connection refused — responding 500: ${describeError(err)}`,
+      )
       throw new InternalServerErrorException()
     }
     return resolvedAuth
@@ -290,6 +307,7 @@ export class SseSubscriptionHandler {
   /** Refuse a new stream with a 503 once shutdown has begun. */
   private refuseDuringShutdown(): void {
     if (this.transport.shuttingDown) {
+      this.tally?.refused('unavailable')
       throw new ServiceUnavailableException(REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE)
     }
   }
@@ -359,18 +377,39 @@ export class SseSubscriptionHandler {
     // A handshake the authenticator could not be asked about, or did not answer in time, is the
     // system being unavailable: a 503 with the generic body, counted and logged by the gate once for
     // each window rather than once for each request.
-    if (err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError) {
+    if (err instanceof ConnectionLimitError) {
+      this.tally?.refused('limit')
       return new ServiceUnavailableException()
+    }
+    if (err instanceof AuthenticationUnavailableError) {
+      this.tally?.refused('unavailable')
+      return new ServiceUnavailableException()
+    }
+    if (err instanceof HttpException && err.getStatus() === HttpStatus.UNAUTHORIZED) {
+      this.tally?.refused('unauthorized')
     }
     return err instanceof HttpException ? err : this.serverError(err, what)
   }
 
   private serverError(err: unknown, what: string): HttpException {
-    this.logger.error(`${what} — responding 500: ${describeError(err)}`)
+    logEvent(
+      this.logger,
+      'error',
+      'REALTIME_HANDSHAKE_FAILED',
+      `${what} — responding 500: ${describeError(err)}`,
+    )
     return new InternalServerErrorException()
   }
 
-  private async authenticateRequest(
+  /** Admit and authenticate a handshake, inside the `realtime.handshake` span when tracing is wired. */
+  private authenticateRequest(req: SseRequest, res?: SseResponse): Promise<AuthenticatedRequest> {
+    const run = (): Promise<AuthenticatedRequest> => this.admitAndAuthenticate(req, res)
+    return this.tracing
+      ? this.tracing.span('realtime.handshake', { 'bymax.realtime.transport': 'sse' }, run)
+      : run()
+  }
+
+  private async admitAndAuthenticate(
     req: SseRequest,
     res?: SseResponse,
   ): Promise<AuthenticatedRequest> {
@@ -599,7 +638,12 @@ export class SseSubscriptionHandler {
   private fireHook(invoke: () => void | Promise<void>, onFailure?: () => void): void {
     void runHook(invoke).then((failed) => {
       if (!failed) return
-      this.logger.warn(`Lifecycle hook failed: ${describeError(failed.error)}`)
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_HOOK_FAILED',
+        `Lifecycle hook failed: ${describeError(failed.error)}`,
+      )
       onFailure?.()
     })
   }

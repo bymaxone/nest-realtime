@@ -5,6 +5,7 @@
  */
 import { Logger } from '@nestjs/common'
 import type { Redis } from 'ioredis'
+import { lineOf } from '../../../test/support/log-lines'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
 // A server that refuses the SUBSCRIBE can be asked twice around one boot: the SUBSCRIBE queued while
@@ -14,7 +15,7 @@ import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 describe('a refusal of the SUBSCRIBE', () => {
   const refusal = (message: string) => Object.assign(new Error(message), { name: 'ReplyError' })
   const refusedLines = (warn: jest.SpyInstance): string[] =>
-    warn.mock.calls.map(([line]) => String(line)).filter((line) => line.includes('refused'))
+    warn.mock.calls.map(([line]) => lineOf(line)).filter((line) => line.includes('refused'))
   const flush = () => new Promise((resolve) => setImmediate(resolve))
 
   function boot(answers: Array<Error | 'accept'>) {

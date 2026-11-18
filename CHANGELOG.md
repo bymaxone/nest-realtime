@@ -7,6 +7,18 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Added
+
+- **Observability, all optional: metrics, a health indicator, spans and log events with stable codes.** A new subpath, `@bymax-one/nest-realtime/observability`, exports `RealtimeMetrics` and `RealtimePubSubHealthIndicator`. Registered as providers of a module of the application, `RealtimeMetrics` publishes `bymax_realtime_connections{transport}`, `bymax_realtime_connections_refused_total{reason}`, `bymax_realtime_evictions_total{reason}`, `bymax_realtime_events_emitted_total{transport}` and `bymax_realtime_slow_consumer_drops_total`, every label from a closed set, and the indicator reports `down` when the bus says it is not subscribed. With `@opentelemetry/api` installed, the library starts `realtime.handshake` and `realtime.reauthenticate` spans, and with no SDK registered they cost nothing. The root and the shared runtime import none of `@bymax-one/nest-core`, `prom-client` or `@opentelemetry/api`, which are optional peers, and `pnpm size` fails if one of them reaches those bundles. The README has the Metrics table, the Traces and Health notes and a Log events table.
+
+### Changed
+
+- **Every `warn` and `error` line is an object with a stable code.** The line is `{ event: 'REALTIME_<EVENT>', message, ...fields }`, so a structured logger writes each as a JSON field and Nest's default logger prints the object instead of a sentence. The message text is the library's own and no longer names a user, a tenant, a room, a channel or a socket: those values were removed from the text, and the logger's own context carries identity. A connection id may be a field. A line that says the library started stays a string.
+
+#### Apply to a derived backend
+
+An alert or a log filter that matched the text of a `warn` or `error` line now matches the `event` field instead; the codes are in the README. A host that parsed a line for a user, tenant, room or channel will not find it. Metrics and spans start only when the application registers `RealtimeMetrics` and installs `@opentelemetry/api`; without either nothing changes. A class that subclasses `SseTransport`, `SseSubscriptionHandler`, `WebSocketTransport`, `RealtimeGateway` or `ReauthenticationService` and builds it by hand gains optional trailing constructor parameters and keeps working without them.
+
 ### Fixed
 
 - **Inputs were accepted, or failed as a raw `TypeError`, where a typed refusal belongs.** The `sseEndpoint` of `forRootAsync` was not covered by the check `sse.endpoint` got: a number failed as `endpoint.startsWith is not a function` and a blank one registered and served no route. A `forRoot` or `forRootAsync` called with no options, `null`, a string, a number or an array failed as "Cannot convert undefined or null to object", or as a message about `options.transport`; a factory that answered a string or a number was read the same way. A `Date` was accepted as `sse`, `websocket`, `reauthenticationPolicy` or `hooks`, because it is not an array. `new RedisOfflineQueue(undefined)` threw a raw `TypeError` and a string was accepted with no `client`. An endpoint with a space in it, `' /x '` or `'/a b'`, was registered and unreachable. Each of those is now refused with `REALTIME_INVALID_OPTIONS`, naming the option and what it received (`a built-in object` for a `Date`, a `Map` and the like). A `forRootAsync` pattern (`useFactory`, `useClass` or `useExisting`) set to `null` now reads as unset, like `undefined`: beside the pattern in use it is no longer counted as a second one, and alone it is refused at registration instead of failing at bootstrap with the container's own error.
@@ -14,6 +26,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 #### Apply to a derived backend
 
 A `sseEndpoint` or `sse.endpoint` that held whitespace, an options argument or factory result that was not an object, and a group that was a `Date` or another built-in now fail at registration, where they used to start or fail later: fix the value. A `RedisOfflineQueue` built without options or without a `client` now throws at construction. An instance of your own class is still read as a group by its keys.
+
+### Documentation
+
+- **The README names every export of every public subpath.** A spec now fails when a name in the public-surface snapshot, or one of the contract members an implementor writes, is missing from it. The README gained a Types and constants section and the Observability section.
 
 ## [1.2.18] - 2026-11-17
 

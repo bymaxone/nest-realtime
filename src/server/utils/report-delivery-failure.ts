@@ -8,6 +8,7 @@ import type {
   IConnectionLifecycleHooks,
 } from '../interfaces/connection-lifecycle-hooks.interface'
 import { describeError } from './describe-error'
+import { logEvent } from './log-event'
 
 /**
  * Logs a delivery failure with its stable code and the operation, and hands it to the
@@ -25,7 +26,10 @@ export function reportDeliveryFailure(
   failure: Omit<DeliveryFailure, 'error'> & { readonly error: unknown },
   what: string,
 ): void {
-  logger.warn(`${failure.code} op=${failure.op}: ${what}: ${describeError(failure.error)}`)
+  logEvent(logger, 'warn', 'REALTIME_DELIVERY_FAILED', `${what}: ${describeError(failure.error)}`, {
+    code: failure.code,
+    op: failure.op,
+  })
   const reported: DeliveryFailure = {
     ...failure,
     error: failure.error instanceof Error ? failure.error : new Error(describeError(failure.error)),
@@ -33,6 +37,14 @@ export function reportDeliveryFailure(
   void Promise.resolve()
     .then(() => hooks?.onDeliveryFailure?.(reported))
     .catch((err: unknown) => {
-      logger.warn(`onDeliveryFailure hook failed: ${describeError(err)}`)
+      logEvent(
+        logger,
+        'warn',
+        'REALTIME_HOOK_FAILED',
+        `onDeliveryFailure hook failed: ${describeError(err)}`,
+        {
+          hook: 'onDeliveryFailure',
+        },
+      )
     })
 }

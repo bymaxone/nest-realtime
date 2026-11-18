@@ -9,6 +9,7 @@ import { Logger } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions } from '@bymax-one/nest-realtime/internal'
+import { lineOf } from '../../../../test/support/log-lines'
 import { RealtimeIoAdapter } from './realtime-io-adapter'
 
 // The Redis adapter's constructor is replaced, so the subscriber stand-ins below are all it is given.
@@ -253,7 +254,7 @@ describe('RealtimeIoAdapter subscriber connection', () => {
       await Promise.allSettled([sub.subscribe('a'), sub.psubscribe('b'), sub.punsubscribe('c')])
 
       expect(warn).toHaveBeenCalledTimes(1)
-      const text = String(warn.mock.calls[0]?.[0])
+      const text = lineOf(warn.mock.calls[0]?.[0])
       expect(text).toContain('RedisDown')
       expect(text).not.toContain('secret')
       expect(text).not.toContain('10.0.0.9')
@@ -268,7 +269,7 @@ describe('RealtimeIoAdapter subscriber connection', () => {
 
       await Promise.allSettled([sub.unsubscribe('a')])
 
-      expect(String(warn.mock.calls[0]?.[0])).toContain('(String)')
+      expect(lineOf(warn.mock.calls[0]?.[0])).toContain('(String)')
     })
 
     // Scenario: a rejection with no prototype, which has no constructor to name. Expected: the
@@ -288,7 +289,7 @@ describe('RealtimeIoAdapter subscriber connection', () => {
         process.off('unhandledRejection', unhandled)
       }
 
-      expect(String(warn.mock.calls[0]?.[0])).toContain('(Error)')
+      expect(lineOf(warn.mock.calls[0]?.[0])).toContain('(Error)')
       expect(unhandled).not.toHaveBeenCalled()
     })
 

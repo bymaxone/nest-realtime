@@ -30,6 +30,7 @@ import type {
   RealtimePubSubMessage,
 } from '../../interfaces/realtime-pubsub.interface'
 import type { ITransport } from '../../interfaces/transport.interface'
+import { RealtimeMetricsTally } from '../../observability/realtime-metrics-tally'
 import { ConnectionRegistry } from '../../services/connection-registry.service'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { EventIdGenerator } from '../../services/event-id-generator.service'
@@ -39,6 +40,7 @@ import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { ConnectionAdmission, UNBOUNDED_TICKET } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
 import { describeError } from '../../utils/describe-error'
+import { logEvent } from '../../utils/log-event'
 import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
 import { refuseReservedRoom, requireRoomName } from '../../utils/reserved-room'
@@ -116,6 +118,10 @@ export class SseTransport implements ITransport {
     @Optional()
     @Inject(ConnectionAdmission)
     private readonly admission?: ConnectionAdmission,
+    // Optional so a transport built by hand keeps working; the module always provides it.
+    @Optional()
+    @Inject(RealtimeMetricsTally)
+    private readonly tally?: RealtimeMetricsTally,
   ) {}
 
   /**
@@ -266,7 +272,17 @@ export class SseTransport implements ITransport {
         }),
       this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
     )
-    if (failed) this.logger.error(`onDisconnect hook failed: ${describeError(failed.error)}`)
+    if (failed) {
+      logEvent(
+        this.logger,
+        'error',
+        'REALTIME_HOOK_FAILED',
+        `onDisconnect hook failed: ${describeError(failed.error)}`,
+        {
+          hook: 'onDisconnect',
+        },
+      )
+    }
   }
 
   /** Replay the events a user missed after `lastEventId`. */
@@ -409,6 +425,7 @@ export class SseTransport implements ITransport {
       // A connection held here as a WebSocket is the WebSocket transport's to close:
       // `disconnectLocal` leaves it alone.
       await this.disconnectLocal(connectionId, reason)
+      this.tally?.evicted('revoked')
       return
     }
     try {
@@ -417,6 +434,7 @@ export class SseTransport implements ITransport {
         args: { connectionId, reason },
         origin: this.instanceId,
       })
+      this.tally?.evicted('revoked')
     } catch (error) {
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
@@ -435,6 +453,7 @@ export class SseTransport implements ITransport {
    */
   emitToUserLocal(userId: string, event: string, data: unknown, id: string): void {
     const message = this.buildMessage(id, event, data)
+    this.tally?.emitted('sse')
     this.replayBuffer.append(userId, message)
     for (const conn of this.connections.byUser(userId, 'sse')) this.deliver(conn, message)
   }
@@ -449,6 +468,7 @@ export class SseTransport implements ITransport {
    */
   emitToTenantLocal(tenantId: string, event: string, data: unknown, id: string): void {
     const message = this.buildMessage(id, event, data)
+    this.tally?.emitted('sse')
     for (const conn of this.connections.byTenant(tenantId, 'sse')) this.deliver(conn, message)
   }
 
@@ -462,6 +482,7 @@ export class SseTransport implements ITransport {
    */
   emitToRoomLocal(roomId: string, event: string, data: unknown, id: string): void {
     const message = this.buildMessage(id, event, data)
+    this.tally?.emitted('sse')
     for (const connectionId of this.rooms.members(roomId)) {
       const conn = this.connections.get(connectionId)
       if (conn && conn.transport === 'sse') this.deliver(conn, message)
@@ -478,6 +499,7 @@ export class SseTransport implements ITransport {
    */
   broadcastLocal(event: string, data: unknown, id: string): void {
     const message = this.buildMessage(id, event, data)
+    this.tally?.emitted('sse')
     for (const conn of this.connections.allByTransport('sse')) this.deliver(conn, message)
   }
 
@@ -513,7 +535,15 @@ export class SseTransport implements ITransport {
       }
       conn.subject?.next(message)
     } catch (error) {
-      this.logger.warn(`SSE delivery failed for ${conn.connectionId}: ${describeError(error)}`)
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_DELIVERY_FAILED',
+        `SSE delivery failed: ${describeError(error)}`,
+        {
+          connectionId: conn.connectionId,
+        },
+      )
     }
   }
 
@@ -545,15 +575,22 @@ export class SseTransport implements ITransport {
   }
 
   private cutSlowConsumer(connectionId: string, why: string, tracked: Outbound): void {
-    this.logger.warn(
-      `${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection ${connectionId}, ${why} ` +
-        `(${tracked.backlog.queuedEvents} events, ${tracked.backlog.queuedBytes} bytes queued, ` +
-        `${tracked.probe.buffered()} bytes held by the response)`,
-    )
+    this.tally?.evicted('slow_consumer')
+    this.tally?.slowConsumerDropped()
+    logEvent(this.logger, 'warn', 'REALTIME_SLOW_CONSUMER', `closing an SSE connection, ${why}`, {
+      connectionId,
+      queuedEvents: tracked.backlog.queuedEvents,
+      queuedBytes: tracked.backlog.queuedBytes,
+      heldBytes: tracked.probe.buffered(),
+    })
     this.disconnectLocal(connectionId, REALTIME_ERROR_CODES.SLOW_CONSUMER).catch(
       (error: unknown) => {
-        this.logger.warn(
-          `Closing slow SSE connection ${connectionId} failed: ${describeError(error)}`,
+        logEvent(
+          this.logger,
+          'warn',
+          'REALTIME_DISCONNECT_FAILED',
+          `Closing a slow SSE connection failed: ${describeError(error)}`,
+          { connectionId },
         )
       },
     )
@@ -593,6 +630,7 @@ export class SseTransport implements ITransport {
     let userConnections = this.connections.byUser(userId, 'sse')
     while (userConnections.length > max) {
       const oldest = userConnections.reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))
+      this.tally?.evicted('per_user_cap')
       await this.disconnectLocal(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
       userConnections = this.connections.byUser(userId, 'sse')
     }

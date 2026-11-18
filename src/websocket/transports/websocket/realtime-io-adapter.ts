@@ -9,6 +9,7 @@ import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
 import type { Server, ServerOptions } from 'socket.io'
 import {
   describeError,
+  logEvent,
   quitWithin,
   REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
@@ -160,7 +161,12 @@ export class RealtimeIoAdapter extends IoAdapter {
           if (reported) return
           reported = true
           const kind = (Object(err).constructor?.name as string | undefined) ?? 'Error'
-          this.adapterLogger.warn(`Redis adapter subscriber command failed (${kind})`)
+          logEvent(
+            this.adapterLogger,
+            'warn',
+            'REALTIME_ADAPTER_COMMAND_FAILED',
+            `Redis adapter subscriber command failed (${kind})`,
+          )
         })
         return pending
       }

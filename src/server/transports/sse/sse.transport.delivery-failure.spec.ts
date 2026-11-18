@@ -70,7 +70,11 @@ describe('SseTransport delivery failures', () => {
       await expect(transport.emitToTenant('t1', 'foo', {})).resolves.toBeUndefined()
       await new Promise((resolve) => setImmediate(resolve))
       expect(warnSpy).toHaveBeenCalledWith(
-        'REALTIME_PUBSUB_UNAVAILABLE op=emitToTenant: pubsub.publish failed: redis down',
+        expect.objectContaining({
+          event: 'REALTIME_DELIVERY_FAILED',
+          op: 'emitToTenant',
+          message: 'pubsub.publish failed: redis down',
+        }),
       )
       expect(onDeliveryFailure).toHaveBeenCalledTimes(1)
       expect(onDeliveryFailure).toHaveBeenCalledWith({
@@ -103,7 +107,9 @@ describe('SseTransport delivery failures', () => {
       try {
         await expect(transport.emitToUser('u1', 'foo', {})).resolves.toBeUndefined()
         await new Promise((resolve) => setImmediate(resolve))
-        expect(warnSpy).toHaveBeenCalledWith('onDeliveryFailure hook failed: hook boom')
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ message: 'onDeliveryFailure hook failed: hook boom' }),
+        )
         expect(unhandled).not.toHaveBeenCalled()
       } finally {
         process.off('unhandledRejection', unhandled)

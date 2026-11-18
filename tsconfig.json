@@ -26,6 +26,7 @@
     "paths": {
       "@bymax-one/nest-realtime": ["./src/server/index.ts"],
       "@bymax-one/nest-realtime/internal": ["./src/internal/index.ts"],
+      "@bymax-one/nest-realtime/observability": ["./src/observability/index.ts"],
       "@bymax-one/nest-realtime/shared": ["./src/shared/index.ts"],
       "@bymax-one/nest-realtime/react": ["./src/react/index.ts"]
     },

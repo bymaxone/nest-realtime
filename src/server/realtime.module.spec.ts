@@ -101,7 +101,9 @@ describe('BymaxRealtimeModule.forRoot', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       BymaxRealtimeModule.forRoot({ transport: 'sse', authenticator })
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('single-instance') }),
+      )
     } finally {
       process.env['NODE_ENV'] = original
       warnSpy.mockRestore()
@@ -291,7 +293,9 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
         ],
       }).compile()
       await mod.init()
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('single-instance') }),
+      )
       await mod.close()
     } finally {
       process.env['NODE_ENV'] = original

@@ -114,8 +114,12 @@ describe('ConnectionAdmission', () => {
     for (let i = 0; i < 50; i += 1) expect(() => admission.admit()).toThrow(ConnectionLimitError)
 
     expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('1 (maxConnections)'))
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('connections refused'))
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('1 (maxConnections)') }),
+    )
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('connections refused') }),
+    )
   })
 
   describe('the log of refusals', () => {
@@ -129,7 +133,9 @@ describe('ConnectionAdmission', () => {
       for (let i = 0; i < 5; i += 1) expect(() => admission.admit()).toThrow(ConnectionLimitError)
       expect(warn).toHaveBeenCalledTimes(1)
       expect(warn).toHaveBeenLastCalledWith(
-        expect.stringContaining('refused since the last report: 1,'),
+        expect.objectContaining({
+          message: expect.stringContaining('refused since the last report: 1,'),
+        }),
       )
 
       jest.advanceTimersByTime(9_999)
@@ -140,7 +146,9 @@ describe('ConnectionAdmission', () => {
 
       expect(warn).toHaveBeenCalledTimes(2)
       expect(warn).toHaveBeenLastCalledWith(
-        expect.stringContaining('refused since the last report: 6,'),
+        expect.objectContaining({
+          message: expect.stringContaining('refused since the last report: 6,'),
+        }),
       )
     })
   })

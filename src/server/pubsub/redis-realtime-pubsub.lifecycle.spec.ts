@@ -15,6 +15,7 @@ import {
 } from '../../../test/fixtures/fake-resp-server'
 import type { RespHandler } from '../../../test/fixtures/fake-resp-server'
 import { expectGenericServiceUnavailable } from '../../../test/fixtures/service-unavailable'
+import { lineOf } from '../../../test/support/log-lines'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
@@ -23,7 +24,7 @@ import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 jest.setTimeout(3_000)
 
 const CHANNEL = 'bymax:realtime'
-const DOWN_PREFIX = `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "${CHANNEL}": `
+const DOWN_PREFIX = `not subscribed: `
 const UP = `Subscribed to "${CHANNEL}"; remote events and revocations reach this instance`
 
 // What happened, in order, with the time since the test began. A failure carries it in its
@@ -50,13 +51,12 @@ function traced<A extends unknown[]>(body: (...args: A) => Promise<void>) {
 }
 
 /** The line the adapter logs for a refusal whose server message is `message`. */
-const refusalLine = (message: string): string =>
-  `REALTIME_PUBSUB_UNAVAILABLE: the server refused the subscription to "${CHANNEL}": ${message}`
+const refusalLine = (message: string): string => `the server refused the subscription: ${message}`
 
 /** The warnings mentioning `token`. Waits and assertions name their own server message, because
  * the logger spy is shared and another test's line must not satisfy them. */
 const linesAbout = (warn: jest.SpyInstance, token: string): string[] =>
-  warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes(token))
+  warn.mock.calls.map((call) => lineOf(call[0])).filter((line) => line.includes(token))
 
 const clients: Redis[] = []
 const unsubscribers: Array<() => Promise<void>> = []
@@ -219,7 +219,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       expect(pubsub.isSubscribed()).toBe(false)
       // Several retries pass; the log carries one line, not one per retry.
       await new Promise((resolve) => setTimeout(resolve, 400))
-      const lines = warn.mock.calls.map((call) => String(call[0]))
+      const lines = warn.mock.calls.map((call) => lineOf(call[0]))
       expect(lines).toHaveLength(1)
       expect(lines[0]).toMatch(
         new RegExp(
@@ -245,7 +245,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       expect(pubsub.isSubscribed()).toBe(false)
       // The one line names the close as the reason; the Error the boot race resolves with does not
       // reach the log.
-      expect(linesAbout(warn, 'not subscribed to')).toEqual([
+      expect(linesAbout(warn, 'not subscribed')).toEqual([
         `${DOWN_PREFIX}connection closed. Remote events and revocations will not reach this instance until it subscribes again`,
       ])
     }),
@@ -278,7 +278,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       await unsubscribing
       await new Promise((resolve) => setTimeout(resolve, 100))
       expect(pubsub.isSubscribed()).toBe(true)
-      expect(linesAbout(warn, 'not subscribed to')).toHaveLength(0)
+      expect(linesAbout(warn, 'not subscribed')).toHaveLength(0)
     }),
   )
 
@@ -319,7 +319,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       })
       await subscribe(pubsub)
       expect(pubsub.isSubscribed()).toBe(false)
-      expect(linesAbout(warn, 'not subscribed to')).toHaveLength(1)
+      expect(linesAbout(warn, 'not subscribed')).toHaveLength(1)
     }),
   )
 
@@ -337,7 +337,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       const received: RealtimePubSubMessage[] = []
       await subscribe(pubsub, (message) => received.push(message))
       expect(pubsub.isSubscribed()).toBe(false)
-      expect(linesAbout(warn, 'not subscribed to')).toHaveLength(1)
+      expect(linesAbout(warn, 'not subscribed')).toHaveLength(1)
 
       behave(fake, healthyRedis)
       await fake.start()
@@ -366,7 +366,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       await expect(unsubscribe()).resolves.toBeUndefined()
       // The queued SUBSCRIBE is rejected because the connection closed, which is not a refusal.
       await new Promise((resolve) => setTimeout(resolve, 100))
-      expect(warn.mock.calls.map((call) => String(call[0]))).toHaveLength(1)
+      expect(warn.mock.calls.map((call) => lineOf(call[0]))).toHaveLength(1)
     }),
   )
 
@@ -393,7 +393,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       fake.broadcast(pushed(CHANNEL, JSON.stringify(message)))
       await until('the pushed message', () => received.length === 1)
       expect(received[0]).toEqual(message)
-      expect(log.mock.calls.map((call) => String(call[0]))).toEqual([UP])
+      expect(log.mock.calls.map((call) => lineOf(call[0]))).toEqual([UP])
       expect(warn).toHaveBeenCalledTimes(1)
     }),
   )
@@ -427,7 +427,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
       await subscribe(pubsub)
       expect(pubsub.isSubscribed()).toBe(true)
-      expect(log.mock.calls.map((call) => String(call[0]))).toEqual([UP])
+      expect(log.mock.calls.map((call) => lineOf(call[0]))).toEqual([UP])
       behave(fake, (command, socket) =>
         command[0] === 'SUBSCRIBE' ? null : healthyRedis(command, socket),
       )
@@ -443,10 +443,10 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       )
       fake.drop()
       await until('the instance to report subscribed again', () => pubsub.isSubscribed())
-      expect(warn.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect(warn.mock.calls.map((call) => lineOf(call[0]))).toEqual([
         `${DOWN_PREFIX}connection closed. Remote events and revocations will not reach this instance until it subscribes again`,
       ])
-      expect(log.mock.calls.map((call) => String(call[0]))).toEqual([UP, UP])
+      expect(log.mock.calls.map((call) => lineOf(call[0]))).toEqual([UP, UP])
     }),
   )
 
@@ -467,7 +467,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       servers.push(fake)
       await until('the instance to report subscribed again', () => pubsub.isSubscribed())
       expect(warn).toHaveBeenCalledTimes(1)
-      expect(log.mock.calls.map((call) => String(call[0]))).toEqual([UP, UP])
+      expect(log.mock.calls.map((call) => lineOf(call[0]))).toEqual([UP, UP])
     }),
   )
 
