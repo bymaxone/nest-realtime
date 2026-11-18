@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  21,136 B → 21,166 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  21,233 B → 21,263 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -77,8 +77,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     the composite, which refuse what is not a non-empty string and what starts with a reserved
 //     prefix, 49 B, and the helpers of `registerSocket`, which stay within the 50-line function
 //     limit, 31 B, and the counting of the refusals, the revocations, the evictions and the deliveries in the tally the
-//     observability entry reads, then the seam that wraps a handshake and a re-authentication cycle in a span when the optional API is installed, then the object form of every warn and error line with its stable code; on the shared runtime they cost 451 B, 519 B and 455 B, 4 B more for the rest, and on the WebSocket bundle 137 B, 134 B and 127 B, measured on 2026-11-17)
-//   observability  1,079 B → 1,109 B (the metrics contributor and the pub/sub health indicator: five collectors read from the tally and the registry, the
+//     observability entry reads, then the seam that wraps a handshake and a re-authentication cycle in a span when the optional API is installed, then the object form of every warn and error line with its stable code; on the shared runtime they cost 451 B, 519 B and 455 B, 4 B more for the rest, and 97 B for the second release candidate (the host error written under `err`, the `error` refusal reason, the guards for a proxy whose reads throw and for a provider with no factory, and the cache check moved to the service), and on the WebSocket bundle 137 B, 134 B and 127 B, measured on 2026-11-17)
+//   observability  1,092 B → 1,122 B (the metrics contributor and the pub/sub health indicator: five collectors read from the tally and the registry, the
 //     entry nobody installs unless they publish metrics, so it carries no weight for anyone else)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
 //   react      2,817 B →  2,847 B (the resume parameter: the last event id the hook saw, replacing one
@@ -96,12 +96,12 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 21_166 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 21_263 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 6_079 },
   {
     name: 'observability (metrics contributor)',
     path: 'dist/observability/index.mjs',
-    brotli: 1_109,
+    brotli: 1_122,
   },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
   { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_847 },
