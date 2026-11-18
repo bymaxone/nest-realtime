@@ -72,6 +72,8 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   private readonly logger = new Logger(ReauthenticationService.name)
   private timer: NodeJS.Timeout | null = null
   private readonly policy: RequiredPolicy
+  /** The policy as the host wrote it: the cache check compares the two figures only when both were set. */
+  private readonly declared: ReauthenticationPolicy | undefined
   /** Connections with a revalidation queued or running: one call at a time for each. */
   private readonly inFlight = new Set<string>()
   /** The cap on revalidations in flight, shared by every cycle. */
@@ -87,6 +89,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     @Optional() @Inject(RealtimeTracing) private readonly tracing?: RealtimeTracing,
   ) {
     this.policy = resolvePolicy(options.reauthenticationPolicy)
+    this.declared = options.reauthenticationPolicy
     this.slots = new Semaphore(this.policy.concurrency)
   }
 
@@ -97,11 +100,26 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    * When the authenticator does not implement `revalidate`, the service stays
    * idle and emits an informative log.
    */
+  /** Warn once, through the application's logger, when the positive cache outlives the interval. */
+  private warnIfCacheOutlivesInterval(): void {
+    const { cacheTtlMs, intervalSeconds } = this.declared ?? {}
+    if (cacheTtlMs === undefined || intervalSeconds === undefined) return
+    if (cacheTtlMs <= intervalSeconds * 1000) return
+    logEvent(
+      this.logger,
+      'warn',
+      'REALTIME_REAUTH_CACHE_WEAKENS_POLICY',
+      `reauthenticationPolicy.cacheTtlMs (${cacheTtlMs} ms) exceeds intervalSeconds*1000 (${intervalSeconds * 1000} ms): the positive reauth cache outlives the interval, so revalidate is skipped on ticks within the cache window — reauthentication is effectively weakened`,
+      { cacheTtlMs, intervalMs: intervalSeconds * 1000 },
+    )
+  }
+
   onModuleInit(): void {
     if (!this.auth.revalidate) {
       this.logger.log('Authenticator does not implement revalidate() — reauthentication disabled')
       return
     }
+    this.warnIfCacheOutlivesInterval()
     this.timer = setInterval(() => {
       this.runCycle().catch((err: unknown) => {
         logEvent(

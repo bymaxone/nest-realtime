@@ -366,104 +366,16 @@ describe('validateOptions', () => {
     }
   })
 
-  // cacheTtlMs > intervalSeconds*1000 → Logger.warn (every cycle is a cache miss).
-  it('warns when cacheTtlMs exceeds intervalSeconds*1000', () => {
+  // The warning that the positive cache outlives the interval is the re-authentication service's, written when it
+  // starts, after the application's logger is in place: registration writes nothing.
+  it('writes no log at registration, whatever the cache and the interval', () => {
     const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
     validateOptions({
       transport: 'sse',
       authenticator,
       reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 120_000 },
     })
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'REALTIME_REAUTH_CACHE_WEAKENS_POLICY',
-        cacheTtlMs: 120_000,
-        intervalMs: 60_000,
-        message: expect.stringContaining('cacheTtlMs'),
-      }),
-      'BymaxRealtimeModule',
-    )
-    warnSpy.mockRestore()
-  })
-
-  // cacheTtlMs === intervalSeconds*1000 → no warning (equal is not greater-than).
-  it('does not warn when cacheTtlMs equals intervalSeconds*1000', () => {
-    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
-    validateOptions({
-      transport: 'sse',
-      authenticator,
-      reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 60_000 },
-    })
     expect(warnSpy).not.toHaveBeenCalled()
-    warnSpy.mockRestore()
-  })
-
-  // Only one of cacheTtlMs / intervalSeconds set → no warning (both are required to compare).
-  it('does not warn when only cacheTtlMs is set (intervalSeconds absent)', () => {
-    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
-    validateOptions({
-      transport: 'sse',
-      authenticator,
-      reauthenticationPolicy: { cacheTtlMs: 120_000 },
-    })
-    expect(warnSpy).not.toHaveBeenCalled()
-    warnSpy.mockRestore()
-  })
-
-  // cacheTtlMs barely over intervalSeconds*1000 must warn — distinguishes ×1000 from ×1001.
-  it('warns when cacheTtlMs is 1 ms over intervalSeconds*1000', () => {
-    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
-    validateOptions({
-      transport: 'sse',
-      authenticator,
-      reauthenticationPolicy: { intervalSeconds: 1, cacheTtlMs: 1001 },
-    })
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('cacheTtlMs') }),
-      'BymaxRealtimeModule',
-    )
-    warnSpy.mockRestore()
-  })
-
-  // cacheTtlMs exactly at intervalSeconds*1000 → no warning (boundary check for ×1000).
-  it('does not warn when cacheTtlMs equals 1*1000 (interval 1 second)', () => {
-    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
-    validateOptions({
-      transport: 'sse',
-      authenticator,
-      reauthenticationPolicy: { intervalSeconds: 1, cacheTtlMs: 1000 },
-    })
-    expect(warnSpy).not.toHaveBeenCalled()
-    warnSpy.mockRestore()
-  })
-  // cacheTtlMs=1 with intervalSeconds=60 must NOT warn — 1 < 60*1000=60000.
-  // With the mutation intervalSeconds/1000 = 0.06, 1 > 0.06 → warns (wrong).
-  it('does not warn when cacheTtlMs is well below intervalSeconds*1000', () => {
-    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
-    validateOptions({
-      transport: 'sse',
-      authenticator,
-      reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 1 },
-    })
-    expect(warnSpy).not.toHaveBeenCalled()
-    warnSpy.mockRestore()
-  })
-
-  // Kills L48 ArithmeticOperator mutation (* 1000 → / 1000 | + 1000 | - 1000) in message.
-  // The condition guard uses intervalSeconds*1000 correctly (separate expression), but the
-  // warning MESSAGE template must also embed the product — not quotient/sum/difference.
-  // With intervalSeconds=60: original → "60000"; / → "0.06"; + → "1060"; - → "-940".
-  it('includes intervalSeconds*1000 (not a different arithmetic) in the warning message', () => {
-    const warnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined)
-    validateOptions({
-      transport: 'sse',
-      authenticator,
-      reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 120_000 },
-    })
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('60000') }),
-      'BymaxRealtimeModule',
-    )
     warnSpy.mockRestore()
   })
 })

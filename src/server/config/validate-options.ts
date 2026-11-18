@@ -2,7 +2,6 @@
  * @fileoverview Bootstrap validation of module options with typed error codes.
  * @layer composition
  */
-import { Logger } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { HEARTBEAT_MAX_MS, HEARTBEAT_MIN_MS } from '../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
@@ -139,21 +138,6 @@ function validateReauthPolicy(options: BymaxRealtimeModuleOptions): void {
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
       `options.reauthenticationPolicy.onFailure must be 'disconnect' or 'event', received ${describeReceived(onFailure)}`,
       { who: 'BymaxRealtimeModule' },
-    )
-  }
-  if (
-    policy?.cacheTtlMs !== undefined &&
-    policy.intervalSeconds !== undefined &&
-    policy.cacheTtlMs > policy.intervalSeconds * 1000
-  ) {
-    Logger.warn(
-      {
-        event: 'REALTIME_REAUTH_CACHE_WEAKENS_POLICY',
-        message: `[BymaxRealtimeModule] reauthenticationPolicy.cacheTtlMs (${policy.cacheTtlMs} ms) exceeds intervalSeconds*1000 (${policy.intervalSeconds * 1000} ms): the positive reauth cache outlives the interval, so revalidate is skipped on ticks within the cache window — reauthentication is effectively weakened`,
-        cacheTtlMs: policy.cacheTtlMs,
-        intervalMs: policy.intervalSeconds * 1000,
-      },
-      'BymaxRealtimeModule',
     )
   }
 }
