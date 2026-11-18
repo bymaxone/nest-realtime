@@ -5,7 +5,7 @@
 import { Injectable } from '@nestjs/common'
 
 /** Why a handshake was refused. */
-export const REFUSAL_REASONS = ['limit', 'unauthorized', 'unavailable'] as const
+export const REFUSAL_REASONS = ['limit', 'unauthorized', 'unavailable', 'error'] as const
 
 /** Why a connection was closed by the library or by a revocation. */
 export const EVICTION_REASONS = ['per_user_cap', 'slow_consumer', 'revoked'] as const

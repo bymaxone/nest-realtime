@@ -30,6 +30,17 @@ describe('isPlainObject', () => {
     ['a Set', new Set()],
     ['a RegExp', /x/],
     ['a Promise', Promise.resolve()],
+    [
+      'a proxy whose reads throw',
+      new Proxy(
+        {},
+        {
+          get: () => {
+            throw new Error('host')
+          },
+        },
+      ),
+    ],
   ])('refuses %s', (_kind, value) => {
     expect(isPlainObject(value)).toBe(false)
   })

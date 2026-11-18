@@ -493,13 +493,13 @@ import {
 export class ObservabilityModule {}
 ```
 
-| Metric                                     | Type    | Labels                                                | Meaning                                               |
-| ------------------------------------------ | ------- | ----------------------------------------------------- | ----------------------------------------------------- |
-| `bymax_realtime_connections`               | gauge   | `transport` = `sse`, `websocket`                      | Connections open on this instance now.                |
-| `bymax_realtime_connections_refused_total` | counter | `reason` = `limit`, `unauthorized`, `unavailable`     | Handshakes refused since start.                       |
-| `bymax_realtime_evictions_total`           | counter | `reason` = `per_user_cap`, `slow_consumer`, `revoked` | Connections closed by the library or by a revocation. |
-| `bymax_realtime_events_emitted_total`      | counter | `transport` = `sse`, `websocket`                      | Events delivered on this instance.                    |
-| `bymax_realtime_slow_consumer_drops_total` | counter | none                                                  | Connections cut for not reading what they were sent.  |
+| Metric                                     | Type    | Labels                                                     | Meaning                                                                                                                            |
+| ------------------------------------------ | ------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `bymax_realtime_connections`               | gauge   | `transport` = `sse`, `websocket`                           | Connections open on this instance now.                                                                                             |
+| `bymax_realtime_connections_refused_total` | counter | `reason` = `limit`, `unauthorized`, `unavailable`, `error` | Handshakes refused since start; `error` is one that failed with an unexpected error (a 500).                                       |
+| `bymax_realtime_evictions_total`           | counter | `reason` = `per_user_cap`, `slow_consumer`, `revoked`      | Connections closed by the library or by a revocation.                                                                              |
+| `bymax_realtime_events_emitted_total`      | counter | `transport` = `sse`, `websocket`                           | Emit calls handled on this instance, not deliveries: a call with no recipient counts, and under `'both'` each transport counts it. |
+| `bymax_realtime_slow_consumer_drops_total` | counter | none                                                       | Connections cut for not reading what they were sent.                                                                               |
 
 A label is one of the values listed and never an id, a tenant or a user. A revocation is counted on the instance that was asked to make it, once it has closed the connection or handed the request to the bus.
 

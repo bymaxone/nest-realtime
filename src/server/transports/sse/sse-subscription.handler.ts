@@ -236,6 +236,7 @@ export class SseSubscriptionHandler {
       assertIdentityIsNotBlank(resolvedAuth)
       resolvedAuth = admitRooms(resolvedAuth)
     } catch (err) {
+      this.tally?.refused('error')
       logEvent(
         this.logger,
         'error',
@@ -393,6 +394,7 @@ export class SseSubscriptionHandler {
   }
 
   private serverError(err: unknown, what: string): HttpException {
+    this.tally?.refused('error')
     logEvent(this.logger, 'error', 'REALTIME_HANDSHAKE_FAILED', `${what} — responding 500`, {}, err)
     return new InternalServerErrorException()
   }

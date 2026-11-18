@@ -55,6 +55,55 @@ describe('the options argument of forRoot', () => {
   })
 })
 
+describe('an object whose reads throw', () => {
+  const hostile = (): unknown =>
+    new Proxy(
+      {},
+      {
+        get: () => {
+          throw new Error('host error')
+        },
+      },
+    )
+
+  // Scenario: the host hands over a proxy that throws on any read, as the options or as a group. Expected: the typed
+  // refusal, not the host's own error.
+  it('is refused as the options argument', () => {
+    expect(() => BymaxRealtimeModule.forRoot(hostile() as never)).toThrow(
+      refusal('options', 'an object', 'a built-in object'),
+    )
+  })
+
+  it.each(['sse', 'websocket', 'reauthenticationPolicy', 'hooks'])('is refused as %s', (name) => {
+    expect(() =>
+      validateOptions({ transport: 'sse', authenticator, [name]: hostile() } as never),
+    ).toThrow(refusal(`options.${name}`, 'an object', 'a built-in object'))
+  })
+})
+
+describe('a forRootAsync provider that is not a factory', () => {
+  class Factory {}
+
+  // Scenario: useExisting names a provider that resolves to nothing, or to something with no createRealtimeOptions.
+  // Expected: the typed refusal at bootstrap, not a raw TypeError.
+  it.each([
+    ['null', null],
+    ['an object with no createRealtimeOptions', {}],
+  ])('refuses useExisting resolving to %s', async (_name, value) => {
+    const testModule = Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useExisting: Factory,
+          extraProviders: [{ provide: Factory, useValue: value }],
+        } as never),
+      ],
+    })
+    await expect(testModule.compile()).rejects.toThrow('REALTIME_INVALID_OPTIONS')
+    await expect(testModule.compile()).rejects.toThrow('createRealtimeOptions')
+  })
+})
+
 describe('the options argument and the factory result of forRootAsync', () => {
   // Scenario: forRootAsync is called with no registration object. Expected: the same typed refusal.
   it.each([

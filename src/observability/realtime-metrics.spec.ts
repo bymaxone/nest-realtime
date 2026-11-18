@@ -67,6 +67,7 @@ describe('RealtimeMetrics', () => {
       'reason=limit': 0,
       'reason=unauthorized': 0,
       'reason=unavailable': 0,
+      'reason=error': 0,
     })
     expect(await samples(registry, 'bymax_realtime_evictions_total')).toEqual({
       'reason=per_user_cap': 0,
@@ -116,6 +117,7 @@ describe('RealtimeMetrics', () => {
         'reason=limit': 2,
         'reason=unauthorized': 1,
         'reason=unavailable': 0,
+        'reason=error': 0,
       })
       expect(await samples(registry, 'bymax_realtime_evictions_total')).toEqual({
         'reason=per_user_cap': 1,

@@ -15,5 +15,11 @@
  * @param value - What an option held.
  */
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && Object.prototype.toString.call(value) === '[object Object]'
+  if (typeof value !== 'object') return false
+  try {
+    return Object.prototype.toString.call(value) === '[object Object]'
+  } catch {
+    // A proxy whose reads throw is the host's own object: it is refused, and its error is not ours to raise.
+    return false
+  }
 }

@@ -166,6 +166,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       this.tally?.refused('unavailable')
       return this.unavailable('Internal Server Error')
     }
+    this.tally?.refused('error')
     logEvent(
       this.logger,
       'error',
@@ -294,6 +295,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       } else if (err instanceof AuthenticationUnavailableError) {
         this.tally?.refused('unavailable')
       } else {
+        this.tally?.refused('error')
         logEvent(
           this.logger,
           'error',

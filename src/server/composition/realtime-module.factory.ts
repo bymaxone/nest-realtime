@@ -316,11 +316,18 @@ function buildOptionsProvider(
   }
   return {
     provide: REALTIME_OPTIONS_TOKEN,
-    useFactory: async (factory: { createRealtimeOptions: () => unknown }) =>
-      resolve(
+    useFactory: async (factory: { createRealtimeOptions?: () => unknown } | null | undefined) => {
+      if (typeof factory?.createRealtimeOptions !== 'function') {
+        throw realtimeError(
+          REALTIME_ERROR_CODES.INVALID_OPTIONS,
+          'the provider named by useExisting or useClass must implement createRealtimeOptions',
+        )
+      }
+      return resolve(
         (await factory.createRealtimeOptions()) as BymaxRealtimeModuleOptions,
         'createRealtimeOptions',
-      ),
+      )
+    },
     inject: [asyncOptions.useExisting ?? factoryToken],
   }
 }
