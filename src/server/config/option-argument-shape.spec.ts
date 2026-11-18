@@ -5,7 +5,7 @@
  * An options argument that is not an object, a `sseEndpoint` that is not a usable route, a group that is a
  * built-in object such as a `Date`, an endpoint with whitespace in it and a `RedisOfflineQueue` built from
  * nothing are each refused with `REALTIME_INVALID_OPTIONS`, naming the option and describing what it
- * received by type, instead of failing as a raw `TypeError` or being accepted and serving nothing.
+ * received by type.
  */
 import { Injectable } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -41,8 +41,7 @@ const NOT_OPTIONS: ReadonlyArray<readonly [unknown, string]> = [
 
 describe('the options argument of forRoot', () => {
   // Scenario: forRoot is called with something that is not an options object. Expected: the typed refusal
-  // names the argument and what it received, where the host used to read a raw TypeError or a message
-  // about `options.transport` that blamed a key the host never meant to leave out.
+  // names the argument and what it received.
   it.each(NOT_OPTIONS)('refuses %p', (value, received) => {
     expect(() => BymaxRealtimeModule.forRoot(value as never)).toThrow(
       refusal('options', 'an object', received),
@@ -115,7 +114,7 @@ describe('a factory pattern of forRootAsync that is null', () => {
   const COUNT = 'forRootAsync requires exactly one of useFactory, useClass, or useExisting'
 
   // Scenario: a pattern set to null beside the one in use. Expected: null reads as unset, like undefined,
-  // so the registration names one pattern and resolves it; it used to count as a second one and be refused.
+  // so the registration names one pattern and resolves it.
   it.each([
     ['useFactory', { useClass: ClassFactory }],
     ['useClass', { useFactory }],
@@ -129,8 +128,7 @@ describe('a factory pattern of forRootAsync that is null', () => {
     await expect(testModule.compile()).resolves.toBeDefined()
   })
 
-  // Scenario: the only pattern is null. Expected: the typed refusal at registration that counts none; it used
-  // to count one and fail at bootstrap with the container's own unresolved-dependency error.
+  // Scenario: the only pattern is null. Expected: the typed refusal at registration, which counts none.
   it.each(['useFactory', 'useClass', 'useExisting'])(
     'refuses a registration whose only pattern is %s of null',
     (name) => {
@@ -149,9 +147,8 @@ describe('the sseEndpoint of forRootAsync', () => {
       useFactory: () => ({ transport: 'sse', authenticator }),
     } as never)
 
-  // Scenario: a registration endpoint that is not a non-blank string. Expected: the check `sse.endpoint`
-  // gets, at registration, where the host used to read `endpoint.startsWith is not a function` or to get
-  // an accepted blank that served no route.
+  // Scenario: a registration endpoint that is not a non-blank string. Expected: the same check `sse.endpoint`
+  // gets, at registration.
   it.each([
     ['', 'a string'],
     ['   ', 'a string'],
@@ -200,8 +197,8 @@ describe('an endpoint with whitespace in it', () => {
 })
 
 describe('a group that is a built-in object', () => {
-  // Scenario: a Date, a Map or a RegExp where a group is expected. Expected: refused as not an object, where
-  // a Date used to pass because it is not an array; a class instance is still read by its keys.
+  // Scenario: a Date, a Map or a RegExp where a group is expected. Expected: refused as not an object; a class
+  // instance is still read by its keys.
   it.each(['sse', 'websocket', 'reauthenticationPolicy', 'hooks'])(
     'refuses a Date as %s',
     (name) => {
@@ -232,8 +229,7 @@ describe('new RedisOfflineQueue(options)', () => {
   const who = 'RedisOfflineQueue'
 
   // Scenario: the queue is built from nothing, or from something that is not an options object. Expected:
-  // the typed refusal at construction, where undefined and null threw a raw TypeError and a string was
-  // accepted with no client.
+  // the typed refusal at construction.
   it.each(NOT_OPTIONS.filter(([value]) => !(value instanceof Date)))(
     'refuses options %p',
     (value, received) => {
