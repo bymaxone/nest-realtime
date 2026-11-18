@@ -27,9 +27,9 @@ import { io } from 'socket.io-client'
 import request from 'supertest'
 import { ModuleKind, ScriptTarget, transpileModule } from 'typescript'
 import { listeningServer } from '../../test/support/listening-server'
+import { lineOf } from '../../test/support/log-lines'
 import * as websocket from '../websocket/index'
 import * as server from './index'
-import { lineOf } from '../../test/support/log-lines'
 
 const README = readFileSync(join(__dirname, '..', '..', 'README.md'), 'utf8')
 
