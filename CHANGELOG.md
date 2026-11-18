@@ -9,7 +9,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Security
 
-- **A log line no longer carries the text of an error raised by the application's own code.** Thirteen events (`REALTIME_HANDSHAKE_FAILED`, `REALTIME_HOOK_FAILED`, `REALTIME_DELIVERY_FAILED`, `REALTIME_DISCONNECT_FAILED`, `REALTIME_OFFLINE_QUEUE_ACK_FAILED`, `REALTIME_PUBSUB_UNSUBSCRIBE_FAILED`, `REALTIME_REAUTH_FAILED`, `REALTIME_REVOCATION_FAILED`, `REALTIME_COMPOSITE_PARTIAL_FAILURE`, `REALTIME_PUBSUB_UNAVAILABLE` and the others that report a failure) put the error's own message into `message`, so an authenticator or a hook that threw `x user=U tenant=T` reached the line. `message` now holds the library's own text only, and the error goes under `err` as the error itself, which is where a structured logger applies its serializer and its redaction. A spec reads every `logEvent` call and fails when a message reads an error.
+- **A log line no longer carries the text of an error raised by the application's own code.** Events such as `REALTIME_HANDSHAKE_FAILED`, `REALTIME_HOOK_FAILED`, `REALTIME_DELIVERY_FAILED`, `REALTIME_DISCONNECT_FAILED`, `REALTIME_OFFLINE_QUEUE_ACK_FAILED`, `REALTIME_PUBSUB_UNSUBSCRIBE_FAILED`, `REALTIME_REAUTH_FAILED`, `REALTIME_REVOCATION_FAILED`, `REALTIME_COMPOSITE_PARTIAL_FAILURE`, `REALTIME_PUBSUB_UNAVAILABLE` put the error's own message into `message`, so an authenticator or a hook that threw `x user=U tenant=T` reached the line. `message` now holds the library's own text only, and the error goes under `err` as the error itself, which is where a structured logger applies its serializer and its redaction. A spec reads every `logEvent` call and fails when a message reads an error.
 
 #### Apply to a derived backend
 
