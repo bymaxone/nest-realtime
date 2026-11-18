@@ -4,6 +4,7 @@
  */
 import { trace } from '@opentelemetry/api'
 
+/** What a recorded span held when the test read it: its name, attributes, final status and how often it ended. */
 export interface RecordedSpan {
   readonly name: string
   readonly attributes: Record<string, unknown>

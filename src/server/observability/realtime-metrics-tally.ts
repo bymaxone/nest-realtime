@@ -13,8 +13,11 @@ export const EVICTION_REASONS = ['per_user_cap', 'slow_consumer', 'revoked'] as 
 /** The transports a count is kept for. */
 export const TALLY_TRANSPORTS = ['sse', 'websocket'] as const
 
+/** A reason a handshake is refused, one of `REFUSAL_REASONS`. */
 export type RefusalReason = (typeof REFUSAL_REASONS)[number]
+/** A reason a connection is closed, one of `EVICTION_REASONS`. */
 export type EvictionReason = (typeof EVICTION_REASONS)[number]
+/** A transport a count is kept for, one of `TALLY_TRANSPORTS`. */
 export type TallyTransport = (typeof TALLY_TRANSPORTS)[number]
 
 /** A zeroed count for each member of a closed set. */

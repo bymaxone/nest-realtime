@@ -32,6 +32,7 @@ export const REALTIME_LOG_EVENTS = [
   'REALTIME_SERVER_NOT_ATTACHED',
 ] as const
 
+/** The code of one warn or error event the library writes, one of `REALTIME_LOG_EVENTS`. */
 export type RealtimeLogEvent = (typeof REALTIME_LOG_EVENTS)[number]
 
 /** Fields are closed or numeric: a count, a size, a configured limit, a transport name or a library-made id. */
