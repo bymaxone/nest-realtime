@@ -5,7 +5,7 @@
 import { describeReceived } from './describe-received'
 
 describe('describeReceived', () => {
-  // Scenario: each kind of value. Expected: a finite number is printed, everything else is named by type.
+  // Scenario: each kind of value. Expected: a finite number is printed, everything else is named by type, a built-in object such as a `Map` apart from an object the host built.
   it.each([
     [0, '0'],
     [-7, '-7'],
@@ -24,7 +24,9 @@ describe('describeReceived', () => {
     [null, 'null'],
     [['secret'], 'an array'],
     [{ secret: 1 }, 'an object'],
-    [new Map(), 'an object'],
+    [new Map(), 'a built-in object'],
+    [new Date(0), 'a built-in object'],
+    [new (class Own {})(), 'an object'],
     [Object.create(null), 'an object'],
   ])('describes %p as %s', (value, expected) => {
     expect(describeReceived(value)).toBe(expected)

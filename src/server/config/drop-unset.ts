@@ -8,6 +8,7 @@ import type {
   SseOptions,
   WebSocketOptions,
 } from '../interfaces/realtime-module-options.interface'
+import { isPlainObject } from '../utils/is-plain-object'
 
 /**
  * The keys each object is read for. Each table is typed against its interface, so a key added to an
@@ -90,7 +91,7 @@ function readSet(source: object, known: Readonly<Record<string, true>>): Record<
  * spelled, resolves to its default and is validated as absent. A group may be a class instance with
  * fields or getters, so each known key is read by property access rather than from the own keys alone.
  * Values that carry behaviour (the authenticator, a queue, a hook table) are kept by reference. A group
- * that is not an object, or is an array, is left as it is.
+ * that is not an object, or is an array or a built-in such as a `Date`, is left as it is.
  *
  * @param options - The options as the host wrote them.
  * @returns A plain copy in which every unset key is absent.
@@ -99,8 +100,7 @@ export function dropUnset<T extends object>(options: T): T {
   const kept = readSet(options, TOP_LEVEL_KEYS)
   for (const [group, keys] of Object.entries(GROUPS)) {
     const value = kept[group]
-    if (typeof value === 'object' && !Array.isArray(value))
-      kept[group] = readSet(value as object, keys)
+    if (isPlainObject(value)) kept[group] = readSet(value, keys)
   }
   return kept as T
 }

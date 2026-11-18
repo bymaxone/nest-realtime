@@ -9,7 +9,7 @@ import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-o
 import { describeReceived } from '../utils/describe-received'
 import { realtimeError } from '../utils/realtime-error'
 import { dropUnset } from './drop-unset'
-import { validateShapes } from './validate-shapes'
+import { assertOptionsObject, validateShapes } from './validate-shapes'
 
 // Format-level validation only: 'websocket' and 'both' are accepted config values,
 // but the module rejects them at bootstrap until those transports are implemented.
@@ -23,6 +23,7 @@ const VALID_TRANSPORTS = new Set<string>(['sse', 'websocket', 'both'])
  * as authenticated. The check is therefore a hard failure, not a warning.
  */
 export function validateOptions(raw: BymaxRealtimeModuleOptions): void {
+  assertOptionsObject(raw)
   const options = dropUnset(raw)
   if (!options.transport || !VALID_TRANSPORTS.has(options.transport)) {
     throw realtimeError(

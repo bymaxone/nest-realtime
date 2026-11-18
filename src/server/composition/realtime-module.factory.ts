@@ -9,6 +9,7 @@ import { applyDefaults } from '../config/default-options'
 import { dropUnset } from '../config/drop-unset'
 import type { ResolvedRealtimeOptions } from '../config/default-options'
 import { validateOptions } from '../config/validate-options'
+import { assertOptionsObject, assertSseEndpoint } from '../config/validate-shapes'
 import {
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
@@ -150,6 +151,7 @@ export function composeForRoot(
   logger: Logger,
   raw: BymaxRealtimeModuleOptions,
 ): DynamicModule {
+  assertOptionsObject(raw, moduleClass.name)
   // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
   const options = dropUnset(raw)
   validateOptions(options)
@@ -235,9 +237,10 @@ function resolveAsyncOptions(
   logger: Logger,
   moduleName: string,
 ): { resolved: ResolvedRealtimeOptions; declaredEndpoint: string | undefined } {
-  if (!raw) {
+  if (raw === undefined || raw === null) {
     throw realtimeError(REALTIME_ERROR_CODES.INVALID_OPTIONS, `${source} returned nothing`)
   }
+  assertOptionsObject(raw, moduleName)
   // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
   const options = dropUnset(raw)
   validateOptions(options)
@@ -255,6 +258,15 @@ function resolveAsyncOptions(
 }
 
 /**
+ * Whether a factory pattern is named: `undefined` and `null` both mean it is not. Counting the patterns and
+ * choosing the provider have to use this one test, or a `null` is counted as the pattern in use and then
+ * skipped when the provider is built.
+ */
+function isSet<T>(pattern: T | null | undefined): pattern is T {
+  return pattern !== undefined && pattern !== null
+}
+
+/**
  * Refuse a registration that names no factory pattern or more than one.
  *
  * @throws when the number of `useFactory`, `useClass` and `useExisting` given is not exactly one.
@@ -267,7 +279,7 @@ function assertOneFactoryPattern(
     asyncOptions.useFactory,
     asyncOptions.useClass,
     asyncOptions.useExisting,
-  ].filter((pattern) => pattern !== undefined)
+  ].filter(isSet)
   if (patterns.length === 1) return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
@@ -285,7 +297,7 @@ function buildOptionsProvider(
   ) => ResolvedRealtimeOptions,
   factoryToken: symbol,
 ): Provider {
-  if (asyncOptions.useFactory) {
+  if (isSet(asyncOptions.useFactory)) {
     return {
       provide: REALTIME_OPTIONS_TOKEN,
       useFactory: async (...args: unknown[]) =>
@@ -364,8 +376,10 @@ export function composeForRootAsync(
   asyncOptions: BymaxRealtimeModuleAsyncOptions,
 ): DynamicModule {
   const moduleName = moduleClass.name
+  assertOptionsObject(asyncOptions, moduleName)
   assertOneFactoryPattern(asyncOptions, moduleName)
   assertModeSupported(wiring, asyncOptions.transport, moduleName)
+  assertSseEndpoint('sseEndpoint', asyncOptions.sseEndpoint)
   assertSseEndpointApplies(asyncOptions, moduleName)
 
   const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
@@ -373,7 +387,7 @@ export function composeForRootAsync(
   const boundSseEndpoint = asyncOptions.sseEndpoint ?? DEFAULT_ASYNC_SSE_ENDPOINT
   const resolve = buildResolver(asyncOptions, instanceId, boundSseEndpoint, logger, moduleName)
 
-  const factoryClassProvider: Provider[] = asyncOptions.useClass
+  const factoryClassProvider: Provider[] = isSet(asyncOptions.useClass)
     ? [{ provide: FACTORY_TOKEN, useClass: asyncOptions.useClass }]
     : []
 

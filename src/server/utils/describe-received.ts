@@ -2,6 +2,7 @@
  * @fileoverview What an option refusal says about the value it was given, without echoing it.
  * @layer utils
  */
+import { isPlainObject } from './is-plain-object'
 
 const KIND_OF_TYPE: Readonly<Record<string, string>> = {
   string: 'a string',
@@ -27,5 +28,7 @@ export function describeReceived(value: unknown): string {
     return Number.isFinite(value) ? String(value) : 'a number that is not finite'
   }
   if (value === null) return 'null'
-  return Array.isArray(value) ? 'an array' : (KIND_OF_TYPE[typeof value] ?? 'an object')
+  if (Array.isArray(value)) return 'an array'
+  if (typeof value === 'object' && !isPlainObject(value)) return 'a built-in object'
+  return KIND_OF_TYPE[typeof value] ?? 'an object'
 }

@@ -7,6 +7,14 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- **Inputs were accepted, or failed as a raw `TypeError`, where a typed refusal belongs.** The `sseEndpoint` of `forRootAsync` was not covered by the check `sse.endpoint` got: a number failed as `endpoint.startsWith is not a function` and a blank one registered and served no route. A `forRoot` or `forRootAsync` called with no options, `null`, a string, a number or an array failed as "Cannot convert undefined or null to object", or as a message about `options.transport`; a factory that answered a string or a number was read the same way. A `Date` was accepted as `sse`, `websocket`, `reauthenticationPolicy` or `hooks`, because it is not an array. `new RedisOfflineQueue(undefined)` threw a raw `TypeError` and a string was accepted with no `client`. An endpoint with a space in it, `' /x '` or `'/a b'`, was registered and unreachable. Each of those is now refused with `REALTIME_INVALID_OPTIONS`, naming the option and what it received (`a built-in object` for a `Date`, a `Map` and the like). A `forRootAsync` pattern (`useFactory`, `useClass` or `useExisting`) set to `null` now reads as unset, like `undefined`: beside the pattern in use it is no longer counted as a second one, and alone it is refused at registration instead of failing at bootstrap with the container's own error.
+
+#### Apply to a derived backend
+
+A `sseEndpoint` or `sse.endpoint` that held whitespace, an options argument or factory result that was not an object, and a group that was a `Date` or another built-in now fail at registration, where they used to start or fail later: fix the value. A `RedisOfflineQueue` built without options or without a `client` now throws at construction. An instance of your own class is still read as a group by its keys.
+
 ## [1.2.18] - 2026-11-17
 
 ### Security
