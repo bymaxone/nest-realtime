@@ -4,6 +4,7 @@
  * @layer application
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
+import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import {
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_OPTIONS_TOKEN,
@@ -14,6 +15,7 @@ import type {
   IConnectionAuthenticator,
 } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { logEvent } from '../utils/log-event'
 import { windowedReport } from '../utils/windowed-report'
 
 /** How long a window of refusals is summarised in one log line. */
@@ -23,6 +25,9 @@ import { windowedReport } from '../utils/windowed-report'
  * a fault of the system, not of the credentials, and carrying nothing about either.
  */
 export class AuthenticationUnavailableError extends Error {
+  /** The code the refusal travels under, so a span or a log names it without reading the message. */
+  readonly code = REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE
+
   constructor(readonly reason: 'saturated' | 'timeout') {
     super(
       reason === 'saturated'
@@ -50,9 +55,18 @@ export class AuthenticationGate {
   private readonly refusals = windowedReport(
     () => ({ saturated: 0, timeout: 0 }),
     ({ saturated, timeout }) => {
-      this.logger.warn(
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_HANDSHAKES_REFUSED',
         `handshakes refused since the last report: ${saturated} because ${this.maxPending} were already ` +
           `waiting for the authenticator, ${timeout} because it did not answer in ${this.timeoutMs} ms`,
+        {
+          saturated,
+          timedOut: timeout,
+          maxPendingHandshakes: this.maxPending,
+          authenticateTimeoutMs: this.timeoutMs,
+        },
       )
     },
   )

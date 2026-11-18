@@ -109,14 +109,24 @@ describe('RedisRealtimePubSub', () => {
       await new Promise((r) => setTimeout(r, 0))
       expect(warnSpy).toHaveBeenCalledTimes(1)
       expect(warnSpy).toHaveBeenCalledWith(
-        'REALTIME_PUBSUB_UNAVAILABLE: dropped 1 malformed payload(s) on "bymax:realtime" since the last report',
+        expect.objectContaining({
+          event: 'REALTIME_PUBSUB_DROPPED',
+          count: 1,
+          last: 'malformed',
+          message: 'dropped 1 malformed payload(s) since the last report',
+        }),
       )
       now.mockReturnValue(1_000_000 + 60_000)
       await client.publish('bymax:realtime', 'again')
       await new Promise((r) => setTimeout(r, 0))
       expect(warnSpy).toHaveBeenCalledTimes(2)
       expect(warnSpy).toHaveBeenLastCalledWith(
-        'REALTIME_PUBSUB_UNAVAILABLE: dropped 2 malformed payload(s) on "bymax:realtime" since the last report',
+        expect.objectContaining({
+          event: 'REALTIME_PUBSUB_DROPPED',
+          count: 2,
+          last: 'malformed',
+          message: 'dropped 2 malformed payload(s) since the last report',
+        }),
       )
     } finally {
       now.mockRestore()
@@ -176,7 +186,9 @@ describe('RedisRealtimePubSub', () => {
       handlers['error']!(Object.assign(new Error(fields.message), fields))
       await subscribing
       expect(warn).toHaveBeenCalledWith(
-        `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "bymax:realtime": ${reason}. Remote events and revocations will not reach this instance until it subscribes again`,
+        expect.objectContaining({
+          message: `not subscribed: ${reason}. Remote events and revocations will not reach this instance until it subscribes again`,
+        }),
       )
     } finally {
       warn.mockRestore()
@@ -245,7 +257,9 @@ describe('RedisRealtimePubSub', () => {
       await expect(pubsub.subscribe(jest.fn())).resolves.toEqual(expect.any(Function))
       expect(pubsub.isSubscribed()).toBe(false)
       expect(warn).toHaveBeenCalledWith(
-        `REALTIME_PUBSUB_UNAVAILABLE: not subscribed to "bymax:realtime": Stream isn't writeable and enableOfflineQueue options is false. Remote events and revocations will not reach this instance until it subscribes again`,
+        expect.objectContaining({
+          message: `not subscribed: Stream isn't writeable and enableOfflineQueue options is false. Remote events and revocations will not reach this instance until it subscribes again`,
+        }),
       )
       // The rejection is the connection failing, which was just reported: it is not also a refusal.
       await new Promise((resolve) => setImmediate(resolve))

@@ -18,6 +18,7 @@
   "mutate": [
     "src/server/**/*.ts",
     "src/websocket/**/*.ts",
+    "src/observability/**/*.ts",
     "src/react/**/*.ts",
     "src/react/**/*.tsx",
     "!src/**/*.spec.ts",

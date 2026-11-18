@@ -5,6 +5,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import {
   describeError,
+  logEvent,
   REALTIME_ERROR_CODES,
   SseTransport,
   unavailableError,
@@ -174,7 +175,13 @@ export class CompositeTransport implements ITransport {
     const reasons = results.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []))
     if (reasons.length === tasks.length) throw this.allFailed(op, reasons)
     for (const reason of reasons) {
-      this.logger.warn(`Composite ${op} partially failed: ${describeError(reason)}`)
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_COMPOSITE_PARTIAL_FAILURE',
+        `Composite ${op} partially failed: ${describeError(reason)}`,
+        { op },
+      )
     }
   }
 

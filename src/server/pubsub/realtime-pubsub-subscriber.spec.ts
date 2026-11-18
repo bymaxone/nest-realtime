@@ -146,7 +146,13 @@ describe('RealtimePubSubSubscriber', () => {
       await subscriber.onModuleInit()
       getHandler()!({ op: 'disconnect', args: { connectionId: 'c1' }, origin: 'remote' })
       await new Promise((resolve) => setImmediate(resolve))
-      expect(warnSpy).toHaveBeenCalledWith('Remote disconnect of c1 failed: close boom')
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'REALTIME_DISCONNECT_FAILED',
+          connectionId: 'c1',
+          message: 'Remote disconnect failed: close boom',
+        }),
+      )
       expect(unhandled).not.toHaveBeenCalled()
     } finally {
       process.off('unhandledRejection', unhandled)
@@ -202,7 +208,9 @@ describe('RealtimePubSubSubscriber', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       await subscriber.onApplicationShutdown()
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('network error'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('network error') }),
+      )
     } finally {
       warnSpy.mockRestore()
     }
@@ -219,8 +227,12 @@ describe('RealtimePubSubSubscriber', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       getHandler()!({ op: 'broadcast', args: { event: 'x', data: {}, id: '1' }, origin: 'remote' })
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('(last: RangeError)'))
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('dispatch-boom'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('(last: RangeError)') }),
+      )
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('dispatch-boom') }),
+      )
     } finally {
       warnSpy.mockRestore()
     }
@@ -233,8 +245,12 @@ describe('RealtimePubSubSubscriber', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       getHandler()!({ op: 'badOp' as never, args: {}, origin: 'remote' })
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('(last: unknown op)'))
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('badOp'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('(last: unknown op)') }),
+      )
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('badOp') }),
+      )
     } finally {
       warnSpy.mockRestore()
     }

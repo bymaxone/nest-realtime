@@ -12,6 +12,7 @@ import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
+import { lineOf } from '../../test/support/log-lines'
 import type { IConnectionLifecycleHooks } from '../server/interfaces/connection-lifecycle-hooks.interface'
 import { ConnectionRegistry } from '../server/services/connection-registry.service'
 import { BymaxRealtimeWebSocketModule } from './realtime-websocket.module'
@@ -94,7 +95,13 @@ describe('WebSocket: a lifecycle hook that fails', () => {
     expect(unhandled).toStrictEqual([])
     expect(connections.allByTransport('websocket')).toHaveLength(1)
     expect(other.connected).toBe(true)
-    expect(logged).toHaveBeenCalledWith(expect.stringContaining('onDisconnect hook failed'))
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onDisconnect',
+        message: expect.stringContaining('onDisconnect hook failed'),
+      }),
+    )
   })
 
   // A hook is a consumer's notification, not a condition of admission: the connection stays.
@@ -113,7 +120,13 @@ describe('WebSocket: a lifecycle hook that fails', () => {
 
     expect(socket.connected).toBe(true)
     expect(connections.allByTransport('websocket')).toHaveLength(1)
-    expect(logged).toHaveBeenCalledWith(expect.stringContaining('onConnect hook failed'))
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onConnect',
+        message: expect.stringContaining('onConnect hook failed'),
+      }),
+    )
   })
 
   it('does not put the failure of one connection hook on the others', async () => {
@@ -141,7 +154,7 @@ describe('WebSocket: a lifecycle hook that fails', () => {
     // only then announced the connection. Nothing here reads the clock.
     const order: string[] = []
     logged.mockImplementation((message: unknown) => {
-      if (String(message).includes('did not settle')) order.push('hook given up')
+      if (lineOf(message).includes('did not settle')) order.push('hook given up')
     })
 
     const socket = await connect()
@@ -150,7 +163,13 @@ describe('WebSocket: a lifecycle hook that fails', () => {
     expect(order).toEqual(['hook given up', 'announced'])
     expect(socket.connected).toBe(true)
     expect(connections.allByTransport('websocket')).toHaveLength(1)
-    expect(logged).toHaveBeenCalledWith('onConnect hook failed: did not settle within 300 ms')
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onConnect',
+        message: 'onConnect hook failed: did not settle within 300 ms',
+      }),
+    )
   })
 
   it('removes the connection when onDisconnect never settles, and the other client stays', async () => {
@@ -163,6 +182,12 @@ describe('WebSocket: a lifecycle hook that fails', () => {
 
     expect(connections.allByTransport('websocket')).toHaveLength(1)
     expect(other.connected).toBe(true)
-    expect(logged).toHaveBeenCalledWith('onDisconnect hook failed: did not settle within 300 ms')
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onDisconnect',
+        message: 'onDisconnect hook failed: did not settle within 300 ms',
+      }),
+    )
   })
 })

@@ -90,7 +90,10 @@ describe('SSE: a client that never reads', () => {
     expect(closedAfter).toBeDefined()
     expect(reasons).toStrictEqual([REALTIME_ERROR_CODES.SLOW_CONSUMER])
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining(`${REALTIME_ERROR_CODES.SLOW_CONSUMER}: closing SSE connection`),
+      expect.objectContaining({
+        event: 'REALTIME_SLOW_CONSUMER',
+        message: expect.stringContaining('closing an SSE connection'),
+      }),
     )
   })
 

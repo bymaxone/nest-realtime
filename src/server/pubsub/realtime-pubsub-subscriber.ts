@@ -14,6 +14,7 @@ import type {
 } from '../interfaces/realtime-pubsub.interface'
 import { SseTransport } from '../transports/sse/sse.transport'
 import { describeError } from '../utils/describe-error'
+import { logEvent } from '../utils/log-event'
 import { windowedReport } from '../utils/windowed-report'
 
 interface EmitUserArgs {
@@ -75,7 +76,12 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
       try {
         await this.unsubscribe()
       } catch (err) {
-        this.logger.warn(`Pub/sub unsubscribe failed: ${describeError(err)}`)
+        logEvent(
+          this.logger,
+          'warn',
+          'REALTIME_PUBSUB_UNSUBSCRIBE_FAILED',
+          `Pub/sub unsubscribe failed: ${describeError(err)}`,
+        )
       }
       this.unsubscribe = null
     }
@@ -91,8 +97,12 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
     // Stryker disable next-line StringLiteral: equivalent — a report is only written after a drop, and every drop sets `last` first
     () => ({ count: 0, last: 'none' }),
     ({ count, last }) => {
-      this.logger.warn(
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_PUBSUB_DROPPED',
         `Pub/sub dropped ${count} message(s) it could not act on since the last report (last: ${last})`,
+        { count, last },
       )
     },
   )
@@ -127,8 +137,12 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
           // Not awaited (the handler is synchronous), so its rejection is handled here.
           Promise.resolve(this.sse.disconnectLocal(a.connectionId, a.reason)).catch(
             (err: unknown) => {
-              this.logger.warn(
-                `Remote disconnect of ${a.connectionId} failed: ${describeError(err)}`,
+              logEvent(
+                this.logger,
+                'warn',
+                'REALTIME_DISCONNECT_FAILED',
+                `Remote disconnect failed: ${describeError(err)}`,
+                { connectionId: a.connectionId },
               )
             },
           )

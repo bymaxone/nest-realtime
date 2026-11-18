@@ -64,6 +64,16 @@
         "default": "./dist/websocket/index.cjs"
       }
     },
+    "./observability": {
+      "import": {
+        "types": "./dist/observability/index.d.ts",
+        "default": "./dist/observability/index.mjs"
+      },
+      "require": {
+        "types": "./dist/observability/index.d.cts",
+        "default": "./dist/observability/index.cjs"
+      }
+    },
     "./internal": {
       "import": {
         "types": "./dist/internal/index.d.ts",
@@ -86,6 +96,9 @@
       ],
       "websocket": [
         "./dist/websocket/index.d.cts"
+      ],
+      "observability": [
+        "./dist/observability/index.d.cts"
       ],
       "internal": [
         "./dist/internal/index.d.cts"
@@ -125,12 +138,15 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
   "peerDependencies": {
+    "@bymax-one/nest-core": "^1.1.0",
     "@nestjs/common": "^11.0.16",
     "@nestjs/core": "^11.1.18",
     "@nestjs/platform-socket.io": "^11.0.0",
     "@nestjs/websockets": "^11.0.0",
+    "@opentelemetry/api": "^1.9.0",
     "@socket.io/redis-adapter": "^8.0.0",
     "ioredis": "^6.0.0",
+    "prom-client": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "reflect-metadata": "^0.2.0",
@@ -139,13 +155,16 @@
     "socket.io-client": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "@nestjs/websockets": {
+    "@bymax-one/nest-core": {
       "optional": true
     },
     "@nestjs/platform-socket.io": {
       "optional": true
     },
-    "socket.io": {
+    "@nestjs/websockets": {
+      "optional": true
+    },
+    "@opentelemetry/api": {
       "optional": true
     },
     "@socket.io/redis-adapter": {
@@ -154,10 +173,16 @@
     "ioredis": {
       "optional": true
     },
+    "prom-client": {
+      "optional": true
+    },
     "react": {
       "optional": true
     },
     "react-dom": {
+      "optional": true
+    },
+    "socket.io": {
       "optional": true
     },
     "socket.io-client": {
@@ -166,12 +191,14 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
+    "@bymax-one/nest-core": "1.6.10",
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
     "@nestjs/platform-socket.io": "^11.1.28",
     "@nestjs/testing": "^11.1.28",
     "@nestjs/websockets": "^11.1.28",
+    "@opentelemetry/api": "^1.10.0",
     "@socket.io/redis-adapter": "^8.0.0",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/jest-runner": "^9.6.1",
@@ -201,6 +228,7 @@
     "jest-environment-jsdom": "^30.0.0",
     "jsonwebtoken": "^9.0.3",
     "prettier": "^3.9.6",
+    "prom-client": "^15.1.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "reflect-metadata": "^0.2.2",

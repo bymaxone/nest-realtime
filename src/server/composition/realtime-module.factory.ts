@@ -25,6 +25,8 @@ import type {
   BymaxRealtimeModuleAsyncOptions,
   BymaxRealtimeModuleOptions,
 } from '../interfaces/realtime-module-options.interface'
+import { RealtimeMetricsTally } from '../observability/realtime-metrics-tally'
+import { RealtimeTracing } from '../observability/realtime-tracing'
 import { OfflineQueueDeliveryService } from '../offline-queue/offline-queue-delivery.service'
 import { InMemoryPubSub } from '../pubsub/in-memory-pubsub'
 import { ConnectionRegistry } from '../services/connection-registry.service'
@@ -36,6 +38,7 @@ import { ReauthenticationService } from '../services/reauthentication.service'
 import { RoomRegistry } from '../services/room-registry.service'
 import { EventReplayBuffer } from '../transports/sse/event-replay-buffer'
 import { HeartbeatService } from '../transports/sse/heartbeat.service'
+import { logEvent } from '../utils/log-event'
 import { normalizeEndpointPath } from '../utils/normalize-endpoint-path'
 import { realtimeError } from '../utils/realtime-error'
 import type { TransportWiring } from './transport-wiring.interface'
@@ -51,6 +54,7 @@ const DEFAULT_ASYNC_SSE_ENDPOINT = '/events'
 const EXPORTED_TOKENS = [
   RealtimeService,
   ConnectionRegistry,
+  RealtimeMetricsTally,
   REALTIME_OPTIONS_TOKEN,
   REALTIME_INSTANCE_ID_TOKEN,
   REALTIME_AUTHENTICATOR_TOKEN,
@@ -73,6 +77,8 @@ const SHARED_SERVICES = [
   OfflineQueueDeliveryService,
   AuthenticationGate,
   ConnectionAdmission,
+  RealtimeMetricsTally,
+  RealtimeTracing,
 ]
 
 /**
@@ -116,7 +122,10 @@ function warnIfSingleInstance(
 ): void {
   if (transport === 'websocket') return
   if (!pubsub && process.env['NODE_ENV'] === 'production') {
-    logger.warn(
+    logEvent(
+      logger,
+      'warn',
+      'REALTIME_PUBSUB_NOT_PROVIDED',
       'No IRealtimePubSub provided in production — single-instance only. Provide a Redis-backed IRealtimePubSub for horizontal scaling.',
     )
   }

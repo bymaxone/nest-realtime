@@ -23,7 +23,9 @@ import type {
   BymaxRealtimeModuleOptions,
   ReauthenticationPolicy,
 } from '../interfaces/realtime-module-options.interface'
+import { RealtimeTracing } from '../observability/realtime-tracing'
 import { describeError } from '../utils/describe-error'
+import { logEvent } from '../utils/log-event'
 import { Semaphore } from '../utils/semaphore'
 import { runHook } from '../utils/run-hook'
 import { ConnectionRegistry } from './connection-registry.service'
@@ -82,6 +84,8 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     @Inject(REALTIME_AUTHENTICATOR_TOKEN) private readonly auth: IConnectionAuthenticator,
     @Inject(REALTIME_OPTIONS_TOKEN) options: BymaxRealtimeModuleOptions,
     @Optional() @Inject(REALTIME_HOOKS_TOKEN) private readonly hooks?: IConnectionLifecycleHooks,
+    // Optional so the service can be unit-constructed in isolation; the module always provides it.
+    @Optional() @Inject(RealtimeTracing) private readonly tracing?: RealtimeTracing,
   ) {
     this.policy = resolvePolicy(options.reauthenticationPolicy)
     this.slots = new Semaphore(this.policy.concurrency)
@@ -101,7 +105,12 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     }
     this.timer = setInterval(() => {
       this.runCycle().catch((err: unknown) => {
-        this.logger.warn(`Reauthentication cycle failed: ${describeError(err)}`)
+        logEvent(
+          this.logger,
+          'warn',
+          'REALTIME_REAUTH_FAILED',
+          `Reauthentication cycle failed: ${describeError(err)}`,
+        )
       })
     }, this.policy.intervalSeconds * 1000)
     this.timer.unref()
@@ -144,7 +153,10 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       ...this.connections.allByTransport('sse'),
       ...this.connections.allByTransport('websocket'),
     ]
-    await Promise.all(connections.map((conn) => this.check(conn, now)))
+    const run = async (): Promise<void> => {
+      await Promise.all(connections.map((conn) => this.check(conn, now)))
+    }
+    await (this.tracing ? this.tracing.span('realtime.reauthenticate', {}, run) : run())
   }
 
   /** Revalidate one connection unless it is cached or already being revalidated. */
@@ -192,7 +204,13 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       }
       await this.revoke(conn)
     } catch (err) {
-      this.logger.warn(`Reauthentication errored for ${conn.connectionId}: ${describeError(err)}`)
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_REAUTH_FAILED',
+        `Reauthentication errored: ${describeError(err)}`,
+        { connectionId: conn.connectionId },
+      )
       await this.revoke(conn)
     }
   }
@@ -234,8 +252,12 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     try {
       await this.bounded('revocation', () => this.handleFailure(conn))
     } catch (err) {
-      this.logger.warn(
-        `Revocation of ${conn.connectionId} failed, retrying next cycle: ${describeError(err)}`,
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_REVOCATION_FAILED',
+        `Revocation failed, retrying next cycle: ${describeError(err)}`,
+        { connectionId: conn.connectionId },
       )
     }
   }
@@ -266,7 +288,13 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       }),
     ).then((failed) => {
       if (failed) {
-        this.logger.warn(`onReauthenticationFailed hook failed: ${describeError(failed.error)}`)
+        logEvent(
+          this.logger,
+          'warn',
+          'REALTIME_HOOK_FAILED',
+          `onReauthenticationFailed hook failed: ${describeError(failed.error)}`,
+          { hook: 'onReauthenticationFailed' },
+        )
       }
     })
 
@@ -276,8 +304,12 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   /** Send the failure event without waiting for it; a rejection, or a throw, is only logged. */
   private notify(conn: ConnectionRecord): void {
     const failed = (err: unknown): void => {
-      this.logger.warn(
-        `Reauthentication notification for ${conn.connectionId} failed, disconnecting anyway: ${describeError(err)}`,
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_REAUTH_FAILED',
+        `Reauthentication notification failed, disconnecting anyway: ${describeError(err)}`,
+        { connectionId: conn.connectionId },
       )
     }
     try {

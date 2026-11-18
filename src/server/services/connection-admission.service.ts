@@ -3,8 +3,10 @@
  * @layer application
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
+import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { REALTIME_OPTIONS_TOKEN } from '../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { logEvent } from '../utils/log-event'
 import { windowedReport } from '../utils/windowed-report'
 import { ConnectionRegistry } from './connection-registry.service'
 
@@ -21,6 +23,9 @@ const HOLD_MARGIN_MS = 5_000
 
 /** A handshake was refused because the instance already holds `maxConnections` connections. */
 export class ConnectionLimitError extends Error {
+  /** The code the refusal travels under, so a span or a log names it without reading the message. */
+  readonly code = REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE
+
   constructor(readonly limit: number) {
     super(`the instance already holds ${limit} connections`)
   }
@@ -68,9 +73,13 @@ export class ConnectionAdmission {
   private readonly refusals = windowedReport(
     () => 0,
     (count) => {
-      this.logger.warn(
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_CONNECTIONS_REFUSED',
         `connections refused since the last report: ${count}, because the instance already holds ` +
           `${this.max} (maxConnections)`,
+        { count, maxConnections: this.max },
       )
     },
   )

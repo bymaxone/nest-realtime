@@ -57,7 +57,9 @@ describe('SseSubscriptionHandler — onConnectFailure', () => {
   ])('keeps the stream open when onConnect fails and the option is %s', async (_label, option) => {
     const run = await open(async () => Promise.reject(new Error('presence store down')), option)
     expect(run.closed()).toBe(false)
-    expect(warn).toHaveBeenCalledWith('Lifecycle hook failed: presence store down')
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Lifecycle hook failed: presence store down' }),
+    )
   })
 
   // A rejection and a synchronous throw are the same failure.
@@ -73,7 +75,9 @@ describe('SseSubscriptionHandler — onConnectFailure', () => {
     const run = await open(onConnect, 'close')
     expect(run.completed()).toBe(true)
     expect(run.closed()).toBe(true)
-    expect(warn).toHaveBeenCalledWith('Lifecycle hook failed: presence store down')
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Lifecycle hook failed: presence store down' }),
+    )
   })
 
   // The option says what a failure does; a hook that succeeds leaves the stream alone.

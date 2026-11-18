@@ -5,6 +5,7 @@
  * @layer infrastructure
  */
 import { Logger } from '@nestjs/common'
+import { lineOf } from '../../../test/support/log-lines'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import type { SseTransport } from '../transports/sse/sse.transport'
 import { RealtimePubSubSubscriber } from './realtime-pubsub-subscriber'
@@ -58,7 +59,13 @@ describe('messages the subscriber cannot act on', () => {
 
     expect(warn).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenLastCalledWith(
-      'Pub/sub dropped 3 message(s) it could not act on since the last report (last: unknown op)',
+      expect.objectContaining({
+        event: 'REALTIME_PUBSUB_DROPPED',
+        count: 3,
+        last: 'unknown op',
+        message:
+          'Pub/sub dropped 3 message(s) it could not act on since the last report (last: unknown op)',
+      }),
     )
   })
 
@@ -73,7 +80,13 @@ describe('messages the subscriber cannot act on', () => {
 
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(
-      'Pub/sub dropped 1 message(s) it could not act on since the last report (last: TypeError)',
+      expect.objectContaining({
+        event: 'REALTIME_PUBSUB_DROPPED',
+        count: 1,
+        last: 'TypeError',
+        message:
+          'Pub/sub dropped 1 message(s) it could not act on since the last report (last: TypeError)',
+      }),
     )
   })
 
@@ -88,7 +101,13 @@ describe('messages the subscriber cannot act on', () => {
     expect(() => deliver(null)).not.toThrow()
 
     expect(warn).toHaveBeenCalledWith(
-      'Pub/sub dropped 1 message(s) it could not act on since the last report (last: TypeError)',
+      expect.objectContaining({
+        event: 'REALTIME_PUBSUB_DROPPED',
+        count: 1,
+        last: 'TypeError',
+        message:
+          'Pub/sub dropped 1 message(s) it could not act on since the last report (last: TypeError)',
+      }),
     )
   })
 
@@ -116,7 +135,7 @@ describe('messages the subscriber cannot act on', () => {
     deliver({ op: `x\r\nFORGED line ${'a'.repeat(100_000)}`, origin: 'other' })
 
     expect(warn).toHaveBeenCalledTimes(1)
-    const line = String(warn.mock.calls[0]?.[0])
+    const line = lineOf(warn.mock.calls[0]?.[0])
     expect(line).not.toMatch(/[\r\n]/)
     expect(line).not.toContain('FORGED')
     expect(line.length).toBeLessThan(200)
@@ -140,7 +159,7 @@ describe('messages the subscriber cannot act on', () => {
       args: { userId: 'u', event: 'e', data: 1, id: '1' },
     })
 
-    const line = String(warn.mock.calls[0]?.[0])
+    const line = lineOf(warn.mock.calls[0]?.[0])
     expect(line).not.toContain('secret')
     expect(line).not.toMatch(/[\r\n]/)
   })
@@ -164,7 +183,13 @@ describe('messages the subscriber cannot act on', () => {
     })
 
     expect(warn).toHaveBeenCalledWith(
-      'Pub/sub dropped 1 message(s) it could not act on since the last report (last: Error)',
+      expect.objectContaining({
+        event: 'REALTIME_PUBSUB_DROPPED',
+        count: 1,
+        last: 'Error',
+        message:
+          'Pub/sub dropped 1 message(s) it could not act on since the last report (last: Error)',
+      }),
     )
   })
 })

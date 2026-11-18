@@ -107,7 +107,13 @@ describe('SseTransport: closing a connection', () => {
     await jest.advanceTimersByTimeAsync(50)
     await closing
 
-    expect(error).toHaveBeenCalledWith('onDisconnect hook failed: did not settle within 50 ms')
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onDisconnect',
+        message: 'onDisconnect hook failed: did not settle within 50 ms',
+      }),
+    )
   })
 
   it('bounds a revocation through disconnect() the same way', async () => {
@@ -130,7 +136,13 @@ describe('SseTransport: closing a connection', () => {
     await jest.advanceTimersByTimeAsync(1)
     await closing
 
-    expect(error).toHaveBeenCalledWith('onDisconnect hook failed: did not settle within 5000 ms')
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onDisconnect',
+        message: 'onDisconnect hook failed: did not settle within 5000 ms',
+      }),
+    )
   })
 
   // A hook that never settles must not hold a user's next connection back from being admitted.

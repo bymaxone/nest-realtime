@@ -2,13 +2,16 @@
  * @fileoverview NestJS WebSocket gateway — handshake auth, lifecycle, and connection:established.
  * @layer transport
  */
-import { Inject, Logger } from '@nestjs/common'
+import { Inject, Logger, Optional } from '@nestjs/common'
 import type { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from '@nestjs/websockets'
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets'
 import type { Server, Socket } from 'socket.io'
 import {
   AuthenticationUnavailableError,
   ConnectionLimitError,
+  RealtimeMetricsTally,
+  RealtimeTracing,
+  logEvent,
   describeError,
   REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
@@ -61,6 +64,14 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   constructor(
     @Inject(WebSocketTransport) private readonly transport: WebSocketTransport,
     @Inject(REALTIME_OPTIONS_TOKEN) private readonly options: BymaxRealtimeModuleOptions,
+    // Optional so the gateway can be unit-constructed in isolation; the module always provides it.
+    @Optional()
+    @Inject(RealtimeMetricsTally)
+    private readonly tally?: RealtimeMetricsTally,
+    // Optional so the gateway can be unit-constructed in isolation; the module always provides it.
+    @Optional()
+    @Inject(RealtimeTracing)
+    private readonly tracing?: RealtimeTracing,
   ) {}
 
   /** Identities the handshake middleware resolved, until `handleConnection` takes them. */
@@ -69,15 +80,41 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   /** The place held for a socket from before its handshake is authenticated until it is registered. */
   private readonly tickets = new WeakMap<Socket, AdmissionTicket>()
 
-  /** Authenticate before accept: a refusal is a `connect_error` with `data.code`; a failure is generic. */
+  /**
+   * Authenticate before accept, inside the `realtime.handshake` span when tracing is wired.
+   *
+   * The refusal the handshake produces is held until the span has ended, so that the span carries it, and is
+   * then handed to `next`.
+   */
   private readonly authenticateHandshake = async (
     socket: Socket,
     next: (err?: Error) => void,
   ): Promise<void> => {
+    let outcome: Error | undefined
+    const run = async (): Promise<void> => {
+      await this.handshake(socket, (err) => {
+        outcome = err
+      })
+      if (outcome) throw outcome
+    }
+    try {
+      await (this.tracing
+        ? this.tracing.span('realtime.handshake', { 'bymax.realtime.transport': 'websocket' }, run)
+        : run())
+    } catch {
+      // The refusal is `outcome`, already recorded on the span.
+    }
+    if (outcome) next(outcome)
+    else next()
+  }
+
+  /** Authenticate before accept: a refusal is a `connect_error` with `data.code`; a failure is generic. */
+  private async handshake(socket: Socket, next: (err?: Error) => void): Promise<void> {
     let ticket: AdmissionTicket | undefined
     let handedOver = false
     try {
       if (this.transport.shuttingDown) {
+        this.tally?.refused('unavailable')
         next(this.unavailable())
         return
       }
@@ -89,10 +126,12 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       const auth = await this.transport.authenticate(this.buildAuthContext(socket))
       // Authentication is asynchronous, so shutdown may have begun while this handshake waited.
       if (this.transport.shuttingDown) {
+        this.tally?.refused('unavailable')
         next(this.unavailable())
         return
       }
       if (!auth) {
+        this.tally?.refused('unauthorized')
         const refusal = new Error(REALTIME_ERROR_CODES.AUTH_FAILED) as Error & { data: unknown }
         refusal.data = { code: REALTIME_ERROR_CODES.AUTH_FAILED }
         next(refusal)
@@ -120,10 +159,21 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
    * client can retry it; any other failure is not something a client can act on and carries none.
    */
   private refusalFor(socket: Socket, err: unknown): Error {
-    if (err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError) {
+    if (err instanceof ConnectionLimitError) {
+      this.tally?.refused('limit')
       return this.unavailable('Internal Server Error')
     }
-    this.logger.error(`handshake refused for socket ${socket.id}: ${describeError(err)}`)
+    if (err instanceof AuthenticationUnavailableError) {
+      this.tally?.refused('unavailable')
+      return this.unavailable('Internal Server Error')
+    }
+    logEvent(
+      this.logger,
+      'error',
+      'REALTIME_HANDSHAKE_FAILED',
+      `handshake refused: ${describeError(err)}`,
+      { socketId: socket.id },
+    )
     return new Error('Internal Server Error')
   }
 
@@ -147,7 +197,10 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   /** Report a server that `RealtimeIoAdapter` did not create: its options are dropped. */
   private reportMissingAdapter(): void {
     const configured = Object.keys(this.options.websocket ?? {})
-    this.logger.error(
+    logEvent(
+      this.logger,
+      'error',
+      'REALTIME_ADAPTER_MISSING',
       'RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options' +
         (configured.length > 0 ? ` (${configured.join(', ')})` : '') +
         ' are ignored and the gateway CORS stays closed (origin: false): browsers on another ' +
@@ -236,9 +289,17 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         })
       }
     } catch (err) {
-      if (!(err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError)) {
-        this.logger.error(
-          `handleConnection threw for socket ${socket.id} — disconnecting: ${describeError(err)}`,
+      if (err instanceof ConnectionLimitError) {
+        this.tally?.refused('limit')
+      } else if (err instanceof AuthenticationUnavailableError) {
+        this.tally?.refused('unavailable')
+      } else {
+        logEvent(
+          this.logger,
+          'error',
+          'REALTIME_HANDSHAKE_FAILED',
+          `handleConnection threw — disconnecting: ${describeError(err)}`,
+          { socketId: socket.id },
         )
       }
       socket.disconnect(true)
@@ -279,6 +340,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     this.tickets.delete(socket)
     if (auth) return { auth, ticket }
     if (this.transport.shuttingDown) {
+      this.tally?.refused('unavailable')
       socket.disconnect(true)
       return undefined
     }
@@ -286,6 +348,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     try {
       const fresh = await this.transport.authenticate(this.buildAuthContext(socket))
       if (!fresh) {
+        this.tally?.refused('unauthorized')
         socket.disconnect(true)
         held.release()
         return undefined

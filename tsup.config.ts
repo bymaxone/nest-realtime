@@ -27,6 +27,9 @@ const externalAll = [
   'react',
   'react-dom',
   'socket.io-client',
+  '@bymax-one/nest-core',
+  'prom-client',
+  '@opentelemetry/api',
 ]
 
 export default defineConfig([
@@ -99,6 +102,23 @@ export default defineConfig([
     tsconfig: 'tsconfig.build.json',
     outDir: 'dist',
     outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false,
+  },
+  // Observability entry — the metrics contributor, the health indicator and the spans. Everything that
+  // reaches `@bymax-one/nest-core`, `prom-client` or `@opentelemetry/api` lives here and only here: the
+  // root and the shared runtime stay free of them, so an application that publishes nothing installs none.
+  {
+    entry: { 'observability/index': 'src/observability/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
+    external: externalAll,
     target: 'node24',
     clean: false,
     splitting: false,

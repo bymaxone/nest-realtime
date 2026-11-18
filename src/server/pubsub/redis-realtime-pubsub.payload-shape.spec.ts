@@ -33,7 +33,12 @@ describe('a payload that parses to something other than an object', () => {
 
         expect(handler).not.toHaveBeenCalled()
         expect(warn).toHaveBeenCalledWith(
-          'REALTIME_PUBSUB_UNAVAILABLE: dropped 1 malformed payload(s) on "bymax:realtime" since the last report',
+          expect.objectContaining({
+            event: 'REALTIME_PUBSUB_DROPPED',
+            count: 1,
+            last: 'malformed',
+            message: 'dropped 1 malformed payload(s) since the last report',
+          }),
         )
       } finally {
         now.mockRestore()

@@ -3,6 +3,7 @@
  * @layer application
  */
 import { Logger } from '@nestjs/common'
+import { lineOf } from '../../../test/support/log-lines'
 import type { ConnectionAuthContext } from '../interfaces/connection-authenticator.interface'
 import { AuthenticationGate, AuthenticationUnavailableError } from './authentication-gate.service'
 
@@ -282,7 +283,7 @@ describe('AuthenticationGate', () => {
       for (let i = 0; i < 50; i++) await rejection(gate.authenticate(context))
 
       expect(warn).toHaveBeenCalledTimes(1)
-      const [line] = warn.mock.calls[0] as [string]
+      const line = lineOf(warn.mock.calls[0]?.[0])
       expect(line).toBe(
         'handshakes refused since the last report: 1 because 1 were already waiting for the authenticator, 0 because it did not answer in 10000 ms',
       )
@@ -302,7 +303,15 @@ describe('AuthenticationGate', () => {
 
       expect(warn).toHaveBeenCalledTimes(2)
       expect(warn.mock.calls[1]).toStrictEqual([
-        'handshakes refused since the last report: 3 because 1 were already waiting for the authenticator, 1 because it did not answer in 10000 ms',
+        {
+          event: 'REALTIME_HANDSHAKES_REFUSED',
+          message:
+            'handshakes refused since the last report: 3 because 1 were already waiting for the authenticator, 1 because it did not answer in 10000 ms',
+          saturated: 3,
+          timedOut: 1,
+          maxPendingHandshakes: 1,
+          authenticateTimeoutMs: 10000,
+        },
       ])
     })
 
@@ -315,7 +324,10 @@ describe('AuthenticationGate', () => {
       await answer
 
       expect(warn).toHaveBeenCalledWith(
-        'handshakes refused since the last report: 0 because 10 were already waiting for the authenticator, 1 because it did not answer in 100 ms',
+        expect.objectContaining({
+          message:
+            'handshakes refused since the last report: 0 because 10 were already waiting for the authenticator, 1 because it did not answer in 100 ms',
+        }),
       )
     })
   })

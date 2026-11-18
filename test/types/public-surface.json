@@ -2,6 +2,7 @@
   ".": [
     "ADMISSION_ROOM_LIMITS",
     "AuthenticationResult",
+    "AuthenticatorCallOptions",
     "BymaxRealtimeModule",
     "BymaxRealtimeModuleAsyncOptions",
     "BymaxRealtimeModuleOptions",
@@ -41,7 +42,6 @@
     "RedisRealtimePubSub",
     "RedisRealtimePubSubOptions",
     "ReservedEventName",
-    "AuthenticatorCallOptions",
     "RoomPrefix",
     "SseOptions",
     "SseRealtimeModuleAsyncOptions",
@@ -58,6 +58,10 @@
     "WebSocketRealtimeModuleAsyncOptions",
     "WebSocketRealtimeModuleOptions",
     "WebSocketTransport"
+  ],
+  "./observability": [
+    "RealtimeMetrics",
+    "RealtimePubSubHealthIndicator"
   ],
   "./shared": [
     "ADMISSION_ROOM_LIMITS",

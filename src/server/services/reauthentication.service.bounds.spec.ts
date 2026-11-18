@@ -56,7 +56,9 @@ describe('ReauthenticationService: the cycle is bounded', () => {
     expect(realtime.disconnect).toHaveBeenCalledWith('revoked', REVOKED)
     expect(realtime.disconnect).toHaveBeenCalledWith('hung', REVOKED)
     expect(warn).toHaveBeenCalledWith(
-      'Reauthentication errored for hung: revalidate did not settle within 10000 ms',
+      expect.objectContaining({
+        message: 'Reauthentication errored: revalidate did not settle within 10000 ms',
+      }),
     )
   })
 
@@ -79,7 +81,11 @@ describe('ReauthenticationService: the cycle is bounded', () => {
 
     expect(realtime.disconnect).toHaveBeenCalledWith('next', REVOKED)
     expect(warn).toHaveBeenCalledWith(
-      'Revocation of stuck failed, retrying next cycle: revocation did not settle within 1000 ms',
+      expect.objectContaining({
+        event: 'REALTIME_REVOCATION_FAILED',
+        connectionId: 'stuck',
+        message: 'Revocation failed, retrying next cycle: revocation did not settle within 1000 ms',
+      }),
     )
   })
 
