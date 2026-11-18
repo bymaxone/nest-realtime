@@ -258,6 +258,15 @@ function resolveAsyncOptions(
 }
 
 /**
+ * Whether a factory pattern is named: `undefined` and `null` both mean it is not. Counting the patterns and
+ * choosing the provider have to use this one test, or a `null` is counted as the pattern in use and then
+ * skipped when the provider is built.
+ */
+function isSet<T>(pattern: T | null | undefined): pattern is T {
+  return pattern !== undefined && pattern !== null
+}
+
+/**
  * Refuse a registration that names no factory pattern or more than one.
  *
  * @throws when the number of `useFactory`, `useClass` and `useExisting` given is not exactly one.
@@ -270,7 +279,7 @@ function assertOneFactoryPattern(
     asyncOptions.useFactory,
     asyncOptions.useClass,
     asyncOptions.useExisting,
-  ].filter((pattern) => pattern !== undefined)
+  ].filter(isSet)
   if (patterns.length === 1) return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
@@ -288,7 +297,7 @@ function buildOptionsProvider(
   ) => ResolvedRealtimeOptions,
   factoryToken: symbol,
 ): Provider {
-  if (asyncOptions.useFactory) {
+  if (isSet(asyncOptions.useFactory)) {
     return {
       provide: REALTIME_OPTIONS_TOKEN,
       useFactory: async (...args: unknown[]) =>
@@ -378,7 +387,7 @@ export function composeForRootAsync(
   const boundSseEndpoint = asyncOptions.sseEndpoint ?? DEFAULT_ASYNC_SSE_ENDPOINT
   const resolve = buildResolver(asyncOptions, instanceId, boundSseEndpoint, logger, moduleName)
 
-  const factoryClassProvider: Provider[] = asyncOptions.useClass
+  const factoryClassProvider: Provider[] = isSet(asyncOptions.useClass)
     ? [{ provide: FACTORY_TOKEN, useClass: asyncOptions.useClass }]
     : []
 

@@ -101,6 +101,46 @@ describe('the options argument and the factory result of forRootAsync', () => {
   })
 })
 
+describe('a factory pattern of forRootAsync that is null', () => {
+  @Injectable()
+  class ClassFactory {
+    createRealtimeOptions(): { transport: 'sse'; authenticator: typeof authenticator } {
+      return { transport: 'sse', authenticator }
+    }
+  }
+  const useFactory = (): { transport: 'sse'; authenticator: typeof authenticator } => ({
+    transport: 'sse',
+    authenticator,
+  })
+  const COUNT = 'forRootAsync requires exactly one of useFactory, useClass, or useExisting'
+
+  // Scenario: a pattern set to null beside the one in use. Expected: null reads as unset, like undefined,
+  // so the registration names one pattern and resolves it; it used to count as a second one and be refused.
+  it.each([
+    ['useFactory', { useClass: ClassFactory }],
+    ['useClass', { useFactory }],
+    ['useExisting', { useFactory }],
+  ])('reads %s of null as unset beside a pattern in use', async (name, rest) => {
+    const testModule = Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({ transport: 'sse', [name]: null, ...rest } as never),
+      ],
+    })
+    await expect(testModule.compile()).resolves.toBeDefined()
+  })
+
+  // Scenario: the only pattern is null. Expected: the typed refusal at registration that counts none; it used
+  // to count one and fail at bootstrap with the container's own unresolved-dependency error.
+  it.each(['useFactory', 'useClass', 'useExisting'])(
+    'refuses a registration whose only pattern is %s of null',
+    (name) => {
+      expect(() =>
+        BymaxRealtimeModule.forRootAsync({ transport: 'sse', [name]: null } as never),
+      ).toThrow(`${COUNT} (received 0)`)
+    },
+  )
+})
+
 describe('the sseEndpoint of forRootAsync', () => {
   const register = (sseEndpoint: unknown): unknown =>
     BymaxRealtimeModule.forRootAsync({
