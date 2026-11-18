@@ -82,7 +82,7 @@ The default transport is **Server-Sent Events**: browser-native, plain HTTP, no 
 
 ## 📦 Subpath Exports
 
-One package, five entry points — import only what your app needs:
+One package, several entry points — import only what your app needs:
 
 | Subpath           | Import                                   | Purpose                                        |                           Dependencies                            |
 | ----------------- | ---------------------------------------- | ---------------------------------------------- | :---------------------------------------------------------------: |
@@ -478,7 +478,7 @@ The Socket.IO server closes first, then the adapter's `dispose()` runs, and `dis
 
 ### Observability
 
-Everything here is optional. The root and the shared runtime import none of `@bymax-one/nest-core`, `prom-client` or `@opentelemetry/api`, so an application that publishes no metrics installs none of them.
+Everything here is optional. The root and the shared runtime import none of `@bymax-one/nest-core`, `prom-client` or `@opentelemetry/api` statically, so an application that publishes no metrics installs none of them.
 
 **Metrics.** Register `RealtimeMetrics` in a module of your application; `BymaxCoreModule` discovers it and calls it once at bootstrap with the registry its scrape endpoint serves. It injects what the realtime module exports, so nothing else is wired.
 
@@ -506,31 +506,31 @@ A label is one of the values listed and never an id, a tenant or a user. A revoc
 
 **Traces.** With `@opentelemetry/api` installed the library starts `realtime.handshake` around the admission and authentication of each connection (attribute `bymax.realtime.transport`, `sse` or `websocket`) and `realtime.reauthenticate` around each re-authentication cycle. A refused handshake ends its span with status ERROR and the library error code, never the message. With no SDK registered the API is a no-op, and without the package nothing is started.
 
-**Log events.** Every `warn` and `error` line the library writes is an object, `{ event, message, ...fields }`, so a structured logger writes each as a JSON field and Nest's default logger prints the object. The fields are counts, sizes, configured limits, transport names and a library-made connection id; a user id, a tenant id, a room or any value your application supplied is never in a message or a field, because the logger's own context carries identity. Lines that report that the library started stay plain strings.
+**Log events.** Every `warn` and `error` line the library writes is an object, `{ event, message, ...fields }`, so a structured logger writes each as a JSON field and Nest's default logger prints the object. The fields are counts, sizes, configured limits, transport names and a library-made connection id; a user id, a tenant id or a room is never in a message or a field, because the logger's own context carries identity. Lines that report that the library started stay plain strings.
 
-| Event                                  | Level | When                                                                                | Fields                                                                   |
-| -------------------------------------- | ----- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `REALTIME_REAUTH_CACHE_WEAKENS_POLICY` | warn  | At start-up, `reauthenticationPolicy.cacheTtlMs` is longer than the interval.       | `cacheTtlMs`, `intervalMs`                                               |
-| `REALTIME_HANDSHAKE_FAILED`            | error | A handshake failed with an error that is not a refusal and was answered as a 500.   | `socketId` (WebSocket)                                                   |
-| `REALTIME_HOOK_FAILED`                 | warn  | A lifecycle hook threw or did not settle within `hookTimeoutMs`.                    | `hook` where known                                                       |
-| `REALTIME_DELIVERY_FAILED`             | warn  | A delivery failed without failing its call.                                         | `connectionId` or `code`, `op`                                           |
-| `REALTIME_SLOW_CONSUMER`               | warn  | A connection was cut for not reading what it was sent.                              | `connectionId`, `queuedEvents`, `queuedBytes`, `heldBytes`               |
-| `REALTIME_DISCONNECT_FAILED`           | warn  | Closing a connection failed.                                                        | `connectionId`                                                           |
-| `REALTIME_RECONNECTS_GIVEN_UP`         | warn  | Reconnects were given up on because the offline queue did not answer (windowed).    | `count`, `timeoutMs`, `maxPending`                                       |
-| `REALTIME_OFFLINE_QUEUE_LIMIT`         | warn  | A read of the offline queue reached its event limit.                                | `limit`                                                                  |
-| `REALTIME_OFFLINE_QUEUE_ACK_FAILED`    | warn  | Acknowledging the offline queue failed.                                             | none                                                                     |
-| `REALTIME_PUBSUB_NOT_PROVIDED`         | warn  | In production, no `IRealtimePubSub` was provided: single instance only.             | none                                                                     |
-| `REALTIME_PUBSUB_UNSUBSCRIBE_FAILED`   | warn  | Unsubscribing from the bus failed at shutdown.                                      | none                                                                     |
-| `REALTIME_PUBSUB_DROPPED`              | warn  | The bus dropped messages it could not act on (windowed).                            | `count`, `last`                                                          |
-| `REALTIME_PUBSUB_UNAVAILABLE`          | warn  | The bus refused or lost the subscription; remote events do not reach this instance. | none                                                                     |
-| `REALTIME_CONNECTIONS_REFUSED`         | warn  | Connections were refused at `maxConnections` (windowed).                            | `count`, `maxConnections`                                                |
-| `REALTIME_HANDSHAKES_REFUSED`          | warn  | Handshakes were refused because the authenticator was saturated or slow (windowed). | `saturated`, `timedOut`, `maxPendingHandshakes`, `authenticateTimeoutMs` |
-| `REALTIME_REAUTH_FAILED`               | warn  | A re-authentication cycle, a check or its notification failed.                      | `connectionId` where known                                               |
-| `REALTIME_REVOCATION_FAILED`           | warn  | A revocation failed and is retried on the next cycle.                               | `connectionId`                                                           |
-| `REALTIME_ADAPTER_MISSING`             | error | `RealtimeIoAdapter` is not the active WebSocket adapter.                            | none                                                                     |
-| `REALTIME_ADAPTER_COMMAND_FAILED`      | warn  | A command of the Redis adapter's subscriber failed (once for each connection).      | none                                                                     |
-| `REALTIME_COMPOSITE_PARTIAL_FAILURE`   | warn  | One of the two transports failed an emit under `transport: 'both'`.                 | `op`                                                                     |
-| `REALTIME_SERVER_NOT_ATTACHED`         | warn  | An emit was made before the WebSocket server was attached (once).                   | `op`                                                                     |
+| Event                                  | Level       | When                                                                                | Fields                                                                   |
+| -------------------------------------- | ----------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `REALTIME_REAUTH_CACHE_WEAKENS_POLICY` | warn        | At start-up, `reauthenticationPolicy.cacheTtlMs` is longer than the interval.       | `cacheTtlMs`, `intervalMs`                                               |
+| `REALTIME_HANDSHAKE_FAILED`            | error       | A handshake failed with an error that is not a refusal and was answered as a 500.   | `socketId` (WebSocket)                                                   |
+| `REALTIME_HOOK_FAILED`                 | warn, error | A lifecycle hook threw or did not settle within `hookTimeoutMs`.                    | `hook` where known                                                       |
+| `REALTIME_DELIVERY_FAILED`             | warn        | A delivery failed without failing its call.                                         | `connectionId` or `code`, `op`                                           |
+| `REALTIME_SLOW_CONSUMER`               | warn        | A connection was cut for not reading what it was sent.                              | `connectionId`, `queuedEvents`, `queuedBytes`, `heldBytes`               |
+| `REALTIME_DISCONNECT_FAILED`           | warn        | Closing a connection failed.                                                        | `connectionId`                                                           |
+| `REALTIME_RECONNECTS_GIVEN_UP`         | warn        | Reconnects were given up on because the offline queue did not answer (windowed).    | `count`, `timeoutMs`, `maxPending`                                       |
+| `REALTIME_OFFLINE_QUEUE_LIMIT`         | warn        | A read of the offline queue reached its event limit.                                | `limit`                                                                  |
+| `REALTIME_OFFLINE_QUEUE_ACK_FAILED`    | warn        | Acknowledging the offline queue failed.                                             | none                                                                     |
+| `REALTIME_PUBSUB_NOT_PROVIDED`         | warn        | In production, no `IRealtimePubSub` was provided: single instance only.             | none                                                                     |
+| `REALTIME_PUBSUB_UNSUBSCRIBE_FAILED`   | warn        | Unsubscribing from the bus failed at shutdown.                                      | none                                                                     |
+| `REALTIME_PUBSUB_DROPPED`              | warn        | The bus dropped messages it could not act on (windowed).                            | `count`, `last`                                                          |
+| `REALTIME_PUBSUB_UNAVAILABLE`          | warn        | The bus refused or lost the subscription; remote events do not reach this instance. | none                                                                     |
+| `REALTIME_CONNECTIONS_REFUSED`         | warn        | Connections were refused at `maxConnections` (windowed).                            | `count`, `maxConnections`                                                |
+| `REALTIME_HANDSHAKES_REFUSED`          | warn        | Handshakes were refused because the authenticator was saturated or slow (windowed). | `saturated`, `timedOut`, `maxPendingHandshakes`, `authenticateTimeoutMs` |
+| `REALTIME_REAUTH_FAILED`               | warn        | A re-authentication cycle, a check or its notification failed.                      | `connectionId` where known                                               |
+| `REALTIME_REVOCATION_FAILED`           | warn        | A revocation failed and is retried on the next cycle.                               | `connectionId`                                                           |
+| `REALTIME_ADAPTER_MISSING`             | error       | `RealtimeIoAdapter` is not the active WebSocket adapter.                            | none                                                                     |
+| `REALTIME_ADAPTER_COMMAND_FAILED`      | warn        | A command of the Redis adapter's subscriber failed (once for each connection).      | none                                                                     |
+| `REALTIME_COMPOSITE_PARTIAL_FAILURE`   | warn        | One of the two transports failed an emit under `transport: 'both'`.                 | `op`                                                                     |
+| `REALTIME_SERVER_NOT_ATTACHED`         | warn        | An emit was made before the WebSocket server was attached (once).                   | `op`                                                                     |
 
 ### Before you deploy
 
