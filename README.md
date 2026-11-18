@@ -483,6 +483,7 @@ Everything here is optional. The root and the shared runtime import none of `@by
 **Metrics.** Register `RealtimeMetrics` in a module of your application; `BymaxCoreModule` discovers it and calls it once at bootstrap with the registry its scrape endpoint serves. It injects what the realtime module exports, so nothing else is wired.
 
 ```typescript
+import { Module } from '@nestjs/common'
 import {
   RealtimeMetrics,
   RealtimePubSubHealthIndicator,

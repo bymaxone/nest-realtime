@@ -50,6 +50,10 @@ function makeSocket(
   }
 }
 
+/** The error event the gateway logs for a socket it refused, with the text it carries. */
+const handshakeFailed = (message: string): unknown =>
+  expect.objectContaining({ event: 'REALTIME_HANDSHAKE_FAILED', socketId: 'sock-1', message })
+
 describe('RealtimeGateway', () => {
   let gateway: RealtimeGateway
   let transportMock: jest.Mocked<
@@ -527,11 +531,7 @@ describe('RealtimeGateway', () => {
 
         expect(socket.disconnect).toHaveBeenCalledWith(true)
         expect(errorSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            event: 'REALTIME_HANDSHAKE_FAILED',
-            socketId: 'sock-1',
-            message: `handleConnection threw — disconnecting: ${logged}`,
-          }),
+          handshakeFailed(`handleConnection threw — disconnecting: ${logged}`),
         )
       } finally {
         errorSpy.mockRestore()
@@ -710,13 +710,7 @@ describe('RealtimeGateway', () => {
 
           expect(next).toHaveBeenCalledTimes(1)
           expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
-          expect(errorSpy).toHaveBeenCalledWith(
-            expect.objectContaining({
-              event: 'REALTIME_HANDSHAKE_FAILED',
-              socketId: 'sock-1',
-              message: `handshake refused: ${logged}`,
-            }),
-          )
+          expect(errorSpy).toHaveBeenCalledWith(handshakeFailed(`handshake refused: ${logged}`))
         } finally {
           errorSpy.mockRestore()
         }
