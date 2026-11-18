@@ -32,6 +32,18 @@ const CONTRACT_MEMBERS = [
 const mentions = (name: string): boolean =>
   new RegExp(`(?<![A-Za-z0-9_])${name}(?![A-Za-z0-9_])`).test(readme)
 
+/** The names `src/internal/index.ts` exports explicitly: not API, but named so a reader of the declarations finds them. */
+const internalNames = [
+  ...readFileSync(join(ROOT, 'src/internal/index.ts'), 'utf8').matchAll(
+    /export (?:type )?\{([^}]*)\}/g,
+  ),
+].flatMap((match) =>
+  match[1]!
+    .split(',')
+    .map((name) => name.trim().split(' as ').pop()!.trim())
+    .filter(Boolean),
+)
+
 describe('the README documents what the package exports', () => {
   const subpaths = Object.entries(surface).filter(([subpath]) => subpath !== './internal')
 
@@ -44,5 +56,13 @@ describe('the README documents what the package exports', () => {
 
   it.each(CONTRACT_MEMBERS)('the README names the contract member %s', (member) => {
     expect(mentions(member)).toBe(true)
+  })
+
+  it.each(internalNames)('./internal exports %s, which the README names as not API', (name) => {
+    expect(mentions(name)).toBe(true)
+  })
+
+  it('names `kind` as a member of ITransport', () => {
+    expect(readme).toContain('`kind`')
   })
 })

@@ -104,6 +104,8 @@ One package, several entry points — import only what your app needs:
 
 The package also exposes `@bymax-one/nest-realtime/internal`. It is **not public API** and carries no compatibility promise — it is the shared runtime the two server subpaths import so that a service registered through one and injected through the other is the same class. Import the four above; nothing you need is only there.
 
+The names `./internal` exports, none of them API and none with a compatibility promise, in four groups. Composition: `composeForRoot`, `composeForRootAsync`, `TransportRegistration`, `TransportWiring` and `sseWiring`, the seam each entry point supplies its wiring to. Shared services: `EventIdGenerator`, `ReauthenticationService`, `AuthenticationGate`, `AuthenticationUnavailableError`, `ConnectionAdmission`, `ConnectionLimitError`, `UNBOUNDED_TICKET`, `AdmissionTicket`, `OfflineQueueDeliveryService`, `EventReplayBuffer`, `HeartbeatService`, `SseSubscriptionHandler`, `createSseController` and `RealtimePubSubSubscriber`. Observability seams: `RealtimeMetricsTally`, `REFUSAL_REASONS`, `EVICTION_REASONS`, `TALLY_TRANSPORTS`, `RefusalReason`, `EvictionReason`, `TallyTransport`, `RealtimeTracing`, `RealtimeSpanName`, `RealtimeSpanAttributes`, `logEvent`, `REALTIME_LOG_EVENTS`, `RealtimeLogEvent` and `LogFields`. Utilities: `DEFAULT_HOOK_TIMEOUT_MS`, `assertIdentityIsNotBlank`, `resolveAuthTenant`, `admitRooms`, `describeError`, `quitWithin`, `QuitableClient`, `runHook`, `unavailableError`, `refuseReservedRoom`, `requireRoomName`, `realtimeError`, `CodedError`, `reportDeliveryFailure` and `parseCookieHeader`.
+
 ---
 
 > [!TIP]
@@ -1006,7 +1008,7 @@ Every name below is exported; the subpath says where to import it from. A type i
 - `IOfflineQueueStorage`: `append` stores an event for a user, `retrieveSince` reads the ones after an id, and `acknowledge` marks events delivered up to an id, which an implementation may purge or keep.
 - `IPresenceStorage`: `setOnline` and `setOffline` record a connection, `isOnline` answers for a user, `listOnlineByTenant` lists a tenant's online users and `countOnline` counts everyone.
 - `IRealtimePubSub`: `publish` sends to the other instances, `subscribe` receives, and the optional `isSubscribed` says whether this instance is subscribed now. A bus that cannot be unsubscribed once subscribed omits it and counts as subscribed; the health indicator reads it.
-- `ITransport`: the optional `onModuleInit`, `beforeApplicationShutdown` and `onApplicationShutdown` are called by Nest on bootstrap and on shutdown, the second before the HTTP server closes.
+- `ITransport`: `kind` names the transport, `'sse'` or `'websocket'`; the optional `onModuleInit`, `beforeApplicationShutdown` and `onApplicationShutdown` are called by Nest on bootstrap and on shutdown, the second before the HTTP server closes.
 
 ### DI Tokens
 
