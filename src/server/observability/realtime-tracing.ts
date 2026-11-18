@@ -68,20 +68,26 @@ export class RealtimeTracing implements OnModuleInit {
     }
   }
 
+  /** Run the operation and report it on the span, where nothing the span does can change what comes back. */
   private async traced<T>(span: Span, run: () => Promise<T>): Promise<T> {
+    let result: T
     try {
-      const result = await run()
-      span.end()
-      return result
+      result = await run()
     } catch (error) {
-      span.setStatus({ code: STATUS_ERROR, message: codeOf(error) })
-      span.end()
+      attempt(() => span.setStatus({ code: STATUS_ERROR, message: codeOf(error) }))
+      attempt(() => span.end())
       throw error
     }
+    attempt(() => span.end())
+    return result
   }
 
   /**
    * Run `run` inside a span named `name`.
+   *
+   * The tracer belongs to the host's SDK, so it is never trusted with the operation: whatever it returns or
+   * throws is ignored, the operation runs exactly once, through the span when the tracer started it and bare
+   * otherwise, and its own result or error is what comes back.
    *
    * @param name - One of the library's span names.
    * @param attributes - Closed-set attributes of the span.
@@ -95,17 +101,25 @@ export class RealtimeTracing implements OnModuleInit {
     const api = this.#api
     if (!api) return run()
     let started: Promise<T> | undefined
-    try {
-      return api.trace
+    attempt(() => {
+      const returned: unknown = api.trace
         .getTracer(TRACER_NAME)
         .startActiveSpan(name, { attributes }, (span): Promise<T> => {
           started = this.traced(span, run)
           return started
         })
-    } catch {
-      // A tracer that throws must not decide what its operation does: run it bare, or take the result of
-      // the run it had already started, so that it never runs twice.
-      return started ?? run()
-    }
+      // The tracer's own promise can fail after the operation ran; that is not the operation's to answer for.
+      Promise.resolve(returned).catch(() => undefined)
+    })
+    return started ?? run()
+  }
+}
+
+/** Run a call into the tracer, and swallow what it throws. */
+function attempt(call: () => void): void {
+  try {
+    call()
+  } catch {
+    // A tracer that throws has no say in what the operation does.
   }
 }

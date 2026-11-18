@@ -132,6 +132,79 @@ describe('RealtimeTracing', () => {
     trace.disable()
   })
 
+  // Scenario: whatever the tracer returns or throws, the operation runs once and its own result or error comes back.
+  // A tracer that returns a non-promise without running the operation, one whose end() or setStatus() throws and
+  // one whose returned promise rejects after it ran the operation must not change the outcome.
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown): void => {
+    unhandled.push(reason)
+  }
+
+  async function withTracer(
+    startActiveSpan: (...args: unknown[]) => unknown,
+  ): Promise<RealtimeTracing> {
+    stop()
+    const { trace } = await import('@opentelemetry/api')
+    trace.setGlobalTracerProvider({
+      getTracer: () => ({ startSpan: () => undefined, startActiveSpan }),
+    } as never)
+    return ready()
+  }
+
+  const callback = (args: unknown[]): ((span: unknown) => unknown) =>
+    args[args.length - 1] as (span: unknown) => unknown
+
+  it('runs the operation once when the tracer returns a non-promise without running it', async () => {
+    const tracing = await withTracer(() => 'not a promise')
+    const run = jest.fn(async () => 'ok')
+    await expect(tracing.span('realtime.handshake', {}, run)).resolves.toBe('ok')
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns the result when the span cannot be ended', async () => {
+    const tracing = await withTracer((...args: unknown[]) =>
+      callback(args)({
+        setStatus() {},
+        end() {
+          throw new Error('end down')
+        },
+      }),
+    )
+    await expect(tracing.span('realtime.handshake', {}, async () => 'ok')).resolves.toBe('ok')
+  })
+
+  it('rethrows the operation error when the status cannot be set', async () => {
+    const tracing = await withTracer((...args: unknown[]) =>
+      callback(args)({
+        setStatus() {
+          throw new Error('status down')
+        },
+        end() {},
+      }),
+    )
+    const failure = new Error('operation failed')
+    await expect(
+      tracing.span('realtime.handshake', {}, () => Promise.reject(failure)),
+    ).rejects.toBe(failure)
+  })
+
+  it('returns the result and leaves no unhandled rejection when the tracer rejects after running it', async () => {
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const tracing = await withTracer(async (...args: unknown[]) => {
+        await callback(args)({ setStatus() {}, end() {} })
+        throw new Error('late tracer failure')
+      })
+      const run = jest.fn(async () => 'ok')
+      await expect(tracing.span('realtime.handshake', {}, run)).resolves.toBe('ok')
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(run).toHaveBeenCalledTimes(1)
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
   // Scenario: the span is used before the module initialised. Expected: the operation runs without a span.
   it('runs the operation before the API has been loaded', async () => {
     const tracing = new RealtimeTracing()
