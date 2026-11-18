@@ -17,7 +17,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 #### Apply to a derived backend
 
-An alert or a log filter that matched the text of a `warn` or `error` line now matches the `event` field instead; the codes are in the README. A host that parsed a line for a user, tenant, room or channel will not find it. Metrics and spans start only when the application registers `RealtimeMetrics` and installs `@opentelemetry/api`; without either nothing changes. A class that subclasses `SseTransport`, `SseSubscriptionHandler`, `WebSocketTransport`, `RealtimeGateway` or `ReauthenticationService` and builds it by hand gains optional trailing constructor parameters and keeps working without them.
+An alert or a log filter that matched the text of a `warn` or `error` line now matches the `event` field instead; the codes are in the README. A host that parsed a line for a user, tenant, room or channel will not find it. Metrics start only when the application registers `RealtimeMetrics`, and spans only when it installs `@opentelemetry/api`; without them nothing changes. A class that subclasses `SseTransport`, `SseSubscriptionHandler`, `WebSocketTransport`, `RealtimeGateway` or `ReauthenticationService` and builds it by hand gains optional trailing constructor parameters and keeps working without them.
 
 ### Fixed
 
