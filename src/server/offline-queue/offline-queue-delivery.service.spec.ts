@@ -61,6 +61,26 @@ describe('OfflineQueueDeliveryService', () => {
       expect(result).toEqual([])
     })
 
+    // A read that returns as many events as the limit may have left older ones behind. Expected: a warning with
+    // its own code and the limit, and the events themselves still returned.
+    it('warns when a read reaches the retrieve limit', async () => {
+      const events = Array.from({ length: 200 }, (_, i) => mkEvent(`e-${i}`))
+      const service = new OfflineQueueDeliveryService(mkStorage(events))
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      try {
+        await expect(service.retrieve('u1', 'last-1', new Set())).resolves.toHaveLength(200)
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            event: 'REALTIME_OFFLINE_QUEUE_LIMIT',
+            limit: 200,
+            message: expect.stringContaining('200-event limit'),
+          }),
+        )
+      } finally {
+        warnSpy.mockRestore()
+      }
+    })
+
     // The gap that could not be read is reported to the consumer's hook as well as logged: the
     // reconnecting client receives an empty replay and has no other way to tell.
     it('reports a retrieveSince failure to onDeliveryFailure', async () => {

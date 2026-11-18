@@ -104,6 +104,7 @@ describe('RealtimeTracing', () => {
   // buried in a longer text, or a lower-case one, is not a code.
   it.each([
     ['null', null],
+    ['undefined', undefined],
     ['a number', 7],
     ['a string that is a code', 'REALTIME_AUTH_FAILED'],
     ['a code inside a longer text', new Error('x REALTIME_AUTH_FAILED')],

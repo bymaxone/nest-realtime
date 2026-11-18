@@ -253,6 +253,8 @@ describe('ReauthenticationService', () => {
           expect(warnSpy).toHaveBeenCalledTimes(1)
           expect(warnSpy).toHaveBeenCalledWith(
             expect.objectContaining({
+              event: 'REALTIME_REAUTH_FAILED',
+              connectionId: 'c1',
               message: `Reauthentication notification failed, disconnecting anyway: ${describeError(failure())}`,
             }),
           )
@@ -283,6 +285,8 @@ describe('ReauthenticationService', () => {
       expect(realtime.disconnect).toHaveBeenCalledTimes(1)
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          event: 'REALTIME_REAUTH_FAILED',
+          connectionId: 'c1',
           message: 'Reauthentication notification failed, disconnecting anyway: sync throw',
         }),
       )
