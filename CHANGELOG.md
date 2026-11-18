@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.19] - 2026-11-17
+
 ### Added
 
 - **Observability, all optional: metrics, a health indicator, spans and log events with stable codes.** A new subpath, `@bymax-one/nest-realtime/observability`, exports `RealtimeMetrics` and `RealtimePubSubHealthIndicator`. Registered as providers of a module of the application, `RealtimeMetrics` publishes `bymax_realtime_connections{transport}`, `bymax_realtime_connections_refused_total{reason}`, `bymax_realtime_evictions_total{reason}`, `bymax_realtime_events_emitted_total{transport}` and `bymax_realtime_slow_consumer_drops_total`, every label from a closed set, and the indicator reports `down` when the bus says it is not subscribed. With `@opentelemetry/api` installed, the library starts `realtime.handshake` and `realtime.reauthenticate` spans, and with no SDK registered they are no-ops. The root and the shared runtime import none of `@bymax-one/nest-core`, `prom-client` or `@opentelemetry/api` statically, which are optional peers, and `pnpm size` fails if one of them reaches those bundles. The README has the Metrics table, the Traces and Health notes and a Log events table.
@@ -1187,7 +1189,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.18...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.19...HEAD
+[1.2.19]: https://github.com/bymaxone/nest-realtime/compare/v1.2.18...v1.2.19
 [1.2.18]: https://github.com/bymaxone/nest-realtime/compare/v1.2.17...v1.2.18
 [1.2.17]: https://github.com/bymaxone/nest-realtime/compare/v1.2.16...v1.2.17
 [1.2.16]: https://github.com/bymaxone/nest-realtime/compare/v1.2.15...v1.2.16
