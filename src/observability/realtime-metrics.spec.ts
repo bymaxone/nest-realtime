@@ -2,9 +2,9 @@
  * @fileoverview The metrics contributor publishes what the transports counted, with every label set closed.
  * @layer observability
  */
-import { BYMAX_METRICS_CONTRIBUTOR_METADATA } from '@bymax-one/nest-core/metrics'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { BYMAX_METRICS_CONTRIBUTOR_METADATA } from '@bymax-one/nest-core/metrics'
 import { Registry } from 'prom-client'
 import { ConnectionRegistry } from '../server/services/connection-registry.service'
 import type { ConnectionRecord } from '../server/services/connection-registry.service'
