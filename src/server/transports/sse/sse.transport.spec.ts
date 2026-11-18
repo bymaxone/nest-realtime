@@ -8,6 +8,12 @@ import { Subject } from 'rxjs'
 import { build, addConn } from '../../../../test/fixtures/sse/transport-harness'
 import type { IOfflineQueueStorage } from '../../interfaces/offline-queue-storage.interface'
 
+/** What the transport logs when a host error is the cause: the error itself, under `err`. */
+const causedBy = (text: string): unknown =>
+  expect.objectContaining({
+    err: expect.objectContaining({ message: expect.stringContaining(text) }),
+  })
+
 describe('SseTransport', () => {
   // The transport reports a fixed kind of 'sse'.
   it('reports kind "sse"', () => {
@@ -630,11 +636,7 @@ describe('SseTransport', () => {
     const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     try {
       await transport.unregisterConnection('c1')
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          err: expect.objectContaining({ message: expect.stringContaining('hook-error') }),
-        }),
-      )
+      expect(errorSpy).toHaveBeenCalledWith(causedBy('hook-error'))
     } finally {
       errorSpy.mockRestore()
     }
@@ -694,11 +696,7 @@ describe('SseTransport', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       await transport.emitToUser('u1', 'foo', {})
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          err: expect.objectContaining({ message: expect.stringContaining('redis-down') }),
-        }),
-      )
+      expect(warnSpy).toHaveBeenCalledWith(causedBy('redis-down'))
     } finally {
       warnSpy.mockRestore()
     }
@@ -727,11 +725,7 @@ describe('SseTransport', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       await transport.emitToUser('u1', 'foo', {})
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          err: expect.objectContaining({ message: expect.stringContaining('deliver-error') }),
-        }),
-      )
+      expect(warnSpy).toHaveBeenCalledWith(causedBy('deliver-error'))
     } finally {
       warnSpy.mockRestore()
     }

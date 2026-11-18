@@ -22,7 +22,7 @@ describe('ReauthenticationService: the cache that outlives the interval', () => 
     jest.restoreAllMocks()
   })
 
-  const start = (policy: { intervalSeconds?: number; cacheTtlMs?: number }) => {
+  const start = (policy?: { intervalSeconds?: number; cacheTtlMs?: number }) => {
     const svc = build(mkConnections([]), mkRealtime(), mkAuth(jest.fn()), mkOptions(policy))
     svc.onModuleInit()
     svc.onApplicationShutdown()
@@ -51,6 +51,7 @@ describe('ReauthenticationService: the cache that outlives the interval', () => 
     ['is far below the interval', { intervalSeconds: 60, cacheTtlMs: 1 }, 0],
     ['is set without an interval', { cacheTtlMs: 120_000 }, 0],
     ['is not set', { intervalSeconds: 60 }, 0],
+    ['has no policy at all', undefined, 0],
   ])('warns %s as expected', (_name, policy, times) => {
     start(policy)
     expect(warn).toHaveBeenCalledTimes(times)

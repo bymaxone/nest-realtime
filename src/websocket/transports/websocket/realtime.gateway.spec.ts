@@ -50,13 +50,18 @@ function makeSocket(
   }
 }
 
-/** The error event the gateway logs for a socket it refused, with the text it carries. */
-const handshakeFailed = (message: string, reason?: unknown): unknown =>
+// The host error a log carries, under `err`; the event logged for a socket the gateway refused.
+const causedBy = (text: string): unknown =>
+  expect.objectContaining({
+    err: expect.objectContaining({ message: expect.stringContaining(text) }),
+  })
+
+const handshakeFailed = (message: string, err?: unknown): unknown =>
   expect.objectContaining({
     event: 'REALTIME_HANDSHAKE_FAILED',
     socketId: 'sock-1',
     message,
-    ...(reason === undefined ? {} : { err: reason }),
+    ...(err === undefined ? {} : { err }),
   })
 
 describe('RealtimeGateway', () => {
@@ -292,11 +297,7 @@ describe('RealtimeGateway', () => {
     const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     try {
       await gateway.handleConnection(socket as never)
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          err: expect.objectContaining({ message: expect.stringContaining('token-verify-fail') }),
-        }),
-      )
+      expect(errorSpy).toHaveBeenCalledWith(causedBy('token-verify-fail'))
     } finally {
       errorSpy.mockRestore()
     }
@@ -689,13 +690,7 @@ describe('RealtimeGateway', () => {
         const err = next.mock.calls[0]?.[0] as Error & { data?: unknown }
         expect(err.message).toBe('Internal Server Error')
         expect(err.data).toBeUndefined()
-        expect(errorSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            err: expect.objectContaining({
-              message: expect.stringContaining('session store unreachable'),
-            }),
-          }),
-        )
+        expect(errorSpy).toHaveBeenCalledWith(causedBy('session store unreachable'))
       } finally {
         errorSpy.mockRestore()
       }
