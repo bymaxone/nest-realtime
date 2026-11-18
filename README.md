@@ -482,6 +482,8 @@ The Socket.IO server closes first, then the adapter's `dispose()` runs, and `dis
 
 Everything here is optional. The root and the shared runtime import none of `@bymax-one/nest-core`, `prom-client` or `@opentelemetry/api` statically, so an application that publishes no metrics installs none of them.
 
+Importing `@bymax-one/nest-realtime/observability` needs `@bymax-one/nest-core` and `prom-client`; without them the import fails with the runtime's own `Cannot find module` error, which names the missing peer.
+
 **Metrics.** Register `RealtimeMetrics` in a module of your application; `BymaxCoreModule` discovers it and calls it once at bootstrap with the registry its scrape endpoint serves. It injects what the realtime module exports, so nothing else is wired.
 
 ```typescript
@@ -509,7 +511,7 @@ A label is one of the values listed and never an id, a tenant or a user. A revoc
 
 **Traces.** With `@opentelemetry/api` installed the library starts `realtime.handshake` around the admission and authentication of each connection (attribute `bymax.realtime.transport`, `sse` or `websocket`) and `realtime.reauthenticate` around each re-authentication cycle. A refused handshake ends its span with status ERROR and the library error code, never the message. With no SDK registered the API is a no-op, and without the package nothing is started.
 
-**Log events.** Every `warn` and `error` line the library writes is an object, `{ event, message, ...fields }`, so a structured logger writes each as a JSON field and Nest's default logger prints the object. The fields are counts, sizes, configured limits, transport names and a library-made connection id; a user id, a tenant id or a room is never in a message or a field, because the logger's own context carries identity. Lines that report that the library started stay plain strings.
+**Log events.** Every `warn` and `error` line the library writes is an object, `{ event, message, ...fields }`, with the error that caused a failure, when there is one, under `err` as the error itself and never as text in `message`; so a structured logger writes each as a JSON field and Nest's default logger prints the object. The fields are counts, sizes, configured limits, transport names and a library-made connection id; a user id, a tenant id or a room is never in a message or a field, because the logger's own context carries identity. Lines that report that the library started stay plain strings.
 
 | Event                                  | Level       | When                                                                                | Fields                                                                   |
 | -------------------------------------- | ----------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
