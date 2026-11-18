@@ -100,25 +100,28 @@ export class RealtimeTracing implements OnModuleInit {
   ): Promise<T> {
     const api = this.#api
     if (!api) return run()
-    let started: Promise<T> | undefined
-    attempt(() => {
-      const returned: unknown = api.trace
-        .getTracer(TRACER_NAME)
-        .startActiveSpan(name, { attributes }, (span): Promise<T> => {
-          started = this.traced(span, run)
-          return started
-        })
-      // The tracer's own promise can fail after the operation ran; that is not the operation's to answer for.
-      Promise.resolve(returned).catch(() => undefined)
-    })
-    return started ?? run()
+    // One-shot: the operation runs at most once, however often or late the tracer calls back. Whoever claims
+    // it first runs it, the tracer through the span or this method bare.
+    const latch: { claimed: boolean; started?: Promise<T> } = { claimed: false }
+    attempt(() =>
+      api.trace.getTracer(TRACER_NAME).startActiveSpan(name, { attributes }, (span): unknown => {
+        if (!latch.claimed) {
+          latch.claimed = true
+          latch.started = this.traced(span, run)
+        }
+        return latch.started
+      }),
+    )
+    if (latch.started) return latch.started
+    latch.claimed = true
+    return run()
   }
 }
 
-/** Run a call into the tracer, and swallow what it throws. */
-function attempt(call: () => void): void {
+/** Run a call into the tracer, and swallow what it throws or rejects with. */
+function attempt(call: () => unknown): void {
   try {
-    call()
+    Promise.resolve(call()).catch(() => undefined)
   } catch {
     // A tracer that throws has no say in what the operation does.
   }

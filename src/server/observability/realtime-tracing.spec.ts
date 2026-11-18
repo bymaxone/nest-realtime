@@ -161,6 +161,50 @@ describe('RealtimeTracing', () => {
     expect(run).toHaveBeenCalledTimes(1)
   })
 
+  it('runs the operation once when the tracer runs the callback twice', async () => {
+    const tracing = await withTracer((...args: unknown[]) => {
+      const start = callback(args)
+      start({ setStatus() {}, end() {} })
+      return start({ setStatus() {}, end() {} })
+    })
+    const run = jest.fn(async () => 'ok')
+    await expect(tracing.span('realtime.handshake', {}, run)).resolves.toBe('ok')
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs the operation once when the tracer runs the callback after span has returned', async () => {
+    const tracing = await withTracer((...args: unknown[]) => {
+      const start = callback(args)
+      setImmediate(() => start({ setStatus() {}, end() {} }))
+      return undefined
+    })
+    const run = jest.fn(async () => 'ok')
+    await expect(tracing.span('realtime.handshake', {}, run)).resolves.toBe('ok')
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves no unhandled rejection when the span calls answer with a rejected promise', async () => {
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const tracing = await withTracer((...args: unknown[]) =>
+        callback(args)({
+          setStatus: () => Promise.reject(new Error('status down')),
+          end: () => Promise.reject(new Error('end down')),
+        }),
+      )
+      const failure = new Error('operation failed')
+      await expect(
+        tracing.span('realtime.handshake', {}, () => Promise.reject(failure)),
+      ).rejects.toBe(failure)
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
   it('returns the result when the span cannot be ended', async () => {
     const tracing = await withTracer((...args: unknown[]) =>
       callback(args)({
