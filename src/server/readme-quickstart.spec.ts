@@ -29,6 +29,7 @@ import { ModuleKind, ScriptTarget, transpileModule } from 'typescript'
 import { listeningServer } from '../../test/support/listening-server'
 import * as websocket from '../websocket/index'
 import * as server from './index'
+import { lineOf } from '../../test/support/log-lines'
 
 const README = readFileSync(join(__dirname, '..', '..', 'README.md'), 'utf8')
 
@@ -371,7 +372,11 @@ describe('README Quick Start — WebSocket', () => {
       .set('Origin', 'https://app.example.com')
     expect(preflight.headers['access-control-allow-origin']).toBe('https://app.example.com')
     expect(
-      errorLog.mock.calls.some((call) => String(call[0]).includes('is not the active WebSocket')),
+      errorLog.mock.calls.some(
+        ([line]) =>
+          (line as { event?: string } | undefined)?.event === 'REALTIME_ADAPTER_MISSING' ||
+          lineOf(line).includes('is not the active WebSocket'),
+      ),
     ).toBe(false)
   })
 })
