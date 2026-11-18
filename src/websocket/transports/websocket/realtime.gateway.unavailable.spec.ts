@@ -100,7 +100,9 @@ describe('RealtimeGateway: a handshake refused as unavailable', () => {
         expect(refusal.message).toBe('Internal Server Error')
         expect(refusal.data).toEqual({ code: 'REALTIME_TRANSPORT_UNAVAILABLE' })
         expect(transport.registerSocket).not.toHaveBeenCalled()
-        expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('handshake refused'))
+        expect(errorSpy).not.toHaveBeenCalledWith(
+          expect.objectContaining({ message: expect.stringContaining('handshake refused') }),
+        )
       } finally {
         errorSpy.mockRestore()
       }

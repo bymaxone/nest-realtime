@@ -148,6 +148,7 @@ describe('RealtimePubSubSubscriber', () => {
       await new Promise((resolve) => setImmediate(resolve))
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          event: 'REALTIME_DISCONNECT_FAILED',
           connectionId: 'c1',
           message: 'Remote disconnect failed: close boom',
         }),
@@ -229,7 +230,9 @@ describe('RealtimePubSubSubscriber', () => {
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({ message: expect.stringContaining('(last: RangeError)') }),
       )
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('dispatch-boom'))
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('dispatch-boom') }),
+      )
     } finally {
       warnSpy.mockRestore()
     }
@@ -245,7 +248,9 @@ describe('RealtimePubSubSubscriber', () => {
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({ message: expect.stringContaining('(last: unknown op)') }),
       )
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('badOp'))
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('badOp') }),
+      )
     } finally {
       warnSpy.mockRestore()
     }

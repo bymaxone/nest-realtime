@@ -64,7 +64,7 @@ export class RealtimeTracing implements OnModuleInit {
     try {
       this.#api = (await import('@opentelemetry/api')) as unknown as OtelApi
     } catch {
-      this.#api = undefined
+      // The package is not installed: the seam stays inert.
     }
   }
 

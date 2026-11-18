@@ -134,6 +134,9 @@ describe('ConnectionAdmission', () => {
       expect(warn).toHaveBeenCalledTimes(1)
       expect(warn).toHaveBeenLastCalledWith(
         expect.objectContaining({
+          event: 'REALTIME_CONNECTIONS_REFUSED',
+          count: 1,
+          maxConnections: 1,
           message: expect.stringContaining('refused since the last report: 1,'),
         }),
       )

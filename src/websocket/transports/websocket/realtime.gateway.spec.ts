@@ -527,7 +527,11 @@ describe('RealtimeGateway', () => {
 
         expect(socket.disconnect).toHaveBeenCalledWith(true)
         expect(errorSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ message: `handleConnection threw — disconnecting: ${logged}` }),
+          expect.objectContaining({
+            event: 'REALTIME_HANDSHAKE_FAILED',
+            socketId: 'sock-1',
+            message: `handleConnection threw — disconnecting: ${logged}`,
+          }),
         )
       } finally {
         errorSpy.mockRestore()
@@ -707,7 +711,11 @@ describe('RealtimeGateway', () => {
           expect(next).toHaveBeenCalledTimes(1)
           expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
           expect(errorSpy).toHaveBeenCalledWith(
-            expect.objectContaining({ message: `handshake refused: ${logged}` }),
+            expect.objectContaining({
+              event: 'REALTIME_HANDSHAKE_FAILED',
+              socketId: 'sock-1',
+              message: `handshake refused: ${logged}`,
+            }),
           )
         } finally {
           errorSpy.mockRestore()

@@ -129,7 +129,11 @@ describe('SseTransport: a client that does not read', () => {
     expect(bounded).toHaveLength(0)
     expect(unbounded).toHaveLength(1)
     expect(warn).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('SSE delivery failed') }),
+      expect.objectContaining({
+        event: 'REALTIME_DELIVERY_FAILED',
+        connectionId: 'a',
+        message: expect.stringContaining('SSE delivery failed'),
+      }),
     )
   })
 
@@ -234,7 +238,11 @@ describe('SseTransport: a client that does not read', () => {
     await new Promise((resolve) => setImmediate(resolve))
 
     expect(warn).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Closing a slow SSE connection failed: close failed' }),
+      expect.objectContaining({
+        event: 'REALTIME_DISCONNECT_FAILED',
+        connectionId: 'slow',
+        message: 'Closing a slow SSE connection failed: close failed',
+      }),
     )
   })
 })

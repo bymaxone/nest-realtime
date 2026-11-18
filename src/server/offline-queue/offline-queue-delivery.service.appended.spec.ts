@@ -78,7 +78,9 @@ describe('OfflineQueueDeliveryService.retrieveGap', () => {
 
     await build(store).retrieveGap('u1', 'e-0')
 
-    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('given up on'))
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('given up on') }),
+    )
     warn.mockRestore()
   })
 

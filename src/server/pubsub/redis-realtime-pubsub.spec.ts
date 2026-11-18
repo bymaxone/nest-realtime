@@ -110,6 +110,9 @@ describe('RedisRealtimePubSub', () => {
       expect(warnSpy).toHaveBeenCalledTimes(1)
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          event: 'REALTIME_PUBSUB_DROPPED',
+          count: 1,
+          last: 'malformed',
           message: 'dropped 1 malformed payload(s) since the last report',
         }),
       )
@@ -119,6 +122,9 @@ describe('RedisRealtimePubSub', () => {
       expect(warnSpy).toHaveBeenCalledTimes(2)
       expect(warnSpy).toHaveBeenLastCalledWith(
         expect.objectContaining({
+          event: 'REALTIME_PUBSUB_DROPPED',
+          count: 2,
+          last: 'malformed',
           message: 'dropped 2 malformed payload(s) since the last report',
         }),
       )

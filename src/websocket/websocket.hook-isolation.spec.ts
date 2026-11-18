@@ -96,7 +96,11 @@ describe('WebSocket: a lifecycle hook that fails', () => {
     expect(connections.allByTransport('websocket')).toHaveLength(1)
     expect(other.connected).toBe(true)
     expect(logged).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('onDisconnect hook failed') }),
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onDisconnect',
+        message: expect.stringContaining('onDisconnect hook failed'),
+      }),
     )
   })
 
@@ -117,7 +121,11 @@ describe('WebSocket: a lifecycle hook that fails', () => {
     expect(socket.connected).toBe(true)
     expect(connections.allByTransport('websocket')).toHaveLength(1)
     expect(logged).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('onConnect hook failed') }),
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onConnect',
+        message: expect.stringContaining('onConnect hook failed'),
+      }),
     )
   })
 
@@ -156,7 +164,11 @@ describe('WebSocket: a lifecycle hook that fails', () => {
     expect(socket.connected).toBe(true)
     expect(connections.allByTransport('websocket')).toHaveLength(1)
     expect(logged).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'onConnect hook failed: did not settle within 300 ms' }),
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onConnect',
+        message: 'onConnect hook failed: did not settle within 300 ms',
+      }),
     )
   })
 
@@ -172,6 +184,8 @@ describe('WebSocket: a lifecycle hook that fails', () => {
     expect(other.connected).toBe(true)
     expect(logged).toHaveBeenCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onDisconnect',
         message: 'onDisconnect hook failed: did not settle within 300 ms',
       }),
     )

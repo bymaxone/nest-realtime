@@ -140,6 +140,8 @@ describe('OfflineQueueDeliveryService: the read is bounded', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_RECONNECTS_GIVEN_UP',
+        count: 1,
         message: expect.stringContaining('reconnects given up on since the last report: 1,'),
       }),
     )
@@ -156,6 +158,8 @@ describe('OfflineQueueDeliveryService: the read is bounded', () => {
     expect(warn).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_RECONNECTS_GIVEN_UP',
+        count: 6,
         message: expect.stringContaining('reconnects given up on since the last report: 6,'),
       }),
     )

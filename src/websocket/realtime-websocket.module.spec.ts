@@ -93,7 +93,9 @@ describe('BymaxRealtimeWebSocketModule.forRoot', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     try {
       BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator })
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('single-instance'))
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('single-instance') }),
+      )
     } finally {
       process.env['NODE_ENV'] = original
       warnSpy.mockRestore()

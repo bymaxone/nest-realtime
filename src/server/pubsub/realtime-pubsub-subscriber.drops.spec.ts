@@ -60,6 +60,9 @@ describe('messages the subscriber cannot act on', () => {
     expect(warn).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_PUBSUB_DROPPED',
+        count: 3,
+        last: 'unknown op',
         message:
           'Pub/sub dropped 3 message(s) it could not act on since the last report (last: unknown op)',
       }),
@@ -78,6 +81,9 @@ describe('messages the subscriber cannot act on', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_PUBSUB_DROPPED',
+        count: 1,
+        last: 'TypeError',
         message:
           'Pub/sub dropped 1 message(s) it could not act on since the last report (last: TypeError)',
       }),
@@ -96,6 +102,9 @@ describe('messages the subscriber cannot act on', () => {
 
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_PUBSUB_DROPPED',
+        count: 1,
+        last: 'TypeError',
         message:
           'Pub/sub dropped 1 message(s) it could not act on since the last report (last: TypeError)',
       }),
@@ -175,6 +184,9 @@ describe('messages the subscriber cannot act on', () => {
 
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_PUBSUB_DROPPED',
+        count: 1,
+        last: 'Error',
         message:
           'Pub/sub dropped 1 message(s) it could not act on since the last report (last: Error)',
       }),

@@ -5,7 +5,7 @@
 import { get } from 'node:http'
 import type { ClientRequest } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { Logger } from '@nestjs/common'
+import { ForbiddenException, Logger, UnauthorizedException } from '@nestjs/common'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { Registry } from 'prom-client'
@@ -129,6 +129,29 @@ describe('metrics after real SSE handshakes', () => {
       1,
     )
   })
+
+  // Scenario: the authenticator answers with an HTTP exception or an error of its own. Expected: only a 401 is a
+  // refusal for `unauthorized`; a 403 and an unexpected error are neither.
+  it.each([
+    ['a 401', () => new UnauthorizedException(), 401, 1],
+    ['a 403', () => new ForbiddenException(), 403, 0],
+    ['an unexpected error', () => new Error('boom'), 500, 0],
+  ])(
+    'counts %s from the authenticator as unauthorized only when it is a 401',
+    async (_name, make, status, counted) => {
+      await boot({
+        authenticator: {
+          authenticate: async () => {
+            throw make()
+          },
+        },
+      })
+      expect((await connect('a')).status).toBe(status)
+      expect(
+        await sample(registry, 'bymax_realtime_connections_refused_total', 'unauthorized'),
+      ).toBe(counted)
+    },
+  )
 
   // Scenario: a handshake once shutdown has begun. Expected: one refusal for `unavailable`.
   it('counts a handshake refused during shutdown', async () => {

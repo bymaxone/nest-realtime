@@ -108,7 +108,11 @@ describe('SseTransport delivery failures', () => {
         await expect(transport.emitToUser('u1', 'foo', {})).resolves.toBeUndefined()
         await new Promise((resolve) => setImmediate(resolve))
         expect(warnSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ message: 'onDeliveryFailure hook failed: hook boom' }),
+          expect.objectContaining({
+            event: 'REALTIME_HOOK_FAILED',
+            hook: 'onDeliveryFailure',
+            message: 'onDeliveryFailure hook failed: hook boom',
+          }),
         )
         expect(unhandled).not.toHaveBeenCalled()
       } finally {

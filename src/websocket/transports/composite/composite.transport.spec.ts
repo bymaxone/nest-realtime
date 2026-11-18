@@ -194,7 +194,11 @@ describe('CompositeTransport', () => {
 
       expect(warnSpy).toHaveBeenCalledTimes(1)
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: `Composite ${op} partially failed: ${reason}` }),
+        expect.objectContaining({
+          event: 'REALTIME_COMPOSITE_PARTIAL_FAILURE',
+          op,
+          message: `Composite ${op} partially failed: ${reason}`,
+        }),
       )
       expect(sseMock[op]).toHaveBeenCalledTimes(1)
       expect(wsMock[op]).toHaveBeenCalledTimes(1)

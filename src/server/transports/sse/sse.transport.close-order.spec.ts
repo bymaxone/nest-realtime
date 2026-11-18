@@ -108,7 +108,11 @@ describe('SseTransport: closing a connection', () => {
     await closing
 
     expect(error).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'onDisconnect hook failed: did not settle within 50 ms' }),
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onDisconnect',
+        message: 'onDisconnect hook failed: did not settle within 50 ms',
+      }),
     )
   })
 
@@ -134,6 +138,8 @@ describe('SseTransport: closing a connection', () => {
 
     expect(error).toHaveBeenCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onDisconnect',
         message: 'onDisconnect hook failed: did not settle within 5000 ms',
       }),
     )

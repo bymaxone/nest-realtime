@@ -336,6 +336,8 @@ describe('ReauthenticationService', () => {
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          event: 'REALTIME_REVOCATION_FAILED',
+          connectionId: 'c1',
           message: 'Revocation failed, retrying next cycle: REALTIME_PUBSUB_UNAVAILABLE',
         }),
       )

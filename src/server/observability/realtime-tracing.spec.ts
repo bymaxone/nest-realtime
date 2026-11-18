@@ -86,6 +86,38 @@ describe('RealtimeTracing', () => {
     expect(spans[0]?.status).toEqual({ code: 2, message: code })
   })
 
+  // Scenario: the tracer the library asks for. Expected: the one named for the package, so a host can filter it.
+  it('asks for the tracer named for the package', async () => {
+    stop()
+    const { trace } = await import('@opentelemetry/api')
+    const getTracer = jest.fn((..._args: unknown[]) => ({
+      startSpan: () => undefined,
+      startActiveSpan: () => undefined,
+    }))
+    trace.setGlobalTracerProvider({ getTracer } as never)
+    const tracing = await ready()
+    await tracing.span('realtime.handshake', {}, async () => 'ok')
+    expect(getTracer.mock.calls[0]?.[0]).toBe('@bymax-one/nest-realtime')
+  })
+
+  // Scenario: errors that are not a library code, whatever they are. Expected: the generic marker; a code
+  // buried in a longer text, or a lower-case one, is not a code.
+  it.each([
+    ['null', null],
+    ['a number', 7],
+    ['a string that is a code', 'REALTIME_AUTH_FAILED'],
+    ['a code inside a longer text', new Error('x REALTIME_AUTH_FAILED')],
+    ['a code followed by text', new Error('REALTIME_AUTH_FAILED and more')],
+    ['a lower-case code', new Error('realtime_auth_failed')],
+    ['an error with a non-string message', Object.assign(new Error('x'), { message: 7 })],
+  ])('names %s as the generic marker', async (_name, error) => {
+    const tracing = await ready()
+    await expect(tracing.span('realtime.handshake', {}, () => Promise.reject(error))).rejects.toBe(
+      error,
+    )
+    expect(spans[0]?.status).toEqual({ code: 2, message: 'REALTIME_ERROR' })
+  })
+
   // Scenario: no SDK is registered, which is the default. Expected: the API is a no-op, the operation runs and
   // its result comes back.
   it('runs the operation when no provider is registered', async () => {

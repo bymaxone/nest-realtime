@@ -57,7 +57,11 @@ describe('ReauthenticationService: a failing onReauthenticationFailed hook', () 
 
     expect(realtime.disconnect).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'onReauthenticationFailed hook failed: hook down' }),
+      expect.objectContaining({
+        event: 'REALTIME_HOOK_FAILED',
+        hook: 'onReauthenticationFailed',
+        message: 'onReauthenticationFailed hook failed: hook down',
+      }),
     )
     warn.mockRestore()
   })

@@ -375,7 +375,12 @@ describe('validateOptions', () => {
       reauthenticationPolicy: { intervalSeconds: 60, cacheTtlMs: 120_000 },
     })
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('cacheTtlMs') }),
+      expect.objectContaining({
+        event: 'REALTIME_REAUTH_CACHE_WEAKENS_POLICY',
+        cacheTtlMs: 120_000,
+        intervalMs: 60_000,
+        message: expect.stringContaining('cacheTtlMs'),
+      }),
       'BymaxRealtimeModule',
     )
     warnSpy.mockRestore()

@@ -82,6 +82,8 @@ describe('ReauthenticationService: the cycle is bounded', () => {
     expect(realtime.disconnect).toHaveBeenCalledWith('next', REVOKED)
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_REVOCATION_FAILED',
+        connectionId: 'stuck',
         message: 'Revocation failed, retrying next cycle: revocation did not settle within 1000 ms',
       }),
     )

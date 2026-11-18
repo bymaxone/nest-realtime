@@ -34,6 +34,9 @@ describe('a payload that parses to something other than an object', () => {
         expect(handler).not.toHaveBeenCalled()
         expect(warn).toHaveBeenCalledWith(
           expect.objectContaining({
+            event: 'REALTIME_PUBSUB_DROPPED',
+            count: 1,
+            last: 'malformed',
             message: 'dropped 1 malformed payload(s) since the last report',
           }),
         )

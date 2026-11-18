@@ -97,6 +97,7 @@ describe('WebSocket: onConnectFailure', () => {
     expect(connections.allByTransport('websocket')).toHaveLength(0)
     expect(logged).toHaveBeenCalledWith(
       expect.objectContaining({
+        event: 'REALTIME_HANDSHAKE_FAILED',
         message: expect.stringContaining('onConnect hook failed: presence store down'),
       }),
     )
