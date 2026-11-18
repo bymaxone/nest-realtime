@@ -511,7 +511,7 @@ A label is one of the values listed and never an id, a tenant or a user. A revoc
 | Event                                  | Level       | When                                                                                | Fields                                                                   |
 | -------------------------------------- | ----------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `REALTIME_REAUTH_CACHE_WEAKENS_POLICY` | warn        | At start-up, `reauthenticationPolicy.cacheTtlMs` is longer than the interval.       | `cacheTtlMs`, `intervalMs`                                               |
-| `REALTIME_HANDSHAKE_FAILED`            | error       | A handshake failed with an error that is not a refusal and was answered as a 500.   | `socketId` (WebSocket)                                                   |
+| `REALTIME_HANDSHAKE_FAILED`            | error       | A handshake failed with an error that is not a refusal.                             | `socketId` (WebSocket)                                                   |
 | `REALTIME_HOOK_FAILED`                 | warn, error | A lifecycle hook threw or did not settle within `hookTimeoutMs`.                    | `hook` where known                                                       |
 | `REALTIME_DELIVERY_FAILED`             | warn        | A delivery failed without failing its call.                                         | `connectionId` or `code`, `op`                                           |
 | `REALTIME_SLOW_CONSUMER`               | warn        | A connection was cut for not reading what it was sent.                              | `connectionId`, `queuedEvents`, `queuedBytes`, `heldBytes`               |
@@ -1005,7 +1005,7 @@ Every name below is exported; the subpath says where to import it from. A type i
 - `IOfflineQueueStorage`: `append` stores an event for a user, `retrieveSince` reads the ones after an id, and `acknowledge` marks events delivered up to an id, which an implementation may purge or keep.
 - `IPresenceStorage`: `setOnline` and `setOffline` record a connection, `isOnline` answers for a user, `listOnlineByTenant` lists a tenant's online users and `countOnline` counts everyone.
 - `IRealtimePubSub`: `publish` sends to the other instances, `subscribe` receives, and the optional `isSubscribed` says whether this instance is subscribed now. A bus that cannot be unsubscribed once subscribed omits it and counts as subscribed; the health indicator reads it.
-- `ITransport`: the optional `onModuleInit` and `onApplicationShutdown` are called by Nest on bootstrap and shutdown, as `beforeApplicationShutdown` is before the HTTP server closes.
+- `ITransport`: the optional `onModuleInit`, `beforeApplicationShutdown` and `onApplicationShutdown` are called by Nest on bootstrap and on shutdown, the second before the HTTP server closes.
 
 ### DI Tokens
 
