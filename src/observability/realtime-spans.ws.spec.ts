@@ -8,6 +8,7 @@ import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
+import { trace } from '@opentelemetry/api'
 import { recordSpans } from '../../test/support/recording-tracer'
 import type { RecordedSpan } from '../../test/support/recording-tracer'
 import { BymaxRealtimeWebSocketModule } from '../websocket/realtime-websocket.module'
@@ -20,6 +21,7 @@ describe('spans around real WebSocket handshakes', () => {
   let url: string
   let spans: RecordedSpan[]
   let stop: () => void
+  let authenticate: jest.Mock
   const sockets: Socket[] = []
 
   async function boot(options: Record<string, unknown> = {}, authenticated = true): Promise<void> {
@@ -34,8 +36,10 @@ describe('spans around real WebSocket handshakes', () => {
         BymaxRealtimeWebSocketModule.forRoot({
           transport: 'websocket',
           authenticator: {
-            authenticate: async (ctx) =>
-              authenticated ? { userId: String(ctx.query['u']), tenantId: 't1' } : null,
+            authenticate: (authenticate = jest.fn(
+              async (ctx: { query: Record<string, unknown> }) =>
+                authenticated ? { userId: String(ctx.query['u']), tenantId: 't1' } : null,
+            )),
           },
           ...options,
         }),
@@ -96,5 +100,32 @@ describe('spans around real WebSocket handshakes', () => {
     await expect(connect('b')).rejects.toThrow()
     const refused = spans.filter((s) => s.name === 'realtime.handshake')[1]
     expect(refused?.status).toEqual({ code: 2, message: 'REALTIME_TRANSPORT_UNAVAILABLE' })
+  })
+
+  // Scenario: the tracer provider throws before it runs the operation. Expected: the handshake is still
+  // authenticated, once, and a rejected one is still refused; a tracing failure never decides the outcome.
+  it.each([
+    ['accepts an authenticated handshake', true],
+    ['still refuses a rejected handshake', false],
+  ])('%s when the tracer throws', async (_name, authenticated) => {
+    await boot({}, authenticated)
+    stop()
+    trace.setGlobalTracerProvider({
+      getTracer: () => ({
+        startSpan: () => {
+          throw new Error('tracer down')
+        },
+        startActiveSpan: () => {
+          throw new Error('tracer down')
+        },
+      }),
+    } as never)
+    const outcome = connect('a').then(
+      () => 'accepted',
+      () => 'refused',
+    )
+    expect(await outcome).toBe(authenticated ? 'accepted' : 'refused')
+    expect(authenticate).toHaveBeenCalledTimes(1)
+    trace.disable()
   })
 })

@@ -107,6 +107,31 @@ describe('RealtimeTracing', () => {
     await expect(tracing.span('realtime.handshake', {}, async () => 'ok')).resolves.toBe('ok')
   })
 
+  // Scenario: the tracer throws. Expected: before it runs the operation, the operation runs once without a span;
+  // after it ran it, the operation's own result comes back and it is not run a second time.
+  it.each([
+    ['before', false],
+    ['after', true],
+  ])('runs the operation once when the tracer throws %s starting it', async (_when, after) => {
+    stop()
+    const { trace } = await import('@opentelemetry/api')
+    trace.setGlobalTracerProvider({
+      getTracer: () => ({
+        startSpan: () => undefined,
+        startActiveSpan: (...args: unknown[]) => {
+          if (after)
+            (args[args.length - 1] as (span: unknown) => unknown)({ setStatus() {}, end() {} })
+          throw new Error('tracer down')
+        },
+      }),
+    } as never)
+    const tracing = await ready()
+    const run = jest.fn(async () => 'ok')
+    await expect(tracing.span('realtime.handshake', {}, run)).resolves.toBe('ok')
+    expect(run).toHaveBeenCalledTimes(1)
+    trace.disable()
+  })
+
   // Scenario: the span is used before the module initialised. Expected: the operation runs without a span.
   it('runs the operation before the API has been loaded', async () => {
     const tracing = new RealtimeTracing()

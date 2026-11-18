@@ -63,27 +63,6 @@ describe('SseTransport counts in the tally', () => {
     expect(snapshot.slowConsumerDrops).toBe(1)
   })
 
-  // Scenario: a revocation through disconnect(), for a connection held here and for one held elsewhere.
-  // Expected: one revocation each, counted once the close or the publish has succeeded.
-  it('counts a revocation for a local connection and for one handed to the bus', async () => {
-    const tally = new RealtimeMetricsTally()
-    const { transport, publish } = build({ tally })
-    await register(transport, 'here')
-    await transport.disconnect('here', 'REVOKED')
-    await transport.disconnect('elsewhere', 'REVOKED')
-    expect(publish).toHaveBeenCalledTimes(1)
-    expect(tally.snapshot().evicted.revoked).toBe(2)
-  })
-
-  // Scenario: the bus refuses the revocation. Expected: it is not counted, because nothing was closed.
-  it('does not count a revocation the bus refused', async () => {
-    const tally = new RealtimeMetricsTally()
-    const { transport, publish } = build({ tally })
-    publish.mockRejectedValueOnce(new Error('down'))
-    await expect(transport.disconnect('elsewhere')).rejects.toThrow()
-    expect(tally.snapshot().evicted.revoked).toBe(0)
-  })
-
   // Scenario: events delivered by each way in. Expected: one count for each delivery on this instance, including
   // the ones a subscriber re-emits from another instance, and none for a connection that is not there.
   it('counts each delivery once, whichever way in', async () => {

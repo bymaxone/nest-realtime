@@ -160,6 +160,17 @@ describe('metrics after real WebSocket handshakes', () => {
     expect(await sample(registry, 'bymax_realtime_evictions_total', 'revoked')).toBe(0)
   })
 
+  // Scenario: both transports run and one connection is revoked, as reauthentication and a host's disconnect do.
+  // Expected: one revocation, though the composite asks each transport to close the id.
+  it('counts one revocation under transport both', async () => {
+    await boot({ transport: 'both' })
+    const id = await connect('a')
+    await service.disconnect(id, 'REVOKED')
+    expect(await sample(registry, 'bymax_realtime_evictions_total', 'revoked')).toBe(1)
+    await service.disconnect('not-a-connection', 'REVOKED')
+    expect(await sample(registry, 'bymax_realtime_evictions_total', 'revoked')).toBe(2)
+  })
+
   // Scenario: an event delivered, then a revocation. Expected: one delivery on WebSocket and one revocation.
   it('counts a delivery and a revocation', async () => {
     await boot()

@@ -9,6 +9,7 @@ import {
 } from '../constants/injection-tokens.constants'
 import type { IRealtimePubSub } from '../interfaces/realtime-pubsub.interface'
 import type { ITransport } from '../interfaces/transport.interface'
+import { RealtimeMetricsTally } from '../observability/realtime-metrics-tally'
 import { refuseReservedRoom, requireRoomName } from '../utils/reserved-room'
 
 /**
@@ -23,6 +24,8 @@ export class RealtimeService {
   constructor(
     @Inject(REALTIME_TRANSPORT_TOKEN) private readonly transport: ITransport,
     @Optional() @Inject(REALTIME_PUBSUB_TOKEN) private readonly pubsub?: IRealtimePubSub,
+    // Optional so the service can be unit-constructed in isolation; the module always provides it.
+    @Optional() @Inject(RealtimeMetricsTally) private readonly tally?: RealtimeMetricsTally,
   ) {}
 
   /**
@@ -116,7 +119,9 @@ export class RealtimeService {
    *   `REALTIME_TRANSPORT_UNAVAILABLE` when the transport that holds the connection fails.
    *   The connection may still be connected: retry.
    */
-  disconnect(connectionId: string, reason?: string): Promise<void> {
-    return this.transport.disconnect(connectionId, reason)
+  async disconnect(connectionId: string, reason?: string): Promise<void> {
+    await this.transport.disconnect(connectionId, reason)
+    // Counted here, once, because under `'both'` the composite asks each transport to close the id.
+    this.tally?.evicted('revoked')
   }
 }

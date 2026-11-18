@@ -393,12 +393,6 @@ export class WebSocketTransport implements ITransport {
    *   fan-out throws: the revocation did not leave this node.
    */
   async disconnect(connectionId: string, _reason?: string): Promise<void> {
-    await this.close(connectionId)
-    this.tally?.evicted('revoked')
-  }
-
-  /** Close a connection on whichever node holds it, without counting why. */
-  private async close(connectionId: string): Promise<void> {
     const server = this.server
     if (!server) {
       throw unavailableError(
@@ -445,7 +439,7 @@ export class WebSocketTransport implements ITransport {
     while (userConnections.length > max) {
       const oldest = userConnections.reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))
       this.tally?.evicted('per_user_cap')
-      await this.close(oldest.connectionId)
+      await this.disconnect(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
       await this.unregisterSocket(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
       userConnections = this.connections.byUser(userId, 'websocket')
     }

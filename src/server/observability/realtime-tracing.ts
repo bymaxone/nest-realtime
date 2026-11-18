@@ -68,6 +68,18 @@ export class RealtimeTracing implements OnModuleInit {
     }
   }
 
+  private async traced<T>(span: Span, run: () => Promise<T>): Promise<T> {
+    try {
+      const result = await run()
+      span.end()
+      return result
+    } catch (error) {
+      span.setStatus({ code: STATUS_ERROR, message: codeOf(error) })
+      span.end()
+      throw error
+    }
+  }
+
   /**
    * Run `run` inside a span named `name`.
    *
@@ -82,18 +94,18 @@ export class RealtimeTracing implements OnModuleInit {
   ): Promise<T> {
     const api = this.#api
     if (!api) return run()
-    return api.trace
-      .getTracer(TRACER_NAME)
-      .startActiveSpan(name, { attributes }, async (span): Promise<T> => {
-        try {
-          const result = await run()
-          span.end()
-          return result
-        } catch (error) {
-          span.setStatus({ code: STATUS_ERROR, message: codeOf(error) })
-          span.end()
-          throw error
-        }
-      })
+    let started: Promise<T> | undefined
+    try {
+      return api.trace
+        .getTracer(TRACER_NAME)
+        .startActiveSpan(name, { attributes }, (span): Promise<T> => {
+          started = this.traced(span, run)
+          return started
+        })
+    } catch {
+      // A tracer that throws must not decide what its operation does: run it bare, or take the result of
+      // the run it had already started, so that it never runs twice.
+      return started ?? run()
+    }
   }
 }

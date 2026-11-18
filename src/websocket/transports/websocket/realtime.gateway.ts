@@ -289,7 +289,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         })
       }
     } catch (err) {
-      if (!(err instanceof AuthenticationUnavailableError || err instanceof ConnectionLimitError)) {
+      if (err instanceof ConnectionLimitError) {
+        this.tally?.refused('limit')
+      } else if (err instanceof AuthenticationUnavailableError) {
+        this.tally?.refused('unavailable')
+      } else {
         logEvent(
           this.logger,
           'error',
@@ -336,6 +340,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     this.tickets.delete(socket)
     if (auth) return { auth, ticket }
     if (this.transport.shuttingDown) {
+      this.tally?.refused('unavailable')
       socket.disconnect(true)
       return undefined
     }
@@ -343,6 +348,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     try {
       const fresh = await this.transport.authenticate(this.buildAuthContext(socket))
       if (!fresh) {
+        this.tally?.refused('unauthorized')
         socket.disconnect(true)
         held.release()
         return undefined

@@ -425,7 +425,6 @@ export class SseTransport implements ITransport {
       // A connection held here as a WebSocket is the WebSocket transport's to close:
       // `disconnectLocal` leaves it alone.
       await this.disconnectLocal(connectionId, reason)
-      this.tally?.evicted('revoked')
       return
     }
     try {
@@ -434,7 +433,6 @@ export class SseTransport implements ITransport {
         args: { connectionId, reason },
         origin: this.instanceId,
       })
-      this.tally?.evicted('revoked')
     } catch (error) {
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
