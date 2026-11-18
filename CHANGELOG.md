@@ -27,7 +27,7 @@ An alert or a log filter that matched the text of a `warn` or `error` line now m
 
 #### Apply to a derived backend
 
-A `sseEndpoint` or `sse.endpoint` that held whitespace, an options argument or factory result that was not an object, and a group that was a `Date` or another built-in now fail at registration, where they used to start or fail later: fix the value. A `RedisOfflineQueue` built without options or without a `client` now throws at construction. An instance of your own class is still read as a group by its keys.
+A `sseEndpoint` or `sse.endpoint` that held whitespace, an options argument or factory result that was not an object, and a group that was a `Date` or another built-in now fail at registration, where they used to start or fail later: fix the value. A `RedisOfflineQueue` built without options or without a `client` now throws at construction. An instance of your own class is still read as a group by its keys, unless it sets its own `Symbol.toStringTag`.
 
 ### Documentation
 
