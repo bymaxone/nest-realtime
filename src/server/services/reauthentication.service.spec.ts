@@ -255,7 +255,8 @@ describe('ReauthenticationService', () => {
             expect.objectContaining({
               event: 'REALTIME_REAUTH_FAILED',
               connectionId: 'c1',
-              message: `Reauthentication notification failed, disconnecting anyway: ${describeError(failure())}`,
+              message: `Reauthentication notification failed, disconnecting anyway`,
+              err: expect.objectContaining({ message: `${describeError(failure())}` }),
             }),
           )
         } finally {
@@ -287,7 +288,8 @@ describe('ReauthenticationService', () => {
         expect.objectContaining({
           event: 'REALTIME_REAUTH_FAILED',
           connectionId: 'c1',
-          message: 'Reauthentication notification failed, disconnecting anyway: sync throw',
+          message: 'Reauthentication notification failed, disconnecting anyway',
+          err: expect.objectContaining({ message: 'sync throw' }),
         }),
       )
     } finally {
@@ -342,7 +344,8 @@ describe('ReauthenticationService', () => {
         expect.objectContaining({
           event: 'REALTIME_REVOCATION_FAILED',
           connectionId: 'c1',
-          message: 'Revocation failed, retrying next cycle: REALTIME_PUBSUB_UNAVAILABLE',
+          message: 'Revocation failed, retrying next cycle',
+          err: expect.objectContaining({ message: 'REALTIME_PUBSUB_UNAVAILABLE' }),
         }),
       )
       await svc.runCycle()
@@ -419,7 +422,9 @@ describe('ReauthenticationService', () => {
       await jest.advanceTimersByTimeAsync(2_000)
       expect(cycle).toHaveBeenCalledTimes(2)
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('cycle boom') }),
+        expect.objectContaining({
+          err: expect.objectContaining({ message: expect.stringContaining('cycle boom') }),
+        }),
       )
       svc.onApplicationShutdown()
     } finally {
@@ -657,7 +662,9 @@ describe('ReauthenticationService', () => {
       await svc.runCycle()
       await flush()
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('hook-crash') }),
+        expect.objectContaining({
+          err: expect.objectContaining({ message: expect.stringContaining('hook-crash') }),
+        }),
       )
     } finally {
       warnSpy.mockRestore()

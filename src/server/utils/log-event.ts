@@ -50,6 +50,9 @@ export type LogFields = Readonly<Record<string, string | number | boolean>>
  * @param event - The stable code of the condition.
  * @param message - Human text; the library's own wording, with no host-supplied value in it.
  * @param fields - Closed or numeric fields.
+ * @param error - What was thrown, when the event reports a failure. It goes under `err` as the value itself, never
+ *   as text in `message`, so the logger's serializer and redaction apply to it: an error raised by host code can
+ *   carry a user or a tenant, and the library's own line must not.
  */
 export function logEvent(
   logger: Pick<Logger, 'warn' | 'error'>,
@@ -57,6 +60,7 @@ export function logEvent(
   event: RealtimeLogEvent,
   message: string,
   fields: LogFields = {},
+  error?: unknown,
 ): void {
-  logger[level]({ event, message, ...fields })
+  logger[level]({ event, message, ...fields, ...(error === undefined ? {} : { err: error }) })
 }

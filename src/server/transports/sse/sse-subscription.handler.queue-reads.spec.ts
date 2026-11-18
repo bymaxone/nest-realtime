@@ -179,7 +179,10 @@ describe('SseSubscriptionHandler: what is logged for a second read that fails af
 
     expect(error).toHaveBeenCalledTimes(1)
     expect(error).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'SSE handshake failed — responding 500: down' }),
+      expect.objectContaining({
+        message: 'SSE handshake failed — responding 500',
+        err: expect.objectContaining({ message: 'down' }),
+      }),
     )
   })
 })

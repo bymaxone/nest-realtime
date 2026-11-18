@@ -58,7 +58,10 @@ describe('SseSubscriptionHandler — onConnectFailure', () => {
     const run = await open(async () => Promise.reject(new Error('presence store down')), option)
     expect(run.closed()).toBe(false)
     expect(warn).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Lifecycle hook failed: presence store down' }),
+      expect.objectContaining({
+        message: 'Lifecycle hook failed',
+        err: expect.objectContaining({ message: 'presence store down' }),
+      }),
     )
   })
 
@@ -76,7 +79,10 @@ describe('SseSubscriptionHandler — onConnectFailure', () => {
     expect(run.completed()).toBe(true)
     expect(run.closed()).toBe(true)
     expect(warn).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Lifecycle hook failed: presence store down' }),
+      expect.objectContaining({
+        message: 'Lifecycle hook failed',
+        err: expect.objectContaining({ message: 'presence store down' }),
+      }),
     )
   })
 

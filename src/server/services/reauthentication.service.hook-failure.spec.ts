@@ -60,7 +60,8 @@ describe('ReauthenticationService: a failing onReauthenticationFailed hook', () 
       expect.objectContaining({
         event: 'REALTIME_HOOK_FAILED',
         hook: 'onReauthenticationFailed',
-        message: 'onReauthenticationFailed hook failed: hook down',
+        message: 'onReauthenticationFailed hook failed',
+        err: expect.objectContaining({ message: 'hook down' }),
       }),
     )
     warn.mockRestore()

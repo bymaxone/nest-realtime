@@ -586,34 +586,32 @@ describe('SseTransport', () => {
   it.each([
     ['null', null, 'null'],
     ['an object with no prototype', Object.create(null), 'unprintable error'],
-  ])(
-    'logs an offlineQueue.append rejection with %s without raising',
-    async (_label, reason, logged) => {
-      // Reading .message from null throws inside the .catch and surfaces as an unhandled rejection.
-      const offlineQueue = {
-        append: jest.fn().mockRejectedValue(reason),
-        retrieveSince: jest.fn(),
-        acknowledge: jest.fn(),
-      } as unknown as IOfflineQueueStorage
-      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-      const unhandled = jest.fn()
-      process.on('unhandledRejection', unhandled)
-      try {
-        const { transport } = build({ offlineQueue })
-        await transport.emitToUser('u1', 'foo', {})
-        await new Promise((resolve) => setImmediate(resolve))
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            message: `Offline queue append failed: ${logged}`,
-          }),
-        )
-        expect(unhandled).not.toHaveBeenCalled()
-      } finally {
-        process.off('unhandledRejection', unhandled)
-        warnSpy.mockRestore()
-      }
-    },
-  )
+  ])('logs an offlineQueue.append rejection with %s without raising', async (_label, reason) => {
+    // Reading .message from null throws inside the .catch and surfaces as an unhandled rejection.
+    const offlineQueue = {
+      append: jest.fn().mockRejectedValue(reason),
+      retrieveSince: jest.fn(),
+      acknowledge: jest.fn(),
+    } as unknown as IOfflineQueueStorage
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      const { transport } = build({ offlineQueue })
+      await transport.emitToUser('u1', 'foo', {})
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: `Offline queue append failed`,
+          err: reason,
+        }),
+      )
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', unhandled)
+      warnSpy.mockRestore()
+    }
+  })
 
   // A rejecting onDisconnect hook is isolated (logged, never an unhandled rejection).
   it('isolates a throwing onDisconnect hook', async () => {
@@ -633,7 +631,9 @@ describe('SseTransport', () => {
     try {
       await transport.unregisterConnection('c1')
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('hook-error') }),
+        expect.objectContaining({
+          err: expect.objectContaining({ message: expect.stringContaining('hook-error') }),
+        }),
       )
     } finally {
       errorSpy.mockRestore()
@@ -695,7 +695,9 @@ describe('SseTransport', () => {
     try {
       await transport.emitToUser('u1', 'foo', {})
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('redis-down') }),
+        expect.objectContaining({
+          err: expect.objectContaining({ message: expect.stringContaining('redis-down') }),
+        }),
       )
     } finally {
       warnSpy.mockRestore()
@@ -726,7 +728,9 @@ describe('SseTransport', () => {
     try {
       await transport.emitToUser('u1', 'foo', {})
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('deliver-error') }),
+        expect.objectContaining({
+          err: expect.objectContaining({ message: expect.stringContaining('deliver-error') }),
+        }),
       )
     } finally {
       warnSpy.mockRestore()

@@ -158,19 +158,18 @@ describe('RedisRealtimePubSub', () => {
     expect(received).toHaveLength(1)
   })
 
-  // The outage line names why the connection failed. ioredis wraps a refused connect in an error
-  // that can have a code and no message, or a message and no code, or neither.
+  // The outage line carries what the connection raised as the error itself, not as text: ioredis wraps a refused
+  // connect in an error that can have a code and no message, or a message and no code, or neither.
   it.each([
     [
       'a code and a message',
       { code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 10.0.0.1:6379' },
-      'ECONNREFUSED connect ECONNREFUSED 10.0.0.1:6379',
     ],
-    ['a code and no message', { code: 'ETIMEDOUT', message: '' }, 'ETIMEDOUT'],
-    ['a message and no code', { message: 'socket hang up' }, 'socket hang up'],
-    ['a code that is not text', { code: 111, message: 'socket hang up' }, 'socket hang up'],
-    ['neither', { message: '' }, 'Error'],
-  ])('states the connection failure with %s', async (_label, fields, reason) => {
+    ['a code and no message', { code: 'ETIMEDOUT', message: '' }],
+    ['a message and no code', { message: 'socket hang up' }],
+    ['a code that is not text', { code: 111, message: 'socket hang up' }],
+    ['neither', { message: '' }],
+  ])('states the connection failure with %s', async (_label, fields) => {
     const handlers: Record<string, (value: unknown) => void> = {}
     const sub = {
       subscribe: jest.fn().mockReturnValue(new Promise(() => undefined)),
@@ -183,13 +182,15 @@ describe('RedisRealtimePubSub', () => {
     try {
       const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
       const subscribing = pubsub.subscribe(jest.fn())
-      handlers['error']!(Object.assign(new Error(fields.message), fields))
+      const raised = Object.assign(new Error(fields.message), fields)
+      handlers['error']!(raised)
       await subscribing
-      expect(warn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: `not subscribed: ${reason}. Remote events and revocations will not reach this instance until it subscribes again`,
-        }),
-      )
+      expect(warn).toHaveBeenCalledWith({
+        event: 'REALTIME_PUBSUB_UNAVAILABLE',
+        message:
+          'not subscribed. Remote events and revocations will not reach this instance until it subscribes again',
+        err: raised,
+      })
     } finally {
       warn.mockRestore()
     }
@@ -258,7 +259,11 @@ describe('RedisRealtimePubSub', () => {
       expect(pubsub.isSubscribed()).toBe(false)
       expect(warn).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: `not subscribed: Stream isn't writeable and enableOfflineQueue options is false. Remote events and revocations will not reach this instance until it subscribes again`,
+          message:
+            'not subscribed. Remote events and revocations will not reach this instance until it subscribes again',
+          err: expect.objectContaining({
+            message: "Stream isn't writeable and enableOfflineQueue options is false",
+          }),
         }),
       )
       // The rejection is the connection failing, which was just reported: it is not also a refusal.

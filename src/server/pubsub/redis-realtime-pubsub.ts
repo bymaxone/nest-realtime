@@ -48,13 +48,6 @@ const PUBLISH_WAIT_MS = 2_000
 /** The events that name a status other than connecting: each ends a first connection attempt. */
 const CONNECTION_OVER = ['ready', 'close', 'reconnecting', 'end'] as const
 
-/** A connection failure as text: ioredis wraps a refused connect in an error with no message. */
-function connectionReason(err: unknown): string {
-  const code = (err as { code?: unknown } | null)?.code
-  const text = describeError(err)
-  return [typeof code === 'string' ? code : '', text].filter(Boolean).join(' ') || String(err)
-}
-
 /** Options for RedisRealtimePubSub. */
 export interface RedisRealtimePubSubOptions {
   /** The Redis client used for publishing. A separate subscriber clone is created internally. */
@@ -324,7 +317,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       if (outcome === 'subscribed') {
         this.markUp()
       } else {
-        this.markDown(connectionReason(outcome.unreachable))
+        this.markDown(undefined, outcome.unreachable)
         // A confirmation needs no handler here: the connection's first `ready` sends its own.
         first.catch((err: unknown) => this.refused(err))
       }
@@ -360,7 +353,9 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.logger,
       'warn',
       'REALTIME_PUBSUB_UNAVAILABLE',
-      `the server refused the subscription: ${reason}`,
+      'the server refused the subscription',
+      {},
+      err,
     )
   }
 
@@ -374,7 +369,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     )
   }
 
-  private markDown(reason: string): void {
+  /** The bus is not subscribed: `wording` is the library's own text, `error` what the connection raised. */
+  private markDown(wording: string | undefined, error?: unknown): void {
     this.#subscribed = false
     if (this.#outageLogged) return
     this.#outageLogged = true
@@ -382,7 +378,9 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.logger,
       'warn',
       'REALTIME_PUBSUB_UNAVAILABLE',
-      `not subscribed: ${reason}. Remote events and revocations will not reach this instance until it subscribes again`,
+      `not subscribed${wording === undefined ? '' : `: ${wording}`}. Remote events and revocations will not reach this instance until it subscribes again`,
+      {},
+      error,
     )
   }
 

@@ -241,7 +241,8 @@ describe('SseTransport: a client that does not read', () => {
       expect.objectContaining({
         event: 'REALTIME_DISCONNECT_FAILED',
         connectionId: 'slow',
-        message: 'Closing a slow SSE connection failed: close failed',
+        message: 'Closing a slow SSE connection failed',
+        err: expect.objectContaining({ message: 'close failed' }),
       }),
     )
   })

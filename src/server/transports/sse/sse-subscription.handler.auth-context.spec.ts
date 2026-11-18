@@ -63,7 +63,10 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
     expect(reason).toContain('REALTIME_AUTH_FAILED')
     expect(errorSpy).toHaveBeenCalledTimes(1)
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ message: `SSE connection refused — responding 500: ${reason}` }),
+      expect.objectContaining({
+        message: `SSE connection refused — responding 500`,
+        err: expect.objectContaining({ message: `${reason}` }),
+      }),
     )
     errorSpy.mockRestore()
   })
@@ -85,7 +88,11 @@ describe('SseSubscriptionHandler — auth context and registration', () => {
       })
       expect(transport.registerConnection).not.toHaveBeenCalled()
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('reserved prefix "user:"') }),
+        expect.objectContaining({
+          err: expect.objectContaining({
+            message: expect.stringContaining('reserved prefix "user:"'),
+          }),
+        }),
       )
     } finally {
       errorSpy.mockRestore()

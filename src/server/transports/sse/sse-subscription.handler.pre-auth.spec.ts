@@ -60,8 +60,8 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
       )
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          message:
-            'SSE authentication failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+          message: 'SSE authentication failed — responding 500',
+          err: expect.objectContaining({ message: 'connect ECONNREFUSED 10.20.30.40:6379' }),
         }),
       )
     } finally {
@@ -85,8 +85,8 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
       )
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          message:
-            'SSE authentication failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+          message: 'SSE authentication failed — responding 500',
+          err: expect.objectContaining({ message: 'connect ECONNREFUSED 10.20.30.40:6379' }),
         }),
       )
     } finally {
@@ -137,7 +137,8 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
       )
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: 'SSE handshake failed — responding 500: cache 10.20.30.40:6379 down',
+          message: 'SSE handshake failed — responding 500',
+          err: expect.objectContaining({ message: 'cache 10.20.30.40:6379 down' }),
         }),
       )
     } finally {
@@ -159,7 +160,9 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
         InternalServerErrorException,
       )
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('null') }),
+        expect.objectContaining({
+          err: null,
+        }),
       )
     } finally {
       errorSpy.mockRestore()
@@ -196,7 +199,8 @@ describe('SseSubscriptionHandler — authenticateBeforeCommit', () => {
       )
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: 'SSE handshake failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+          message: 'SSE handshake failed — responding 500',
+          err: expect.objectContaining({ message: 'connect ECONNREFUSED 10.20.30.40:6379' }),
         }),
       )
     } finally {

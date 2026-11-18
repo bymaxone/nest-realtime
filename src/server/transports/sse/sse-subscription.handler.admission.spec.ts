@@ -237,7 +237,10 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
 
     expect(failure).toBeInstanceOf(InternalServerErrorException)
     expect(error).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'SSE registration refused — responding 500: broken' }),
+      expect.objectContaining({
+        message: 'SSE registration refused — responding 500',
+        err: expect.objectContaining({ message: 'broken' }),
+      }),
     )
     error.mockRestore()
   })

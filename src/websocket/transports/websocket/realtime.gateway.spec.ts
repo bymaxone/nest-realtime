@@ -51,8 +51,13 @@ function makeSocket(
 }
 
 /** The error event the gateway logs for a socket it refused, with the text it carries. */
-const handshakeFailed = (message: string): unknown =>
-  expect.objectContaining({ event: 'REALTIME_HANDSHAKE_FAILED', socketId: 'sock-1', message })
+const handshakeFailed = (message: string, reason?: unknown): unknown =>
+  expect.objectContaining({
+    event: 'REALTIME_HANDSHAKE_FAILED',
+    socketId: 'sock-1',
+    message,
+    ...(reason === undefined ? {} : { err: reason }),
+  })
 
 describe('RealtimeGateway', () => {
   let gateway: RealtimeGateway
@@ -288,7 +293,9 @@ describe('RealtimeGateway', () => {
     try {
       await gateway.handleConnection(socket as never)
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('token-verify-fail') }),
+        expect.objectContaining({
+          err: expect.objectContaining({ message: expect.stringContaining('token-verify-fail') }),
+        }),
       )
     } finally {
       errorSpy.mockRestore()
@@ -520,7 +527,7 @@ describe('RealtimeGateway', () => {
     ['an object with no prototype', Object.create(null), 'unprintable error'],
   ])(
     'handleConnection still disconnects when the authenticator rejects with %s',
-    async (_label, reason, logged) => {
+    async (_label, reason) => {
       // A rejection that is not an Error has no message to read; the socket must still be closed.
       const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
       try {
@@ -531,7 +538,7 @@ describe('RealtimeGateway', () => {
 
         expect(socket.disconnect).toHaveBeenCalledWith(true)
         expect(errorSpy).toHaveBeenCalledWith(
-          handshakeFailed(`handleConnection threw — disconnecting: ${logged}`),
+          handshakeFailed('handleConnection threw — disconnecting', reason),
         )
       } finally {
         errorSpy.mockRestore()
@@ -684,7 +691,9 @@ describe('RealtimeGateway', () => {
         expect(err.data).toBeUndefined()
         expect(errorSpy).toHaveBeenCalledWith(
           expect.objectContaining({
-            message: expect.stringContaining('session store unreachable'),
+            err: expect.objectContaining({
+              message: expect.stringContaining('session store unreachable'),
+            }),
           }),
         )
       } finally {
@@ -699,7 +708,7 @@ describe('RealtimeGateway', () => {
       ['an object with no prototype', Object.create(null), 'unprintable error'],
     ])(
       'still answers the generic error when the authenticator rejects with %s',
-      async (_label, reason, logged) => {
+      async (_label, reason) => {
         // A rejection that is not an Error has no message to read; the handshake must still complete.
         const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
         try {
@@ -710,7 +719,7 @@ describe('RealtimeGateway', () => {
 
           expect(next).toHaveBeenCalledTimes(1)
           expect((next.mock.calls[0]?.[0] as Error).message).toBe('Internal Server Error')
-          expect(errorSpy).toHaveBeenCalledWith(handshakeFailed(`handshake refused: ${logged}`))
+          expect(errorSpy).toHaveBeenCalledWith(handshakeFailed('handshake refused', reason))
         } finally {
           errorSpy.mockRestore()
         }

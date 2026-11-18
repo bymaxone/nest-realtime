@@ -24,7 +24,6 @@ import type {
   ReauthenticationPolicy,
 } from '../interfaces/realtime-module-options.interface'
 import { RealtimeTracing } from '../observability/realtime-tracing'
-import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
 import { Semaphore } from '../utils/semaphore'
 import { runHook } from '../utils/run-hook'
@@ -109,7 +108,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
           this.logger,
           'warn',
           'REALTIME_REAUTH_FAILED',
-          `Reauthentication cycle failed: ${describeError(err)}`,
+          `Reauthentication cycle failed`,
+          {},
+          err,
         )
       })
     }, this.policy.intervalSeconds * 1000)
@@ -208,8 +209,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         this.logger,
         'warn',
         'REALTIME_REAUTH_FAILED',
-        `Reauthentication errored: ${describeError(err)}`,
+        `Reauthentication errored`,
         { connectionId: conn.connectionId },
+        err,
       )
       await this.revoke(conn)
     }
@@ -256,8 +258,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         this.logger,
         'warn',
         'REALTIME_REVOCATION_FAILED',
-        `Revocation failed, retrying next cycle: ${describeError(err)}`,
+        `Revocation failed, retrying next cycle`,
         { connectionId: conn.connectionId },
+        err,
       )
     }
   }
@@ -292,8 +295,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
           this.logger,
           'warn',
           'REALTIME_HOOK_FAILED',
-          `onReauthenticationFailed hook failed: ${describeError(failed.error)}`,
+          `onReauthenticationFailed hook failed`,
           { hook: 'onReauthenticationFailed' },
+          failed.error,
         )
       }
     })
@@ -308,8 +312,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         this.logger,
         'warn',
         'REALTIME_REAUTH_FAILED',
-        `Reauthentication notification failed, disconnecting anyway: ${describeError(err)}`,
+        `Reauthentication notification failed, disconnecting anyway`,
         { connectionId: conn.connectionId },
+        err,
       )
     }
     try {

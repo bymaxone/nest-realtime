@@ -215,7 +215,14 @@ export class WebSocketTransport implements ITransport {
     const message = `onConnect hook failed: ${describeError(failed.error)}`
     // Raised, the failure reaches the gateway, which logs it and disconnects the socket.
     if (this.options.onConnectFailure === 'close') throw new Error(message)
-    logEvent(this.logger, 'error', 'REALTIME_HOOK_FAILED', message, { hook: 'onConnect' })
+    logEvent(
+      this.logger,
+      'error',
+      'REALTIME_HOOK_FAILED',
+      'onConnect hook failed',
+      { hook: 'onConnect' },
+      failed.error,
+    )
   }
 
   /** Join the socket to its canonical rooms and the ones the authenticator named, here and in the registry. */
@@ -291,10 +298,11 @@ export class WebSocketTransport implements ITransport {
         this.logger,
         'error',
         'REALTIME_HOOK_FAILED',
-        `onDisconnect hook failed: ${describeError(failed.error)}`,
+        `onDisconnect hook failed`,
         {
           hook: 'onDisconnect',
         },
+        failed.error,
       )
     }
   }

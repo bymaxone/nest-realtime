@@ -26,10 +26,17 @@ export function reportDeliveryFailure(
   failure: Omit<DeliveryFailure, 'error'> & { readonly error: unknown },
   what: string,
 ): void {
-  logEvent(logger, 'warn', 'REALTIME_DELIVERY_FAILED', `${what}: ${describeError(failure.error)}`, {
-    code: failure.code,
-    op: failure.op,
-  })
+  logEvent(
+    logger,
+    'warn',
+    'REALTIME_DELIVERY_FAILED',
+    `${what}`,
+    {
+      code: failure.code,
+      op: failure.op,
+    },
+    failure.error,
+  )
   const reported: DeliveryFailure = {
     ...failure,
     error: failure.error instanceof Error ? failure.error : new Error(describeError(failure.error)),
@@ -41,10 +48,11 @@ export function reportDeliveryFailure(
         logger,
         'warn',
         'REALTIME_HOOK_FAILED',
-        `onDeliveryFailure hook failed: ${describeError(err)}`,
+        `onDeliveryFailure hook failed`,
         {
           hook: 'onDeliveryFailure',
         },
+        err,
       )
     })
 }
