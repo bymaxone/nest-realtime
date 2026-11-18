@@ -29,6 +29,7 @@ A dashboard that sums `bymax_realtime_connections_refused_total` over its labels
 
 ### Documentation
 
+- **The README says what a duplicate `socket.io` does.** Two copies in `node_modules` make TypeScript report TS2416 on `RealtimeIoAdapter` under `skipLibCheck: false`; the fix is one copy.
 - **The README names the `./internal` exports and `ITransport.kind`, and a spec holds it.** The spec that fails when a public export is not named now covers the names `./internal` exports explicitly. The README also says that `./observability` needs its optional peers, and that without them the import fails with the runtime's own `Cannot find module` error, which names the peer.
 
 ## [1.2.19] - 2026-11-18

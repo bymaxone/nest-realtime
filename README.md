@@ -287,7 +287,7 @@ For WebSocket, scaling goes through Socket.IO's own Redis adapter instead, confi
 
 ### 7. Add WebSocket (optional)
 
-WebSocket lives behind its own subpath, so an SSE application never installs the Socket.IO stack. Install its peers (see [Install](#1-install)), then do two things: register `BymaxRealtimeWebSocketModule` from `/websocket` instead of `BymaxRealtimeModule`, and install `RealtimeIoAdapter` in `main.ts`.
+WebSocket lives behind its own subpath, so an SSE application never installs the Socket.IO stack. Install its peers (see [Install](#1-install)), then do two things: register `BymaxRealtimeWebSocketModule` from `/websocket` instead of `BymaxRealtimeModule`, and install `RealtimeIoAdapter` in `main.ts`. Two copies of `socket.io` in `node_modules` make TypeScript report TS2416 on `RealtimeIoAdapter` under `skipLibCheck: false`; dedupe to one copy.
 
 ```typescript
 // app.module.ts
