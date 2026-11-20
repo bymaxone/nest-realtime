@@ -53,6 +53,10 @@ export type LogFields = Readonly<Record<string, string | number | boolean>>
  * @param error - What was thrown, when the event reports a failure. It goes under `err` as the value itself, never
  *   as text in `message`, so the logger's serializer and redaction apply to it: an error raised by host code can
  *   carry a user or a tenant, and the library's own line must not.
+ *
+ * A logger that throws while writing is absorbed, since the report of a failure must not become another one. A
+ * logger whose method returns a rejected promise is not: Nest's `Logger` discards what the method returns, so the
+ * rejection is an unhandled rejection of the host's process, and the logger has to catch its own.
  */
 export function logEvent(
   logger: Pick<Logger, 'warn' | 'error'>,
@@ -62,5 +66,10 @@ export function logEvent(
   fields: LogFields = {},
   error?: unknown,
 ): void {
-  logger[level]({ event, message, ...fields, ...(error === undefined ? {} : { err: error }) })
+  try {
+    logger[level]({ event, message, ...fields, ...(error === undefined ? {} : { err: error }) })
+  } catch {
+    // The host's logger threw. This is called from catch blocks and promise handlers, where a throw is a second
+    // failure on top of the one being reported, or an unhandled rejection, so the line is lost and the call goes on.
+  }
 }
