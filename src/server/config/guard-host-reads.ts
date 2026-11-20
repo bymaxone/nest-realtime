@@ -45,9 +45,10 @@ export function guardHostReads<T>(what: string, read: () => T): T {
 /**
  * Reads what a host's factory returned under the guard, so that the read `await` makes of it cannot run a trap
  * outside it. `await` reads `then` on a value, and a proxy whose trap throws, or one that was revoked, throws there,
- * inside the library's own provider and before the options are read. The read is made here once; returning the value
+ * inside the library's own provider and before the options are read. The read is made here first; returning the value
  * from an `async` function then adopts a promise or a thenable as it is, so the rejection of a factory's own promise
- * stays the factory's failure, whatever it threw, and is not this module's to rename.
+ * stays the factory's failure, whatever it threw, and is not this module's to rename. The adoption reads `then` again,
+ * so a getter that answers differently the second time is not guarded.
  *
  * @param returned - What the factory returned.
  * @param what - What is being read, completing "... could not be read".
