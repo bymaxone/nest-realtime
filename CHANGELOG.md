@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.20] - 2026-11-20
+
 ### Fixed
 
 - **A getter or a proxy that throws, in an object the host hands over, is refused with the library's typed error.** A proxy or a getter returned as the options by a `useFactory` or by `createRealtimeOptions`, one on the provider `useExisting` names, and one as the `authenticator` raised the host's own error at registration; they now raise `REALTIME_INVALID_OPTIONS` with the error that was thrown as the `cause`. An `extraProviders` that is not an array of providers raised a raw `TypeError` or was accepted until the container reached it; it is now refused at registration, naming the entry.
@@ -1217,7 +1219,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.19...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.20...HEAD
+[1.2.20]: https://github.com/bymaxone/nest-realtime/compare/v1.2.19...v1.2.20
 [1.2.19]: https://github.com/bymaxone/nest-realtime/compare/v1.2.18...v1.2.19
 [1.2.18]: https://github.com/bymaxone/nest-realtime/compare/v1.2.17...v1.2.18
 [1.2.17]: https://github.com/bymaxone/nest-realtime/compare/v1.2.16...v1.2.17
