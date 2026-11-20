@@ -152,6 +152,30 @@ describe('resolveAuthTenant', () => {
     expect(out.tenantId).toBe(expected)
   })
 
+  // Scenario: the result carries no tenant, or a null one, and a resolver is configured. Expected: the resolver is given
+  // a result without a tenantId, and what it answers routes. Why: the copy handed to the resolver has the key only when
+  // the read found a value, so an absent or null tenant is the same "nothing" for the resolver as it is for the library.
+  it.each([
+    ['absent', undefined],
+    ['null', null],
+  ])('gives a resolver a result with no tenantId when the tenantId is %s', (_name, value) => {
+    let given: Record<string, unknown> | undefined
+    const auth = untyped({ userId: 'u1', ...(value === undefined ? {} : { tenantId: value }) })
+
+    const out = resolveAuthTenant(
+      {
+        tenantResolver: (a) => {
+          given = a as unknown as Record<string, unknown>
+          return 't-resolved'
+        },
+      },
+      auth,
+    )
+
+    expect(given && 'tenantId' in given).toBe(false)
+    expect(out.tenantId).toBe('t-resolved')
+  })
+
   // Scenario: the authenticator's result has a getter that throws. Expected: the library does not wrap it, so the
   // host's own error is what the handshake fails with. Why: the result is the host's own code, the README says so,
   // and the gateway logs the error under `err` and counts the handshake as an error.
