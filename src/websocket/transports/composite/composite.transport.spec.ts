@@ -165,6 +165,9 @@ describe('CompositeTransport', () => {
         `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} of conn-1 failed on both transports`,
       )
       expect((failure as { code?: unknown }).code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+      // The cause reads as both reasons, in the order the transports ran, which is what an operator
+      // sees when the error is logged.
+      expect(((failure as Error).cause as AggregateError).message).toBe('sse fail; ws fail')
       expect(((failure as Error).cause as AggregateError).errors.map(String)).toEqual([
         'Error: sse fail',
         'Error: ws fail',
@@ -220,6 +223,9 @@ describe('CompositeTransport', () => {
         `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} failed on both transports`,
       )
       expect((failure as { code?: unknown }).code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+      // The cause reads as both reasons, in the order the transports ran, which is what an operator
+      // sees when the error is logged.
+      expect(((failure as Error).cause as AggregateError).message).toBe('sse fail; ws fail')
       expect(((failure as Error).cause as AggregateError).errors.map(String)).toEqual([
         'Error: sse fail',
         'Error: ws fail',
