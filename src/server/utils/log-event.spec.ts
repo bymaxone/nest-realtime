@@ -43,6 +43,28 @@ describe('logEvent', () => {
       message: 'a handshake failed',
     })
   })
+
+  // Scenario: a field is named like the event or the message, or like the error's key. Expected: the event and the
+  // message are the library's, and so is `err`. Why: an alert matches on `event`, and a field the library builds must not
+  // be able to replace what names the condition.
+  it('does not let a field replace the event, the message or the error', () => {
+    const warn = jest.fn()
+    const cause = new Error('boom')
+    logEvent(
+      { warn, error: jest.fn() },
+      'warn',
+      'REALTIME_HOOK_FAILED',
+      'a hook failed',
+      { event: 'REPLACED', message: 'replaced', err: 'replaced', hook: 'onConnect' } as never,
+      cause,
+    )
+    expect(warn).toHaveBeenCalledWith({
+      event: 'REALTIME_HOOK_FAILED',
+      message: 'a hook failed',
+      hook: 'onConnect',
+      err: cause,
+    })
+  })
 })
 
 describe('the event catalog', () => {

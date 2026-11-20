@@ -8,7 +8,6 @@ import { IoAdapter } from '@nestjs/platform-socket.io'
 import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
 import type { Server, ServerOptions } from 'socket.io'
 import {
-  describeError,
   logEvent,
   quitWithin,
   REALTIME_ERROR_CODES,
@@ -199,10 +198,9 @@ export class RealtimeIoAdapter extends IoAdapter {
           // The install failure below is the one to report; a failed release must not replace it.
         }
       }
-      const reason = describeError(err)
       throw realtimeError(
         REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED,
-        `websocket.redisAdapter is set but the Socket.IO Redis adapter could not be installed (${reason}). ` +
+        'websocket.redisAdapter is set but the Socket.IO Redis adapter could not be installed. ' +
           'Install @socket.io/redis-adapter and pass an ioredis client as pubClient.',
         { who: RealtimeIoAdapter.name, cause: err },
       )

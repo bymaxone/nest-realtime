@@ -13,6 +13,15 @@ const KIND_OF_TYPE: Readonly<Record<string, string>> = {
   undefined: 'undefined',
 }
 
+/** Whether a value is an array; a revoked proxy throws on the test, and is then not one. */
+function isArray(value: unknown): boolean {
+  try {
+    return Array.isArray(value)
+  } catch {
+    return false
+  }
+}
+
 /**
  * Describe a value by its type, for the message of a refused option.
  *
@@ -28,7 +37,7 @@ export function describeReceived(value: unknown): string {
     return Number.isFinite(value) ? String(value) : 'a number that is not finite'
   }
   if (value === null) return 'null'
-  if (Array.isArray(value)) return 'an array'
+  if (isArray(value)) return 'an array'
   if (typeof value === 'object' && !isPlainObject(value)) return 'a built-in object'
   return KIND_OF_TYPE[typeof value] ?? 'an object'
 }
