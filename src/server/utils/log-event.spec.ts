@@ -67,6 +67,41 @@ describe('logEvent', () => {
   })
 })
 
+describe('logEvent and the err key', () => {
+  // Scenario: a field is named `err` and the event reports no error. Expected: the line carries no `err` at all. Why:
+  // `err` is where the logger's serializer reads an error from, so only the error argument may put anything there.
+  it('does not let a field stand for the error when none is passed', () => {
+    const warn = jest.fn()
+    logEvent({ warn, error: jest.fn() }, 'warn', 'REALTIME_HOOK_FAILED', 'a hook failed', {
+      err: 'from a field',
+      hook: 'onConnect',
+    } as never)
+    const [line] = warn.mock.calls[0] as [Record<string, unknown>]
+    expect('err' in line).toBe(false)
+    expect(line).toEqual({
+      event: 'REALTIME_HOOK_FAILED',
+      message: 'a hook failed',
+      hook: 'onConnect',
+    })
+  })
+
+  // Scenario: a field is a getter that throws. Expected: logEvent returns and the logger is not called, as the JSDoc
+  // says. Why: the line is built inside the guard that absorbs a throw while writing, so the failure being reported
+  // is not replaced by this one; the line is lost.
+  it('loses the line, without throwing, when reading a field throws', () => {
+    const warn = jest.fn()
+    const fields = {
+      get n(): number {
+        throw new Error('getter threw')
+      },
+    }
+    expect(() =>
+      logEvent({ warn, error: jest.fn() }, 'warn', 'REALTIME_HOOK_FAILED', 'a hook failed', fields),
+    ).not.toThrow()
+    expect(warn).not.toHaveBeenCalled()
+  })
+})
+
 describe('the event catalog', () => {
   const sources = shipped(SRC).map((path) => readFileSync(path, 'utf8'))
 

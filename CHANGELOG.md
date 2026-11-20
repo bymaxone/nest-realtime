@@ -7,6 +7,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- **A field named `err` can no longer stand for the error of a log line.** `logEvent` wrote a caller's `err` field when no error was passed, and `err` is where a logger's serializer reads an error from. Only the error argument writes `err` now. The `logEvent` documentation also says that a field whose read throws, such as a getter, loses the line instead of throwing.
+
 ## [1.2.21] - 2026-11-20
 
 ### Fixed
