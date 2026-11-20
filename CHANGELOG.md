@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.22] - 2026-11-20
+
 ### Fixed
 
 - **The tenant of an authentication result is read once.** The routing tenant was read from the result more than once, so a getter that answers differently the second time could route on a value that was not the one tested. It is read once, the rest of the result is copied beside it, and a `tenantResolver` is given that copy, so a resolver that reads `auth.tenantId` reads the same value.
@@ -1250,7 +1252,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.21...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.22...HEAD
+[1.2.22]: https://github.com/bymaxone/nest-realtime/compare/v1.2.21...v1.2.22
 [1.2.21]: https://github.com/bymaxone/nest-realtime/compare/v1.2.20...v1.2.21
 [1.2.20]: https://github.com/bymaxone/nest-realtime/compare/v1.2.19...v1.2.20
 [1.2.19]: https://github.com/bymaxone/nest-realtime/compare/v1.2.18...v1.2.19
