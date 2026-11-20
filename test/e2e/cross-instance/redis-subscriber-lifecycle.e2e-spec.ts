@@ -124,9 +124,10 @@ describe('RedisRealtimePubSub against a real Redis', () => {
     })
     const failure = await pubsub.subscribe(() => undefined).catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(Error)
-    expect((failure as Error).message).toMatch(
-      /^\[RedisRealtimePubSub\] REALTIME_PUBSUB_UNAVAILABLE: could not subscribe to "bymax:realtime" \(/,
+    expect((failure as Error).message).toBe(
+      '[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: could not subscribe to "bymax:realtime"',
     )
+    expect(((failure as Error).cause as Error).message).not.toBe('')
     expect(pubsub.isSubscribed()).toBe(false)
   })
 
