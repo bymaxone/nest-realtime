@@ -127,7 +127,8 @@ describe('RedisRealtimePubSub against a real Redis', () => {
     expect((failure as Error).message).toBe(
       '[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: could not subscribe to "bymax:realtime"',
     )
-    expect(((failure as Error).cause as Error).message).not.toBe('')
+    // The boot fails only on an error reply, which is the server refusing the credentials.
+    expect(((failure as Error).cause as Error).name).toBe('ReplyError')
     expect(pubsub.isSubscribed()).toBe(false)
   })
 
