@@ -118,6 +118,105 @@ describe('options whose read throws', () => {
     )
   })
 
+  // Scenario: a factory that returns at once, not through a promise, answers a proxy whose get trap throws, or one
+  // that was revoked. Expected: the typed refusal. Why: `await` reads `then` on what it is given, which runs the trap
+  // inside the library's own provider before the options are read, so the guard has to cover that read.
+  it.each([
+    [
+      'a proxy that throws on every key',
+      () =>
+        new Proxy(
+          {},
+          {
+            get: () => {
+              throw new Error(SENTINEL)
+            },
+          },
+        ),
+    ],
+    ['a proxy that throws on then', () => throwingOn('then', { transport: 'sse', authenticator })],
+  ])('is refused as what a synchronous useFactory returns, %s', async (_name, build) => {
+    await typedRefusal(() =>
+      Test.createTestingModule({
+        imports: [
+          BymaxRealtimeModule.forRootAsync({
+            transport: 'sse',
+            useFactory: () => build() as never,
+          }),
+        ],
+      }).compile(),
+    )
+  })
+
+  it('is refused as what a synchronous createRealtimeOptions returns', async () => {
+    class Factory {
+      createRealtimeOptions(): never {
+        return throwingOn('then', { transport: 'sse', authenticator }) as never
+      }
+    }
+    await typedRefusal(() =>
+      Test.createTestingModule({
+        imports: [BymaxRealtimeModule.forRootAsync({ transport: 'sse', useClass: Factory })],
+      }).compile(),
+    )
+  })
+
+  // Scenario: an async factory rejects with its own error. Expected: that error reaches the caller as it is, neither
+  // wrapped nor renamed. Why: the read of `then` is guarded, and the factory's own failure is not a read of the object.
+  it('leaves the rejection of an async useFactory as the factory failure', async () => {
+    await expect(
+      Test.createTestingModule({
+        imports: [
+          BymaxRealtimeModule.forRootAsync({
+            transport: 'sse',
+            useFactory: () => Promise.reject(new Error('the factory failed')),
+          }),
+        ],
+      }).compile(),
+    ).rejects.toThrow(new Error('the factory failed'))
+  })
+
+  // Scenario: a factory answers a thenable that is not a native promise, as a library's own promise type is. Expected:
+  // it is awaited and its options are used, so the guard on the read of `then` does not stop a thenable that works.
+  it('awaits a thenable a synchronous useFactory returns', async () => {
+    const thenable = {
+      then: (resolve: (options: unknown) => void) => resolve({ transport: 'sse', authenticator }),
+    }
+    await expect(
+      Test.createTestingModule({
+        imports: [
+          BymaxRealtimeModule.forRootAsync({
+            transport: 'sse',
+            useFactory: () => thenable as never,
+          }),
+        ],
+      }).compile(),
+    ).resolves.toBeDefined()
+  })
+
+  // Scenario: a revoked proxy as the options, from a factory or as the argument of forRoot. Expected: the typed
+  // refusal, not the engine's TypeError. Why: `Array.isArray` throws on a revoked proxy.
+  it('refuses a revoked proxy returned by a factory and one passed to forRoot', async () => {
+    const revoked = (): object => {
+      const { proxy, revoke } = Proxy.revocable({}, {})
+      revoke()
+      return proxy
+    }
+    expect(() => BymaxRealtimeModule.forRoot(revoked() as never)).toThrow(
+      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options must be an object, received a built-in object',
+    )
+    await expect(
+      Test.createTestingModule({
+        imports: [
+          BymaxRealtimeModule.forRootAsync({
+            transport: 'sse',
+            useFactory: () => revoked() as never,
+          }),
+        ],
+      }).compile(),
+    ).rejects.toThrow('REALTIME_INVALID_OPTIONS')
+  })
+
   // Scenario: the authenticator is a proxy that throws when its method is read. Expected: the typed refusal.
   it('is refused as the authenticator', async () => {
     await typedRefusal(() =>

@@ -67,7 +67,7 @@ export function logEvent(
   error?: unknown,
 ): void {
   try {
-    logger[level]({ event, message, ...fields, ...(error === undefined ? {} : { err: error }) })
+    logger[level]({ ...fields, event, message, ...(error === undefined ? {} : { err: error }) })
   } catch {
     // The host's logger threw. This is called from catch blocks and promise handlers, where a throw is a second
     // failure on top of the one being reported, or an unhandled rejection, so the line is lost and the call goes on.

@@ -194,7 +194,7 @@ describe('RealtimeIoAdapter subscriber connection', () => {
         throw new Error('adapter constructor exploded')
       })
 
-      expect(() => adapter.createIOServer(0)).toThrow(/adapter constructor exploded/)
+      expect(() => adapter.createIOServer(0)).toThrow(/REALTIME_REDIS_ADAPTER_FAILED/)
     })
   })
 

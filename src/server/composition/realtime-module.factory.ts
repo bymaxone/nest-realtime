@@ -7,7 +7,7 @@ import type { DynamicModule, Logger, Provider, Type } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { applyDefaults } from '../config/default-options'
 import { dropUnset } from '../config/drop-unset'
-import { guardHostReads } from '../config/guard-host-reads'
+import { awaitHostResult, guardHostReads } from '../config/guard-host-reads'
 import type { ResolvedRealtimeOptions } from '../config/default-options'
 import { validateOptions } from '../config/validate-options'
 import {
@@ -315,7 +315,7 @@ function buildOptionsProvider(
     return {
       provide: REALTIME_OPTIONS_TOKEN,
       useFactory: async (...args: unknown[]) =>
-        resolve(await asyncOptions.useFactory!(...args), 'useFactory'),
+        resolve(await awaitHostResult(asyncOptions.useFactory!(...args)), 'useFactory'),
       inject: [...(asyncOptions.inject ?? [])],
     }
   }
@@ -333,7 +333,7 @@ function buildOptionsProvider(
         )
       }
       return resolve(
-        (await create.call(factory)) as BymaxRealtimeModuleOptions,
+        (await awaitHostResult(create.call(factory))) as BymaxRealtimeModuleOptions,
         'createRealtimeOptions',
       )
     },
