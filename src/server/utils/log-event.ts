@@ -49,7 +49,9 @@ export type LogFields = Readonly<Record<string, string | number | boolean>>
  * @param level - `warn` for what degrades service, `error` for what fails an operation.
  * @param event - The stable code of the condition.
  * @param message - Human text; the library's own wording, with no host-supplied value in it.
- * @param fields - Closed or numeric fields.
+ * @param fields - Closed or numeric fields, built by the library. A key named `event`, `message` or `err` is replaced by the
+ *   library's own value or dropped, and a field whose read throws, such as a getter, loses the line like any other
+ *   throw while writing.
  * @param error - What was thrown, when the event reports a failure. It goes under `err` as the value itself, never
  *   as text in `message`, so the logger's serializer and redaction apply to it: an error raised by host code can
  *   carry a user or a tenant, and the library's own line must not.
@@ -67,7 +69,11 @@ export function logEvent(
   error?: unknown,
 ): void {
   try {
-    logger[level]({ ...fields, event, message, ...(error === undefined ? {} : { err: error }) })
+    const line: Record<string, unknown> = { ...fields, event, message }
+    // `err` is where a logger's serializer reads an error from, so only the error argument may put anything there.
+    delete line['err']
+    if (error !== undefined) line['err'] = error
+    logger[level](line)
   } catch {
     // The host's logger threw. This is called from catch blocks and promise handlers, where a throw is a second
     // failure on top of the one being reported, or an unhandled rejection, so the line is lost and the call goes on.

@@ -141,7 +141,7 @@ pnpm add socket.io-client
 
 ### 2. Implement the Authenticator Interface
 
-This is the only interface you are required to provide. The library calls it once per connection and never inspects the credential itself.
+This is the only interface you are required to provide. The library calls it once per connection and never inspects the credential itself. What it returns is your code's own object: a getter on it that throws raises that error as it is, the handshake fails, the error is logged under `err` and counted as `reason="error"`, and the client is sent nothing of it.
 
 ```typescript
 import type {
