@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  21,233 B → 21,263 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  21,556 B → 21,586 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -63,7 +63,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     before the defaults merge and the type-only wording of every option refusal, with the key tables that read a group's known keys, 436 B, and the construction-time check of
 //     `RedisOfflineQueue`'s two options, with its error, 117 B, and the start-up check of the shape of the
 //     option groups and of the pluggable pieces, 448 B, and the refusal of an options argument, of a registration endpoint and of one with whitespace in it, of a built-in object where a group is expected, and of a queue built without its options or its client, 188 B, and the one test that counts the factory patterns and chooses the provider, so that a pattern set to `null` is read as unset, 42 B, measured on 2026-11-17)
-//   websocket  5,571 B →  6,079 B (the Socket.IO stack alone: the start-up message that names the
+//   websocket  6,112 B →  6,142 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server
@@ -77,7 +77,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     the composite, which refuse what is not a non-empty string and what starts with a reserved
 //     prefix, 49 B, and the helpers of `registerSocket`, which stay within the 50-line function
 //     limit, 31 B, and the counting of the refusals, the revocations, the evictions and the deliveries in the tally the
-//     observability entry reads, then the seam that wraps a handshake and a re-authentication cycle in a span when the optional API is installed, then the object form of every warn and error line with its stable code; on the shared runtime they cost 451 B, 519 B and 455 B, 4 B more for the rest, and 97 B for the host error written under `err`, the `error` refusal reason, and the guards for a proxy whose reads throw and for a provider with no factory, and on the WebSocket bundle 137 B, 134 B and 127 B, measured on 2026-11-17)
+//     observability entry reads, then the seam that wraps a handshake and a re-authentication cycle in a span when the optional API is installed, then the object form of every warn and error line with its stable code; on the shared runtime they cost 451 B, 519 B and 455 B, 4 B more for the rest, and 97 B for the host error written under `err`, the `error` refusal reason, and the guards for a proxy whose reads throw and for a provider with no factory, and 323 B for the refusal of an object whose read throws, wherever the host hands one over, of an `extraProviders` that is not an array of providers, and of the unavailable errors that carry no cause text in their message, and on the WebSocket bundle 137 B, 134 B and 127 B, and 63 B for the error that closes a connection whose `onConnect` failed, measured on 2026-11-17)
 //   observability  1,092 B → 1,122 B (the metrics contributor and the pub/sub health indicator: five collectors read from the tally and the registry, the
 //     entry nobody installs unless they publish metrics, so it carries no weight for anyone else)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
@@ -96,8 +96,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 21_263 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 6_079 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 21_586 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 6_142 },
   {
     name: 'observability (metrics contributor)',
     path: 'dist/observability/index.mjs',

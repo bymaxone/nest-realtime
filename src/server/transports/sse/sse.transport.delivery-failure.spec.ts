@@ -164,7 +164,7 @@ describe('SseTransport delivery failures', () => {
     const failure = await transport.emitToUser('u1', 'foo', {}).catch((error: unknown) => error)
     expectGenericServiceUnavailable(failure)
     expect((failure as Error).message).toBe(
-      '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed (queue down)',
+      '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed',
     )
     expect(((failure as Error).cause as Error).message).toBe('queue down')
   })
@@ -178,7 +178,7 @@ describe('SseTransport delivery failures', () => {
     const { transport, publish } = build({ offlineQueue })
     publish.mockRejectedValueOnce(new Error('redis down'))
     await expect(transport.emitToUser('u1', 'foo', {})).rejects.toThrow(
-      '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed (queue down)',
+      '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed',
     )
   })
 
@@ -201,7 +201,7 @@ describe('SseTransport delivery failures', () => {
     })
     if (bus === 'failed') publish.mockRejectedValueOnce(new Error('redis down'))
     await expect(transport.emitToUser('u1', 'foo', {})).rejects.toThrow(
-      '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed (queue down)',
+      '[SseTransport] REALTIME_TRANSPORT_UNAVAILABLE: foo for u1 has no delivery path: the user is offline here and the offline queue failed',
     )
     await new Promise((resolve) => setImmediate(resolve))
     expect(onDeliveryFailure).not.toHaveBeenCalled()
@@ -232,7 +232,7 @@ describe('SseTransport delivery failures', () => {
     const failure = await transport.disconnect('held-elsewhere').catch((error: unknown) => error)
     expectGenericServiceUnavailable(failure)
     expect((failure as Error).message).toBe(
-      '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of held-elsewhere could not be published (redis down)',
+      '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of held-elsewhere could not be published',
     )
     expect(((failure as Error).cause as Error).message).toBe('redis down')
   })

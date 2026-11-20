@@ -92,7 +92,7 @@ describe('RedisRealtimePubSub.publish during an outage', () => {
       reason: {
         code: 'REALTIME_PUBSUB_UNAVAILABLE',
         message:
-          '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of c-remote could not be published ([RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: cannot publish to "bymax:realtime" (the Redis client is reconnecting))',
+          '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of c-remote could not be published',
       },
     })
     expect(await settlesInThisTurn(() => instance!.transport.emitToUser('u1', 'evt', {}))).toEqual({

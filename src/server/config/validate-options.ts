@@ -8,6 +8,7 @@ import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-o
 import { describeReceived } from '../utils/describe-received'
 import { realtimeError } from '../utils/realtime-error'
 import { dropUnset } from './drop-unset'
+import { guardHostReads } from './guard-host-reads'
 import { assertOptionsObject, validateShapes } from './validate-shapes'
 
 // Format-level validation only: 'websocket' and 'both' are accepted config values,
@@ -22,6 +23,11 @@ const VALID_TRANSPORTS = new Set<string>(['sse', 'websocket', 'both'])
  * as authenticated. The check is therefore a hard failure, not a warning.
  */
 export function validateOptions(raw: BymaxRealtimeModuleOptions): void {
+  guardHostReads('the options', () => validateReadOptions(raw))
+}
+
+/** The checks of `validateOptions`, which reads the options and what they hold. */
+function validateReadOptions(raw: BymaxRealtimeModuleOptions): void {
   assertOptionsObject(raw)
   const options = dropUnset(raw)
   if (!options.transport || !VALID_TRANSPORTS.has(options.transport)) {

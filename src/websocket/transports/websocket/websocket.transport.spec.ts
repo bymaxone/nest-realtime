@@ -508,7 +508,7 @@ describe('WebSocketTransport', () => {
     const failure = await transport.disconnect('remote-id').catch((error: unknown) => error)
     expectGenericServiceUnavailable(failure)
     expect((failure as Error).message).toBe(
-      '[WebSocketTransport] REALTIME_TRANSPORT_UNAVAILABLE: the revocation of remote-id could not be sent (adapter down)',
+      '[WebSocketTransport] REALTIME_TRANSPORT_UNAVAILABLE: the revocation of remote-id could not be sent',
     )
     expect(((failure as Error).cause as Error).message).toBe('adapter down')
   })

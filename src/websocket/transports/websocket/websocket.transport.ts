@@ -30,6 +30,7 @@ import type {
   BymaxRealtimeModuleOptions,
   AdmissionTicket,
 } from '@bymax-one/nest-realtime/internal'
+import { ConnectHookFailure } from './connect-hook-failure'
 
 /**
  * Prefix of the per-socket room each connection joins at registration. It makes
@@ -214,7 +215,7 @@ export class WebSocketTransport implements ITransport {
     // Raised, the failure reaches the gateway, which logs it and disconnects the socket.
     // The host's error travels as the cause, so its text never enters the library's message.
     if (this.options.onConnectFailure === 'close') {
-      throw new Error('onConnect hook failed', { cause: failed.error })
+      throw new ConnectHookFailure(failed.error)
     }
     logEvent(
       this.logger,
@@ -407,7 +408,7 @@ export class WebSocketTransport implements ITransport {
       throw unavailableError(
         REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
         WebSocketTransport.name,
-        `the WebSocket server is not attached, so ${connectionId} cannot be revoked`,
+        `the WebSocket server is not attached, so ${connectionId} cannot be revoked (server not attached)`,
         new Error('server not attached'),
       )
     }

@@ -10,6 +10,7 @@ import {
   REALTIME_OPTIONS_TOKEN,
   RealtimeMetricsTally,
 } from '@bymax-one/nest-realtime/internal'
+import { ConnectHookFailure } from './connect-hook-failure'
 import { RealtimeGateway } from './realtime.gateway'
 import { WebSocketTransport } from './websocket.transport'
 
@@ -95,5 +96,20 @@ describe('RealtimeGateway.handleConnection counts what it refuses', () => {
     ;(transport['authenticate'] as jest.Mock).mockRejectedValue(new Error('boom'))
     await gateway.handleConnection(socket() as never)
     expect(refused()).toEqual({ limit: 0, unauthorized: 0, unavailable: 0, error: 1 })
+  })
+
+  // Scenario: onConnect failed and onConnectFailure is 'close', so the transport closes an admitted connection.
+  // Expected: nothing is counted as refused, and the socket is closed. Why: the SSE transport admits that
+  // connection and completes its stream the same way and counts nothing, so a count here would make `error`
+  // mean two things.
+  it('does not count a connection closed because onConnect failed', async () => {
+    const closed = socket()
+    ;(transport['authenticate'] as jest.Mock).mockResolvedValue({ userId: 'u1', roles: [] })
+    ;(transport['registerSocket'] as jest.Mock).mockRejectedValue(
+      new ConnectHookFailure(new Error('presence store down')),
+    )
+    await gateway.handleConnection(closed as never)
+    expect(refused()).toEqual({ limit: 0, unauthorized: 0, unavailable: 0, error: 0 })
+    expect(closed['disconnect']).toHaveBeenCalledWith(true)
   })
 })

@@ -196,7 +196,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     return unavailableError(
       REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
       RedisRealtimePubSub.name,
-      `cannot publish to "${this.channel}"`,
+      `cannot publish to "${this.channel}" (${reason})`,
       new Error(reason),
     )
   }
@@ -365,7 +365,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     this.#outageLogged = false
     this.#lastRefusal = undefined
     this.logger.log(
-      `Subscribed to "${this.channel}"; remote events and revocations reach this instance`,
+      `Subscribed to the realtime channel; remote events and revocations reach this instance`,
     )
   }
 

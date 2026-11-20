@@ -18,6 +18,8 @@ const surface = JSON.parse(
 /** The contract members the README must name, because an implementor of the contract writes them. */
 const CONTRACT_MEMBERS = [
   'extraProviders',
+  'createRealtimeOptions',
+  'userAgent',
   'onModuleInit',
   'onApplicationShutdown',
   'append',
