@@ -33,7 +33,7 @@ const getterThrows = (): object => ({
 })
 
 /** What a refusal must be: the typed code, no host text in the message, the host's error as the cause. */
-const typedRefusal = async (attempt: () => unknown): Promise<void> => {
+const typedRefusal = async (attempt: () => unknown, what = 'the options'): Promise<void> => {
   const error = await Promise.resolve()
     .then(attempt)
     .then(
@@ -42,7 +42,9 @@ const typedRefusal = async (attempt: () => unknown): Promise<void> => {
     )
   expect(error).toBeInstanceOf(Error)
   const { message, cause } = error as Error
-  expect(message).toContain('REALTIME_INVALID_OPTIONS')
+  expect(message).toBe(
+    `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: ${what} could not be read: a getter or a proxy on it throws`,
+  )
   expect(message).not.toContain(SENTINEL)
   expect((cause as Error).message).toBe(SENTINEL)
 }
@@ -101,16 +103,18 @@ describe('options whose read throws', () => {
         throw new Error(SENTINEL)
       },
     }
-    await typedRefusal(() =>
-      Test.createTestingModule({
-        imports: [
-          BymaxRealtimeModule.forRootAsync({
-            transport: 'sse',
-            useExisting: Factory,
-            extraProviders: [{ provide: Factory, useValue: provider }],
-          } as never),
-        ],
-      }).compile(),
+    await typedRefusal(
+      () =>
+        Test.createTestingModule({
+          imports: [
+            BymaxRealtimeModule.forRootAsync({
+              transport: 'sse',
+              useExisting: Factory,
+              extraProviders: [{ provide: Factory, useValue: provider }],
+            } as never),
+          ],
+        }).compile(),
+      'the provider named by useExisting or useClass',
     )
   })
 
@@ -149,7 +153,9 @@ describe('the extraProviders of forRootAsync', () => {
     [true, 'a boolean'],
   ])('refuses %p', (value, received) => {
     expect(() => register(value)).toThrow(
-      `REALTIME_INVALID_OPTIONS: extraProviders must be an array of providers, received ${received}`,
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: extraProviders must be an array of providers, received ${received}`,
+      ),
     )
   })
 
@@ -161,7 +167,9 @@ describe('the extraProviders of forRootAsync', () => {
     [{ useValue: 1 }, 'an object with no provide'],
   ])('refuses the entry %p', (entry, received) => {
     expect(() => register([entry])).toThrow(
-      `REALTIME_INVALID_OPTIONS: extraProviders[0] must be a provider (a class or an object with provide), received ${received}`,
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: extraProviders[0] must be a provider (a class or an object with provide), received ${received}`,
+      ),
     )
   })
 
@@ -177,7 +185,7 @@ describe('the extraProviders of forRootAsync', () => {
     ).not.toThrow()
   })
 
-  it('accepts a registration with no extraProviders', () => {
-    expect(() => register(undefined)).not.toThrow()
+  it.each([undefined, null])('accepts a registration whose extraProviders is %p', (value) => {
+    expect(() => register(value)).not.toThrow()
   })
 })
