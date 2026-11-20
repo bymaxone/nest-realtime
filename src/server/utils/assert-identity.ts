@@ -42,9 +42,13 @@ export function resolveAuthTenant(
   auth: AuthenticationResult,
 ): AuthenticationResult {
   // The tenantId is read here, once, with the rest of the result copied: a getter can answer differently the second
-  // time, and the value that decides the routing room must be the one that was tested.
+  // time, and the value that decides the routing room must be the one that was tested. The resolver is given that
+  // copy, so a resolver that reads `auth.tenantId` reads the same value and not the getter again.
   const { tenantId: own, ...rest } = auth
-  const resolved = options.tenantResolver?.(auth) ?? own
+  const resolved =
+    options.tenantResolver?.(
+      own === undefined || own === null ? rest : { ...rest, tenantId: own },
+    ) ?? own
   if (resolved === undefined || resolved === null) return rest
   return { ...rest, tenantId: resolved }
 }

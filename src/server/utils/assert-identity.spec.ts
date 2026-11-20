@@ -130,6 +130,12 @@ describe('resolveAuthTenant', () => {
     ['no resolver', {}, 't1', 't1'],
     ['a resolver that returns undefined', { tenantResolver: () => undefined }, 't1', 't1'],
     ['a null tenantId', {}, null, undefined],
+    [
+      'a resolver that reads the tenantId itself',
+      { tenantResolver: (a: { tenantId?: string }) => a.tenantId },
+      't1',
+      't1',
+    ],
   ])('reads the tenantId of the auth result once with %s', (_name, options, value, expected) => {
     let reads = 0
     const auth = {
