@@ -66,5 +66,9 @@
   {
     "file": "src/check-function-length.key.spec.ts",
     "reason": "Runs scripts/check-function-length.mjs as a child process and imports nothing from src/, so it judges no mutant."
+  },
+  {
+    "file": "src/readme-exports.spec.ts",
+    "reason": "Reads documentation text; covers no published code. It imports no mutated source, so no mutant can be attributed to it."
   }
 ]

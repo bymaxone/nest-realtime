@@ -12,7 +12,6 @@ import {
   ROOM_PREFIXES,
   REALTIME_ERROR_CODES,
   unavailableError,
-  describeError,
   runHook,
   DEFAULT_HOOK_TIMEOUT_MS,
   AuthenticationGate,
@@ -212,9 +211,11 @@ export class WebSocketTransport implements ITransport {
 
     const failed = await this.runOnConnect(socket, auth, connectedAt)
     if (!failed) return
-    const message = `onConnect hook failed: ${describeError(failed.error)}`
     // Raised, the failure reaches the gateway, which logs it and disconnects the socket.
-    if (this.options.onConnectFailure === 'close') throw new Error(message)
+    // The host's error travels as the cause, so its text never enters the library's message.
+    if (this.options.onConnectFailure === 'close') {
+      throw new Error('onConnect hook failed', { cause: failed.error })
+    }
     logEvent(
       this.logger,
       'error',

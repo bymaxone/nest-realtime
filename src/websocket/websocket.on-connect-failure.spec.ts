@@ -99,7 +99,8 @@ describe('WebSocket: onConnectFailure', () => {
       expect.objectContaining({
         event: 'REALTIME_HANDSHAKE_FAILED',
         err: expect.objectContaining({
-          message: expect.stringContaining('onConnect hook failed: presence store down'),
+          message: 'onConnect hook failed',
+          cause: expect.objectContaining({ message: 'presence store down' }),
         }),
       }),
     )

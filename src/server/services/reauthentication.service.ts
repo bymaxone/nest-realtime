@@ -93,13 +93,6 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     this.slots = new Semaphore(this.policy.concurrency)
   }
 
-  /**
-   * Schedule the periodic revalidation cycle.
-   *
-   * The timer is unref'd so it never keeps the process alive on its own.
-   * When the authenticator does not implement `revalidate`, the service stays
-   * idle and emits an informative log.
-   */
   /** Warn once, through the application's logger, when the positive cache outlives the interval. */
   private warnIfCacheOutlivesInterval(): void {
     const { cacheTtlMs, intervalSeconds } = this.declared ?? {}
@@ -114,6 +107,13 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     )
   }
 
+  /**
+   * Schedule the periodic revalidation cycle.
+   *
+   * The timer is unref'd so it never keeps the process alive on its own.
+   * When the authenticator does not implement `revalidate`, the service stays
+   * idle and emits an informative log.
+   */
   onModuleInit(): void {
     if (!this.auth.revalidate) {
       this.logger.log('Authenticator does not implement revalidate() — reauthentication disabled')
