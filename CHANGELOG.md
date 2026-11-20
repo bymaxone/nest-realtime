@@ -7,32 +7,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
-### Security
-
-- **A log line no longer carries the text of an error raised by the application's own code.** Events such as `REALTIME_HANDSHAKE_FAILED`, `REALTIME_HOOK_FAILED`, `REALTIME_DELIVERY_FAILED`, `REALTIME_DISCONNECT_FAILED`, `REALTIME_OFFLINE_QUEUE_ACK_FAILED`, `REALTIME_PUBSUB_UNSUBSCRIBE_FAILED`, `REALTIME_REAUTH_FAILED`, `REALTIME_REVOCATION_FAILED`, `REALTIME_COMPOSITE_PARTIAL_FAILURE`, `REALTIME_PUBSUB_UNAVAILABLE` put the error's own message into `message`, so an authenticator or a hook that threw `x user=U tenant=T` reached the line. `message` now holds the library's own text only, and the error goes under `err` as the error itself, which is where a structured logger applies its serializer and its redaction. A spec reads every `logEvent` call and fails when a message reads an error.
-
-#### Apply to a derived backend
-
-An alert, a filter or a dashboard that matched the text of an application error in the `message` of one of those events must read the `err` field instead. A custom `LoggerService` that turns a log argument into a string prints the object, including `err`; give it the object, or serialize `err` in it.
-
-### Fixed
-
-- **A handshake that failed with an unexpected error counted in no metric, a `useExisting` that resolved to nothing failed with a raw `TypeError`, a proxy whose reads throw reached the application with its own error, and the cache warning was written before the logger was in place.** A 500 handshake now counts under `bymax_realtime_connections_refused_total{reason="error"}`. A `useExisting` or `useClass` provider with no `createRealtimeOptions` is refused with `REALTIME_INVALID_OPTIONS` at bootstrap. A proxy whose reads throw, given as the options or as a group, is refused as `a built-in object`. `REALTIME_REAUTH_CACHE_WEAKENS_POLICY` is written when the re-authentication service starts, through the application's logger, and no longer at registration.
-
-#### Apply to a derived backend
-
-A dashboard that sums `bymax_realtime_connections_refused_total` over its labels now includes `reason="error"`. A log pipeline that found `REALTIME_REAUTH_CACHE_WEAKENS_POLICY` at registration finds it at start-up, after `app.useLogger`, and only when the authenticator implements `revalidate`.
-
-### Changed
-
-- **`bymax_realtime_events_emitted_total` is described as what it counts.** It counts emit calls handled on the instance, including a call with no recipient, and under `'both'` each transport counts it. The metric help text and the README say so.
-
-### Documentation
-
-- **The README says what a duplicate `socket.io` does.** Two copies in `node_modules` make TypeScript report TS2416 on `RealtimeIoAdapter` under `skipLibCheck: false`; the fix is one copy.
-- **The README names the `./internal` exports and `ITransport.kind`, and a spec holds it.** The spec that fails when a public export is not named now covers the names `./internal` exports explicitly. The README also says that `./observability` needs its optional peers, and that without them the import fails with the runtime's own `Cannot find module` error, which names the peer.
-
-## [1.2.19] - 2026-11-18
+## [1.2.19] - 2026-11-20
 
 ### Added
 
@@ -41,6 +16,7 @@ A dashboard that sums `bymax_realtime_connections_refused_total` over its labels
 ### Changed
 
 - **Every `warn` and `error` line is an object with a stable code.** The line is `{ event: 'REALTIME_<EVENT>', message, ...fields }`, so a structured logger writes each as a JSON field and Nest's default logger prints the object instead of a sentence. The message text no longer names a user, a tenant, a room, a channel or a socket: those values were removed from the text, and the logger's own context carries identity. A connection id may be a field. A line that says the library started stays a string.
+- **`bymax_realtime_events_emitted_total` is described as what it counts.** It counts emit calls handled on the instance, including a call with no recipient, and under `'both'` each transport counts it. The metric help text and the README say so.
 
 #### Apply to a derived backend
 
@@ -49,14 +25,27 @@ An alert or a log filter that matched the text of a `warn` or `error` line now m
 ### Fixed
 
 - **Inputs were accepted, or failed as a raw `TypeError`, where a typed refusal belongs.** The `sseEndpoint` of `forRootAsync` was not covered by the check `sse.endpoint` got: a number failed as `endpoint.startsWith is not a function` and a blank one registered and served no route. A `forRoot` or `forRootAsync` called with no options, `null`, a string, a number or an array failed as "Cannot convert undefined or null to object", or as a message about `options.transport`; a factory that answered a string or a number was read the same way. A `Date` was accepted as `sse`, `websocket`, `reauthenticationPolicy` or `hooks`, because it is not an array. `new RedisOfflineQueue(undefined)` threw a raw `TypeError` and a string was accepted with no `client`. An endpoint with a space in it, `' /x '` or `'/a b'`, was registered and unreachable. Each of those is now refused with `REALTIME_INVALID_OPTIONS`, naming the option and what it received (`a built-in object` for a `Date`, a `Map` and the like). A `forRootAsync` pattern (`useFactory`, `useClass` or `useExisting`) set to `null` now reads as unset, like `undefined`: beside the pattern in use it is no longer counted as a second one, and alone it is refused at registration instead of failing at bootstrap with the container's own error.
+- **A handshake that failed with an unexpected error counted in no metric, a `useExisting` that resolved to nothing failed with a raw `TypeError`, a proxy whose reads throw reached the application with its own error, and the cache warning was written before the logger was in place.** A 500 handshake now counts under `bymax_realtime_connections_refused_total{reason="error"}`. A `useExisting` or `useClass` provider with no `createRealtimeOptions` is refused with `REALTIME_INVALID_OPTIONS` at bootstrap. A proxy whose reads throw, given as the options or as a group, is refused as `a built-in object`. `REALTIME_REAUTH_CACHE_WEAKENS_POLICY` is written when the re-authentication service starts, through the application's logger, and no longer at registration.
 
 #### Apply to a derived backend
 
 A `sseEndpoint` or `sse.endpoint` that held whitespace, an options argument or factory result that was not an object, and a group that was a `Date` or another built-in now fail at registration, where they used to start or fail later: fix the value. A `RedisOfflineQueue` built without options or without a `client` now throws at construction. An instance of your own class is still read as a group by its keys, unless it sets its own `Symbol.toStringTag` to something other than `'Object'`.
 
+A dashboard that sums `bymax_realtime_connections_refused_total` over its labels now includes `reason="error"`. A log pipeline that found `REALTIME_REAUTH_CACHE_WEAKENS_POLICY` at registration finds it at start-up, after `app.useLogger`, and only when the authenticator implements `revalidate`.
+
+### Security
+
+- **A log line no longer carries the text of an error raised by the application's own code.** Events such as `REALTIME_HANDSHAKE_FAILED`, `REALTIME_HOOK_FAILED`, `REALTIME_DELIVERY_FAILED`, `REALTIME_DISCONNECT_FAILED`, `REALTIME_OFFLINE_QUEUE_ACK_FAILED`, `REALTIME_PUBSUB_UNSUBSCRIBE_FAILED`, `REALTIME_REAUTH_FAILED`, `REALTIME_REVOCATION_FAILED`, `REALTIME_COMPOSITE_PARTIAL_FAILURE`, `REALTIME_PUBSUB_UNAVAILABLE` put the error's own message into `message`, so an authenticator or a hook that threw `x user=U tenant=T` reached the line. `message` now holds the library's own text only, and the error goes under `err` as the error itself, which is where a structured logger applies its serializer and its redaction. A spec reads every `logEvent` call and fails when a message reads an error.
+
+#### Apply to a derived backend
+
+An alert, a filter or a dashboard that matched the text of an application error in the `message` of one of those events must read the `err` field instead. A custom `LoggerService` that turns a log argument into a string prints the object, including `err`; give it the object, or serialize `err` in it.
+
 ### Documentation
 
 - **The README names every export of every public subpath.** A spec now fails when a name in the public-surface snapshot, or one of the contract members an implementor writes, is missing from it. The README gained a Types and constants section and the Observability section.
+- **The README says what a duplicate `socket.io` does.** Two copies in `node_modules` make TypeScript report TS2416 on `RealtimeIoAdapter` under `skipLibCheck: false`; the fix is one copy.
+- **The README names the `./internal` exports and `ITransport.kind`, and a spec holds it.** The spec that fails when a public export is not named now covers the names `./internal` exports explicitly. The README also says that `./observability` needs its optional peers, and that without them the import fails with the runtime's own `Cannot find module` error, which names the peer.
 
 ## [1.2.18] - 2026-11-17
 
