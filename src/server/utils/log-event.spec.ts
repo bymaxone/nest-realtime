@@ -137,3 +137,74 @@ describe('what a warn or error line carries', () => {
     for (const sentinel of [USER, TENANT, ROOM]) expect(everything).not.toContain(sentinel)
   })
 })
+
+describe('what a log message may carry', () => {
+  const sources = shipped(SRC).map((path) => ({ path, text: readFileSync(path, 'utf8') }))
+
+  /** The arguments of each `logEvent(` call in a file, split at the top level. */
+  function calls(text: string): string[][] {
+    const found: string[][] = []
+    for (const match of text.matchAll(/logEvent\(/g)) {
+      let depth = 1
+      let at = (match.index ?? 0) + match[0].length
+      const args: string[] = []
+      let current = ''
+      let quote: string | undefined
+      while (depth > 0 && at < text.length) {
+        const ch = text[at]!
+        if (quote) {
+          current += ch
+          if (ch === '\\') current += text[++at] ?? ''
+          else if (ch === quote) quote = undefined
+        } else if (ch === '"' || ch === "'" || ch === '`') {
+          quote = ch
+          current += ch
+        } else {
+          if ('([{'.includes(ch)) depth += 1
+          if (')]}'.includes(ch)) depth -= 1
+          if (depth === 0) break
+          if (ch === ',' && depth === 1) {
+            args.push(current.trim())
+            current = ''
+          } else current += ch
+        }
+        at += 1
+      }
+      if (current.trim()) args.push(current.trim())
+      found.push(args)
+    }
+    return found
+  }
+
+  // Scenario: every line the library writes through `logEvent`. Expected: the message is the library's own text. An
+  // error raised by host code can carry a user or a tenant, so it is never read into the message (no `describeError`,
+  // no `.message`, no placeholder named for an error or a reason): it is the sixth argument, written under `err`.
+  it('never reads an error into the message of an event', () => {
+    let checked = 0
+    for (const { path, text } of sources) {
+      if (path.endsWith('log-event.ts')) continue
+      for (const args of calls(text)) {
+        if (args.length < 4) continue
+        checked += 1
+        const message = args[3]!
+        expect({ path, message }).toEqual({
+          path,
+          message: expect.not.stringMatching(
+            /describeError|\.message|\$\{[^}]*\b(err|error|reason|failed|cause)\b/i,
+          ),
+        })
+      }
+    }
+    expect(checked).toBeGreaterThan(20)
+  })
+
+  it('does not call describeError for text that reaches a log', () => {
+    const offenders = sources
+      .filter(({ path }) => !path.endsWith('log-event.ts'))
+      .filter(({ text }) =>
+        calls(text).some((args) => args.some((arg) => arg.includes('describeError'))),
+      )
+      .map(({ path }) => path)
+    expect(offenders).toEqual([])
+  })
+})

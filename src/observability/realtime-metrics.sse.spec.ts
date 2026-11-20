@@ -153,6 +153,29 @@ describe('metrics after real SSE handshakes', () => {
     },
   )
 
+  // Scenario: the authenticator throws something that is not an HTTP exception, so the handshake fails with a 500.
+  // Expected: one refusal for `error`; a 401 and a 403 are not counted under it.
+  it.each([
+    ['an unexpected error', () => new Error('boom'), 500, 1],
+    ['a 401', () => new UnauthorizedException(), 401, 0],
+    ['a 403', () => new ForbiddenException(), 403, 0],
+  ])(
+    'counts %s from the authenticator under error only when it is a 500',
+    async (_name, make, status, counted) => {
+      await boot({
+        authenticator: {
+          authenticate: async () => {
+            throw make()
+          },
+        },
+      })
+      expect((await connect('a')).status).toBe(status)
+      expect(await sample(registry, 'bymax_realtime_connections_refused_total', 'error')).toBe(
+        counted,
+      )
+    },
+  )
+
   // Scenario: a handshake once shutdown has begun. Expected: one refusal for `unavailable`.
   it('counts a handshake refused during shutdown', async () => {
     await boot()

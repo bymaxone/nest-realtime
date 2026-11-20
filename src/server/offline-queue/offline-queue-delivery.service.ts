@@ -15,7 +15,6 @@ import type {
   OfflineQueuedEvent,
 } from '../interfaces/offline-queue-storage.interface'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
-import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
 import { windowedReport } from '../utils/windowed-report'
@@ -188,7 +187,9 @@ export class OfflineQueueDeliveryService {
         this.logger,
         'warn',
         'REALTIME_OFFLINE_QUEUE_ACK_FAILED',
-        `Offline queue acknowledge failed: ${describeError(err)}`,
+        `Offline queue acknowledge failed`,
+        {},
+        err,
       )
     }
   }

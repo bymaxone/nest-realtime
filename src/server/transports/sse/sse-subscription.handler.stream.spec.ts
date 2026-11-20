@@ -148,7 +148,10 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     expect(sub.closed).toBe(false)
     expect(heartbeat.start).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Lifecycle hook failed: audit log down' }),
+      expect.objectContaining({
+        message: 'Lifecycle hook failed',
+        err: expect.objectContaining({ message: 'audit log down' }),
+      }),
     )
     sub.unsubscribe()
     warn.mockRestore()
@@ -327,7 +330,8 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ error: regError }))
     expect(errorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'SSE registration failed — responding 500: connect ECONNREFUSED 10.20.30.40:6379',
+        message: 'SSE registration failed — responding 500',
+        err: expect.objectContaining({ message: 'connect ECONNREFUSED 10.20.30.40:6379' }),
       }),
     )
     errorSpy.mockRestore()
@@ -406,7 +410,9 @@ describe('SseSubscriptionHandler — stream lifecycle and hooks', () => {
       await new Promise((resolve) => setImmediate(resolve))
       sub.unsubscribe()
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('hook-crash') }),
+        expect.objectContaining({
+          err: expect.objectContaining({ message: expect.stringContaining('hook-crash') }),
+        }),
       )
     } finally {
       warnSpy.mockRestore()

@@ -61,7 +61,7 @@ describe('RealtimeGateway.handleConnection counts what it refuses', () => {
   it('counts a rejected re-authentication as unauthorized', async () => {
     ;(transport['authenticate'] as jest.Mock).mockResolvedValue(null)
     await gateway.handleConnection(socket() as never)
-    expect(refused()).toEqual({ limit: 0, unauthorized: 1, unavailable: 0 })
+    expect(refused()).toEqual({ limit: 0, unauthorized: 1, unavailable: 0, error: 0 })
   })
 
   // Scenario: the instance is full when such a socket asks for its place.
@@ -70,7 +70,7 @@ describe('RealtimeGateway.handleConnection counts what it refuses', () => {
       throw new ConnectionLimitError(1)
     })
     await gateway.handleConnection(socket() as never)
-    expect(refused()).toEqual({ limit: 1, unauthorized: 0, unavailable: 0 })
+    expect(refused()).toEqual({ limit: 1, unauthorized: 0, unavailable: 0, error: 0 })
   })
 
   // Scenario: the authenticator cannot be asked, or shutdown has begun.
@@ -86,6 +86,14 @@ describe('RealtimeGateway.handleConnection counts what it refuses', () => {
   ])('counts %s as unavailable', async (_name, arrange) => {
     arrange()
     await gateway.handleConnection(socket() as never)
-    expect(refused()).toEqual({ limit: 0, unauthorized: 0, unavailable: 1 })
+    expect(refused()).toEqual({ limit: 0, unauthorized: 0, unavailable: 1, error: 0 })
+  })
+
+  // Scenario: the authenticator throws something that is not a refusal, on the path with no middleware result.
+  // Expected: one refusal for `error`.
+  it('counts a failure that is not a refusal as error', async () => {
+    ;(transport['authenticate'] as jest.Mock).mockRejectedValue(new Error('boom'))
+    await gateway.handleConnection(socket() as never)
+    expect(refused()).toEqual({ limit: 0, unauthorized: 0, unavailable: 0, error: 1 })
   })
 })

@@ -59,10 +59,7 @@
     "WebSocketRealtimeModuleOptions",
     "WebSocketTransport"
   ],
-  "./observability": [
-    "RealtimeMetrics",
-    "RealtimePubSubHealthIndicator"
-  ],
+  "./observability": ["RealtimeMetrics", "RealtimePubSubHealthIndicator"],
   "./shared": [
     "ADMISSION_ROOM_LIMITS",
     "PRESENCE_EVENT_NAMES",

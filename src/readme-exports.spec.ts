@@ -29,8 +29,36 @@ const CONTRACT_MEMBERS = [
   'isSubscribed',
 ]
 
-const mentions = (name: string): boolean =>
-  new RegExp(`(?<![A-Za-z0-9_])${name}(?![A-Za-z0-9_])`).test(readme)
+const mentionsIn = (text: string, name: string): boolean =>
+  new RegExp(`(?<![A-Za-z0-9_])${name}(?![A-Za-z0-9_])`).test(text)
+
+const mentions = (name: string): boolean => mentionsIn(readme, name)
+
+/** The README line that starts with `prefix`, or an empty string when none does. */
+const lineStartingWith = (prefix: string): string =>
+  readme.split('\n').find((line) => line.startsWith(prefix)) ?? ''
+
+/** The paragraph that lists the `./internal` names and says they are not API. */
+const internalParagraph = lineStartingWith('These names from `./internal`, none of them API')
+
+const publicNames = new Set(
+  Object.entries(surface)
+    .filter(([subpath]) => subpath !== './internal')
+    .flatMap(([, names]) => names),
+)
+
+/** The names `src/internal/index.ts` exports explicitly that no public subpath exports: not API, but named so a reader of the declarations finds them. */
+const internalNames = [
+  ...readFileSync(join(ROOT, 'src/internal/index.ts'), 'utf8').matchAll(
+    /export (?:type )?\{([^}]*)\}/g,
+  ),
+].flatMap((match) =>
+  match[1]!
+    .split(',')
+    .map((name) => name.trim().split(' as ').pop()!.trim())
+    .filter(Boolean)
+    .filter((name) => !publicNames.has(name)),
+)
 
 describe('the README documents what the package exports', () => {
   const subpaths = Object.entries(surface).filter(([subpath]) => subpath !== './internal')
@@ -44,5 +72,17 @@ describe('the README documents what the package exports', () => {
 
   it.each(CONTRACT_MEMBERS)('the README names the contract member %s', (member) => {
     expect(mentions(member)).toBe(true)
+  })
+
+  it.each(internalNames)(
+    './internal exports %s, which the paragraph that says none of them is API lists',
+    (name) => {
+      expect(internalParagraph).not.toBe('')
+      expect(mentionsIn(internalParagraph, name)).toBe(true)
+    },
+  )
+
+  it('describes `kind` on the ITransport line', () => {
+    expect(mentionsIn(lineStartingWith('- `ITransport`:'), 'kind')).toBe(true)
   })
 })

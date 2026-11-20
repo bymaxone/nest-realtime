@@ -82,7 +82,7 @@ export class RealtimeMetrics implements IMetricsContributor {
     })
     countedBy(registry, {
       name: 'bymax_realtime_connections_refused_total',
-      help: 'Handshakes refused since start, by reason: limit, unauthorized or unavailable.',
+      help: 'Handshakes refused since start, by reason: limit, unauthorized, unavailable or error.',
       label: 'reason',
       keys: REFUSAL_REASONS,
       read: () => tally.snapshot().refused,
@@ -96,7 +96,7 @@ export class RealtimeMetrics implements IMetricsContributor {
     })
     countedBy(registry, {
       name: 'bymax_realtime_events_emitted_total',
-      help: 'Events delivered on this instance since start, by transport.',
+      help: 'Emit calls handled on this instance since start, by transport, whether or not a connection received the event.',
       label: 'transport',
       keys: TALLY_TRANSPORTS,
       read: () => tally.snapshot().emitted,

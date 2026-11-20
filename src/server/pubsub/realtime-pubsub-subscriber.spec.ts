@@ -150,7 +150,8 @@ describe('RealtimePubSubSubscriber', () => {
         expect.objectContaining({
           event: 'REALTIME_DISCONNECT_FAILED',
           connectionId: 'c1',
-          message: 'Remote disconnect failed: close boom',
+          message: 'Remote disconnect failed',
+          err: expect.objectContaining({ message: 'close boom' }),
         }),
       )
       expect(unhandled).not.toHaveBeenCalled()
@@ -209,7 +210,10 @@ describe('RealtimePubSubSubscriber', () => {
     try {
       await subscriber.onApplicationShutdown()
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('network error') }),
+        expect.objectContaining({
+          message: 'Pub/sub unsubscribe failed',
+          err: expect.objectContaining({ message: expect.stringContaining('network error') }),
+        }),
       )
     } finally {
       warnSpy.mockRestore()

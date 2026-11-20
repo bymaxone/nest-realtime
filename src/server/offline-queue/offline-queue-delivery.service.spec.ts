@@ -94,7 +94,8 @@ describe('OfflineQueueDeliveryService', () => {
         await new Promise((resolve) => setImmediate(resolve))
         expect(warnSpy).toHaveBeenCalledWith(
           expect.objectContaining({
-            message: 'Offline queue retrieve failed: redis down',
+            message: 'Offline queue retrieve failed',
+            err: expect.objectContaining({ message: 'redis down' }),
           }),
         )
         expect(onDeliveryFailure).toHaveBeenCalledWith({
@@ -116,7 +117,9 @@ describe('OfflineQueueDeliveryService', () => {
       try {
         await service.retrieve('u1', 'last-1', new Set())
         expect(warnSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ message: expect.stringContaining('queue-down') }),
+          expect.objectContaining({
+            err: expect.objectContaining({ message: expect.stringContaining('queue-down') }),
+          }),
         )
       } finally {
         warnSpy.mockRestore()
@@ -184,7 +187,10 @@ describe('OfflineQueueDeliveryService', () => {
       try {
         await service.acknowledge('u1', [mkEvent('1')])
         expect(warnSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ message: expect.stringContaining('ack-failure') }),
+          expect.objectContaining({
+            message: 'Offline queue acknowledge failed',
+            err: expect.objectContaining({ message: expect.stringContaining('ack-failure') }),
+          }),
         )
       } finally {
         warnSpy.mockRestore()

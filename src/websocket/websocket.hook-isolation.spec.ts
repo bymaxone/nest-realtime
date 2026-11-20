@@ -12,7 +12,7 @@ import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
-import { lineOf } from '../../test/support/log-lines'
+import { lineWithError } from '../../test/support/log-lines'
 import type { IConnectionLifecycleHooks } from '../server/interfaces/connection-lifecycle-hooks.interface'
 import { ConnectionRegistry } from '../server/services/connection-registry.service'
 import { BymaxRealtimeWebSocketModule } from './realtime-websocket.module'
@@ -154,7 +154,7 @@ describe('WebSocket: a lifecycle hook that fails', () => {
     // only then announced the connection. Nothing here reads the clock.
     const order: string[] = []
     logged.mockImplementation((message: unknown) => {
-      if (lineOf(message).includes('did not settle')) order.push('hook given up')
+      if (lineWithError(message).includes('did not settle')) order.push('hook given up')
     })
 
     const socket = await connect()
@@ -167,7 +167,8 @@ describe('WebSocket: a lifecycle hook that fails', () => {
       expect.objectContaining({
         event: 'REALTIME_HOOK_FAILED',
         hook: 'onConnect',
-        message: 'onConnect hook failed: did not settle within 300 ms',
+        message: 'onConnect hook failed',
+        err: expect.objectContaining({ message: 'did not settle within 300 ms' }),
       }),
     )
   })
@@ -186,7 +187,8 @@ describe('WebSocket: a lifecycle hook that fails', () => {
       expect.objectContaining({
         event: 'REALTIME_HOOK_FAILED',
         hook: 'onDisconnect',
-        message: 'onDisconnect hook failed: did not settle within 300 ms',
+        message: 'onDisconnect hook failed',
+        err: expect.objectContaining({ message: 'did not settle within 300 ms' }),
       }),
     )
   })

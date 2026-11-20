@@ -179,8 +179,9 @@ export class CompositeTransport implements ITransport {
         this.logger,
         'warn',
         'REALTIME_COMPOSITE_PARTIAL_FAILURE',
-        `Composite ${op} partially failed: ${describeError(reason)}`,
+        `Composite ${op} partially failed`,
         { op },
+        reason,
       )
     }
   }

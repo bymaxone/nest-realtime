@@ -49,7 +49,6 @@ import { resolveClientAddress } from '../../utils/client-address'
 import { AuthenticationUnavailableError } from '../../services/authentication-gate.service'
 import { ConnectionLimitError } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
-import { describeError } from '../../utils/describe-error'
 import { runHook } from '../../utils/run-hook'
 import { SseTransport } from './sse.transport'
 import { probeOf } from './outbound-backlog'
@@ -237,11 +236,14 @@ export class SseSubscriptionHandler {
       assertIdentityIsNotBlank(resolvedAuth)
       resolvedAuth = admitRooms(resolvedAuth)
     } catch (err) {
+      this.tally?.refused('error')
       logEvent(
         this.logger,
         'error',
         'REALTIME_HANDSHAKE_FAILED',
-        `SSE connection refused — responding 500: ${describeError(err)}`,
+        `SSE connection refused — responding 500`,
+        {},
+        err,
       )
       throw new InternalServerErrorException()
     }
@@ -392,12 +394,8 @@ export class SseSubscriptionHandler {
   }
 
   private serverError(err: unknown, what: string): HttpException {
-    logEvent(
-      this.logger,
-      'error',
-      'REALTIME_HANDSHAKE_FAILED',
-      `${what} — responding 500: ${describeError(err)}`,
-    )
+    this.tally?.refused('error')
+    logEvent(this.logger, 'error', 'REALTIME_HANDSHAKE_FAILED', `${what} — responding 500`, {}, err)
     return new InternalServerErrorException()
   }
 
@@ -642,7 +640,9 @@ export class SseSubscriptionHandler {
         this.logger,
         'warn',
         'REALTIME_HOOK_FAILED',
-        `Lifecycle hook failed: ${describeError(failed.error)}`,
+        `Lifecycle hook failed`,
+        {},
+        failed.error,
       )
       onFailure?.()
     })

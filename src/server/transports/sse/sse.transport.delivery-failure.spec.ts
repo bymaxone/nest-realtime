@@ -73,7 +73,8 @@ describe('SseTransport delivery failures', () => {
         expect.objectContaining({
           event: 'REALTIME_DELIVERY_FAILED',
           op: 'emitToTenant',
-          message: 'pubsub.publish failed: redis down',
+          message: 'pubsub.publish failed',
+          err: expect.objectContaining({ message: 'redis down' }),
         }),
       )
       expect(onDeliveryFailure).toHaveBeenCalledTimes(1)
@@ -111,7 +112,8 @@ describe('SseTransport delivery failures', () => {
           expect.objectContaining({
             event: 'REALTIME_HOOK_FAILED',
             hook: 'onDeliveryFailure',
-            message: 'onDeliveryFailure hook failed: hook boom',
+            message: 'onDeliveryFailure hook failed',
+            err: expect.objectContaining({ message: 'hook boom' }),
           }),
         )
         expect(unhandled).not.toHaveBeenCalled()

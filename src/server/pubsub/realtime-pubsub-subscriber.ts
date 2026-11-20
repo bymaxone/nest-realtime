@@ -13,7 +13,6 @@ import type {
   RealtimePubSubMessage,
 } from '../interfaces/realtime-pubsub.interface'
 import { SseTransport } from '../transports/sse/sse.transport'
-import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
 import { windowedReport } from '../utils/windowed-report'
 
@@ -80,7 +79,9 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
           this.logger,
           'warn',
           'REALTIME_PUBSUB_UNSUBSCRIBE_FAILED',
-          `Pub/sub unsubscribe failed: ${describeError(err)}`,
+          `Pub/sub unsubscribe failed`,
+          {},
+          err,
         )
       }
       this.unsubscribe = null
@@ -132,22 +133,9 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
           this.sse.broadcastLocal(a.event, a.data, a.id)
           break
         }
-        case 'disconnect': {
-          const a = msg.args as DisconnectArgs
-          // Not awaited (the handler is synchronous), so its rejection is handled here.
-          Promise.resolve(this.sse.disconnectLocal(a.connectionId, a.reason)).catch(
-            (err: unknown) => {
-              logEvent(
-                this.logger,
-                'warn',
-                'REALTIME_DISCONNECT_FAILED',
-                `Remote disconnect failed: ${describeError(err)}`,
-                { connectionId: a.connectionId },
-              )
-            },
-          )
+        case 'disconnect':
+          this.closeLocal(msg.args as DisconnectArgs)
           break
-        }
         default: {
           msg.op satisfies never
           this.drop('unknown op')
@@ -156,6 +144,20 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
     } catch (err) {
       this.drop(String(Object(err).constructor?.name ?? 'Error'))
     }
+  }
+
+  /** Close a connection another instance asked this one to close; the handler is synchronous, so a rejection is handled here. */
+  private closeLocal(a: DisconnectArgs): void {
+    Promise.resolve(this.sse.disconnectLocal(a.connectionId, a.reason)).catch((err: unknown) => {
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_DISCONNECT_FAILED',
+        'Remote disconnect failed',
+        { connectionId: a.connectionId },
+        err,
+      )
+    })
   }
 
   private drop(last: string): void {

@@ -104,6 +104,8 @@ One package, several entry points — import only what your app needs:
 
 The package also exposes `@bymax-one/nest-realtime/internal`. It is **not public API** and carries no compatibility promise — it is the shared runtime the two server subpaths import so that a service registered through one and injected through the other is the same class. Import the four above; nothing you need is only there.
 
+These names from `./internal`, none of them API and none with a compatibility promise, are grouped below. Composition: `composeForRoot`, `composeForRootAsync`, `TransportRegistration`, `TransportWiring` and `sseWiring`. Shared services: `EventIdGenerator`, `ReauthenticationService`, `AuthenticationGate`, `AuthenticationUnavailableError`, `ConnectionAdmission`, `ConnectionLimitError`, `UNBOUNDED_TICKET`, `AdmissionTicket`, `OfflineQueueDeliveryService`, `EventReplayBuffer`, `HeartbeatService`, `SseSubscriptionHandler`, `createSseController`, `RoomRegistry`, `SseTransport` and `RealtimePubSubSubscriber`. Observability seams: `RealtimeMetricsTally`, `REFUSAL_REASONS`, `EVICTION_REASONS`, `TALLY_TRANSPORTS`, `RefusalReason`, `EvictionReason`, `TallyTransport`, `RealtimeTracing`, `RealtimeSpanName`, `RealtimeSpanAttributes`, `logEvent`, `REALTIME_LOG_EVENTS`, `RealtimeLogEvent` and `LogFields`. Utilities: `DEFAULT_HOOK_TIMEOUT_MS`, `assertIdentityIsNotBlank`, `resolveAuthTenant`, `admitRooms`, `describeError`, `quitWithin`, `QuitableClient`, `runHook`, `unavailableError`, `refuseReservedRoom`, `requireRoomName`, `realtimeError`, `CodedError`, `reportDeliveryFailure` and `parseCookieHeader`.
+
 ---
 
 > [!TIP]
@@ -285,7 +287,7 @@ For WebSocket, scaling goes through Socket.IO's own Redis adapter instead, confi
 
 ### 7. Add WebSocket (optional)
 
-WebSocket lives behind its own subpath, so an SSE application never installs the Socket.IO stack. Install its peers (see [Install](#1-install)), then do two things: register `BymaxRealtimeWebSocketModule` from `/websocket` instead of `BymaxRealtimeModule`, and install `RealtimeIoAdapter` in `main.ts`.
+WebSocket lives behind its own subpath, so an SSE application never installs the Socket.IO stack. Install its peers (see [Install](#1-install)), then do two things: register `BymaxRealtimeWebSocketModule` from `/websocket` instead of `BymaxRealtimeModule`, and install `RealtimeIoAdapter` in `main.ts`. Two copies of `socket.io` in `node_modules` make TypeScript report TS2416 on `RealtimeIoAdapter` under `skipLibCheck: false`; dedupe to one copy.
 
 ```typescript
 // app.module.ts
@@ -480,6 +482,8 @@ The Socket.IO server closes first, then the adapter's `dispose()` runs, and `dis
 
 Everything here is optional. The root and the shared runtime import none of `@bymax-one/nest-core`, `prom-client` or `@opentelemetry/api` statically, so an application that publishes no metrics installs none of them.
 
+Importing `@bymax-one/nest-realtime/observability` needs `@bymax-one/nest-core` and `prom-client`; without them the import fails with the runtime's own `Cannot find module` error, which names the missing peer.
+
 **Metrics.** Register `RealtimeMetrics` in a module of your application; `BymaxCoreModule` discovers it and calls it once at bootstrap with the registry its scrape endpoint serves. It injects what the realtime module exports, so nothing else is wired.
 
 ```typescript
@@ -493,13 +497,13 @@ import {
 export class ObservabilityModule {}
 ```
 
-| Metric                                     | Type    | Labels                                                | Meaning                                               |
-| ------------------------------------------ | ------- | ----------------------------------------------------- | ----------------------------------------------------- |
-| `bymax_realtime_connections`               | gauge   | `transport` = `sse`, `websocket`                      | Connections open on this instance now.                |
-| `bymax_realtime_connections_refused_total` | counter | `reason` = `limit`, `unauthorized`, `unavailable`     | Handshakes refused since start.                       |
-| `bymax_realtime_evictions_total`           | counter | `reason` = `per_user_cap`, `slow_consumer`, `revoked` | Connections closed by the library or by a revocation. |
-| `bymax_realtime_events_emitted_total`      | counter | `transport` = `sse`, `websocket`                      | Events delivered on this instance.                    |
-| `bymax_realtime_slow_consumer_drops_total` | counter | none                                                  | Connections cut for not reading what they were sent.  |
+| Metric                                     | Type    | Labels                                                     | Meaning                                                                                                                            |
+| ------------------------------------------ | ------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `bymax_realtime_connections`               | gauge   | `transport` = `sse`, `websocket`                           | Connections open on this instance now.                                                                                             |
+| `bymax_realtime_connections_refused_total` | counter | `reason` = `limit`, `unauthorized`, `unavailable`, `error` | Handshakes refused since start; `error` is one that failed with an unexpected error (a 500).                                       |
+| `bymax_realtime_evictions_total`           | counter | `reason` = `per_user_cap`, `slow_consumer`, `revoked`      | Connections closed by the library or by a revocation.                                                                              |
+| `bymax_realtime_events_emitted_total`      | counter | `transport` = `sse`, `websocket`                           | Emit calls handled on this instance, not deliveries: a call with no recipient counts, and under `'both'` each transport counts it. |
+| `bymax_realtime_slow_consumer_drops_total` | counter | none                                                       | Connections cut for not reading what they were sent.                                                                               |
 
 A label is one of the values listed and never an id, a tenant or a user. A revocation is counted on the instance that was asked to make it, once it has closed the connection or handed the request to the bus.
 
@@ -507,7 +511,7 @@ A label is one of the values listed and never an id, a tenant or a user. A revoc
 
 **Traces.** With `@opentelemetry/api` installed the library starts `realtime.handshake` around the admission and authentication of each connection (attribute `bymax.realtime.transport`, `sse` or `websocket`) and `realtime.reauthenticate` around each re-authentication cycle. A refused handshake ends its span with status ERROR and the library error code, never the message. With no SDK registered the API is a no-op, and without the package nothing is started.
 
-**Log events.** Every `warn` and `error` line the library writes is an object, `{ event, message, ...fields }`, so a structured logger writes each as a JSON field and Nest's default logger prints the object. The fields are counts, sizes, configured limits, transport names and a library-made connection id; a user id, a tenant id or a room is never in a message or a field, because the logger's own context carries identity. Lines that report that the library started stay plain strings.
+**Log events.** Every `warn` and `error` line the library writes is an object, `{ event, message, ...fields }`, with the error that caused a failure, when there is one, under `err` as the error itself and never as text in `message`; so a structured logger writes each as a JSON field and Nest's default logger prints the object. The fields are counts, sizes, configured limits, transport names and a library-made connection id; a user id, a tenant id or a room is never in a message or a field, because the logger's own context carries identity. Lines that report that the library started stay plain strings.
 
 | Event                                  | Level       | When                                                                                | Fields                                                                   |
 | -------------------------------------- | ----------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -1006,7 +1010,7 @@ Every name below is exported; the subpath says where to import it from. A type i
 - `IOfflineQueueStorage`: `append` stores an event for a user, `retrieveSince` reads the ones after an id, and `acknowledge` marks events delivered up to an id, which an implementation may purge or keep.
 - `IPresenceStorage`: `setOnline` and `setOffline` record a connection, `isOnline` answers for a user, `listOnlineByTenant` lists a tenant's online users and `countOnline` counts everyone.
 - `IRealtimePubSub`: `publish` sends to the other instances, `subscribe` receives, and the optional `isSubscribed` says whether this instance is subscribed now. A bus that cannot be unsubscribed once subscribed omits it and counts as subscribed; the health indicator reads it.
-- `ITransport`: the optional `onModuleInit`, `beforeApplicationShutdown` and `onApplicationShutdown` are called by Nest on bootstrap and on shutdown, the second before the HTTP server closes.
+- `ITransport`: `kind` names the transport, `'sse'` or `'websocket'`; the optional `onModuleInit`, `beforeApplicationShutdown` and `onApplicationShutdown` are called by Nest on bootstrap and on shutdown, the second before the HTTP server closes.
 
 ### DI Tokens
 

@@ -12,7 +12,6 @@ import {
   RealtimeMetricsTally,
   RealtimeTracing,
   logEvent,
-  describeError,
   REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
   RESERVED_EVENT_NAMES,
@@ -167,12 +166,14 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       this.tally?.refused('unavailable')
       return this.unavailable('Internal Server Error')
     }
+    this.tally?.refused('error')
     logEvent(
       this.logger,
       'error',
       'REALTIME_HANDSHAKE_FAILED',
-      `handshake refused: ${describeError(err)}`,
+      `handshake refused`,
       { socketId: socket.id },
+      err,
     )
     return new Error('Internal Server Error')
   }
@@ -294,12 +295,14 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       } else if (err instanceof AuthenticationUnavailableError) {
         this.tally?.refused('unavailable')
       } else {
+        this.tally?.refused('error')
         logEvent(
           this.logger,
           'error',
           'REALTIME_HANDSHAKE_FAILED',
-          `handleConnection threw — disconnecting: ${describeError(err)}`,
+          `handleConnection threw — disconnecting`,
           { socketId: socket.id },
+          err,
         )
       }
       socket.disconnect(true)

@@ -90,7 +90,9 @@ describe('CompositeTransport', () => {
     await composite.emitToUser('u-1', 'evt', {})
     expect(wsMock.emitToUser).toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('SSE down') }),
+      expect.objectContaining({
+        err: expect.objectContaining({ message: expect.stringContaining('SSE down') }),
+      }),
     )
   })
 
@@ -100,7 +102,9 @@ describe('CompositeTransport', () => {
     await composite.emitToUser('u-1', 'evt', {})
     expect(sseMock.emitToUser).toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('WS down') }),
+      expect.objectContaining({
+        err: expect.objectContaining({ message: expect.stringContaining('WS down') }),
+      }),
     )
   })
 
@@ -197,7 +201,8 @@ describe('CompositeTransport', () => {
         expect.objectContaining({
           event: 'REALTIME_COMPOSITE_PARTIAL_FAILURE',
           op,
-          message: `Composite ${op} partially failed: ${reason}`,
+          message: `Composite ${op} partially failed`,
+          err: expect.objectContaining({ message: reason }),
         }),
       )
       expect(sseMock[op]).toHaveBeenCalledTimes(1)
@@ -273,7 +278,10 @@ describe('CompositeTransport', () => {
     sseMock.broadcast.mockRejectedValue(new Error('transport-down'))
     await composite.broadcast('evt', {})
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('broadcast') }),
+      expect.objectContaining({
+        op: 'broadcast',
+        message: 'Composite broadcast partially failed',
+      }),
     )
   })
 
@@ -282,7 +290,9 @@ describe('CompositeTransport', () => {
     sseMock.emitToUser.mockRejectedValue('sentinel-reason-value')
     await composite.emitToUser('u-1', 'evt', {})
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('sentinel-reason-value') }),
+      expect.objectContaining({
+        err: 'sentinel-reason-value',
+      }),
     )
   })
 })

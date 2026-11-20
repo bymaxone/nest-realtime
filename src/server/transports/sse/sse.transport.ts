@@ -39,7 +39,6 @@ import { composeRoomId } from '../../utils/compose-room-id'
 import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { ConnectionAdmission, UNBOUNDED_TICKET } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
-import { describeError } from '../../utils/describe-error'
 import { logEvent } from '../../utils/log-event'
 import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
@@ -277,10 +276,11 @@ export class SseTransport implements ITransport {
         this.logger,
         'error',
         'REALTIME_HOOK_FAILED',
-        `onDisconnect hook failed: ${describeError(failed.error)}`,
+        `onDisconnect hook failed`,
         {
           hook: 'onDisconnect',
         },
+        failed.error,
       )
     }
   }
@@ -537,10 +537,11 @@ export class SseTransport implements ITransport {
         this.logger,
         'warn',
         'REALTIME_DELIVERY_FAILED',
-        `SSE delivery failed: ${describeError(error)}`,
+        `SSE delivery failed`,
         {
           connectionId: conn.connectionId,
         },
+        error,
       )
     }
   }
@@ -587,8 +588,9 @@ export class SseTransport implements ITransport {
           this.logger,
           'warn',
           'REALTIME_DISCONNECT_FAILED',
-          `Closing a slow SSE connection failed: ${describeError(error)}`,
+          `Closing a slow SSE connection failed`,
           { connectionId },
+          error,
         )
       },
     )
