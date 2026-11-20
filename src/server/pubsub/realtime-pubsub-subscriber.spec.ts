@@ -211,6 +211,7 @@ describe('RealtimePubSubSubscriber', () => {
       await subscriber.onApplicationShutdown()
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          message: 'Pub/sub unsubscribe failed',
           err: expect.objectContaining({ message: expect.stringContaining('network error') }),
         }),
       )

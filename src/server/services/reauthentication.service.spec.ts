@@ -423,6 +423,7 @@ describe('ReauthenticationService', () => {
       expect(cycle).toHaveBeenCalledTimes(2)
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          message: 'Reauthentication cycle failed',
           err: expect.objectContaining({ message: expect.stringContaining('cycle boom') }),
         }),
       )

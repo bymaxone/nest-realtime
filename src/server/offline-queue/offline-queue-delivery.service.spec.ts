@@ -188,6 +188,7 @@ describe('OfflineQueueDeliveryService', () => {
         await service.acknowledge('u1', [mkEvent('1')])
         expect(warnSpy).toHaveBeenCalledWith(
           expect.objectContaining({
+            message: 'Offline queue acknowledge failed',
             err: expect.objectContaining({ message: expect.stringContaining('ack-failure') }),
           }),
         )
