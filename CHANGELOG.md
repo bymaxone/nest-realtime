@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.21] - 2026-11-20
+
 ### Fixed
 
 - **A proxy whose trap throws on `then`, or one that was revoked, returned by a factory is refused with the typed error.** `await` reads `then` on what a synchronous `useFactory` or `createRealtimeOptions` returns, which ran the trap inside the library before the options were read; a revoked proxy given to `forRoot` or returned by a factory raised the engine's `TypeError`. Both now raise `REALTIME_INVALID_OPTIONS` with the error as the `cause`.
@@ -1235,7 +1237,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.20...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.21...HEAD
+[1.2.21]: https://github.com/bymaxone/nest-realtime/compare/v1.2.20...v1.2.21
 [1.2.20]: https://github.com/bymaxone/nest-realtime/compare/v1.2.19...v1.2.20
 [1.2.19]: https://github.com/bymaxone/nest-realtime/compare/v1.2.18...v1.2.19
 [1.2.18]: https://github.com/bymaxone/nest-realtime/compare/v1.2.17...v1.2.18
