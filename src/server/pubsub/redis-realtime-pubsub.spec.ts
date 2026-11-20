@@ -570,7 +570,9 @@ describe('RedisRealtimePubSub', () => {
     const handler = jest.fn()
 
     // First subscribe fails — must reject and not leave the handler registered.
-    await expect(pubsub.subscribe(handler)).rejects.toThrow('redis down')
+    const refusal = await pubsub.subscribe(handler).catch((error: unknown) => error)
+    expect((refusal as Error).message).not.toContain('redis down')
+    expect(((refusal as Error).cause as Error).message).toBe('redis down')
     // The failed subscriber is closed, not left retrying in the background.
     expect(failingSub.disconnect).toHaveBeenCalledTimes(1)
 

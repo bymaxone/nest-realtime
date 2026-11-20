@@ -26,6 +26,7 @@ import type {
   ConnectionAuthContext,
   BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
+import { ConnectHookFailure } from './connect-hook-failure'
 import { isRealtimeIoServer } from './realtime-io-adapter'
 import { WebSocketTransport } from './websocket.transport'
 
@@ -295,7 +296,8 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       } else if (err instanceof AuthenticationUnavailableError) {
         this.tally?.refused('unavailable')
       } else {
-        this.tally?.refused('error')
+        // A connection onConnect closed was admitted first, as on SSE, so it is logged and not a refusal.
+        if (!(err instanceof ConnectHookFailure)) this.tally?.refused('error')
         logEvent(
           this.logger,
           'error',

@@ -412,7 +412,7 @@ An option that holds `undefined` or `null` is read as unset: it takes its defaul
 
 The shape of what you pass is checked at start-up too, and refused with `REALTIME_INVALID_OPTIONS`: `sse`, `websocket`, `reauthenticationPolicy` and `hooks` must be objects; `pubsub`, `offlineQueue` and `presence` must have every function of their interface (`IRealtimePubSub`, `IOfflineQueueStorage`, `IPresenceStorage`), on the object or its prototype; each hook that is set and `tenantResolver` must be a function; `sse.emitConnectionEvent` and `websocket.emitConnectionEvent` must be booleans; `sse.endpoint` must be a non-blank string, with or without a leading slash. An endpoint holds no whitespace, because no request can reach it, and the `sseEndpoint` of `forRootAsync` gets the same check. The options argument must be an object, and so must what a `forRootAsync` factory returns; an array, a `Date` or a `Map` is refused there and where a group is expected, while an instance of your own class is read by its keys. `new RedisOfflineQueue(options)` refuses options that are not an object and a `client` that is not one.
 
-The options are typed per entry point: `SseRealtimeModuleOptions` and `SseRealtimeModuleAsyncOptions` fix `transport: 'sse'`, and `WebSocketRealtimeModuleOptions` and `WebSocketRealtimeModuleAsyncOptions` (from `/websocket`) fix `'websocket' | 'both'`. `forRootAsync` takes `useFactory`, `useClass` (a `BymaxRealtimeModuleOptionsFactory`) or `useExisting`.
+The options are typed per entry point: `SseRealtimeModuleOptions` and `SseRealtimeModuleAsyncOptions` fix `transport: 'sse'`, and `WebSocketRealtimeModuleOptions` and `WebSocketRealtimeModuleAsyncOptions` (from `/websocket`) fix `'websocket' | 'both'`. `forRootAsync` takes `useFactory`, `useClass` (a `BymaxRealtimeModuleOptionsFactory`) or `useExisting`. A `useClass` or `useExisting` provider implements `createRealtimeOptions()`, which returns the options or a promise of them; a provider that does not is refused with `REALTIME_INVALID_OPTIONS`, as is an `extraProviders` that is not an array of providers (a class, or an object with `provide`). An options object, a group, a pluggable piece or a provider whose read throws, such as a getter or a proxy, is refused the same way, with the error it threw as the `cause`.
 
 > [!IMPORTANT]
 > **`forRootAsync` takes the SSE route on the registration, not from the factory.** NestJS
@@ -500,7 +500,7 @@ export class ObservabilityModule {}
 | Metric                                     | Type    | Labels                                                     | Meaning                                                                                                                            |
 | ------------------------------------------ | ------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `bymax_realtime_connections`               | gauge   | `transport` = `sse`, `websocket`                           | Connections open on this instance now.                                                                                             |
-| `bymax_realtime_connections_refused_total` | counter | `reason` = `limit`, `unauthorized`, `unavailable`, `error` | Handshakes refused since start; `error` is one that failed with an unexpected error (a 500).                                       |
+| `bymax_realtime_connections_refused_total` | counter | `reason` = `limit`, `unauthorized`, `unavailable`, `error` | Handshakes refused since start; `error` is one that failed with an unexpected error (a 500); a connection that `onConnectFailure: 'close'` closes was admitted first, and is not counted.                                       |
 | `bymax_realtime_evictions_total`           | counter | `reason` = `per_user_cap`, `slow_consumer`, `revoked`      | Connections closed by the library or by a revocation.                                                                              |
 | `bymax_realtime_events_emitted_total`      | counter | `transport` = `sse`, `websocket`                           | Emit calls handled on this instance, not deliveries: a call with no recipient counts, and under `'both'` each transport counts it. |
 | `bymax_realtime_slow_consumer_drops_total` | counter | none                                                       | Connections cut for not reading what they were sent.                                                                               |
@@ -856,6 +856,9 @@ proxy it is the proxy's address. Use it to decide whether a forwarded header suc
 `X-Forwarded-Host` may be believed: read it only when `remoteAddress` is one of your proxies. It is
 `undefined` when the socket reports no address, and an IPv4 peer can arrive in its IPv4-mapped form
 (`::ffff:10.0.0.1`), which is passed through as reported.
+
+`userAgent` is the raw `User-Agent` header, or `undefined` when the client sent none. Any client can
+set it to anything, so it suits a log line and not a decision about who may connect.
 
 ### Rooms
 

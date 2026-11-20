@@ -119,3 +119,36 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
   assertBoolean('websocket.emitConnectionEvent', options.websocket?.emitConnectionEvent)
   assertSseEndpoint('sse.endpoint', options.sse?.endpoint)
 }
+
+/**
+ * Refuse `extraProviders` that is not an array of providers: a class, or an object with `provide`. Nest would
+ * spread a value that is not iterable and fail with a raw `TypeError`, and would accept an entry that is not a
+ * provider until the container reached it.
+ *
+ * @param value - The `extraProviders` of a `forRootAsync` registration.
+ * @throws Error carrying `REALTIME_INVALID_OPTIONS`.
+ */
+export function assertExtraProviders(value: unknown): void {
+  if (value === undefined || value === null) return
+  if (!Array.isArray(value)) {
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `extraProviders must be an array of providers, received ${describeReceived(value)}`,
+      { who: 'BymaxRealtimeModule' },
+    )
+  }
+  value.forEach((entry: unknown, index) => {
+    const isClass = typeof entry === 'function'
+    const hasProvide = isPlainObject(entry) && 'provide' in entry
+    if (isClass || hasProvide) return
+    const received =
+      isPlainObject(entry) && !Array.isArray(entry)
+        ? 'an object with no provide'
+        : describeReceived(entry)
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `extraProviders[${index}] must be a provider (a class or an object with provide), received ${received}`,
+      { who: 'BymaxRealtimeModule' },
+    )
+  })
+}

@@ -7,6 +7,20 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- **A getter or a proxy that throws, in an object the host hands over, is refused with the library's typed error.** A proxy or a getter returned as the options by a `useFactory` or by `createRealtimeOptions`, one on the provider `useExisting` names, and one as the `authenticator` raised the host's own error at registration; they now raise `REALTIME_INVALID_OPTIONS` with the error that was thrown as the `cause`. An `extraProviders` that is not an array of providers raised a raw `TypeError` or was accepted until the container reached it; it is now refused at registration, naming the entry.
+- **An `onConnect` that fails under `onConnectFailure: 'close'` is no longer counted as a refused handshake on WebSocket.** The connection was admitted first, as on SSE, where nothing was counted; `bymax_realtime_connections_refused_total{reason="error"}` now means a handshake that failed with an unexpected error on both transports.
+- **A `*_UNAVAILABLE` error no longer carries the text of the error underneath in its message.** The message names what could not be reached; the error that was thrown is the `cause`, as it already was. The `Subscribed to` line of `RedisRealtimePubSub` no longer names the channel.
+
+#### Apply to a derived backend
+
+Code that read the text of the underlying failure from the `message` of a `REALTIME_PUBSUB_UNAVAILABLE` or `REALTIME_TRANSPORT_UNAVAILABLE` error must read `error.cause` instead. A dashboard that summed `reason="error"` and counted WebSocket connections that `onConnect` closed will see those no longer counted. A log filter that matched `Subscribed to "<channel>"` matches `Subscribed to the realtime channel`.
+
+### Documentation
+
+- **The README names `createRealtimeOptions` and `ConnectionAuthContext.userAgent`.**
+
 ## [1.2.19] - 2026-11-20
 
 ### Added

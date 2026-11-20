@@ -124,7 +124,7 @@ describe('A transport rejection that reaches HTTP (e2e)', () => {
     const [caught] = filter.caught as [ServiceUnavailableException & { code?: string }]
     expect(caught.code).toBe('REALTIME_PUBSUB_UNAVAILABLE')
     expect(caught.message).toBe(
-      `[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of held-elsewhere could not be published (${DRIVER_TEXT})`,
+      `[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of held-elsewhere could not be published`,
     )
     expect((caught.cause as Error).message).toBe(DRIVER_TEXT)
   })

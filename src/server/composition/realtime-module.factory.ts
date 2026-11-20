@@ -7,9 +7,14 @@ import type { DynamicModule, Logger, Provider, Type } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { applyDefaults } from '../config/default-options'
 import { dropUnset } from '../config/drop-unset'
+import { guardHostReads } from '../config/guard-host-reads'
 import type { ResolvedRealtimeOptions } from '../config/default-options'
 import { validateOptions } from '../config/validate-options'
-import { assertOptionsObject, assertSseEndpoint } from '../config/validate-shapes'
+import {
+  assertExtraProviders,
+  assertOptionsObject,
+  assertSseEndpoint,
+} from '../config/validate-shapes'
 import {
   REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
@@ -162,7 +167,7 @@ export function composeForRoot(
 ): DynamicModule {
   assertOptionsObject(raw, moduleClass.name)
   // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
-  const options = dropUnset(raw)
+  const options = guardHostReads('the options', () => dropUnset(raw))
   validateOptions(options)
   assertModeSupported(wiring, options.transport, moduleClass.name)
   const resolved: ResolvedRealtimeOptions = applyDefaults(options)
@@ -251,7 +256,7 @@ function resolveAsyncOptions(
   }
   assertOptionsObject(raw, moduleName)
   // Read once: what is validated is the plain copy that is resolved, whatever a getter would answer next.
-  const options = dropUnset(raw)
+  const options = guardHostReads('the options', () => dropUnset(raw))
   validateOptions(options)
   if (options.transport !== declaredMode) {
     throw realtimeError(
@@ -317,14 +322,18 @@ function buildOptionsProvider(
   return {
     provide: REALTIME_OPTIONS_TOKEN,
     useFactory: async (factory: { createRealtimeOptions?: () => unknown } | null | undefined) => {
-      if (typeof factory?.createRealtimeOptions !== 'function') {
+      const create = guardHostReads(
+        'the provider named by useExisting or useClass',
+        () => factory?.createRealtimeOptions,
+      )
+      if (typeof create !== 'function') {
         throw realtimeError(
           REALTIME_ERROR_CODES.INVALID_OPTIONS,
           'the provider named by useExisting or useClass must implement createRealtimeOptions',
         )
       }
       return resolve(
-        (await factory.createRealtimeOptions()) as BymaxRealtimeModuleOptions,
+        (await create.call(factory)) as BymaxRealtimeModuleOptions,
         'createRealtimeOptions',
       )
     },
@@ -397,6 +406,7 @@ export function composeForRootAsync(
   assertModeSupported(wiring, asyncOptions.transport, moduleName)
   assertSseEndpoint('sseEndpoint', asyncOptions.sseEndpoint)
   assertSseEndpointApplies(asyncOptions, moduleName)
+  assertExtraProviders(asyncOptions.extraProviders)
 
   const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
   const instanceId = randomUUID()

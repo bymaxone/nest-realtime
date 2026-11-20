@@ -162,7 +162,7 @@ describe('CompositeTransport', () => {
       ).catch((error: unknown) => error)
       expectGenericServiceUnavailable(failure)
       expect((failure as Error).message).toBe(
-        `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} of conn-1 failed on both transports (sse fail; ws fail)`,
+        `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} of conn-1 failed on both transports`,
       )
       expect((failure as { code?: unknown }).code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
       expect(((failure as Error).cause as AggregateError).errors.map(String)).toEqual([
@@ -217,7 +217,7 @@ describe('CompositeTransport', () => {
 
       expectGenericServiceUnavailable(failure)
       expect((failure as Error).message).toBe(
-        `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} failed on both transports (sse fail; ws fail)`,
+        `[CompositeTransport] REALTIME_TRANSPORT_UNAVAILABLE: ${op} failed on both transports`,
       )
       expect((failure as { code?: unknown }).code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
       expect(((failure as Error).cause as AggregateError).errors.map(String)).toEqual([

@@ -11,8 +11,9 @@ import { unavailableError } from './unavailable-error'
 
 describe('unavailableError', () => {
   // Scenario: a revocation that could not be published. Expected: the stable code leads the
-  // message, after the class that raised it, and the reason underneath is both in the text and
-  // in `cause`. Why: callers match on the code and operators read the cause.
+  // message, after the class that raised it, and the reason underneath is in `cause` and not in the
+  // text. Why: callers match on the code, operators read the cause, and a driver's or a host's text
+  // is not the library's to put in a message that can reach a log or a response.
   it('leads with the code, names the raiser and keeps the cause', () => {
     const cause = new Error('redis down')
     const error = unavailableError(
@@ -25,17 +26,17 @@ describe('unavailableError', () => {
     expect(error).toBeInstanceOf(Error)
     expect(error.code).toBe('REALTIME_PUBSUB_UNAVAILABLE')
     expect(error.message).toBe(
-      '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of c1 could not be published (redis down)',
+      '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: the revocation of c1 could not be published',
     )
     expect(error.cause).toBe(cause)
   })
 
-  // Scenario: whatever was thrown is not an Error. Expected: it still produces a readable
-  // message and is kept as `cause`. Why: a rejection can carry any value.
+  // Scenario: whatever was thrown is not an Error. Expected: the message is the same and the value is
+  // kept as `cause`. Why: a rejection can carry any value, `null` included.
   it.each([
-    ['a string', 'plain reason', 'plain reason'],
-    ['null', null, 'null'],
-  ])('describes %s as the reason', (_label, reason, text) => {
+    ['a string', 'plain reason'],
+    ['null', null],
+  ])('keeps %s as the cause and out of the message', (_label, reason) => {
     const error = unavailableError(
       REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
       'WebSocketTransport',
@@ -43,7 +44,9 @@ describe('unavailableError', () => {
       reason,
     )
 
-    expect(error.message).toContain(`(${text})`)
+    expect(error.message).toBe(
+      '[WebSocketTransport] REALTIME_TRANSPORT_UNAVAILABLE: the server is not attached',
+    )
     expect(error.cause).toBe(reason)
   })
 
@@ -65,6 +68,7 @@ describe('unavailableError', () => {
       /redis|secret|10\.0|revocation|SseTransport|REALTIME/,
     )
     expect(error.code).toBe('REALTIME_PUBSUB_UNAVAILABLE')
-    expect(error.message).toContain('ECONNREFUSED')
+    expect(error.message).not.toContain('ECONNREFUSED')
+    expect((error.cause as Error).message).toContain('ECONNREFUSED')
   })
 })

@@ -25,7 +25,7 @@ jest.setTimeout(3_000)
 
 const CHANNEL = 'bymax:realtime'
 const DOWN_PREFIX = `not subscribed: `
-const UP = `Subscribed to "${CHANNEL}"; remote events and revocations reach this instance`
+const UP = `Subscribed to the realtime channel; remote events and revocations reach this instance`
 
 // What happened, in order, with the time since the test began. A failure carries it in its
 // message, because the order of a close, a ready and a reply is what these cases are about and
@@ -181,7 +181,7 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       const failure = await pubsub.subscribe(jest.fn()).catch((error: unknown) => error)
       expectGenericServiceUnavailable(failure)
       expect((failure as Error).message).toBe(
-        `[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: could not subscribe to "${CHANNEL}" (${code} refused by the scripted server)`,
+        `[RedisRealtimePubSub] REALTIME_PUBSUB_UNAVAILABLE: could not subscribe to "${CHANNEL}"`,
       )
       expect(pubsub.isSubscribed()).toBe(false)
     }),
