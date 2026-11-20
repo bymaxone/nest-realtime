@@ -43,10 +43,11 @@ export function guardHostReads<T>(what: string, read: () => T): T {
 }
 
 /**
- * Awaits what a host's factory returned, with the read that `await` makes of it guarded. `await` reads `then` on a value
- * that is not a native promise, and a proxy whose trap throws, or one that was revoked, throws there, inside the
- * library's own provider and before the options are read. A native promise is the host's own and is awaited as it is:
- * its rejection is the factory's failure, whatever the factory threw, and it is not this module's to rename.
+ * Reads what a host's factory returned under the guard, so that the read `await` makes of it cannot run a trap
+ * outside it. `await` reads `then` on a value, and a proxy whose trap throws, or one that was revoked, throws there,
+ * inside the library's own provider and before the options are read. The read is made here once; returning the value
+ * from an `async` function then adopts a promise or a thenable as it is, so the rejection of a factory's own promise
+ * stays the factory's failure, whatever it threw, and is not this module's to rename.
  *
  * @param returned - What the factory returned.
  * @param what - What is being read, completing "... could not be read".
@@ -56,7 +57,6 @@ export async function awaitHostResult<T>(
   returned: T | Promise<T>,
   what = 'the options',
 ): Promise<T> {
-  if (guardHostReads(what, () => returned instanceof Promise)) return returned as Promise<T>
-  const then = guardHostReads(what, () => (returned as { then?: unknown } | null | undefined)?.then)
-  return typeof then === 'function' ? await returned : returned
+  guardHostReads(what, () => (returned as { then?: unknown } | null | undefined)?.then)
+  return returned
 }

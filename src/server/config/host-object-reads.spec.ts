@@ -161,6 +161,21 @@ describe('options whose read throws', () => {
     )
   })
 
+  // Scenario: an async factory rejects with its own error. Expected: that error reaches the caller as it is, neither
+  // wrapped nor renamed. Why: the read of `then` is guarded, and the factory's own failure is not a read of the object.
+  it('leaves the rejection of an async useFactory as the factory failure', async () => {
+    await expect(
+      Test.createTestingModule({
+        imports: [
+          BymaxRealtimeModule.forRootAsync({
+            transport: 'sse',
+            useFactory: () => Promise.reject(new Error('the factory failed')),
+          }),
+        ],
+      }).compile(),
+    ).rejects.toThrow(new Error('the factory failed'))
+  })
+
   // Scenario: a factory answers a thenable that is not a native promise, as a library's own promise type is. Expected:
   // it is awaited and its options are used, so the guard on the read of `then` does not stop a thenable that works.
   it('awaits a thenable a synchronous useFactory returns', async () => {
