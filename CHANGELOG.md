@@ -9,7 +9,12 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Fixed
 
+- **The tenant of an authentication result is read once.** The routing tenant was read from the result up to twice, so a getter that answers differently the second time could route on a value that was not the one tested. It is read once and the rest of the result is copied beside it.
 - **A field named `err` can no longer stand for the error of a log line.** `logEvent` wrote a caller's `err` field when no error was passed, and `err` is where a logger's serializer reads an error from. Only the error argument writes `err` now. The `logEvent` documentation also says that a field whose read throws, such as a getter, loses the line instead of throwing.
+
+### Documentation
+
+- **The README says what a getter that throws on the authenticator's result does.** The error is the host's own and is not wrapped: the handshake fails, it is logged under `err` and counted as `reason="error"`.
 
 ## [1.2.21] - 2026-11-20
 

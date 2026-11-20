@@ -41,12 +41,12 @@ export function resolveAuthTenant(
   options: Pick<BymaxRealtimeModuleOptions, 'tenantResolver'>,
   auth: AuthenticationResult,
 ): AuthenticationResult {
-  const resolved = options.tenantResolver?.(auth) ?? auth.tenantId
-  if (resolved === undefined || resolved === null) {
-    const { tenantId: _dropped, ...withoutTenant } = auth
-    return withoutTenant
-  }
-  return { ...auth, tenantId: resolved }
+  // The tenantId is read here, once, with the rest of the result copied: a getter can answer differently the second
+  // time, and the value that decides the routing room must be the one that was tested.
+  const { tenantId: own, ...rest } = auth
+  const resolved = options.tenantResolver?.(auth) ?? own
+  if (resolved === undefined || resolved === null) return rest
+  return { ...rest, tenantId: resolved }
 }
 
 /**

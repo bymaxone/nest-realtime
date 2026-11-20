@@ -123,6 +123,43 @@ describe('resolveAuthTenant', () => {
     expect(out.tenantId).toBe('t1')
   })
 
+  // Scenario: tenantId is a getter that counts its reads, with no resolver, a resolver that returns nothing, and a null
+  // value. Expected: one read each, and the answer that read gave. Why: a getter can answer differently the second
+  // time, so a value that decides the routing room is read once and every later use is of what that read returned.
+  it.each([
+    ['no resolver', {}, 't1', 't1'],
+    ['a resolver that returns undefined', { tenantResolver: () => undefined }, 't1', 't1'],
+    ['a null tenantId', {}, null, undefined],
+  ])('reads the tenantId of the auth result once with %s', (_name, options, value, expected) => {
+    let reads = 0
+    const auth = {
+      userId: 'u1',
+      get tenantId(): string {
+        reads += 1
+        return value as string
+      },
+    }
+
+    const out = resolveAuthTenant(options, auth)
+
+    expect(reads).toBe(1)
+    expect(out.tenantId).toBe(expected)
+  })
+
+  // Scenario: the authenticator's result has a getter that throws. Expected: the library does not wrap it, so the
+  // host's own error is what the handshake fails with. Why: the result is the host's own code, the README says so,
+  // and the gateway logs the error under `err` and counts the handshake as an error.
+  it('raises the error of a getter on the result as it is', () => {
+    const auth = {
+      userId: 'u1',
+      get tenantId(): string {
+        throw new Error('the getter threw')
+      },
+    }
+
+    expect(() => resolveAuthTenant({}, auth)).toThrow(new Error('the getter threw'))
+  })
+
   // An absent tenant stays absent rather than becoming an explicit undefined key,
   // which `exactOptionalPropertyTypes` treats as a different shape.
   it('leaves an absent tenantId absent', () => {
