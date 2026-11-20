@@ -13,7 +13,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Documentation
 
-- **The README says what a logger that rejects does and what a proxy that throws on its type keeps.** A logger whose method returns a rejected promise is not absorbed, because Nest's `Logger` discards the return value, so the rejection is an unhandled rejection of the host's process. A proxy that throws on every read, its type tag included, is refused as a built-in object without its error as the `cause`.
+- **The README says what a logger that rejects does and what a proxy that throws on its type keeps.** A logger whose method returns a rejected promise is not absorbed, because Nest's `Logger` discards the return value, so the rejection is an unhandled rejection of the host's process, which ends a Node process with exit code 1 unless the application handles `unhandledRejection`. A proxy that throws on every read, its type tag included, is refused as a built-in object without its error as the `cause`.
 
 ## [1.2.20] - 2026-11-20
 
