@@ -159,13 +159,13 @@ describe('resolveAuthTenant', () => {
     ['absent', undefined],
     ['null', null],
   ])('gives a resolver a result with no tenantId when the tenantId is %s', (_name, value) => {
-    let given: Record<string, unknown> | undefined
+    let given: AuthenticationResult | undefined
     const auth = untyped({ userId: 'u1', ...(value === undefined ? {} : { tenantId: value }) })
 
     const out = resolveAuthTenant(
       {
         tenantResolver: (a) => {
-          given = a as unknown as Record<string, unknown>
+          given = a
           return 't-resolved'
         },
       },
