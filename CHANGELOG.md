@@ -10,7 +10,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Fixed
 
 - **A proxy whose trap throws on `then`, or one that was revoked, returned by a factory is refused with the typed error.** `await` reads `then` on what a synchronous `useFactory` or `createRealtimeOptions` returns, which ran the trap inside the library before the options were read; a revoked proxy given to `forRoot` or returned by a factory raised the engine's `TypeError`. Both now raise `REALTIME_INVALID_OPTIONS` with the error as the `cause`.
-- **`REALTIME_REDIS_ADAPTER_FAILED` no longer carries the text of the error underneath in its message.** The message names what could not be installed and the remedy; the error that was thrown is the `cause`, as it already was.
+- **`REALTIME_REDIS_ADAPTER_FAILED` no longer carries the text of the error underneath in its message.** The message names what could not be installed and the remedy; the error that was thrown is the `cause`.
 - **A field named `event`, `message` or `err` cannot replace the event, the message or the error of a log line.** The library's own values are written after the fields.
 - **A logger that throws no longer turns a reported failure into another one.** `logEvent` writes every `warn` and `error` line the library emits, often from a `catch` block or a promise handler; when the host's logger threw there, the error left the handler, and in the timer of the re-authentication service it was an unhandled rejection, which ends a Node process by default. The throw is now absorbed and the line is lost.
 
