@@ -19,7 +19,7 @@ Code that read the text of the underlying failure from the `message` of a `REALT
 
 ### Documentation
 
-- **The README names `createRealtimeOptions` and `ConnectionAuthContext.userAgent`.** A spec holds both names, with the other contract members an implementor writes.
+- **The README names `createRealtimeOptions` and `ConnectionAuthContext.userAgent`.**
 
 ## [1.2.19] - 2026-11-20
 
