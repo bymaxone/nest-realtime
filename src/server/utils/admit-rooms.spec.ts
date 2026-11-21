@@ -219,7 +219,9 @@ describe('admitRooms', () => {
 
       expect((caught as { code?: string }).code).toBe('REALTIME_AUTH_FAILED')
       expect((caught as Error).cause).toBe(HOST)
-      expect((caught as Error).message).not.toContain('host-roles-error')
+      expect((caught as Error).message).toBe(
+        'REALTIME_AUTH_FAILED: the authenticator returned roles that could not be read: a getter or a proxy on them throws',
+      )
     })
 
     it('carries a frozen copy of the roles that does not follow the original', () => {
