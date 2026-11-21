@@ -2,6 +2,7 @@
  * @fileoverview Unit tests for tenant resolution and blank-identity rejection.
  * @layer utils
  */
+import vm from 'node:vm'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
 import { assertIdentityIsNotBlank, resolveAuthTenant } from './assert-identity'
@@ -416,15 +417,77 @@ describe('resolveAuthTenant', () => {
     }
   })
 
-  it('does not touch a resolver result that is a thenable whose then throws', () => {
-    const thenable = {
-      get then(): never {
-        throw new Error('host')
-      },
+  // The residual of absorbing only a native promise: a thenable that is not one is never asked for its `then`
+  // (asking could run a lazy query), so its own rejection is not absorbed, and it still cannot route.
+  it('does not call the then of a thenable that is not a promise, and still refuses it as a tenant', () => {
+    const then = jest.fn()
+    const thenable = { then }
+
+    const out = resolveAuthTenant({ tenantResolver: () => thenable as never }, { userId: 'u1' })
+
+    expect(then).not.toHaveBeenCalled()
+    expect(() => assertIdentityIsNotBlank(out)).toThrow('REALTIME_AUTH_FAILED')
+  })
+
+  // Scenario: a rejecting promise the native `instanceof` does not recognise, or whose own methods cannot be
+  // trusted. Expected: no unhandled rejection reaches the process, and the result still cannot route.
+  describe('a rejecting promise of an unusual kind', () => {
+    const settle = async (): Promise<void> => {
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setImmediate(resolve))
     }
 
-    expect(() =>
-      resolveAuthTenant({ tenantResolver: () => thenable as never }, { userId: 'u1' }),
-    ).not.toThrow()
+    const rejecting = (): Promise<unknown> => Promise.reject(new Error('late'))
+
+    class OverridesCatch extends Promise<unknown> {
+      override catch(): never {
+        throw new Error('own catch')
+      }
+    }
+
+    it.each([
+      [
+        'from another realm',
+        () => vm.runInNewContext("Promise.reject(new Error('late'))") as unknown,
+      ],
+      ['a subclass that overrides catch', () => OverridesCatch.reject(new Error('late'))],
+      [
+        'with a then of its own',
+        () =>
+          Object.defineProperty(rejecting(), 'then', {
+            value: () => {
+              throw new Error('own then')
+            },
+          }),
+      ],
+    ])('is absorbed: %s', async (_name, build) => {
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+      try {
+        const out = resolveAuthTenant({ tenantResolver: () => build() as never }, { userId: 'u1' })
+        await settle()
+
+        expect(unhandled).not.toHaveBeenCalled()
+        expect(() => assertIdentityIsNotBlank(out)).toThrow('REALTIME_AUTH_FAILED')
+      } finally {
+        process.off('unhandledRejection', unhandled)
+      }
+    })
+
+    // The residual: a promise whose constructor cannot be read cannot be given a handler, so its own rejection
+    // is not absorbed; the library still does not throw the host's error, and the result still cannot route.
+    it('does not throw the host error for a promise whose constructor cannot be read', () => {
+      const rejected = Promise.reject(new Error('late'))
+      rejected.catch(() => undefined)
+      const promise = Object.defineProperty(rejected, 'constructor', {
+        get: () => {
+          throw new Error('own constructor')
+        },
+      })
+
+      const out = resolveAuthTenant({ tenantResolver: () => promise as never }, { userId: 'u1' })
+
+      expect(() => assertIdentityIsNotBlank(out)).toThrow('REALTIME_AUTH_FAILED')
+    })
   })
 })

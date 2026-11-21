@@ -52,9 +52,23 @@ export function resolveAuthTenant(
   const own = auth.tenantId
   const kept = keepByName(auth)
   const resolved: unknown = options.tenantResolver?.(auth) ?? own
-  if (resolved instanceof Promise) resolved.catch(() => undefined)
+  absorbRejection(resolved)
   if (resolved === undefined || resolved === null) return kept
   return { ...kept, tenantId: resolved as string }
+}
+
+/**
+ * Handle the rejection of a promise a synchronous resolver returned, so it cannot end the process. The intrinsic
+ * `then` is used rather than the value's own methods, and it accepts only a real promise, of any realm, so a
+ * promise from another realm, a subclass that overrides `catch` and a promise with a `then` of its own are all
+ * handled, while any other value is refused by the intrinsic before a property of it is read.
+ */
+function absorbRejection(value: unknown): void {
+  try {
+    Promise.prototype.then.call(value, undefined, () => undefined)
+  } catch {
+    // Not a promise, or a promise whose species cannot be read: there is no rejection to absorb on this path.
+  }
 }
 
 /** The fields of a result the library keeps, besides the tenant: the ones it names, read once and left out when absent. */
