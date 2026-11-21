@@ -446,7 +446,29 @@ describe('websocket.cors', () => {
   ])('refuses %s with the way out', (_name, build) => {
     expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
       new Error(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp that cannot be copied faithfully, as a subclass, one with a property of its own, one from another realm or one with the y flag: use a function origin for custom matching`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp, or an object that looks like one, that cannot be copied faithfully: a subclass, one with a property of its own, one from another realm, one with the y flag, a proxy over one or an object that only has its prototype: use a function origin for custom matching`,
+      ),
+    )
+  })
+
+  // Scenario: an origin that is a Proxy whose reads all throw, so it cannot be told to be a RegExp or not. Expected:
+  // refused as an origin of a kind that is not allowed, without the host's text and without the way out.
+  it('refuses an origin whose reads throw, without the host text', () => {
+    const origin = new Proxy(
+      {},
+      {
+        getPrototypeOf: () => {
+          throw new Error('host text')
+        },
+        get: () => {
+          throw new Error('host text')
+        },
+      },
+    )
+
+    expect(() => validateOptions(corsOptions({ origin }))).toThrow(
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a built-in object`,
       ),
     )
   })

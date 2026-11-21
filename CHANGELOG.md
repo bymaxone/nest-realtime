@@ -7,6 +7,21 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.32] - 2026-11-21
+
+### Security
+
+- **The flags of a `RegExp` origin are read through the accessors taken when the library loaded.** The copy and the refusal of a sticky `RegExp` read the flags through the `flags` accessor of `RegExp.prototype`, which reads `sticky`, `global`, `multiline` and the others from whatever the prototype holds at the time. A host that replaced one of them before boot could make `/…/y` look unflagged and be copied unanchored, or change the flags of the copy. Each flag is now read through its own accessor taken at load, and the flag string is built from them; a flag accessor that throws no longer raises the host's error.
+
+### Changed
+
+- **A value that is or looks like a `RegExp` and cannot be copied gets the same way out**: an object that only has the prototype of a `RegExp`, a proxy over one and an object with a `test` are refused with "use a function origin for custom matching", as a subclass already was.
+- **The README and the `CorsConfig` comment say that `allowedHeaders`, `exposedHeaders` and `maxAge` are live references**: a change made after boot reaches later requests and never decides which origin is allowed.
+
+#### Apply to a derived backend
+
+None for a host that does not change `RegExp.prototype`. A value that looks like a `RegExp` and is not one now refuses boot with the way out.
+
 ## [1.2.31] - 2026-11-21
 
 ### Security
@@ -1382,7 +1397,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.31...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.32...HEAD
+[1.2.32]: https://github.com/bymaxone/nest-realtime/compare/v1.2.31...v1.2.32
 [1.2.31]: https://github.com/bymaxone/nest-realtime/compare/v1.2.30...v1.2.31
 [1.2.30]: https://github.com/bymaxone/nest-realtime/compare/v1.2.29...v1.2.30
 [1.2.29]: https://github.com/bymaxone/nest-realtime/compare/v1.2.28...v1.2.29

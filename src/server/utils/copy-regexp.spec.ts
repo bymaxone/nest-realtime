@@ -25,6 +25,51 @@ describe('copyRegExp', () => {
     expect(hasRegExpBrand(/x/y)).toBe(true)
   })
 
+  // Scenario: the flag accessors of RegExp.prototype replaced after the module loaded. Expected: the accessors it took
+  // at load decide the flags, so neither a lie nor a throw changes what is copied or refused.
+  describe('with the flag accessors of RegExp.prototype replaced', () => {
+    const replace = (name: string, get: () => unknown): (() => void) => {
+      const saved = Object.getOwnPropertyDescriptor(RegExp.prototype, name) as PropertyDescriptor
+      Object.defineProperty(RegExp.prototype, name, { get, configurable: true })
+      return () => Object.defineProperty(RegExp.prototype, name, saved)
+    }
+
+    it('still refuses a sticky RegExp when sticky says false', () => {
+      const restore = replace('sticky', () => false)
+      try {
+        expect(copyRegExp(/x/y)).toBeUndefined()
+      } finally {
+        restore()
+      }
+    })
+
+    // The copy is judged by what it matches, not by its own `flags`, which reads the replaced accessors too.
+    it('copies the flags the RegExp has, not the ones the accessors now say', () => {
+      const restore = replace('multiline', () => true)
+      try {
+        const copy = copyRegExp(/^x$/) as RegExp
+
+        expect(copy.test('a\nx')).toBe(false)
+        expect(copy.test('x')).toBe(true)
+      } finally {
+        restore()
+      }
+    })
+
+    it('raises no error of the host when an accessor throws', () => {
+      const restore = replace('global', () => {
+        throw new Error('host text')
+      })
+      try {
+        const copy = copyRegExp(/x/g) as RegExp
+
+        expect([copy.test('x'), copy.test('x')]).toStrictEqual([true, true])
+      } finally {
+        restore()
+      }
+    })
+  })
+
   // Scenario: the same copy is asked twice. Expected: it answers the same each time, which a g flag would not.
   it('answers the same however many times it is tested', () => {
     const copy = copyRegExp(/good/g)
