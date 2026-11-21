@@ -20,9 +20,13 @@ export interface CorsConfig {
    * strings and `RegExp`s, or a boolean (`true` answers every origin, `false` none). Any other kind, and a key set to
    * `null` or `undefined`, is refused at boot with `REALTIME_INVALID_OPTIONS`, because Socket.IO reads it as
    * "allow every origin". A block with no `origin` key answers `*`. A list holds at most 1,000 entries and is copied
-   * once at boot, so what the host does to it afterwards changes nothing. A function, and a `RegExp` subclass that
-   * overrides `test`, are host code: the library trusts what they answer, as it trusts any other function the host
-   * hands it.
+   * once at boot, so what the host does to it afterwards changes nothing. Each plain `RegExp`, alone or in the
+   * list, is replaced at boot by one with the same pattern and flags except `g`. A `RegExp` that is not plain
+   * (a subclass, one with a property of its own, one from another realm) or has the `y` flag is refused, because a
+   * copy would lose its own `test`, or, for `y`, match anywhere in the origin and not only at its start: use a
+   * function origin for custom matching. A function is host code: the library trusts
+   * what it answers, as it trusts any other function the host hands it. Any other key of the block reaches
+   * Socket.IO as written.
    */
   origin?:
     | string
@@ -38,7 +42,8 @@ export interface CorsConfig {
       ) => void)
   /** Whether credentials are allowed; a boolean, and refused at boot when it is anything else. */
   credentials?: boolean
-  methods?: readonly string[]
+  /** The HTTP methods allowed, as a string or a list of at most 1,000 strings; refused at boot when it is anything else. */
+  methods?: string | readonly string[]
 }
 
 /**

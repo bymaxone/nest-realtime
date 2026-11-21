@@ -7,6 +7,22 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.31] - 2026-11-21
+
+### Security
+
+- **The entries of an origin list are copied too, and a `RegExp` is recognised by its brand.** 1.2.30 copied the list and left its entries as the host wrote them, and Socket.IO matches an entry by its prototype: after boot, `Object.setPrototypeOf` on an entry, or a proxy entry whose `getPrototypeOf` answered differently, made it answer any origin. Each `RegExp`, in the list or as the origin itself, is now replaced at boot by a plain one with the same pattern and flags except `g`, read once through the accessors of `RegExp.prototype`; a `g` flag made an entry answer alternately allowed and refused, and an object that only had the prototype of a `RegExp` passed validation and then failed every request. A `RegExp` that is not plain (a subclass, one with a property of its own, one from another realm) or has the `y` flag is refused at boot with "use a function origin for custom matching", because a plain copy would lose its behaviour, and a copy more permissive than the original would answer origins the host meant to refuse: a sticky `RegExp` matches only at the start of the origin, so `/https:\/\/a\.com/y` rejects `https://evil.io/#https://a.com`, and a copy without the flag accepts it. A function origin stays the host's own code.
+
+### Changed
+
+- **`websocket.cors.methods` is a string or a list of at most 1,000 strings**, read once like the origin list; anything else is refused at boot with `REALTIME_INVALID_OPTIONS`. The declared type now says string too, as Socket.IO accepts.
+- **A list entry that is not a string or a `RegExp` is refused**: `false`, a number, an object and a `String` object were accepted before 1.2.30 and are not any more. A refusal of a `websocket.cors` option no longer prints a number, only that it was one.
+- **Any other key of the `cors` block reaches Socket.IO as written**; the library does not validate it. This is documented in the README.
+
+#### Apply to a derived backend
+
+A `RegExp` subclass, a `RegExp` with a property of its own, a `RegExp` from another realm and a `RegExp` with the `y` flag now refuse boot: use a function origin for custom matching, or an anchored pattern. A list entry that is not a string or a `RegExp`, and a `methods` that is not a string or a list of strings, now refuse boot.
+
 ## [1.2.30] - 2026-11-21
 
 ### Security
@@ -1366,7 +1382,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.30...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.31...HEAD
+[1.2.31]: https://github.com/bymaxone/nest-realtime/compare/v1.2.30...v1.2.31
 [1.2.30]: https://github.com/bymaxone/nest-realtime/compare/v1.2.29...v1.2.30
 [1.2.29]: https://github.com/bymaxone/nest-realtime/compare/v1.2.28...v1.2.29
 [1.2.28]: https://github.com/bymaxone/nest-realtime/compare/v1.2.27...v1.2.28

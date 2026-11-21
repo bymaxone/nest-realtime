@@ -284,6 +284,7 @@ describe('validateShapes called on options that still hold null', () => {
   })
 })
 
+const METHODS_KINDS = 'a string or a list of at most 1000 strings'
 const ORIGIN_KINDS = 'a string, a RegExp, a function, an array of strings and RegExps, or a boolean'
 
 describe('websocket.cors', () => {
@@ -356,9 +357,10 @@ describe('websocket.cors', () => {
   // Scenario: kinds of origin Socket.IO reads as any origin. Expected: refused naming the option.
   it.each([
     [{}, 'an object'],
-    [5, '5'],
+    [5, 'a number'],
     [[1], 'an array'],
     [[{}], 'an array'],
+    [['https://a.example', false], 'an array'],
   ])('refuses an origin of %p', (origin, received) => {
     expect(() => validateOptions(corsOptions({ origin }))).toThrow(
       refusal('websocket.cors.origin', ORIGIN_KINDS, received),
@@ -408,10 +410,43 @@ describe('websocket.cors', () => {
           get: (t, k, r) => (k === 'length' ? -1 : Reflect.get(t, k, r)),
         }),
     ],
-  ])('refuses an origin list whose length is %p with the module and the code', (length, build) => {
+  ])('refuses an origin list whose length is %p with the module and the code', (_length, build) => {
     expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
       new Error(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be a list of at most 1000 strings and RegExps, received a list whose length is ${String(length)}`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a list whose length is not an integer from 0 to 1000`,
+      ),
+    )
+  })
+
+  // Scenario: the same refusal for `methods`, whole. Expected: the module, the code, the option and the kinds, and
+  // no length in the text.
+  it.each([
+    [1001, () => Array.from({ length: 1001 }, () => 'GET')],
+    [
+      1.5,
+      () => new Proxy(['GET'], { get: (t, k, r) => (k === 'length' ? 1.5 : Reflect.get(t, k, r)) }),
+    ],
+  ])('refuses a methods list whose length is %p with the module and the code', (_length, build) => {
+    expect(() =>
+      validateOptions(corsOptions({ origin: 'https://a.example', methods: build() })),
+    ).toThrow(
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.methods must be ${METHODS_KINDS}, received a list whose length is not an integer from 0 to 1000`,
+      ),
+    )
+  })
+
+  // Scenario: a RegExp that is not a plain one, alone or in a list, refused whole. Expected: the module, the code,
+  // the option, the kinds and the way out, which is a function.
+  it.each([
+    ['a subclass', () => new (class Mine extends RegExp {})('x')],
+    ['a subclass in a list', () => [new (class Mine extends RegExp {})('x')]],
+    ['one with a test of its own', () => Object.assign(/x/, { test: () => true })],
+    ['a sticky one', () => /x/y],
+  ])('refuses %s with the way out', (_name, build) => {
+    expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp that cannot be copied faithfully, as a subclass, one with a property of its own, one from another realm or one with the y flag: use a function origin for custom matching`,
       ),
     )
   })
@@ -420,6 +455,41 @@ describe('websocket.cors', () => {
     const origin = Array.from({ length: 1000 }, () => 'https://a.example')
 
     expect(() => validateOptions(corsOptions({ origin }))).not.toThrow()
+  })
+
+  // Scenario: `methods` of a kind that is not a string or a list of strings, or a list over the bound. Expected:
+  // refused, naming the option and the kind, never a number.
+  it.each([
+    [5, 'a number'],
+    [{}, 'an object'],
+    [['GET', 1], 'an array'],
+    [['GET', {}], 'an array'],
+  ])('refuses methods of %p', (methods, received) => {
+    expect(() => validateOptions(corsOptions({ origin: 'https://a.example', methods }))).toThrow(
+      refusal('websocket.cors.methods', METHODS_KINDS, received),
+    )
+  })
+
+  it('refuses a methods list of more than 1,000 entries, without printing the count', () => {
+    const methods = Array.from({ length: 1001 }, () => 'GET')
+
+    expect(() => validateOptions(corsOptions({ origin: 'https://a.example', methods }))).toThrow(
+      'options.websocket.cors.methods must be a string or a list of at most 1000 strings, received a list whose length is not an integer from 0 to 1000',
+    )
+  })
+
+  it.each([['GET,POST'], [['GET', 'POST']], [[]]])('accepts methods of %p', (methods) => {
+    expect(() =>
+      validateOptions(corsOptions({ origin: 'https://a.example', methods })),
+    ).not.toThrow()
+  })
+
+  // Scenario: a key the options do not name. Expected: accepted; that it reaches Socket.IO is shown by a real
+  // preflight in the handshake spec.
+  it('accepts a key it does not name', () => {
+    expect(() =>
+      validateOptions(corsOptions({ origin: 'https://a.example', allowedHeaders: 'x-token' })),
+    ).not.toThrow()
   })
 
   // Scenario: the kinds an origin may be. Expected: accepted.
@@ -439,7 +509,7 @@ describe('websocket.cors', () => {
   // Socket.IO's own default, which sends no CORS header.
   it.each([
     ['a', 'a string'],
-    [5, '5'],
+    [5, 'a number'],
     [true, 'a boolean'],
     [false, 'a boolean'],
     [[], 'an array'],
@@ -468,7 +538,7 @@ describe('websocket.cors', () => {
   it.each([
     ['true', 'a string'],
     ['false', 'a string'],
-    [1, '1'],
+    [1, 'a number'],
     [{}, 'an object'],
   ])('refuses credentials %p', (value, received) => {
     expect(() =>
