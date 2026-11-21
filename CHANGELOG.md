@@ -20,7 +20,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 #### Apply to a derived backend
 
-A nullish `cors.origin` now refuses boot: set the allowlist, or remove the key to take the default. A `credentials` that is not `true` or `false` now refuses boot: write the boolean.
+A nullish `cors.origin` now refuses boot: set the allowlist, or remove the key to take the default. A `credentials` that is set to something other than `true` or `false` now refuses boot: write the boolean.
 
 ## [1.2.28] - 2026-11-21
 
