@@ -63,7 +63,7 @@ export function resolveAuthTenant(
   if (own !== undefined && own !== null) {
     Object.defineProperty(given, 'tenantId', {
       value: own,
-      enumerable: true,
+      enumerable: descriptors.tenantId?.enumerable ?? true,
       writable: true,
       configurable: true,
     })

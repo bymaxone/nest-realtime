@@ -299,6 +299,24 @@ describe('resolveAuthTenant', () => {
       expect(Object.keys(given ?? {})).toEqual(['userId'])
     })
 
+    it('gives the resolver a hidden tenantId with its flag, and an inherited one as enumerable', () => {
+      const flags: Array<boolean | undefined> = []
+      const record = (a: object): undefined => {
+        flags.push(Object.getOwnPropertyDescriptor(a, 'tenantId')?.enumerable)
+        return undefined
+      }
+      const hidden = hide({ userId: 'u1' }, 'tenantId', 't-hidden')
+      const inherited = Object.create(
+        { tenantId: 't-proto' },
+        { userId: { value: 'u1', enumerable: true } },
+      )
+
+      resolveAuthTenant({ tenantResolver: record }, hidden)
+      resolveAuthTenant({ tenantResolver: record }, inherited as AuthenticationResult)
+
+      expect(flags).toEqual([false, true])
+    })
+
     it('keeps only the enumerable properties in what it returns', () => {
       const auth = hide({ userId: 'u1' }, 'scope', 'hidden')
 
