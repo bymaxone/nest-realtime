@@ -319,11 +319,11 @@ describe('websocket.cors over a real server', () => {
   })
 
   // Scenario: a sticky RegExp, which matches only at the start of the origin, so it rejects an origin that merely
-  // contains the pattern. Expected: refused at boot, because a copy without the flag is unanchored and would
+  // ends with the pattern. Expected: refused at boot, because a copy without the flag matches anywhere and would
   // accept https://evil.io/#https://a.com, which the original rejects.
   it.each([
-    ['a sticky RegExp', () => /https:\/\/a\.com/y],
-    ['a list holding a sticky RegExp', () => [/https:\/\/a\.com/y]],
+    ['a sticky RegExp', () => /https:\/\/a\.com$/y],
+    ['a list holding a sticky RegExp', () => [/https:\/\/a\.com$/y]],
   ])('refuses to boot, and does not widen the pattern, for %s', async (_name, build) => {
     let caught: unknown
     try {
