@@ -20,7 +20,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Tooling
 
-- **`pnpm size` refuses a `dist` older than the sources** (`scripts/check-dist-fresh.mjs`, the family template at `bymaxone/.github` 9ea69c7, byte for byte), so a size budget is not measured on a stale build, and its test runs with `pnpm lint`.
+- **`pnpm size` refuses a `dist` older than the sources** (`scripts/check-dist-fresh.mjs`), so a size budget is not measured on a stale build, and its test runs with `pnpm lint`.
 - **The no-AI-attribution caller workflow sets `contents: read` at the top**, which clears a code-scanning alert for a workflow without top-level permissions.
 
 #### Apply to a derived backend
