@@ -15,7 +15,28 @@ import type { IPresenceStorage } from './presence-storage.interface'
 
 /** CORS configuration shared by the SSE and WebSocket transports. */
 export interface CorsConfig {
-  origin?: string | readonly string[] | boolean
+  /**
+   * The origins a browser may connect from: a string, a `RegExp`, a function that answers per origin, a list of
+   * strings and `RegExp`s, or a boolean (`true` answers every origin, `false` none). Any other kind, and a key set to
+   * `null` or `undefined`, is refused at boot with `REALTIME_INVALID_OPTIONS`, because Socket.IO reads it as
+   * "allow every origin". A block with no `origin` key answers `*`. A list holds at most 1,000 entries and is copied
+   * once at boot, so what the host does to it afterwards changes nothing. A function, and a `RegExp` subclass that
+   * overrides `test`, are host code: the library trusts what they answer, as it trusts any other function the host
+   * hands it.
+   */
+  origin?:
+    | string
+    | RegExp
+    | boolean
+    | readonly (string | RegExp)[]
+    | ((
+        requestOrigin: string | undefined,
+        callback: (
+          error: Error | null,
+          allow?: boolean | string | RegExp | readonly (string | RegExp)[],
+        ) => void,
+      ) => void)
+  /** Whether credentials are allowed; a boolean, and refused at boot when it is anything else. */
   credentials?: boolean
   methods?: readonly string[]
 }

@@ -3,6 +3,7 @@
  * @layer transport
  */
 import type { AddressInfo } from 'node:net'
+import vm from 'node:vm'
 import { Logger } from '@nestjs/common'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -115,11 +116,16 @@ describe('websocket.cors over a real server', () => {
     jest.restoreAllMocks()
   })
 
-  async function answerTo(
+  /**
+   * Boots a server with `cors`, asks it from `origin`, runs `between` while the server is still up, and asks
+   * again. Resolves to both answers.
+   */
+  async function answersAround(
     cors: object,
     origin: string,
+    between: () => void = () => undefined,
     wrap: (websocket: object) => object = (websocket) => websocket,
-  ): Promise<unknown> {
+  ): Promise<[unknown, unknown]> {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     const module = await Test.createTestingModule({
       imports: [
@@ -134,10 +140,23 @@ describe('websocket.cors over a real server', () => {
     app.useWebSocketAdapter(new RealtimeIoAdapter(app))
     await app.listen(0)
     const port = (app.getHttpServer().address() as AddressInfo).port
-    const response = await request(`http://127.0.0.1:${port}`)
-      .get('/socket.io/?EIO=4&transport=polling')
-      .set('Origin', origin)
-    return response.headers['access-control-allow-origin']
+    const ask = async (): Promise<unknown> =>
+      (
+        await request(`http://127.0.0.1:${port}`)
+          .get('/socket.io/?EIO=4&transport=polling')
+          .set('Origin', origin)
+      ).headers['access-control-allow-origin']
+    const before = await ask()
+    between()
+    return [before, await ask()]
+  }
+
+  async function answerTo(
+    cors: object,
+    origin: string,
+    wrap: (websocket: object) => object = (websocket) => websocket,
+  ): Promise<unknown> {
+    return (await answersAround(cors, origin, undefined, wrap))[0]
   }
 
   // Scenario: an allowlist of one origin, and a request from another. Expected: no allow-all header, and the
@@ -184,6 +203,124 @@ describe('websocket.cors over a real server', () => {
     app = undefined as never
     expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
     expect((caught as Error).message).toContain('options.websocket.cors.origin must be')
+  })
+
+  // Scenario: an origin of a kind Socket.IO reads as "any origin": an object, a number, a symbol, an array with an
+  // entry that is neither a string nor a RegExp, and a RegExp from another realm. Expected: the module refuses to
+  // boot, and no server reflects the origin it was asked from.
+  const wrongOrigins: ReadonlyArray<readonly [string, () => unknown]> = [
+    ['an empty object', () => ({})],
+    ['a number', () => 5],
+    ['a symbol', () => Symbol('origin')],
+    ['an array holding a number', () => [GOOD, 1]],
+    ['an array holding an object', () => [{}]],
+    ['an array holding an array', () => [[GOOD]]],
+    ['a RegExp from another realm', () => vm.runInNewContext('/good\\.example$/')],
+  ]
+
+  it.each(wrongOrigins)('refuses to boot when origin is %s', async (_name, build) => {
+    let caught: unknown
+    try {
+      await answerTo({ origin: build() }, EVIL)
+    } catch (error) {
+      caught = error
+    }
+    app = undefined as never
+    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
+    expect((caught as Error).message).toContain('options.websocket.cors.origin must be')
+  })
+
+  // Scenario: an origin list the host can change after validation, or that reads differently by iterator and by
+  // index (Socket.IO's own matching reads it by index and length on every request). Expected: the list that was
+  // validated is the list that is used, so no later change or second reading reaches the answer.
+  const WITH = 'https://good.example'
+
+  it('answers by the list that was validated, whatever the host pushes after boot', async () => {
+    const list: unknown[] = [WITH]
+
+    const [before, after] = await answersAround({ origin: list }, EVIL, () => {
+      list.push(/./, {})
+    })
+
+    expect(before).toBeUndefined()
+    expect(after).toBeUndefined()
+  })
+
+  it('refuses a list whose iterator yields a string where its index holds an object', async () => {
+    class Split extends Array<unknown> {
+      override [Symbol.iterator](): ArrayIterator<unknown> {
+        return ['https://ok.test'][Symbol.iterator]()
+      }
+    }
+    const list = new Split()
+    list[0] = {}
+    let caught: unknown
+    try {
+      await answerTo({ origin: list }, EVIL)
+    } catch (error) {
+      caught = error
+    }
+    app = undefined as never
+    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
+  })
+
+  it('uses the first reading of an entry that a proxy answers differently afterwards', async () => {
+    let reads = 0
+    const list = new Proxy([WITH], {
+      get: (target, key, receiver) =>
+        key === '0' ? (reads++ === 0 ? WITH : {}) : (Reflect.get(target, key, receiver) as unknown),
+    })
+
+    const [first, second] = await answersAround({ origin: list }, EVIL)
+
+    expect(first).toBeUndefined()
+    expect(second).toBeUndefined()
+  })
+
+  // Scenario: the kinds the option documents. Expected: each is accepted and answers by its own rule.
+  it.each([
+    ['a RegExp', () => /^https:\/\/good\.example$/, GOOD, EVIL],
+    [
+      'an array of a string and a RegExp',
+      () => ['https://other.example', /good\.example$/],
+      GOOD,
+      EVIL,
+    ],
+    [
+      'a function',
+      () => (origin: string | undefined, done: (error: null, allow: boolean) => void) =>
+        done(null, origin === GOOD),
+      GOOD,
+      EVIL,
+    ],
+  ])('answers by the rule of %s', async (_name, build, good, evil) => {
+    expect(await answerTo({ origin: build() }, evil)).toBeUndefined()
+    await app.close()
+    expect(await answerTo({ origin: build() }, good)).toBe(good)
+  })
+
+  // Scenario: a cors block that is present and is not an object. Expected: refused, not ignored (Socket.IO answers
+  // every origin for each of these).
+  it.each([
+    ['a string', () => 'https://good.example'],
+    ['a number', () => 5],
+    ['true', () => true],
+    ['false', () => false],
+    ['an array', () => [GOOD]],
+    ['a Map', () => new Map()],
+    ['a Map from another realm', () => vm.runInNewContext('new Map()') as unknown],
+    ['an Error', () => new Error('not options')],
+    ['a Date', () => new Date(0)],
+  ])('refuses to boot when the cors block is %s', async (_name, build) => {
+    let caught: unknown
+    try {
+      await answerTo(build() as never, EVIL)
+    } catch (error) {
+      caught = error
+    }
+    app = undefined as never
+    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
+    expect((caught as Error).message).toContain('options.websocket.cors must be')
   })
 
   // Scenario: a block with no origin key at all. Expected: the documented default, which answers every origin.

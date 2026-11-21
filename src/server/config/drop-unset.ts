@@ -9,7 +9,10 @@ import type {
   SseOptions,
   WebSocketOptions,
 } from '../interfaces/realtime-module-options.interface'
+import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { describeReceived } from '../utils/describe-received'
 import { isPlainObject } from '../utils/is-plain-object'
+import { realtimeError } from '../utils/realtime-error'
 
 /**
  * The keys each object is read for. Each table is typed against its interface, so a key added to an
@@ -78,6 +81,38 @@ const GROUPS = {
   reauthenticationPolicy: REAUTHENTICATION_KEYS,
 } as const
 
+/** The most entries an origin list may hold: a bound on the copy, not on how many origins a host may allow. */
+const MAX_ORIGINS = 1000
+
+/**
+ * A copy of an origin list, with its length and each of its entries read once. Socket.IO matches the list it is
+ * given by index and length on every request, so the list that was validated has to be the list it holds: a
+ * subclass whose iterator and indexes differ, a proxy that answers differently the second time and an array the
+ * host changes after boot are all read here, once, and never again.
+ *
+ * @param list - The origin list the host wrote.
+ * @returns A frozen array of the entries, which are validated by the caller.
+ * @throws Error carrying `REALTIME_INVALID_OPTIONS` when the length is not an integer from 0 to 1,000.
+ */
+function snapshotOrigins(list: readonly unknown[]): readonly unknown[] {
+  const length: unknown = list.length
+  if (
+    typeof length !== 'number' ||
+    !Number.isInteger(length) ||
+    length < 0 ||
+    length > MAX_ORIGINS
+  ) {
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `options.websocket.cors.origin must be a list of at most ${MAX_ORIGINS} strings and RegExps, received a list whose length is ${describeReceived(length)}`,
+      { who: 'BymaxRealtimeModule' },
+    )
+  }
+  const entries: unknown[] = []
+  for (let index = 0; index < length; index += 1) entries.push(list[index])
+  return Object.freeze(entries)
+}
+
 /**
  * Read the own keys of `source` and the `known` ones by property access, keeping what holds a value. A key in
  * `keepWhenSet` is also kept when it holds `null`, or `undefined` while the object has the property, however it
@@ -107,7 +142,8 @@ function readSet(
  * fields or getters, so each known key is read by property access rather than from the own keys alone.
  * Values that carry behaviour (the authenticator, a queue, a hook table) are kept by reference. A group
  * that is not an object, or is an array or a built-in such as a `Date`, is left as it is. The CORS block
- * of `websocket` is read by the same names whenever it is an object, however it reports its type, because
+ * of `websocket` is read by the same names when it is a plain object or holds one of them, however it reports
+ * its type; any other object is left as it is, so validation refuses it instead of reading it as an empty block. It is read because
  * the origin allowlist it carries reaches Socket.IO, which copies what it is given: an `origin` held as a getter or on a prototype would be lost in that copy and
  * the server would answer every origin.
  *
@@ -123,8 +159,12 @@ export function dropUnset<T extends object>(options: T): T {
   const websocket = kept.websocket
   if (isPlainObject(websocket)) {
     const cors = (websocket as Record<string, unknown>).cors
-    if (typeof cors === 'object' && cors !== null && !Array.isArray(cors)) {
-      ;(websocket as Record<string, unknown>).cors = readSet(cors, CORS_KEYS, 'origin')
+    if (typeof cors === 'object' && cors !== null) {
+      const read = readSet(cors, CORS_KEYS, 'origin')
+      if (isPlainObject(cors) || Object.keys(CORS_KEYS).some((key) => key in read)) {
+        if (Array.isArray(read.origin)) read.origin = snapshotOrigins(read.origin as unknown[])
+        ;(websocket as Record<string, unknown>).cors = read
+      }
     }
   }
   return kept as T

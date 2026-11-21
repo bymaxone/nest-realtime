@@ -284,6 +284,8 @@ describe('validateShapes called on options that still hold null', () => {
   })
 })
 
+const ORIGIN_KINDS = 'a string, a RegExp, a function, an array of strings and RegExps, or a boolean'
+
 describe('websocket.cors', () => {
   const corsOptions = (cors: unknown): never =>
     ({ transport: 'websocket', authenticator, websocket: { cors } }) as never
@@ -295,11 +297,7 @@ describe('websocket.cors', () => {
     [undefined, 'undefined'],
   ])('refuses an origin that is set to %p', (origin, received) => {
     expect(() => validateOptions(corsOptions({ origin }))).toThrow(
-      refusal(
-        'websocket.cors.origin',
-        'a string, a RegExp, a function, an array or false',
-        received,
-      ),
+      refusal('websocket.cors.origin', ORIGIN_KINDS, received),
     )
   })
 
@@ -320,20 +318,119 @@ describe('websocket.cors', () => {
     ],
   ])('refuses an origin of undefined held as %s', (_name, build) => {
     expect(() => validateOptions(corsOptions(build()))).toThrow(
-      refusal(
-        'websocket.cors.origin',
-        'a string, a RegExp, a function, an array or false',
-        'undefined',
-      ),
+      refusal('websocket.cors.origin', ORIGIN_KINDS, 'undefined'),
     )
   })
 
-  // Scenario: shapes are checked on a block that is null or not an object, as `validateShapes` is called on its own.
-  // Expected: nothing to check, and no TypeError from looking an origin up on null.
-  it.each([null, 'cors'])('leaves a cors block of %p to the other checks', (cors) => {
+  // Scenario: `validateShapes` is called on its own with a null block. Expected: nothing to check, and no
+  // TypeError from looking an origin up on null. A block that is a string is refused, not left to the other checks.
+  it('leaves a cors block of null to the other checks', () => {
     expect(() =>
-      validateShapes({ transport: 'websocket', authenticator, websocket: { cors } } as never),
+      validateShapes({ transport: 'websocket', authenticator, websocket: { cors: null } } as never),
     ).not.toThrow()
+  })
+
+  // Scenario: an origin whose `in` lookup throws, on a proxy that answers `undefined` for the name. Expected: the
+  // refusal with the host's error as the cause, as for any read of the options.
+  it('refuses a cors block whose has trap throws, with the host error as the cause', () => {
+    const host = new Error('has boom')
+    const cors = new Proxy(
+      {},
+      {
+        get: () => undefined,
+        has: () => {
+          throw host
+        },
+      },
+    )
+    let caught: unknown
+    try {
+      validateOptions(corsOptions(cors))
+    } catch (error) {
+      caught = error
+    }
+    expect((caught as { code?: string }).code).toBe('REALTIME_INVALID_OPTIONS')
+    expect((caught as Error).cause).toBe(host)
+  })
+
+  // Scenario: kinds of origin Socket.IO reads as any origin. Expected: refused naming the option.
+  it.each([
+    [{}, 'an object'],
+    [5, '5'],
+    [[1], 'an array'],
+    [[{}], 'an array'],
+  ])('refuses an origin of %p', (origin, received) => {
+    expect(() => validateOptions(corsOptions({ origin }))).toThrow(
+      refusal('websocket.cors.origin', ORIGIN_KINDS, received),
+    )
+  })
+
+  // Scenario: an origin list whose length is not a count of at most 1,000 entries, or that has a hole. Expected:
+  // refused; the list is copied once, so a length that is read is a length that is checked.
+  it.each([
+    ['1,001 entries', () => Array.from({ length: 1001 }, () => 'https://a.example')],
+    ['a hole', () => new Array<string>(2).fill('https://a.example', 0, 1)],
+    [
+      'a length that is not an integer',
+      () =>
+        new Proxy(['https://a.example'], {
+          get: (t, k, r) => (k === 'length' ? 1.5 : Reflect.get(t, k, r)),
+        }),
+    ],
+    [
+      'a negative length',
+      () =>
+        new Proxy(['https://a.example'], {
+          get: (t, k, r) => (k === 'length' ? -1 : Reflect.get(t, k, r)),
+        }),
+    ],
+  ])('refuses an origin list of %s', (_name, build) => {
+    expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
+      'options.websocket.cors.origin must be',
+    )
+  })
+
+  it('accepts an origin list of exactly 1,000 entries', () => {
+    const origin = Array.from({ length: 1000 }, () => 'https://a.example')
+
+    expect(() => validateOptions(corsOptions({ origin }))).not.toThrow()
+  })
+
+  // Scenario: the kinds an origin may be. Expected: accepted.
+  it.each([
+    ['https://a.example'],
+    [/a\.example$/],
+    [() => undefined],
+    [['https://a.example', /b\.example$/]],
+    [[]],
+    [true],
+    [false],
+  ])('accepts an origin of %p', (origin) => {
+    expect(() => validateOptions(corsOptions({ origin }))).not.toThrow()
+  })
+
+  // Scenario: a cors block that is present and not an object. Expected: refused; an absent or null one is left to
+  // Socket.IO's own default, which sends no CORS header.
+  it.each([
+    ['a', 'a string'],
+    [5, '5'],
+    [true, 'a boolean'],
+    [false, 'a boolean'],
+    [[], 'an array'],
+    [new Map(), 'a built-in object'],
+    [new Error('x'), 'a built-in object'],
+    [new Date(0), 'a built-in object'],
+    [new Set(), 'a built-in object'],
+    [Promise.resolve(), 'a built-in object'],
+    [new (class Tagged extends Map<string, string> {})(), 'a built-in object'],
+  ])('refuses a cors block of %p', (cors, received) => {
+    expect(() => validateOptions(corsOptions(cors))).toThrow(
+      refusal('websocket.cors', 'an object', received),
+    )
+  })
+
+  it.each([undefined, null])('accepts a cors block of %p', (cors) => {
+    expect(() => validateOptions(corsOptions(cors))).not.toThrow()
   })
 
   // Scenario: no origin key. Expected: accepted, the documented `*`.
