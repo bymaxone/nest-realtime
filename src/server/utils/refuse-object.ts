@@ -23,7 +23,7 @@ export function refuseObject(
 ): never {
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `${path} must be an object, received ${describeReceived(value)}`,
+    `${path} must be an object, received ${cause === undefined ? describeReceived(value) : 'an object that could not be read'}`,
     cause === undefined ? { who } : { who, cause: cause.error },
   )
 }

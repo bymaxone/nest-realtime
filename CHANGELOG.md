@@ -10,6 +10,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Fixed
 
 - **A `tenantResolver` is given the properties of the result that are not enumerable again.** From 1.2.22 to 1.2.24 the copy handed to a resolver held the enumerable properties only, so a resolver that derived the tenant from a hidden field, a non-enumerable property or a symbol key got nothing, and its answer fell back silently to the authenticator's own tenant. The copy now holds every own property with its enumerable flag, as the original object did. The record the library keeps is unchanged: the enumerable properties only, as before 1.2.22.
+- **The entries of `extraProviders` are read under the guard, and a value whose type cannot be read says so.** An entry that throws when its type or its `provide` is read raised the host's own error or a refusal without it; it is now refused with the library's code and the error as the `cause`. A refusal of the options, a group or an entry whose type could not be read says `received an object that could not be read`, where it said `a built-in object` or `an object` according to a second read of the value.
+- **A log field named `service` or `version` can no longer reach a log line.** A logger that stamps those on every line would have been given two answers; `logEvent` drops them with the other names it reserves.
 
 #### Apply to a derived backend
 

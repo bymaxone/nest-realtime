@@ -89,7 +89,9 @@ describe('an object whose reads throw', () => {
   it('is refused as the options argument, with the host error as the cause', () => {
     const caught = thrownBy(() => BymaxRealtimeModule.forRoot(hostile() as never))
 
-    expect(caught.message).toBe(refusal('options', 'an object', 'a built-in object').message)
+    expect(caught.message).toBe(
+      refusal('options', 'an object', 'an object that could not be read').message,
+    )
     expect((caught.cause as Error).message).toBe('host error')
   })
 
@@ -101,7 +103,7 @@ describe('an object whose reads throw', () => {
       )
 
       expect(caught.message).toBe(
-        refusal(`options.${name}`, 'an object', 'a built-in object').message,
+        refusal(`options.${name}`, 'an object', 'an object that could not be read').message,
       )
       expect((caught.cause as Error).message).toBe('host error')
     },

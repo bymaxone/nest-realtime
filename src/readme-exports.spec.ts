@@ -113,6 +113,18 @@ describe('the README documents what the package exports', () => {
     expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain('not enumerable')
   })
 
+  // The options table is what most readers see of `tenantResolver`; it says the copy is shallow, like the paragraph.
+  it('says in the options table row that the resolver copy is shallow', () => {
+    expect(lineStartingWith('| **tenantResolver**')).toContain('shallow')
+  })
+
+  // An object that throws when its type is read is refused as one that could not be read, whatever it would be.
+  it('says that an object whose type cannot be read is refused as one that could not be read', () => {
+    expect(lineStartingWith('The options are typed per entry point:')).toContain(
+      'an object that could not be read',
+    )
+  })
+
   it('limits the isolation of the resolver copy to top-level properties', () => {
     const line = lineStartingWith('`tenantResolver` cannot clear a tenant.')
     expect(line).toContain('top-level')
