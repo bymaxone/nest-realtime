@@ -390,6 +390,32 @@ describe('websocket.cors', () => {
     )
   })
 
+  // Scenario: the refusal of a list length, whole. Expected: it names the module and the code as every other
+  // refusal does, the option, the kinds and the length it read.
+  it.each([
+    [1001, () => Array.from({ length: 1001 }, () => 'https://a.example')],
+    [
+      1.5,
+      () =>
+        new Proxy(['https://a.example'], {
+          get: (t, k, r) => (k === 'length' ? 1.5 : Reflect.get(t, k, r)),
+        }),
+    ],
+    [
+      -1,
+      () =>
+        new Proxy(['https://a.example'], {
+          get: (t, k, r) => (k === 'length' ? -1 : Reflect.get(t, k, r)),
+        }),
+    ],
+  ])('refuses an origin list whose length is %p with the module and the code', (length, build) => {
+    expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be a list of at most 1000 strings and RegExps, received a list whose length is ${String(length)}`,
+      ),
+    )
+  })
+
   it('accepts an origin list of exactly 1,000 entries', () => {
     const origin = Array.from({ length: 1000 }, () => 'https://a.example')
 
