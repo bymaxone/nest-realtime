@@ -631,6 +631,7 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 - `tenantId` is derived from the authenticated result, never from a query parameter or request body
 - Tickets are single-use and short-lived; `consume()` must be atomic under concurrency
 - `websocket.cors.origin` is an explicit allowlist, not `true`, in any browser-facing deployment
+- `websocket.cors` with `credentials: true` also sets `origin`: a block with no `origin` key leaves Socket.IO's default, which answers `*`, and browsers refuse `*` together with credentials
 - `maxConnectionsPerUser` is left at its default of `5` (or set) for WebSocket if clients are untrusted — `0` makes it unlimited
 - Reserved event names are not reused for application events (see the [catalog](#reserved-events))
 
@@ -778,6 +779,8 @@ Reference implementations shipped: `InMemoryPubSub` (default), `RedisRealtimePub
 To place a connection in no tenant, **omit `tenantId`**. The runtime also accepts `undefined` or `null`, but whether those type-check depends on the consumer's `tsconfig` (`exactOptionalPropertyTypes` rejects `undefined`, `strictNullChecks` rejects `null`), so omission is the only form that compiles everywhere.
 
 `tenantResolver` cannot clear a tenant. It receives the authenticator's own result, the object it returned and not a copy, so everything on it works as it does for the authenticator's code. The library keeps its own record of `userId`, `tenantId`, `roles`, `rooms` and `metadata`, built by name before the resolver runs and read the way JavaScript reads a property, so a field that a class default, `Object.create` or an accessor on the prototype supplies counts. What a resolver writes to the result does not change that record, which is another object; `roles`, `rooms` and `metadata` are shared, so a write inside them changes what the library keeps. Resolution is `tenantResolver?.(auth) ?? tenantId`, where `tenantId` is what the result held before the resolver ran, so a resolver returning `undefined` or `null` means "no opinion" and the authenticator's tenant stays. Decide the absent case in the authenticator.
+
+A resolver that returns a promise is refused as a blank tenant, and the promise's rejection is handled so it cannot end the process. That handling reaches a native promise from any realm, a subclass, a promise with a `then` of its own, and a proxy whose `get` trap binds the promise's methods. It cannot reach a proxy with no traps, a proxy whose `catch` trap throws, or a promise whose species lookup throws, which is a `constructor` that is neither an object nor `undefined`, a `Symbol.species` that is neither a constructor nor `null` or `undefined`, or a getter for either that throws: `then` and `catch` run that lookup before attaching a handler, so such a promise's rejection is left to the process. A thenable that is not a promise is never asked for its `then`. Return a value from a resolver, not a promise.
 
 #### Carrying handshake context into the hooks
 
