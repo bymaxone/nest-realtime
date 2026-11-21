@@ -169,11 +169,7 @@ describe('websocket.cors over a real server', () => {
   // getter as the origin. Expected: the module refuses it as an options error, so no server is built that could
   // answer every origin; a proxy that answers every key is an ordinary block, and its allowlist holds.
   describe('when the websocket block itself is unusual', () => {
-    const cors = {
-      get origin(): string[] {
-        return ALLOWED
-      },
-    }
+    const cors = Object.defineProperty({}, 'origin', { get: () => ALLOWED })
     const compile = async (websocket: object): Promise<unknown> =>
       Test.createTestingModule({
         imports: [
@@ -223,12 +219,19 @@ describe('websocket.cors over a real server', () => {
     })
 
     it('keeps the allowlist when a proxy answers every key', async () => {
-      const block = new Proxy(
-        { cors },
-        { get: (target, key) => Reflect.get(target, key) as unknown },
-      )
+      let reads = 0
+      const wrap = (websocket: object): object =>
+        new Proxy(websocket, {
+          get: (target, key) => {
+            reads += 1
+            return Reflect.get(target, key) as unknown
+          },
+        })
 
-      expect(await answerTo(block.cors, EVIL)).toBeUndefined()
+      expect(await answerTo(cors, EVIL, wrap)).toBeUndefined()
+      expect(reads).toBeGreaterThan(0)
+      await app.close()
+      expect(await answerTo(cors, GOOD, wrap)).toBe(GOOD)
     })
   })
 })
