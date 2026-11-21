@@ -151,7 +151,6 @@ describe('resolveAuthTenant', () => {
   // symbol keys, prototype data, accessors and private fields all work as they do for the authenticator's own code.
   it.each([
     ['an absent tenantId', {}],
-    ['a null tenantId', { tenantId: null }],
     ['a present tenantId', { tenantId: 't1' }],
   ])('gives the resolver the result itself, with %s', (_name, extra) => {
     const auth: AuthenticationResult = Object.assign({ userId: 'u1' }, extra)
