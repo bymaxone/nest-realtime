@@ -92,14 +92,18 @@ describe('websocket.cors over a real server', () => {
     jest.restoreAllMocks()
   })
 
-  async function answerTo(cors: object, origin: string): Promise<unknown> {
+  async function answerTo(
+    cors: object,
+    origin: string,
+    wrap: (websocket: object) => object = (websocket) => websocket,
+  ): Promise<unknown> {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     const module = await Test.createTestingModule({
       imports: [
         BymaxRealtimeWebSocketModule.forRoot({
           transport: 'websocket',
           authenticator: { authenticate: async () => null },
-          websocket: { cors },
+          websocket: wrap({ cors }),
         } as never),
       ],
     }).compile()
@@ -159,5 +163,72 @@ describe('websocket.cors over a real server', () => {
     app = undefined as never
     expect((caught as { code?: string }).code).toBe('REALTIME_INVALID_OPTIONS')
     expect((caught as Error).cause).toBe(host)
+  })
+
+  // Scenario: the websocket block that holds the cors block is itself type-tagged or a strict proxy, with a
+  // getter as the origin. Expected: the module refuses it as an options error, so no server is built that could
+  // answer every origin; a proxy that answers every key is an ordinary block, and its allowlist holds.
+  describe('when the websocket block itself is unusual', () => {
+    const cors = {
+      get origin(): string[] {
+        return ALLOWED
+      },
+    }
+    const compile = async (websocket: object): Promise<unknown> =>
+      Test.createTestingModule({
+        imports: [
+          BymaxRealtimeWebSocketModule.forRoot({
+            transport: 'websocket',
+            authenticator: { authenticate: async () => null },
+            websocket,
+          } as never),
+        ],
+      }).compile()
+
+    it('refuses a block with a Symbol.toStringTag', async () => {
+      const block = Object.defineProperty({ cors }, Symbol.toStringTag, { value: 'Websocket' })
+
+      await expect(compile(block)).rejects.toMatchObject({ code: 'REALTIME_INVALID_OPTIONS' })
+    })
+
+    it('refuses a strict proxy that throws for a key it does not know, with the host error as the cause', async () => {
+      const host = new Error('strict')
+      const block = new Proxy(
+        { cors },
+        {
+          get: (target, key) => {
+            if (key === 'cors') return target.cors
+            throw host
+          },
+        },
+      )
+
+      await expect(compile(block)).rejects.toMatchObject({
+        code: 'REALTIME_INVALID_OPTIONS',
+        cause: host,
+      })
+    })
+
+    it('refuses a cors block that is a revoked proxy, with the engine error as the cause', async () => {
+      const { proxy, revoke } = Proxy.revocable({}, {})
+      revoke()
+
+      const error = await compile({ cors: proxy }).then(
+        () => undefined,
+        (thrown: unknown) => thrown,
+      )
+
+      expect(error).toMatchObject({ code: 'REALTIME_INVALID_OPTIONS' })
+      expect((error as Error).cause).toBeInstanceOf(TypeError)
+    })
+
+    it('keeps the allowlist when a proxy answers every key', async () => {
+      const block = new Proxy(
+        { cors },
+        { get: (target, key) => Reflect.get(target, key) as unknown },
+      )
+
+      expect(await answerTo(block.cors, EVIL)).toBeUndefined()
+    })
   })
 })
