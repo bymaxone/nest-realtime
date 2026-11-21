@@ -102,7 +102,9 @@ describe('the README documents what the package exports', () => {
   // The tenant is read with a plain property read, so one an accessor on the prototype supplies counts; the paragraph
   // says so rather than claiming own enumerable properties only for the whole copy.
   it('says that a tenantId from an accessor on the prototype counts', () => {
-    expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain('has the prototype of the result')
+    expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain(
+      'has the prototype of the result',
+    )
   })
 
   // The copy is shallow: a write to a top-level property stays in the copy, a write inside a nested object does not,
@@ -127,7 +129,9 @@ describe('the README documents what the package exports', () => {
 
   // A class default or an Object.create prototype supplies data fields such as roles; the resolver reads them.
   it('says that the resolver copy has the prototype of the result', () => {
-    expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain('has the prototype of the result')
+    expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain(
+      'has the prototype of the result',
+    )
   })
 
   it('limits the isolation of the resolver copy to top-level properties', () => {
