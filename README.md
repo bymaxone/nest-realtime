@@ -631,7 +631,7 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 - `tenantId` is derived from the authenticated result, never from a query parameter or request body
 - Tickets are single-use and short-lived; `consume()` must be atomic under concurrency
 - `websocket.cors.origin` is an explicit allowlist, not `true`, in any browser-facing deployment
-- `websocket.cors` with `credentials: true` also sets `origin`: a block with no `origin` key leaves Socket.IO's default, which answers `*`, and browsers refuse `*` together with credentials
+- `websocket.cors` with `credentials: true` also sets `origin`: a block with no `origin` key leaves Socket.IO's default, which answers `*`, and browsers refuse `*` together with credentials. An `origin` that is set to `null` or `undefined`, as when its environment variable is missing, is refused at boot, and `credentials` must be a boolean
 - `maxConnectionsPerUser` is left at its default of `5` (or set) for WebSocket if clients are untrusted — `0` makes it unlimited
 - Reserved event names are not reused for application events (see the [catalog](#reserved-events))
 

@@ -7,6 +7,21 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.29] - 2026-11-21
+
+### Security
+
+- **A `websocket.cors.origin` that is set to nothing no longer opens the server to every origin.** The module read `null` and `undefined` as an unset option and dropped them, so the block reached Socket.IO without an `origin` and the server answered `*`; Socket.IO itself answers no origin for either value. A host whose allowlist came from a missing environment variable (`origin: process.env.APP_ORIGIN`) therefore allowed every origin.
+
+### Changed
+
+- **A present-but-nullish `websocket.cors.origin` is refused at boot.** `null`, `undefined` as a key of its own, and an environment variable that is missing are refused with `REALTIME_INVALID_OPTIONS`, naming `options.websocket.cors.origin`. A block with no `origin` key keeps the documented default, which answers `*`.
+- **`websocket.cors.credentials` must be a boolean.** `'true'`, `'false'`, `1` and an object were ignored by Socket.IO, so credentials were silently off; they are refused with `REALTIME_INVALID_OPTIONS`.
+
+#### Apply to a derived backend
+
+A nullish `cors.origin` now refuses boot: set the allowlist, or remove the key to take the default. A `credentials` that is not `true` or `false` now refuses boot: write the boolean.
+
 ## [1.2.28] - 2026-11-21
 
 ### Documentation
@@ -1329,7 +1344,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.28...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.29...HEAD
+[1.2.29]: https://github.com/bymaxone/nest-realtime/compare/v1.2.28...v1.2.29
 [1.2.28]: https://github.com/bymaxone/nest-realtime/compare/v1.2.27...v1.2.28
 [1.2.27]: https://github.com/bymaxone/nest-realtime/compare/v1.2.26...v1.2.27
 [1.2.26]: https://github.com/bymaxone/nest-realtime/compare/v1.2.25...v1.2.26

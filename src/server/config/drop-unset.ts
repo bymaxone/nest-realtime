@@ -78,12 +78,22 @@ const GROUPS = {
   reauthenticationPolicy: REAUTHENTICATION_KEYS,
 } as const
 
-/** Read the own keys of `source` and the `known` ones by property access, keeping what holds a value. */
-function readSet(source: object, known: Readonly<Record<string, true>>): Record<string, unknown> {
+/**
+ * Read the own keys of `source` and the `known` ones by property access, keeping what holds a value. A key in
+ * `keepWhenSet` is also kept when it holds `null`, or `undefined` as an own key: that is a value the host set
+ * to nothing, which validation refuses, not an option left unset.
+ */
+function readSet(
+  source: object,
+  known: Readonly<Record<string, true>>,
+  keepWhenSet?: string,
+): Record<string, unknown> {
+  const own = Object.keys(source)
   const kept: Record<string, unknown> = {}
-  for (const key of new Set([...Object.keys(source), ...Object.keys(known)])) {
+  for (const key of new Set([...own, ...Object.keys(known)])) {
     const value = (source as Record<string, unknown>)[key]
     if (value !== undefined && value !== null) kept[key] = value
+    else if (key === keepWhenSet && (value === null || own.includes(key))) kept[key] = value
   }
   return kept
 }
@@ -115,7 +125,7 @@ export function dropUnset<T extends object>(options: T): T {
   if (isPlainObject(websocket)) {
     const cors = (websocket as Record<string, unknown>).cors
     if (typeof cors === 'object' && cors !== null && !Array.isArray(cors)) {
-      ;(websocket as Record<string, unknown>).cors = readSet(cors, CORS_KEYS)
+      ;(websocket as Record<string, unknown>).cors = readSet(cors, CORS_KEYS, 'origin')
     }
   }
   return kept as T

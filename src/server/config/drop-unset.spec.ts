@@ -110,12 +110,25 @@ describe('dropUnset, the CORS block of websocket', () => {
     expect({ ...cors }).toStrictEqual({ methods: ['GET'], allowedHeaders: 'x' })
   })
 
-  // Scenario: the block holds nothing for a key. Expected: the key is absent, as at every other level.
+  // Scenario: the block holds nothing for a key other than the origin. Expected: the key is absent, as at every
+  // other level.
   it('drops an unset key of the block', () => {
-    const cors = dropUnset({ websocket: { cors: { origin: undefined, credentials: null } } })
+    const cors = dropUnset({ websocket: { cors: { credentials: null, methods: undefined } } })
       .websocket?.cors
 
     expect({ ...cors }).toStrictEqual({})
+  })
+
+  // Scenario: the origin is set to nothing. Expected: it stays in the copy, so validation can refuse it; read as
+  // unset it would answer every origin. An origin that is not set at all stays absent.
+  it.each([
+    ['null', { origin: null }, { origin: null }],
+    ['undefined as a key of its own', { origin: undefined }, { origin: undefined }],
+    ['absent', {}, {}],
+  ])('keeps an origin that is %s as the host set it', (_name, cors, expected) => {
+    const kept = dropUnset({ websocket: { cors } }).websocket?.cors
+
+    expect({ ...kept }).toStrictEqual(expected)
   })
 
   // Scenario: a block that is not an object. Expected: left as it is.
