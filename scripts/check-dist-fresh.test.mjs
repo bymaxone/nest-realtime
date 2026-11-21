@@ -60,8 +60,8 @@ describe('judge', () => {
 })
 
 describe('parseOptions', () => {
-  it('defaults to src, dist and tsup.config.ts, and repeats --src and --also', () => {
-    assert.deepEqual(parseOptions([]), { src: ['src'], dist: 'dist', also: ['tsup.config.ts'] })
+  it('defaults to src, dist, tsup.config.ts and package.json, and repeats --src and --also', () => {
+    assert.deepEqual(parseOptions([]), { src: ['src'], dist: 'dist', also: ['tsup.config.ts', 'package.json'] })
     assert.deepEqual(parseOptions(['--src', 'a', '--src', 'b', '--also', 'x', '--dist', 'out']), {
       src: ['a', 'b'],
       dist: 'out',
@@ -92,6 +92,13 @@ describe('the command', () => {
   it('fails a build older than tsup.config.ts, which shapes what is built', () => {
     const root = pkg({ 'src/a.ts': 100, 'tsup.config.ts': 300, 'dist/a.mjs': 200 })
     assert.equal(cli(root).status, 1)
+  })
+
+  it('fails a build older than package.json, since a dependency bump changes the bundle', () => {
+    const root = pkg({ 'src/a.ts': 100, 'package.json': 300, 'dist/a.mjs': 200 })
+    const result = cli(root)
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /dist\/a\.mjs is older than package\.json/)
   })
 
   it('does not count a spec or a test file as a source', () => {

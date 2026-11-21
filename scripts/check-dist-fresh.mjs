@@ -6,7 +6,7 @@
  *   node scripts/check-dist-fresh.mjs [--src <dir>]... [--dist <dir>] [--also <file>]...
  *
  * The newest source is the newest file under each `--src` directory (default `src`) that is not a test, and
- * each `--also` file (default `tsup.config.ts`, when it exists). The oldest build output is the oldest file
+ * each `--also` file (default `tsup.config.ts` and `package.json`, when they exist). The oldest build output is the oldest file
  * under `--dist` (default `dist`). The build is stale when a source is newer than that output. Exit status:
  * 0 fresh, 1 stale or missing, 2 a bad command line.
  *
@@ -69,7 +69,7 @@ export function parseOptions(argv) {
     else options[name.slice(2)].push(value)
   }
   if (options.src.length === 0) options.src.push('src')
-  if (options.also.length === 0) options.also.push('tsup.config.ts')
+  if (options.also.length === 0) options.also.push('tsup.config.ts', 'package.json')
   return options
 }
 
