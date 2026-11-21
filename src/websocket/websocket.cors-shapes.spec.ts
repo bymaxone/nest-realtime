@@ -206,7 +206,8 @@ describe('websocket.cors over a real server', () => {
   })
 
   // Scenario: an origin of a kind Socket.IO reads as "any origin": an object, a number, a symbol, an array with an
-  // entry that is neither a string nor a RegExp, and a RegExp from another realm. Expected: the module refuses to
+  // entry that is neither a string nor a RegExp, an object that only has a RegExp's prototype and a Proxy over a
+  // RegExp. Expected: the module refuses to
   // boot, and no server reflects the origin it was asked from.
   const wrongOrigins: ReadonlyArray<readonly [string, () => unknown]> = [
     ['an empty object', () => ({})],
@@ -215,7 +216,9 @@ describe('websocket.cors over a real server', () => {
     ['an array holding a number', () => [GOOD, 1]],
     ['an array holding an object', () => [{}]],
     ['an array holding an array', () => [[GOOD]]],
-    ['a RegExp from another realm', () => vm.runInNewContext('/good\\.example$/')],
+    ['a RegExp-shaped object that is not one', () => Object.create(RegExp.prototype) as unknown],
+    ['a Proxy over a RegExp', () => new Proxy(/good\\.example$/, {})],
+    ['a list holding false', () => [GOOD, false]],
   ]
 
   it.each(wrongOrigins)('refuses to boot when origin is %s', async (_name, build) => {
@@ -275,6 +278,39 @@ describe('websocket.cors over a real server', () => {
 
     expect(first).toBeUndefined()
     expect(second).toBeUndefined()
+  })
+
+  // Scenario: RegExp entries the host can change after boot, or that keep state between requests. Expected: each
+  // RegExp is copied without its g and y flags once at boot, so what the host does to the original reaches nothing,
+  // and a request is answered the same however many came before it.
+  it('answers by the RegExp that was validated, whatever the host does to it after boot', async () => {
+    const pattern = /good\.example$/
+    const list: unknown[] = [pattern]
+
+    const [before, after] = await answersAround({ origin: list }, EVIL, () => {
+      Object.setPrototypeOf(pattern, {})
+      list[0] = {}
+    })
+
+    expect(before).toBeUndefined()
+    expect(after).toBeUndefined()
+  })
+
+  it('answers every request the same for a RegExp entry with the g or y flag', async () => {
+    const [first, second] = await answersAround({ origin: [/good\.example$/g] }, GOOD)
+
+    expect(first).toBe(GOOD)
+    expect(second).toBe(GOOD)
+  })
+
+  it.each([
+    ['a RegExp origin', () => /good\.example$/y],
+    ['a RegExp from another realm', () => vm.runInNewContext('/good\\.example$/g') as unknown],
+  ])('answers every request the same for %s', async (_name, build) => {
+    const [first, second] = await answersAround({ origin: build() }, GOOD)
+
+    expect(first).toBe(GOOD)
+    expect(second).toBe(GOOD)
   })
 
   // Scenario: the kinds the option documents. Expected: each is accepted and answers by its own rule.

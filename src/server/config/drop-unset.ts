@@ -2,6 +2,7 @@
  * @fileoverview Option objects without the keys that hold nothing.
  * @layer composition
  */
+import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type {
   BymaxRealtimeModuleOptions,
   CorsConfig,
@@ -9,8 +10,7 @@ import type {
   SseOptions,
   WebSocketOptions,
 } from '../interfaces/realtime-module-options.interface'
-import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
-import { describeReceived } from '../utils/describe-received'
+import { copyRegExp } from '../utils/copy-regexp'
 import { isPlainObject } from '../utils/is-plain-object'
 import { realtimeError } from '../utils/realtime-error'
 
@@ -81,36 +81,55 @@ const GROUPS = {
   reauthenticationPolicy: REAUTHENTICATION_KEYS,
 } as const
 
-/** The most entries an origin list may hold: a bound on the copy, not on how many origins a host may allow. */
-const MAX_ORIGINS = 1000
+/** The most entries an origin or a methods list may hold: a bound on the copy, not on how many a host may name. */
+const MAX_LIST_ENTRIES = 1000
 
 /**
- * A copy of an origin list, with its length and each of its entries read once. Socket.IO matches the list it is
- * given by index and length on every request, so the list that was validated has to be the list it holds: a
- * subclass whose iterator and indexes differ, a proxy that answers differently the second time and an array the
- * host changes after boot are all read here, once, and never again.
+ * A copy of a list, with its length and each of its entries read once, and each RegExp replaced by a pristine copy
+ * without `g` and `y`. Socket.IO matches the list it is given by index and length on every request, and an entry by
+ * its prototype, so the list that was validated has to be the list it holds: a subclass whose iterator and indexes
+ * differ, a proxy that answers differently the second time, an array the host changes after boot and an entry whose
+ * prototype is changed afterwards are all read here, once, and never again.
  *
- * @param list - The origin list the host wrote.
+ * @param list - The list the host wrote.
+ * @param path - The option, for the refusal.
+ * @param kinds - What the option may be, for the refusal.
  * @returns A frozen array of the entries, which are validated by the caller.
  * @throws Error carrying `REALTIME_INVALID_OPTIONS` when the length is not an integer from 0 to 1,000.
  */
-function snapshotOrigins(list: readonly unknown[]): readonly unknown[] {
+function snapshotList(list: readonly unknown[], path: string, kinds: string): readonly unknown[] {
   const length: unknown = list.length
   if (
     typeof length !== 'number' ||
     !Number.isInteger(length) ||
     length < 0 ||
-    length > MAX_ORIGINS
+    length > MAX_LIST_ENTRIES
   ) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      `options.websocket.cors.origin must be a list of at most ${MAX_ORIGINS} strings and RegExps, received a list whose length is ${describeReceived(length)}`,
+      `options.${path} must be ${kinds}, received a list whose length is not an integer from 0 to ${MAX_LIST_ENTRIES}`,
       { who: 'BymaxRealtimeModule' },
     )
   }
   const entries: unknown[] = []
-  for (let index = 0; index < length; index += 1) entries.push(list[index])
+  for (let index = 0; index < length; index += 1) {
+    const entry = list[index]
+    entries.push(copyRegExp(entry) ?? entry)
+  }
   return Object.freeze(entries)
+}
+
+/** The kinds an origin may be, for the refusal of a list that cannot be copied. */
+export const ORIGIN_KINDS =
+  'a string, a RegExp, a function, an array of strings and RegExps, or a boolean'
+
+/** The kinds `methods` may be. */
+export const METHODS_KINDS = 'a string or a list of at most 1000 strings'
+
+/** A list as a copy, a RegExp as a pristine one, and anything else, `undefined` included, as it is. */
+function copied(value: unknown, path: string, kinds: string): unknown {
+  if (Array.isArray(value)) return snapshotList(value as unknown[], path, kinds)
+  return copyRegExp(value) ?? value
 }
 
 /**
@@ -162,7 +181,11 @@ export function dropUnset<T extends object>(options: T): T {
     if (typeof cors === 'object' && cors !== null) {
       const read = readSet(cors, CORS_KEYS, 'origin')
       if (isPlainObject(cors) || Object.keys(CORS_KEYS).some((key) => key in read)) {
-        if (Array.isArray(read.origin)) read.origin = snapshotOrigins(read.origin as unknown[])
+        if ('origin' in read)
+          read.origin = copied(read.origin, 'websocket.cors.origin', ORIGIN_KINDS)
+        if ('methods' in read) {
+          read.methods = copied(read.methods, 'websocket.cors.methods', METHODS_KINDS)
+        }
         ;(websocket as Record<string, unknown>).cors = read
       }
     }

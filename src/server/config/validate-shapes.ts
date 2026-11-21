@@ -4,10 +4,12 @@
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { copyRegExp } from '../utils/copy-regexp'
 import { describeReceived } from '../utils/describe-received'
 import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
 import { refuseObject } from '../utils/refuse-object'
 import { realtimeError } from '../utils/realtime-error'
+import { METHODS_KINDS, ORIGIN_KINDS } from './drop-unset'
 
 /** The functions each pluggable piece must have when it is set; what it lacks would fail at its first use. */
 const REQUIRED_FUNCTIONS = {
@@ -31,6 +33,13 @@ const GROUP_NAMES = ['sse', 'websocket', 'reauthenticationPolicy'] as const
 /** What a refusal says of a value whose type could not be read, so the text does not depend on a second read of it. */
 const UNREADABLE = 'an object that could not be read'
 
+/** What a refusal says of a value: its kind, and for the cors options never the number itself. */
+function shown(path: string, received: unknown): string {
+  return path.startsWith('websocket.cors') && typeof received === 'number'
+    ? 'a number'
+    : describeReceived(received)
+}
+
 function refuse(
   path: string,
   expected: string,
@@ -39,7 +48,7 @@ function refuse(
 ): never {
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `options.${path} must be ${expected}, received ${cause === undefined ? describeReceived(received) : UNREADABLE}`,
+    `options.${path} must be ${expected}, received ${cause === undefined ? shown(path, received) : UNREADABLE}`,
     cause === undefined
       ? { who: 'BymaxRealtimeModule' }
       : { who: 'BymaxRealtimeModule', cause: cause.error },
@@ -135,22 +144,27 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
   assertCors(options.websocket?.cors)
 }
 
-const ORIGIN_KINDS = 'a string, a RegExp, a function, an array of strings and RegExps, or a boolean'
-
 /** Whether an origin entry is one Socket.IO matches by itself: a string, or a RegExp of this realm. */
 function isOriginEntry(entry: unknown): boolean {
-  return typeof entry === 'string' || entry instanceof RegExp
+  return typeof entry === 'string' || copyRegExp(entry) !== undefined
 }
 
 /**
  * Refuse an `origin` of a kind Socket.IO does not match by itself. It reads anything else as "allow", so an
- * object, a number, a symbol, a list with such an entry and a RegExp from another realm would each be answered
- * with the origin that asked. `null` and `undefined` are refused here too: they are not an allowlist.
+ * object, a number, a symbol, a list with such an entry and an object that only has the prototype of a RegExp would
+ * each be answered with the origin that asked. `null` and `undefined` are refused here too: they are not an
+ * allowlist. A RegExp is recognised by its brand, not by its prototype.
  */
 function assertOrigin(origin: unknown): void {
   const kind = typeof origin
-  if (kind === 'string' || kind === 'function' || kind === 'boolean' || origin instanceof RegExp)
+  if (
+    kind === 'string' ||
+    kind === 'function' ||
+    kind === 'boolean' ||
+    copyRegExp(origin) !== undefined
+  ) {
     return
+  }
   if (Array.isArray(origin)) {
     for (let index = 0; index < origin.length; index += 1) {
       if (!isOriginEntry(origin[index])) refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
@@ -170,7 +184,21 @@ function assertCors(cors: unknown): void {
   if (!isPlainObject(cors)) refuse('websocket.cors', 'an object', cors)
   const block = cors as Record<string, unknown>
   if ('origin' in block) assertOrigin(block.origin)
+  assertMethods(block.methods)
   assertBoolean('websocket.cors.credentials', block.credentials)
+}
+
+/** Refuse `methods` that is neither a string nor a list of strings; an unset one is left to Socket.IO. */
+function assertMethods(methods: unknown): void {
+  if (methods === undefined || typeof methods === 'string') return
+  if (Array.isArray(methods)) {
+    for (let index = 0; index < methods.length; index += 1) {
+      if (typeof methods[index] !== 'string')
+        refuse('websocket.cors.methods', METHODS_KINDS, methods)
+    }
+    return
+  }
+  refuse('websocket.cors.methods', METHODS_KINDS, methods)
 }
 
 /**

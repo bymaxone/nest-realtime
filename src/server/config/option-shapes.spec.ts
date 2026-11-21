@@ -284,6 +284,7 @@ describe('validateShapes called on options that still hold null', () => {
   })
 })
 
+const METHODS_KINDS = 'a string or a list of at most 1000 strings'
 const ORIGIN_KINDS = 'a string, a RegExp, a function, an array of strings and RegExps, or a boolean'
 
 describe('websocket.cors', () => {
@@ -356,9 +357,10 @@ describe('websocket.cors', () => {
   // Scenario: kinds of origin Socket.IO reads as any origin. Expected: refused naming the option.
   it.each([
     [{}, 'an object'],
-    [5, '5'],
+    [5, 'a number'],
     [[1], 'an array'],
     [[{}], 'an array'],
+    [['https://a.example', false], 'an array'],
   ])('refuses an origin of %p', (origin, received) => {
     expect(() => validateOptions(corsOptions({ origin }))).toThrow(
       refusal('websocket.cors.origin', ORIGIN_KINDS, received),
@@ -422,6 +424,40 @@ describe('websocket.cors', () => {
     expect(() => validateOptions(corsOptions({ origin }))).not.toThrow()
   })
 
+  // Scenario: `methods` of a kind that is not a string or a list of strings, or a list over the bound. Expected:
+  // refused, naming the option and the kind, never a number.
+  it.each([
+    [5, 'a number'],
+    [{}, 'an object'],
+    [['GET', 1], 'an array'],
+    [['GET', {}], 'an array'],
+  ])('refuses methods of %p', (methods, received) => {
+    expect(() => validateOptions(corsOptions({ origin: 'https://a.example', methods }))).toThrow(
+      refusal('websocket.cors.methods', METHODS_KINDS, received),
+    )
+  })
+
+  it('refuses a methods list of more than 1,000 entries, without printing the count', () => {
+    const methods = Array.from({ length: 1001 }, () => 'GET')
+
+    expect(() => validateOptions(corsOptions({ origin: 'https://a.example', methods }))).toThrow(
+      'options.websocket.cors.methods must be a string or a list of at most 1000 strings, received a list whose length is not an integer from 0 to 1000',
+    )
+  })
+
+  it.each([['GET,POST'], [['GET', 'POST']], [[]]])('accepts methods of %p', (methods) => {
+    expect(() =>
+      validateOptions(corsOptions({ origin: 'https://a.example', methods })),
+    ).not.toThrow()
+  })
+
+  // Scenario: a key the options do not name. Expected: it reaches Socket.IO as written, as documented.
+  it('leaves a key it does not name to Socket.IO', () => {
+    expect(() =>
+      validateOptions(corsOptions({ origin: 'https://a.example', allowedHeaders: 'x-token' })),
+    ).not.toThrow()
+  })
+
   // Scenario: the kinds an origin may be. Expected: accepted.
   it.each([
     ['https://a.example'],
@@ -439,7 +475,7 @@ describe('websocket.cors', () => {
   // Socket.IO's own default, which sends no CORS header.
   it.each([
     ['a', 'a string'],
-    [5, '5'],
+    [5, 'a number'],
     [true, 'a boolean'],
     [false, 'a boolean'],
     [[], 'an array'],
@@ -468,7 +504,7 @@ describe('websocket.cors', () => {
   it.each([
     ['true', 'a string'],
     ['false', 'a string'],
-    [1, '1'],
+    [1, 'a number'],
     [{}, 'an object'],
   ])('refuses credentials %p', (value, received) => {
     expect(() =>
