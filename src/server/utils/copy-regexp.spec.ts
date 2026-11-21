@@ -3,7 +3,7 @@
  * @layer utils
  */
 import vm from 'node:vm'
-import { copyRegExp } from './copy-regexp'
+import { copyRegExp, hasRegExpBrand } from './copy-regexp'
 
 describe('copyRegExp', () => {
   // Scenario: a RegExp with the pattern and flags that matter and the two that carry state. Expected: a new
@@ -29,11 +29,23 @@ describe('copyRegExp', () => {
     ])
   })
 
-  // Scenario: a RegExp from another realm. Expected: copied into this realm, where `instanceof` holds.
-  it('copies a RegExp from another realm into this one', () => {
-    const copy = copyRegExp(vm.runInNewContext('/x/g'))
+  // Scenario: a RegExp that is not a plain one: a subclass, one with a property of its own, one from another realm.
+  // Expected: no copy, because a copy would lose what makes it different, and it is still known to be a RegExp.
+  it.each([
+    ['a subclass', () => new (class Mine extends RegExp {})('x')],
+    ['a RegExp with a property of its own', () => Object.assign(/x/, { test: () => false })],
+    ['a RegExp from another realm', () => vm.runInNewContext('/x/g') as unknown],
+  ])('gives no copy of %s, and knows it for a RegExp', (_name, build) => {
+    const value = build()
 
-    expect(copy).toBeInstanceOf(RegExp)
+    expect(copyRegExp(value)).toBeUndefined()
+    expect(hasRegExpBrand(value)).toBe(true)
+  })
+
+  it('does not take a plain RegExp, a proxy or a primitive for a RegExp of its own kind', () => {
+    expect(hasRegExpBrand(/x/)).toBe(true)
+    expect(hasRegExpBrand(new Proxy(/x/, {}))).toBe(false)
+    expect(hasRegExpBrand('x')).toBe(false)
   })
 
   // Scenario: values that are not RegExps, including one with the prototype of one and a proxy over one.

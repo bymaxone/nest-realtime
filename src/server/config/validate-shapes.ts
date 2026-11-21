@@ -4,7 +4,7 @@
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
-import { copyRegExp } from '../utils/copy-regexp'
+import { copyRegExp, hasRegExpBrand } from '../utils/copy-regexp'
 import { describeReceived } from '../utils/describe-received'
 import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
 import { refuseObject } from '../utils/refuse-object'
@@ -167,11 +167,25 @@ function assertOrigin(origin: unknown): void {
   }
   if (Array.isArray(origin)) {
     for (let index = 0; index < origin.length; index += 1) {
-      if (!isOriginEntry(origin[index])) refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
+      const entry: unknown = origin[index]
+      if (isOriginEntry(entry)) continue
+      refuseCustomRegExp(entry)
+      refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
     }
     return
   }
+  refuseCustomRegExp(origin)
   refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
+}
+
+/** Refuse a RegExp that is not a plain one, and say how to get custom matching: with a function. */
+function refuseCustomRegExp(value: unknown): void {
+  if (!hasRegExpBrand(value)) return
+  throw realtimeError(
+    REALTIME_ERROR_CODES.INVALID_OPTIONS,
+    `options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp that is a subclass, has a property of its own or comes from another realm: use a function origin for custom matching`,
+    { who: 'BymaxRealtimeModule' },
+  )
 }
 
 /**

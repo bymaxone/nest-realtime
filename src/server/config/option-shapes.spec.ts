@@ -410,10 +410,42 @@ describe('websocket.cors', () => {
           get: (t, k, r) => (k === 'length' ? -1 : Reflect.get(t, k, r)),
         }),
     ],
-  ])('refuses an origin list whose length is %p with the module and the code', (length, build) => {
+  ])('refuses an origin list whose length is %p with the module and the code', (_length, build) => {
     expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
       new Error(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be a list of at most 1000 strings and RegExps, received a list whose length is ${String(length)}`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a list whose length is not an integer from 0 to 1000`,
+      ),
+    )
+  })
+
+  // Scenario: the same refusal for `methods`, whole. Expected: the module, the code, the option and the kinds, and
+  // no length in the text.
+  it.each([
+    [1001, () => Array.from({ length: 1001 }, () => 'GET')],
+    [
+      1.5,
+      () => new Proxy(['GET'], { get: (t, k, r) => (k === 'length' ? 1.5 : Reflect.get(t, k, r)) }),
+    ],
+  ])('refuses a methods list whose length is %p with the module and the code', (_length, build) => {
+    expect(() =>
+      validateOptions(corsOptions({ origin: 'https://a.example', methods: build() })),
+    ).toThrow(
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.methods must be ${METHODS_KINDS}, received a list whose length is not an integer from 0 to 1000`,
+      ),
+    )
+  })
+
+  // Scenario: a RegExp that is not a plain one, alone or in a list, refused whole. Expected: the module, the code,
+  // the option, the kinds and the way out, which is a function.
+  it.each([
+    ['a subclass', () => new (class Mine extends RegExp {})('x')],
+    ['a subclass in a list', () => [new (class Mine extends RegExp {})('x')]],
+    ['one with a test of its own', () => Object.assign(/x/, { test: () => true })],
+  ])('refuses %s with the way out', (_name, build) => {
+    expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp that is a subclass, has a property of its own or comes from another realm: use a function origin for custom matching`,
       ),
     )
   })

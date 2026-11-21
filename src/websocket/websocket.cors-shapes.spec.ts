@@ -303,14 +303,42 @@ describe('websocket.cors over a real server', () => {
     expect(second).toBe(GOOD)
   })
 
-  it.each([
-    ['a RegExp origin', () => /good\.example$/y],
-    ['a RegExp from another realm', () => vm.runInNewContext('/good\\.example$/g') as unknown],
-  ])('answers every request the same for %s', async (_name, build) => {
-    const [first, second] = await answersAround({ origin: build() }, GOOD)
+  it.each([['a RegExp origin', () => /good\.example$/y]])(
+    'answers every request the same for %s',
+    async (_name, build) => {
+      const [first, second] = await answersAround({ origin: build() }, GOOD)
 
-    expect(first).toBe(GOOD)
-    expect(second).toBe(GOOD)
+      expect(first).toBe(GOOD)
+      expect(second).toBe(GOOD)
+    },
+  )
+
+  // Scenario: a RegExp that is not a plain one: a subclass, one with a property of its own, one from another realm.
+  // Socket.IO would call its own `test`, which a plain copy cannot keep, and a copy that is more permissive than the
+  // original would answer origins the host meant to refuse. Expected: refused at boot, with the way out.
+  class StrictPattern extends RegExp {
+    override test(origin: string): boolean {
+      return super.test(origin) && origin !== 'https://blocked.good.example'
+    }
+  }
+  it.each([
+    ['a RegExp subclass', () => new StrictPattern('good\\.example$')],
+    [
+      'a RegExp with a test of its own',
+      () => Object.assign(/good\.example$/, { test: () => false }),
+    ],
+    ['a RegExp from another realm', () => vm.runInNewContext('/good\\.example$/') as unknown],
+    ['a list holding a RegExp subclass', () => [new StrictPattern('good\\.example$')]],
+  ])('refuses to boot when origin is %s', async (_name, build) => {
+    let caught: unknown
+    try {
+      await answerTo({ origin: build() }, EVIL)
+    } catch (error) {
+      caught = error
+    }
+    app = undefined as never
+    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
+    expect((caught as Error).message).toContain('use a function origin for custom matching')
   })
 
   // Scenario: the kinds the option documents. Expected: each is accepted and answers by its own rule.
