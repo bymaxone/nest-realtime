@@ -361,6 +361,7 @@ describe('websocket.cors over a real server', () => {
   // accept https://evil.io/#https://a.com, which the original rejects.
   it.each([
     ['a sticky RegExp', () => /https:\/\/a\.com$/y],
+    ['a RegExp whose source is longer than 1,000 characters', () => new RegExp('a'.repeat(1001))],
     ['a list holding a sticky RegExp', () => [/https:\/\/a\.com$/y]],
   ])('refuses to boot, and does not widen the pattern, for %s', async (_name, build) => {
     let caught: unknown
@@ -402,10 +403,10 @@ describe('websocket.cors over a real server', () => {
     expect((caught as Error).message).toContain('use a function origin for custom matching')
   })
 
-  // Scenario: the host changes the block after boot. Expected: an array it gave for allowedHeaders is shared with
-  // Socket.IO, so a push reaches the next preflight, while replacing the property or changing a scalar such as
-  // maxAge does not. This is what the README says.
-  it('shares an array given for allowedHeaders, and not a replaced property or a scalar', async () => {
+  // Scenario: the host changes the block after boot. Expected: an array it gave for allowedHeaders is copied once at
+  // boot, so a push, a replaced property and a changed scalar such as maxAge reach nothing. This is what the README
+  // says.
+  it('copies an array given for allowedHeaders, so nothing the host does after boot reaches it', async () => {
     const cors = { origin: GOOD, allowedHeaders: ['x-a'], maxAge: 600 }
     const port = await boot(cors)
     const preflight = async (): Promise<Record<string, unknown>> =>
@@ -424,9 +425,28 @@ describe('websocket.cors over a real server', () => {
     const replaced = await preflight()
 
     expect(before['access-control-allow-headers']).toBe('x-a')
-    expect(pushed['access-control-allow-headers']).toBe('x-a,x-b')
+    expect(pushed['access-control-allow-headers']).toBe('x-a')
     expect(pushed['access-control-max-age']).toBe('600')
-    expect(replaced['access-control-allow-headers']).toBe('x-a,x-b')
+    expect(replaced['access-control-allow-headers']).toBe('x-a')
+  })
+
+  // Scenario: the same for exposedHeaders, which a request that is not a preflight answers.
+  it('copies an array given for exposedHeaders', async () => {
+    const cors = { origin: GOOD, exposedHeaders: ['x-a'] }
+    const port = await boot(cors)
+    const exposed = async (): Promise<unknown> =>
+      (
+        await request(`http://127.0.0.1:${port}`)
+          .get('/socket.io/?EIO=4&transport=polling')
+          .set('Origin', GOOD)
+      ).headers['access-control-expose-headers']
+
+    const before = await exposed()
+    cors.exposedHeaders.push('x-b')
+    const pushed = await exposed()
+
+    expect(before).toBe('x-a')
+    expect(pushed).toBe('x-a')
   })
 
   // Scenario: a key of the block that the options do not name, here the headers a preflight may ask for. Expected:

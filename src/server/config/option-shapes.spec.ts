@@ -446,7 +446,7 @@ describe('websocket.cors', () => {
   ])('refuses %s with the way out', (_name, build) => {
     expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
       new Error(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp, or an object that looks like one, that cannot be copied faithfully: a subclass, one with a property of its own, one from another realm, one with the y flag, a proxy over one or an object that only has its prototype: use a function origin for custom matching`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp, or an object that looks like one, that cannot be copied faithfully: a subclass, one with a property of its own, one from another realm, one with the y flag, one whose source is longer than 1000 characters, a proxy over one or an object that only has its prototype: use a function origin for custom matching`,
       ),
     )
   })
@@ -504,6 +504,20 @@ describe('websocket.cors', () => {
     expect(() =>
       validateOptions(corsOptions({ origin: 'https://a.example', methods })),
     ).not.toThrow()
+  })
+
+  // Scenario: a headers list over the bound, or with a length that is not a count. Expected: refused whole, as an
+  // origin list or a methods list is, whichever of the two keys holds it.
+  it.each(['allowedHeaders', 'exposedHeaders'])('refuses an over-long %s list, whole', (key) => {
+    const list = Array.from({ length: 1001 }, () => 'x-a')
+
+    expect(() =>
+      validateOptions(corsOptions({ origin: 'https://a.example', [key]: list })),
+    ).toThrow(
+      new Error(
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.${key} must be ${METHODS_KINDS}, received a list whose length is not an integer from 0 to 1000`,
+      ),
+    )
   })
 
   // Scenario: a key the options do not name. Expected: accepted; that it reaches Socket.IO is shown by a real

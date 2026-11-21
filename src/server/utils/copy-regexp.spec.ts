@@ -79,6 +79,13 @@ describe('copyRegExp', () => {
     })
   })
 
+  // Scenario: a pattern longer than the bound the copy allows. Expected: no copy for one over it, a copy for one at it.
+  // The bound limits the cost of reading and keeping a pattern; how it behaves on input is the host's to judge.
+  it('copies a pattern of exactly 1,000 characters and not one of 1,001', () => {
+    expect(copyRegExp(new RegExp('a'.repeat(1000)))).toBeInstanceOf(RegExp)
+    expect(copyRegExp(new RegExp('a'.repeat(1001)))).toBeUndefined()
+  })
+
   // Scenario: the same copy is asked twice. Expected: it answers the same each time, which a g flag would not.
   it('answers the same however many times it is tested', () => {
     const copy = copyRegExp(/good/g)

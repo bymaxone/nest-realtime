@@ -13,7 +13,10 @@ import type { IRealtimePubSub } from './realtime-pubsub.interface'
 import type { IOfflineQueueStorage } from './offline-queue-storage.interface'
 import type { IPresenceStorage } from './presence-storage.interface'
 
-/** CORS configuration shared by the SSE and WebSocket transports. */
+/**
+ * CORS configuration of the WebSocket transport. The SSE endpoint is a plain HTTP GET: which origins may read its
+ * answer is the host application's `app.enableCors`, and nothing here decides it.
+ */
 export interface CorsConfig {
   /**
    * The origins a browser may connect from: a string, a `RegExp`, a function that answers per origin, a list of
@@ -22,13 +25,14 @@ export interface CorsConfig {
    * "allow every origin". A block with no `origin` key answers `*`. A list holds at most 1,000 entries and is copied
    * once at boot, so what the host does to it afterwards changes nothing. Each plain `RegExp`, alone or in the
    * list, is replaced at boot by one with the same pattern and flags except `g`. A `RegExp` that is not plain
-   * (a subclass, one with a property of its own, one from another realm) or has the `y` flag is refused, because a
-   * copy would lose its own `test`, or, for `y`, match anywhere in the origin and not only at its start: use a
-   * function origin for custom matching. A function is host code: the library trusts
-   * what it answers, as it trusts any other function the host hands it. Any other key of the block reaches
-   * Socket.IO as written: `allowedHeaders` and `exposedHeaders` given as arrays are shared with Socket.IO, so a change
-   * the host makes to the array itself after boot (a `push`, say) reaches later requests, while replacing the
-   * property or changing a scalar such as `maxAge` does not; none of them decides which origin is allowed.
+   * (a subclass, one with a property of its own, one from another realm), has the `y` flag or has a source over
+   * 1,000 characters is refused, because a copy would lose its own `test`, or, for `y`, match anywhere in the origin
+   * and not only at its start: use a function origin for custom matching. A function is host code: the library trusts
+   * what it answers, as it trusts any other function the host hands it. A pattern runs as written, so how it
+   * behaves on a hostile origin (a catastrophic backtrack, say) is the host's to judge; the library bounds its
+   * source at 1,000 characters and nothing else. The lists `methods`, `allowedHeaders` and `exposedHeaders` are
+   * copied once at boot like the origin list. Any other key of the block reaches Socket.IO as written, and none of
+   * them decides which origin is allowed.
    */
   origin?:
     | string
