@@ -150,10 +150,11 @@ describe('resolveAuthTenant', () => {
   // everything on it as the authenticator built it. Why: no copy semantics apply to the host's object, so hidden fields,
   // symbol keys, prototype data, accessors and private fields all work as they do for the authenticator's own code.
   it.each([
-    ['an absent tenantId', { userId: 'u1' }],
-    ['a null tenantId', { userId: 'u1', tenantId: null as unknown as string }],
-    ['a present tenantId', { userId: 'u1', tenantId: 't1' }],
-  ])('gives the resolver the result itself, with %s', (_name, auth) => {
+    ['an absent tenantId', {}],
+    ['a null tenantId', { tenantId: null }],
+    ['a present tenantId', { tenantId: 't1' }],
+  ])('gives the resolver the result itself, with %s', (_name, extra) => {
+    const auth: AuthenticationResult = Object.assign({ userId: 'u1' }, extra)
     let given: unknown
 
     resolveAuthTenant(
