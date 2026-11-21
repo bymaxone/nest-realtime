@@ -13,7 +13,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Documentation
 
-- **The README and the `tenantResolver` documentation say that the resolver receives a plain copy.** The options table, the paragraph on identity and the JSDoc state that the copy has its own enumerable properties only and no `tenantId` when the tenant is absent or `null`. A spec holds the two README places.
+- **The README and the `tenantResolver` documentation say that the resolver receives a plain copy.** The options table, the paragraph on identity and the JSDoc state that the copy has its own enumerable properties only and no `tenantId` when the tenant is absent or `null`.
 
 ## [1.2.22] - 2026-11-20
 
