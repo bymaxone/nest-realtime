@@ -339,6 +339,28 @@ describe('resolveAuthTenant', () => {
     expect(reads).toEqual({ userId: 1, tenantId: 1, roles: 1, rooms: 1, metadata: 1 })
   })
 
+  // Scenario: a result with only a userId, and a result with every field. Expected: the kept record has exactly the
+  // fields the result has, none added as an explicit undefined, and each is an ordinary data property. Why: the record
+  // is spread, frozen and compared downstream, and `exactOptionalPropertyTypes` treats an undefined key as a different
+  // shape from an absent one.
+  it('keeps exactly the fields the result has, as ordinary data properties', () => {
+    const sparse = resolveAuthTenant({}, { userId: 'u1' })
+    const full = resolveAuthTenant(
+      {},
+      { userId: 'u1', roles: ['r'], rooms: ['x'], metadata: { k: 1 } },
+    )
+
+    expect(Reflect.ownKeys(sparse)).toEqual(['userId'])
+    expect(Object.keys(full).sort()).toEqual(['metadata', 'roles', 'rooms', 'userId'])
+    for (const key of Reflect.ownKeys(full)) {
+      expect(Reflect.getOwnPropertyDescriptor(full, key)).toMatchObject({
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      })
+    }
+  })
+
   // Scenario: the authenticator's result has a getter that throws. Expected: the library does not wrap it, so the
   // host's own error is what the handshake fails with. Why: the result is the host's own code, the README says so,
   // and the gateway logs the error under `err` and counts the handshake as an error.
