@@ -98,4 +98,10 @@ describe('the README documents what the package exports', () => {
     expect(line).not.toBe('')
     expect(line).toContain('plain copy')
   })
+
+  // The tenant is read with a plain property read, so one an accessor on the prototype supplies counts; the paragraph
+  // says so rather than claiming own enumerable properties only for the whole copy.
+  it('says that a tenantId from an accessor on the prototype counts', () => {
+    expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain('prototype')
+  })
 })

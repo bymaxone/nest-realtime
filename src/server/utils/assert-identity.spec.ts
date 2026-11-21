@@ -176,6 +176,63 @@ describe('resolveAuthTenant', () => {
     expect(out.tenantId).toBe('t-resolved')
   })
 
+  // Scenario: a resolver that writes to the result it was given, with an absent, a null and a present tenant, and with
+  // an answer that adds nothing. Expected: what the library keeps is not changed by the write. Why: the resolver's
+  // argument and the record the library returns must be different objects, or a resolver changes the connection.
+  it.each([
+    ['absent', undefined],
+    ['null', null],
+    ['present', 't1'],
+  ])(
+    'keeps the result it returns apart from what a resolver is given, with a tenantId that is %s',
+    (_name, value) => {
+      const auth = untyped({ userId: 'u1', ...(value === undefined ? {} : { tenantId: value }) })
+
+      const out = resolveAuthTenant(
+        {
+          tenantResolver: (a) => {
+            ;(a as { userId: string }).userId = 'MUTATED'
+            return undefined
+          },
+        },
+        auth,
+      )
+
+      expect(out.userId).toBe('u1')
+    },
+  )
+
+  // Scenario: the result is an instance whose tenantId is an accessor on its prototype, and a resolver is configured.
+  // Expected: the tenant is honoured and the resolver is given it, while the other properties come from the instance's
+  // own enumerable ones. Why: the tenant is read with a plain property read, so an inherited accessor counts, and the
+  // documentation says exactly that; the copy of the rest is the own enumerable properties only.
+  it('honours a tenantId supplied by an accessor on the prototype and tells the resolver', () => {
+    class Result {
+      userId = 'u1'
+      get tenantId(): string {
+        return 'from-prototype'
+      }
+      inherited(): string {
+        return 'method'
+      }
+    }
+    let given: AuthenticationResult | undefined
+
+    const out = resolveAuthTenant(
+      {
+        tenantResolver: (a) => {
+          given = a
+          return undefined
+        },
+      },
+      new Result(),
+    )
+
+    expect(out.tenantId).toBe('from-prototype')
+    expect(given?.tenantId).toBe('from-prototype')
+    expect('inherited' in out).toBe(false)
+  })
+
   // Scenario: the authenticator's result has a getter that throws. Expected: the library does not wrap it, so the
   // host's own error is what the handshake fails with. Why: the result is the host's own code, the README says so,
   // and the gateway logs the error under `err` and counts the handshake as an error.
