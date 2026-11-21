@@ -55,6 +55,16 @@ describe('the options argument of forRoot', () => {
   })
 })
 
+/** What a call throws; fails when it does not throw. */
+const thrownBy = (call: () => unknown): Error => {
+  try {
+    call()
+  } catch (error) {
+    return error as Error
+  }
+  throw new Error('the call did not throw')
+}
+
 describe('an object whose reads throw', () => {
   const hostile = (): unknown =>
     new Proxy(
@@ -68,17 +78,26 @@ describe('an object whose reads throw', () => {
 
   // Scenario: the host hands over a proxy that throws on any read, as the options or as a group. Expected: the typed
   // refusal, not the host's own error.
-  it('is refused as the options argument', () => {
-    expect(() => BymaxRealtimeModule.forRoot(hostile() as never)).toThrow(
-      refusal('options', 'an object', 'a built-in object'),
-    )
+  it('is refused as the options argument, with the host error as the cause', () => {
+    const caught = thrownBy(() => BymaxRealtimeModule.forRoot(hostile() as never))
+
+    expect(caught.message).toBe(refusal('options', 'an object', 'a built-in object').message)
+    expect((caught.cause as Error).message).toBe('host error')
   })
 
-  it.each(['sse', 'websocket', 'reauthenticationPolicy', 'hooks'])('is refused as %s', (name) => {
-    expect(() =>
-      validateOptions({ transport: 'sse', authenticator, [name]: hostile() } as never),
-    ).toThrow(refusal(`options.${name}`, 'an object', 'a built-in object'))
-  })
+  it.each(['sse', 'websocket', 'reauthenticationPolicy', 'hooks'])(
+    'is refused as %s, with the host error as the cause',
+    (name) => {
+      const caught = thrownBy(() =>
+        validateOptions({ transport: 'sse', authenticator, [name]: hostile() } as never),
+      )
+
+      expect(caught.message).toBe(
+        refusal(`options.${name}`, 'an object', 'a built-in object').message,
+      )
+      expect((caught.cause as Error).message).toBe('host error')
+    },
+  )
 })
 
 describe('a forRootAsync provider that is not a factory', () => {

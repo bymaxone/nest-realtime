@@ -315,7 +315,7 @@ function buildOptionsProvider(
     return {
       provide: REALTIME_OPTIONS_TOKEN,
       useFactory: async (...args: unknown[]) =>
-        resolve(await awaitHostResult(asyncOptions.useFactory!(...args)), 'useFactory'),
+        resolve((await awaitHostResult(asyncOptions.useFactory!(...args))).value, 'useFactory'),
       inject: [...(asyncOptions.inject ?? [])],
     }
   }
@@ -333,7 +333,7 @@ function buildOptionsProvider(
         )
       }
       return resolve(
-        (await awaitHostResult(create.call(factory))) as BymaxRealtimeModuleOptions,
+        (await awaitHostResult(create.call(factory))).value as BymaxRealtimeModuleOptions,
         'createRealtimeOptions',
       )
     },
@@ -383,6 +383,30 @@ function buildResolver(
   }
 }
 
+/** A host array copied, or the value as it is when it is not an array, so the checks that follow can refuse it. */
+const copied = (value: unknown): unknown =>
+  Array.isArray(value) ? [...(value as unknown[])] : value
+
+/**
+ * The keys of a `forRootAsync` registration the module reads, each read once and under the guard, as one plain object.
+ * Every later read is of that object, so a getter or a proxy on the registration is asked once per key and a throw is
+ * refused with the library's code and the host's error as its cause.
+ */
+function readRegistration(
+  registration: BymaxRealtimeModuleAsyncOptions,
+): BymaxRealtimeModuleAsyncOptions {
+  return guardHostReads('the registration', () => ({
+    transport: registration.transport,
+    sseEndpoint: registration.sseEndpoint,
+    useFactory: registration.useFactory,
+    useClass: registration.useClass,
+    useExisting: registration.useExisting,
+    inject: copied(registration.inject),
+    imports: copied(registration.imports),
+    extraProviders: copied(registration.extraProviders),
+  })) as BymaxRealtimeModuleAsyncOptions
+}
+
 /**
  * Compose the asynchronous dynamic module for an entry point.
  *
@@ -402,37 +426,38 @@ export function composeForRootAsync(
 ): DynamicModule {
   const moduleName = moduleClass.name
   assertOptionsObject(asyncOptions, moduleName)
-  assertOneFactoryPattern(asyncOptions, moduleName)
-  assertModeSupported(wiring, asyncOptions.transport, moduleName)
-  assertSseEndpoint('sseEndpoint', asyncOptions.sseEndpoint)
-  assertSseEndpointApplies(asyncOptions, moduleName)
-  assertExtraProviders(asyncOptions.extraProviders)
+  const registration = readRegistration(asyncOptions)
+  assertOneFactoryPattern(registration, moduleName)
+  assertModeSupported(wiring, registration.transport, moduleName)
+  assertSseEndpoint('sseEndpoint', registration.sseEndpoint)
+  assertSseEndpointApplies(registration, moduleName)
+  assertExtraProviders(registration.extraProviders)
 
   const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
   const instanceId = randomUUID()
-  const boundSseEndpoint = asyncOptions.sseEndpoint ?? DEFAULT_ASYNC_SSE_ENDPOINT
-  const resolve = buildResolver(asyncOptions, instanceId, boundSseEndpoint, logger, moduleName)
+  const boundSseEndpoint = registration.sseEndpoint ?? DEFAULT_ASYNC_SSE_ENDPOINT
+  const resolve = buildResolver(registration, instanceId, boundSseEndpoint, logger, moduleName)
 
-  const factoryClassProvider: Provider[] = isSet(asyncOptions.useClass)
-    ? [{ provide: FACTORY_TOKEN, useClass: asyncOptions.useClass }]
+  const factoryClassProvider: Provider[] = isSet(registration.useClass)
+    ? [{ provide: FACTORY_TOKEN, useClass: registration.useClass }]
     : []
 
   const { providers: transportProviders, controllers } = wiring.buildAsync({
-    mode: asyncOptions.transport,
+    mode: registration.transport,
     sseEndpoint: boundSseEndpoint,
   })
 
   return {
     module: moduleClass,
-    imports: asyncOptions.imports ?? [],
+    imports: registration.imports ?? [],
     controllers,
     providers: [
       ...factoryClassProvider,
-      buildOptionsProvider(asyncOptions, resolve, FACTORY_TOKEN),
+      buildOptionsProvider(registration, resolve, FACTORY_TOKEN),
       ...buildOptionDerivedProviders(logger, instanceId),
       ...SHARED_SERVICES,
       ...transportProviders,
-      ...(asyncOptions.extraProviders ?? []),
+      ...(registration.extraProviders ?? []),
     ],
     exports: EXPORTED_TOKENS,
   }

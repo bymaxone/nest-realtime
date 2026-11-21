@@ -5,7 +5,7 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { describeReceived } from '../utils/describe-received'
-import { isPlainObject } from '../utils/is-plain-object'
+import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
 import { refuseObject } from '../utils/refuse-object'
 import { realtimeError } from '../utils/realtime-error'
 
@@ -28,17 +28,26 @@ const HOOK_NAMES = [
 /** The option groups, each an object holding the options of one concern. */
 const GROUP_NAMES = ['sse', 'websocket', 'reauthenticationPolicy'] as const
 
-function refuse(path: string, expected: string, received: unknown): never {
+function refuse(
+  path: string,
+  expected: string,
+  received: unknown,
+  cause?: { readonly error: unknown },
+): never {
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
     `options.${path} must be ${expected}, received ${describeReceived(received)}`,
-    { who: 'BymaxRealtimeModule' },
+    cause === undefined
+      ? { who: 'BymaxRealtimeModule' }
+      : { who: 'BymaxRealtimeModule', cause: cause.error },
   )
 }
 
 /** Refuse a set option that is not an object; an unset one is left to its default. */
 function assertObject(path: string, value: unknown): void {
-  if (value !== undefined && !isPlainObject(value)) refuse(path, 'an object', value)
+  if (value === undefined) return
+  const read = readPlainObject(value)
+  if (!read.plain) refuse(path, 'an object', value, read.threw ? { error: read.error } : undefined)
 }
 
 function assertFunction(path: string, value: unknown): void {
@@ -78,7 +87,9 @@ export function assertSseEndpoint(path: string, value: unknown): void {
  * @throws Error carrying `REALTIME_INVALID_OPTIONS`.
  */
 export function assertOptionsObject(value: unknown, who = 'BymaxRealtimeModule'): void {
-  if (!isPlainObject(value)) refuseObject(who, 'options', value)
+  const read = readPlainObject(value)
+  if (!read.plain)
+    refuseObject(who, 'options', value, read.threw ? { error: read.error } : undefined)
 }
 
 function validatePieces(options: BymaxRealtimeModuleOptions): void {

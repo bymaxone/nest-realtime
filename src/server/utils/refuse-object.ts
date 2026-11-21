@@ -12,12 +12,18 @@ import { realtimeError } from './realtime-error'
  * @param who - The component the refusal is attributed to.
  * @param path - The option, spelled as the host wrote it.
  * @param value - What the option held; only its type is printed.
+ * @param cause - The error that reading the value raised, when it raised one; it travels as the `cause`.
  * @throws Error carrying `REALTIME_INVALID_OPTIONS`.
  */
-export function refuseObject(who: string, path: string, value: unknown): never {
+export function refuseObject(
+  who: string,
+  path: string,
+  value: unknown,
+  cause?: { readonly error: unknown },
+): never {
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
     `${path} must be an object, received ${describeReceived(value)}`,
-    { who },
+    cause === undefined ? { who } : { who, cause: cause.error },
   )
 }
