@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.24] - 2026-11-20
+
 ### Fixed
 
 - **A `tenantResolver` that writes to the result it receives no longer changes the connection.** With an absent or `null` tenant, the copy handed to the resolver was the object the library kept, so a resolver that assigned to it (for example to `userId`) changed the connection record. The resolver is given its own copy in every case; the copy is shallow, so nested objects are still shared and a write inside them still changes what is kept.
@@ -1272,7 +1274,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.23...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.24...HEAD
+[1.2.24]: https://github.com/bymaxone/nest-realtime/compare/v1.2.23...v1.2.24
 [1.2.23]: https://github.com/bymaxone/nest-realtime/compare/v1.2.22...v1.2.23
 [1.2.22]: https://github.com/bymaxone/nest-realtime/compare/v1.2.21...v1.2.22
 [1.2.21]: https://github.com/bymaxone/nest-realtime/compare/v1.2.20...v1.2.21
