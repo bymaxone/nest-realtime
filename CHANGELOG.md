@@ -7,6 +7,16 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.28] - 2026-11-21
+
+### Fixed
+
+- **A proxy over a rejecting promise is absorbed again.** 1.2.27 attached its handler through the intrinsic `then`, which refuses a proxy because it is not a promise by brand, so the rejection of a promise returned through a proxy whose `get` trap binds methods reached the process as an unhandled one. The intrinsic path is still tried first; when it refuses, a value that is an `instanceof Promise` is given its own `catch`. A thenable that is not a promise is still never asked for its `then`. A promise whose `constructor` or species cannot be read cannot be given a handler by either path, and no release has handled one.
+
+#### Apply to a derived backend
+
+None. A `tenantResolver` that returns a promise still has its connection refused as a blank tenant; only the handling of that promise's rejection changed.
+
 ## [1.2.27] - 2026-11-21
 
 ### Fixed
@@ -1319,7 +1329,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.27...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.28...HEAD
+[1.2.28]: https://github.com/bymaxone/nest-realtime/compare/v1.2.27...v1.2.28
 [1.2.27]: https://github.com/bymaxone/nest-realtime/compare/v1.2.26...v1.2.27
 [1.2.26]: https://github.com/bymaxone/nest-realtime/compare/v1.2.25...v1.2.26
 [1.2.25]: https://github.com/bymaxone/nest-realtime/compare/v1.2.24...v1.2.25

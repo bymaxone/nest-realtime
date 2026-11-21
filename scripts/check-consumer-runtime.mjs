@@ -314,6 +314,13 @@ const kinds = {
   'a promise from another realm': () => vm.runInNewContext("Promise.reject(new Error('cross-realm'))"),
   'a subclass that overrides catch': () => OverridesCatch.reject(new Error('subclass')),
   'a promise with a then of its own': () => withOwnThen,
+  'a proxy over a promise with bound methods': () =>
+    new Proxy(Promise.reject(new Error('proxied')), {
+      get: (target, key) => {
+        const value = Reflect.get(target, key)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    }),
 }
 
 for (const [name, build] of Object.entries(kinds)) {

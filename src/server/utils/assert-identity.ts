@@ -59,15 +59,22 @@ export function resolveAuthTenant(
 
 /**
  * Handle the rejection of a promise a synchronous resolver returned, so it cannot end the process. The intrinsic
- * `then` is used rather than the value's own methods, and it accepts only a real promise, of any realm, so a
- * promise from another realm, a subclass that overrides `catch` and a promise with a `then` of its own are all
- * handled, while any other value is refused by the intrinsic before a property of it is read.
+ * `then` is tried first: it accepts only a real promise, of any realm, so a promise from another realm, a
+ * subclass that overrides `catch` and a promise with a `then` of its own are handled, and any other value is
+ * refused before a property of it is read. A proxy over a promise is not one by brand, so a value that is an
+ * `instanceof Promise` is then given its own `catch`; a thenable that is not a promise is never asked for its
+ * `then`. A promise whose `constructor` or species cannot be read cannot be given a handler by either path.
  */
 function absorbRejection(value: unknown): void {
   try {
     Promise.prototype.then.call(value, undefined, () => undefined)
   } catch {
-    // Not a promise, or a promise whose species cannot be read: there is no rejection to absorb on this path.
+    // Not a promise by brand, or a promise whose species cannot be read: its own `catch` is the last way to a handler.
+    try {
+      if (value instanceof Promise) value.catch(() => undefined)
+    } catch {
+      // The value's own `catch` or its species cannot be used: there is no handler to attach on this path.
+    }
   }
 }
 
