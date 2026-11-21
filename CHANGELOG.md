@@ -7,6 +7,15 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `tenantResolver` that writes to the result it receives no longer changes the connection.** With an absent or `null` tenant, the copy handed to the resolver was the object the library kept, so a resolver that assigned to it (for example to `userId`) changed the connection record. The resolver is given its own copy in every case; the copy is shallow, so nested objects are still shared and a write inside them still changes what is kept.
+- **A log field named like what a structured logger writes itself no longer reaches the line.** `logEvent` already dropped `err`, `msg` and `level`; it now also drops `time`, `pid`, `hostname`, `name`, `v`, `req` and `res`, which a logger writes on every line.
+
+### Documentation
+
+- **The `tenantResolver` documentation says exactly what the copy holds.** The result's own enumerable properties, and the `tenantId` as the library read it, which counts when an accessor on the prototype supplies it. This replaces "own enumerable properties only", which was true of the rest of the copy and not of the tenant.
+
 ## [1.2.23] - 2026-11-20
 
 ### Fixed

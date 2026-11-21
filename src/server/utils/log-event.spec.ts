@@ -127,6 +127,26 @@ describe('logEvent and the keys a logger reads as its own', () => {
   })
 })
 
+describe('logEvent and the names a logger adds to a line itself', () => {
+  // Scenario: a field named like what a structured logger writes on every line (the time, the process, the host, the
+  // logger's name, the format version and the request and response serializers). Expected: none reaches the line. Why:
+  // the logger writes those itself, and a field of the same name would replace its value or be replaced, so a line
+  // would carry two answers to one question.
+  it.each(['time', 'pid', 'hostname', 'name', 'v', 'req', 'res'])(
+    'drops a field named %s',
+    (key) => {
+      const warn = jest.fn()
+      logEvent({ warn, error: jest.fn() }, 'warn', 'REALTIME_HOOK_FAILED', 'a hook failed', {
+        [key]: 'from a field',
+        hook: 'onConnect',
+      } as never)
+      const [line] = warn.mock.calls[0] as [Record<string, unknown>]
+      expect(key in line).toBe(false)
+      expect(line['hook']).toBe('onConnect')
+    },
+  )
+})
+
 describe('the event catalog', () => {
   const sources = shipped(SRC).map((path) => readFileSync(path, 'utf8'))
 
