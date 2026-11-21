@@ -11,7 +11,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Fixed
 
-- **A proxy over a rejecting promise is absorbed again.** 1.2.27 attached its handler through the intrinsic `then`, which refuses a proxy because it is not a promise by brand, so the rejection of a promise returned through a proxy whose `get` trap binds methods reached the process as an unhandled one. The intrinsic path is still tried first; when it refuses, a value that is an `instanceof Promise` is given its own `catch`. A thenable that is not a promise is still never asked for its `then`. A promise whose `constructor` or species cannot be read cannot be given a handler by either path, and no release has handled one.
+- **A proxy over a rejecting promise is absorbed again.** 1.2.27 attached its handler through the intrinsic `then`, which refuses a proxy because it is not a promise by brand, so the rejection of a promise returned through a proxy whose `get` trap binds methods reached the process as an unhandled one. The intrinsic path is still tried first; when it refuses, a value that is an `instanceof Promise` is given its own `catch`. A thenable that is not a promise is still never asked for its `then`. A promise whose `constructor` or species cannot be read cannot be given a handler by either path; that limit is unchanged from 1.2.26.
 
 #### Apply to a derived backend
 
