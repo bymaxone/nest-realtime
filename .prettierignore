@@ -12,3 +12,7 @@ src/stryker-scope.spec.ts
 # the same reason.
 scripts/check-suppressions-baseline.mjs
 scripts/check-suppressions-baseline.test.mjs
+
+# The dist-freshness check and its test, the same way.
+scripts/check-dist-fresh.mjs
+scripts/check-dist-fresh.test.mjs
