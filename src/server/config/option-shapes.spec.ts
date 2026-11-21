@@ -303,6 +303,31 @@ describe('websocket.cors', () => {
     )
   })
 
+  // Scenario: an origin of undefined that is not an enumerable own key. Expected: refused like the plain key.
+  it.each([
+    [
+      'a non-enumerable own property',
+      () => Object.defineProperty({}, 'origin', { value: undefined }),
+    ],
+    [
+      'a getter on the prototype',
+      () =>
+        new (class {
+          get origin(): undefined {
+            return undefined
+          }
+        })(),
+    ],
+  ])('refuses an origin of undefined held as %s', (_name, build) => {
+    expect(() => validateOptions(corsOptions(build()))).toThrow(
+      refusal(
+        'websocket.cors.origin',
+        'a string, a RegExp, a function, an array or false',
+        'undefined',
+      ),
+    )
+  })
+
   // Scenario: no origin key. Expected: accepted, the documented `*`.
   it('accepts a block with no origin', () => {
     expect(() => validateOptions(corsOptions({ credentials: true }))).not.toThrow()

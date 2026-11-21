@@ -131,6 +131,36 @@ describe('dropUnset, the CORS block of websocket', () => {
     expect({ ...kept }).toStrictEqual(expected)
   })
 
+  // Scenario: an origin that is set to undefined without being an enumerable own key: a non-enumerable property, a
+  // getter on the prototype, a field a class declared. Expected: kept like the plain own key, because it is just as
+  // much a value the host set; read as unset it would answer every origin.
+  it.each([
+    [
+      'a non-enumerable own property',
+      () => Object.defineProperty({}, 'origin', { value: undefined }),
+    ],
+    [
+      'a getter on the prototype',
+      () =>
+        new (class {
+          get origin(): undefined {
+            return undefined
+          }
+        })(),
+    ],
+    [
+      'a field a class declared',
+      () =>
+        new (class {
+          origin: string | undefined = undefined
+        })(),
+    ],
+  ])('keeps an origin of undefined held as %s', (_name, build) => {
+    const kept = dropUnset({ websocket: { cors: build() } }).websocket?.cors as object
+
+    expect('origin' in kept).toBe(true)
+  })
+
   // Scenario: a block that is not an object. Expected: left as it is.
   it.each([[true], ['*'], [[1]]])('leaves the block %p untouched', (cors) => {
     expect(dropUnset({ websocket: { cors: cors as CorsConfig } }).websocket?.cors).toBe(cors)
