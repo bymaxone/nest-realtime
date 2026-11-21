@@ -90,7 +90,9 @@ export interface BymaxRealtimeModuleOptions {
    * result, not the authenticator's original object: the result's own enumerable
    * properties and the `tenantId` as the library read it, which counts when an accessor
    * on the prototype supplies it and is missing when the tenant is absent or `null`.
-   * The copy is its own object, so a resolver that writes to it changes nothing the
+   * The copy is its own object and is shallow: a resolver that assigns to one of its
+   * top-level properties changes nothing the library keeps, while `roles`, `rooms` and
+   * `metadata` are shared with the original, so a write inside them changes what the
    * library keeps. `undefined` and
    * `null` both mean "no opinion"
    * and fall back to `auth.tenantId` rather than clearing it; to place a connection

@@ -104,4 +104,12 @@ describe('the README documents what the package exports', () => {
   it('says that a tenantId from an accessor on the prototype counts', () => {
     expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain('prototype')
   })
+
+  // The copy is shallow: a write to a top-level property stays in the copy, a write inside `roles` or `metadata` does
+  // not, because those objects are shared. The paragraph says both.
+  it('limits the isolation of the resolver copy to top-level properties', () => {
+    const line = lineStartingWith('`tenantResolver` cannot clear a tenant.')
+    expect(line).toContain('top-level')
+    expect(line).toContain('metadata')
+  })
 })

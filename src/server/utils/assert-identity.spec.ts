@@ -202,6 +202,27 @@ describe('resolveAuthTenant', () => {
     },
   )
 
+  // Scenario: a resolver that writes inside a nested object of the result. Expected: the write is visible in what is
+  // returned, because the copy is shallow and the nested object is shared. Why: the documentation limits the isolation
+  // to top-level properties and this pins the other half of that sentence, so it cannot drift into a stronger claim.
+  it('shares the nested objects of the result with the copy a resolver is given', () => {
+    const metadata = { plan: 'free' }
+    const auth: AuthenticationResult = { userId: 'u1', metadata }
+
+    const out = resolveAuthTenant(
+      {
+        tenantResolver: (a) => {
+          if (a.metadata) a.metadata['plan'] = 'changed'
+          return undefined
+        },
+      },
+      auth,
+    )
+
+    expect(out.metadata).toBe(metadata)
+    expect(metadata['plan']).toBe('changed')
+  })
+
   // Scenario: the result is an instance whose tenantId is an accessor on its prototype, and a resolver is configured.
   // Expected: the tenant is honoured and the resolver is given it, while the other properties come from the instance's
   // own enumerable ones. Why: the tenant is read with a plain property read, so an inherited accessor counts, and the
