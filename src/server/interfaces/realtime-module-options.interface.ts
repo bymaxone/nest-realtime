@@ -86,7 +86,10 @@ export interface BymaxRealtimeModuleOptions {
   /**
    * Derive the tenant a connection routes on from the authenticated result.
    *
-   * Applied on **both** transports. `undefined` and `null` both mean "no opinion"
+   * Applied on **both** transports. It receives a plain copy of the authentication
+   * result, with its own enumerable properties only and no `tenantId` when the tenant
+   * is absent or `null`, not the authenticator's original object. `undefined` and
+   * `null` both mean "no opinion"
    * and fall back to `auth.tenantId` rather than clearing it; to place a connection
    * in no tenant, return a result without one from the authenticator. `null` is in
    * the signature because the implementation accepts it and a type narrower than the
