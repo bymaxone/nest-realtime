@@ -17,6 +17,24 @@ function refuse(detail: string): never {
 }
 
 /**
+ * The roles the connection keeps: a frozen copy of an array, read once here. A read that throws is refused
+ * at admission, as the authenticator's fault, with the host's
+ * error as the cause. A value that is not an array is left as it is.
+ */
+function admitRoles(roles: AuthenticationResult['roles']): AuthenticationResult['roles'] {
+  if (!Array.isArray(roles)) return roles
+  try {
+    return Object.freeze([...(roles as readonly string[])])
+  } catch (error) {
+    throw realtimeError(
+      REALTIME_ERROR_CODES.AUTH_FAILED,
+      'the authenticator returned roles that could not be read: a getter or a proxy on them throws',
+      { cause: error },
+    )
+  }
+}
+
+/**
  * Validate the `rooms` of an authentication result and return the result the connection is
  * admitted with.
  *
@@ -31,13 +49,15 @@ function refuse(detail: string): never {
  * await, so reading the original there would join whatever it holds by then.
  *
  * @param auth - The resolved authentication result.
- * @returns `auth` itself when it has no `rooms`; otherwise a result with the same fields and a
- *   frozen copy of its `rooms`.
- * @throws Error carrying `REALTIME_AUTH_FAILED` when `rooms` is present and invalid.
+ * @returns `auth` itself when it has no `rooms` and no array `roles`; otherwise a result with the
+ *   same fields and a frozen copy of each of those it has.
+ * @throws Error carrying `REALTIME_AUTH_FAILED` when `rooms` is present and invalid, or `roles` cannot be read.
  */
 export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
+  const roles = admitRoles(auth.roles)
   const { rooms } = auth
-  if (rooms === undefined) return auth
+  const kept = roles === auth.roles ? auth : { ...auth, roles: roles as readonly string[] }
+  if (rooms === undefined) return kept
   if (!Array.isArray(rooms)) refuse('`rooms` is not an array')
   const admitted: unknown[] = []
   for (const room of rooms as Iterable<unknown>) {
@@ -58,5 +78,5 @@ export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
     const reserved = reservedRoomPrefix(room)
     if (reserved !== undefined) refuse(`a room name starts with the reserved prefix "${reserved}"`)
   }
-  return { ...auth, rooms: Object.freeze(admitted as string[]) }
+  return { ...kept, rooms: Object.freeze(admitted as string[]) }
 }

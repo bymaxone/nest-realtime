@@ -7,6 +7,18 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.26] - 2026-11-21
+
+### Fixed
+
+- **An origin allowlist in `websocket.cors` is no longer dropped when it is defined as a class getter, a non-enumerable property or a prototype property.** The block was copied by its own enumerable keys, so `origin` went missing, Socket.IO fell back to its default and answered every origin with `Access-Control-Allow-Origin: *`. The block is now read by the names of `CorsConfig`. The hook table was never affected.
+- **`roles` whose read throws is refused at admission.** A proxy or getter on `roles` was first read when the connection event or a hook needed it, so the host's error reached the framework raw. The array is now read once at admission into a frozen copy, and a read that throws is refused with `REALTIME_AUTH_FAILED` and the host's error as the cause. A `roles` value that is not an array is left as it is.
+- **An `async` `tenantResolver` no longer leaves an unhandled rejection.** The resolver is synchronous; a promise is refused as a tenant that is not a string, and its rejection is now absorbed.
+
+#### Apply to a derived backend
+
+Nothing to change. A host that defined `websocket.cors.origin` as a getter, non-enumerable or on a prototype now gets the allowlist it wrote; check that it is the list you intend, since until now such a server answered every origin.
+
 ## [1.2.25] - 2026-11-21
 
 ### Fixed
@@ -1286,7 +1298,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.25...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.26...HEAD
+[1.2.26]: https://github.com/bymaxone/nest-realtime/compare/v1.2.25...v1.2.26
 [1.2.25]: https://github.com/bymaxone/nest-realtime/compare/v1.2.24...v1.2.25
 [1.2.24]: https://github.com/bymaxone/nest-realtime/compare/v1.2.23...v1.2.24
 [1.2.23]: https://github.com/bymaxone/nest-realtime/compare/v1.2.22...v1.2.23

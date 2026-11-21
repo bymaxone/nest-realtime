@@ -197,4 +197,46 @@ describe('admitRooms', () => {
       expect(admitted.rooms).toStrictEqual(['workspace:w1'])
     })
   })
+
+  // The roles go to the client in the connection event and to every hook, after the admission. A value
+  // whose reads throw has to be refused here, with the host's error as the cause, not met later by the framework.
+  describe('the roles', () => {
+    const HOST = new Error('host-roles-error')
+    const throwing = new Proxy(['admin'], {
+      get(target, key, receiver) {
+        if (key === Symbol.iterator || key === 'length' || key === '0') throw HOST
+        return Reflect.get(target, key, receiver) as unknown
+      },
+    })
+
+    it('refuses roles whose read throws, keeping the host error as the cause', () => {
+      let caught: unknown
+      try {
+        admitRooms({ userId: 'u1', roles: throwing })
+      } catch (error) {
+        caught = error
+      }
+
+      expect((caught as { code?: string }).code).toBe('REALTIME_AUTH_FAILED')
+      expect((caught as Error).cause).toBe(HOST)
+      expect((caught as Error).message).toBe(
+        'REALTIME_AUTH_FAILED: the authenticator returned roles that could not be read: a getter or a proxy on them throws',
+      )
+    })
+
+    it('carries a frozen copy of the roles that does not follow the original', () => {
+      const returned = ['admin']
+      const admitted = admitRooms({ userId: 'u1', roles: returned })
+
+      returned.push('root')
+
+      expect(admitted.roles).toStrictEqual(['admin'])
+      expect(Object.isFrozen(admitted.roles)).toBe(true)
+    })
+
+    it('leaves roles that are not an array as they are', () => {
+      const auth = { userId: 'u1', roles: 'admin' } as unknown as AuthenticationResult
+      expect(admitRooms(auth)).toBe(auth)
+    })
+  })
 })

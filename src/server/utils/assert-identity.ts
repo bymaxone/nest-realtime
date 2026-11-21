@@ -35,7 +35,7 @@ function isBlank(value: unknown): boolean {
  *
  * @param options - The module options, read for an optional `tenantResolver`.
  * @param auth - The authentication result the consumer's authenticator returned.
- * @returns The same result with `tenantId` resolved, or absent when there is none.
+ * @returns A copy of the result with `tenantId` resolved, or absent when there is none.
  */
 export function resolveAuthTenant(
   options: Pick<BymaxRealtimeModuleOptions, 'tenantResolver'>,
@@ -46,12 +46,15 @@ export function resolveAuthTenant(
   // the value that decides the routing room is the one that was tested. The resolver is given the authenticator's own
   // result, not a copy of it, so everything on it works as it does for the authenticator's code, and what it writes to
   // that object cannot reach the record, which is another object. The nested objects (`roles`, `rooms`, `metadata`) are
-  // shared. What the resolver returns is what routes, `undefined` and `null` meaning no opinion.
+  // shared. What the resolver returns is what routes, `undefined` and `null` meaning no opinion. The resolver is
+  // synchronous: a promise is not a tenant and is refused as one, and its own rejection is absorbed so that it does
+  // not reach the process as an unhandled one.
   const own = auth.tenantId
   const kept = keepByName(auth)
-  const resolved = options.tenantResolver?.(auth) ?? own
+  const resolved: unknown = options.tenantResolver?.(auth) ?? own
+  if (resolved instanceof Promise) resolved.catch(() => undefined)
   if (resolved === undefined || resolved === null) return kept
-  return { ...kept, tenantId: resolved }
+  return { ...kept, tenantId: resolved as string }
 }
 
 /** The fields of a result the library keeps, besides the tenant: the ones it names, read once and left out when absent. */
