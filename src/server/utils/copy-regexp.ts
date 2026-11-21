@@ -1,5 +1,5 @@
 /**
- * @fileoverview A pristine copy of a plain RegExp, and the test of whether a value is a RegExp at all.
+ * @fileoverview A pristine copy of a plain RegExp, which is also the test of whether a value is one.
  * @layer utils
  */
 
@@ -28,22 +28,6 @@ const NewRegExp = RegExp
 const PROTOTYPE = RegExp.prototype
 const getPrototypeOf = Object.getPrototypeOf
 const ownKeys = Reflect.ownKeys
-
-/**
- * Whether a value has the internal slots of a RegExp. The `source` accessor of `RegExp.prototype` throws for any
- * value without them, so an object that only has the prototype of a RegExp, a `Proxy` over one and a primitive all
- * fail, while a RegExp of any realm, a subclass and one with properties of its own pass.
- *
- * @param value - What an option held.
- */
-export function hasRegExpBrand(value: unknown): boolean {
-  try {
-    SOURCE.call(value)
-    return true
-  } catch {
-    return false
-  }
-}
 
 /**
  * A new RegExp with the pattern and flags of `value`, without `g`, or `undefined` when `value` cannot be copied

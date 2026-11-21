@@ -153,7 +153,8 @@ function isOriginEntry(entry: unknown): boolean {
  * Refuse an `origin` of a kind Socket.IO does not match by itself. It reads anything else as "allow", so an
  * object, a number, a symbol, a list with such an entry and an object that only has the prototype of a RegExp would
  * each be answered with the origin that asked. `null` and `undefined` are refused here too: they are not an
- * allowlist. A RegExp is recognised by its brand, not by its prototype.
+ * allowlist. Only a plain RegExp is accepted, as `copyRegExp` decides; a value that is or looks like one but
+ * cannot be copied gets the way out, a function origin.
  */
 function assertOrigin(origin: unknown): void {
   const kind = typeof origin
