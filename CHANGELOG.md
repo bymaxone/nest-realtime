@@ -7,6 +7,25 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.30] - 2026-11-21
+
+### Security
+
+- **A `websocket.cors.origin` of a kind Socket.IO reads as "any origin", and a `cors` that is not an object, no longer open the server.** Socket.IO matches an origin that is a string, a `RegExp` of its own realm or a list of those, and answers the asking origin for anything else: an object, a number, a symbol, a list with such an entry and a `RegExp` from another realm. A `cors` that is a string, a number, `true`, `false`, an array or a `Map` was ignored, so the server answered `*`. All of these are now refused at boot with `REALTIME_INVALID_OPTIONS`, naming `options.websocket.cors.origin` or `options.websocket.cors`.
+
+### Changed
+
+- **`CorsConfig.origin` is typed as what Socket.IO accepts.** The declaration now includes `RegExp`, a list of strings and `RegExp`s, and the function Socket.IO calls per origin, which the runtime already honoured. `true` stays accepted and answers every origin; `false` answers none.
+- **A `cors` that is absent or `null` stays valid.** Socket.IO sends no CORS header for it, so the server is closed to browsers on other origins.
+
+#### Apply to a derived backend
+
+An `origin` that is not a string, a `RegExp`, a function, a list of strings and `RegExp`s, or a boolean now refuses boot, and so does a `cors` that is present and not an object: write the allowlist as one of those kinds, or remove the key.
+
+### Tests
+
+- A row for a `cors` block whose `has` trap throws, which is refused with the host's error as the cause, and real-handshake rows for each refused kind.
+
 ## [1.2.29] - 2026-11-21
 
 ### Security
@@ -1344,7 +1363,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.29...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.30...HEAD
+[1.2.30]: https://github.com/bymaxone/nest-realtime/compare/v1.2.29...v1.2.30
 [1.2.29]: https://github.com/bymaxone/nest-realtime/compare/v1.2.28...v1.2.29
 [1.2.28]: https://github.com/bymaxone/nest-realtime/compare/v1.2.27...v1.2.28
 [1.2.27]: https://github.com/bymaxone/nest-realtime/compare/v1.2.26...v1.2.27

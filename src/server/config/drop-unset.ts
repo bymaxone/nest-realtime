@@ -9,6 +9,7 @@ import type {
   SseOptions,
   WebSocketOptions,
 } from '../interfaces/realtime-module-options.interface'
+import { isBuiltInValue } from '../utils/is-built-in-value'
 import { isPlainObject } from '../utils/is-plain-object'
 
 /**
@@ -123,7 +124,7 @@ export function dropUnset<T extends object>(options: T): T {
   const websocket = kept.websocket
   if (isPlainObject(websocket)) {
     const cors = (websocket as Record<string, unknown>).cors
-    if (typeof cors === 'object' && cors !== null && !Array.isArray(cors)) {
+    if (typeof cors === 'object' && cors !== null && !isBuiltInValue(cors)) {
       ;(websocket as Record<string, unknown>).cors = readSet(cors, CORS_KEYS, 'origin')
     }
   }

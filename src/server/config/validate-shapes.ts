@@ -5,6 +5,7 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { describeReceived } from '../utils/describe-received'
+import { isBuiltInValue } from '../utils/is-built-in-value'
 import { readPlainObject } from '../utils/is-plain-object'
 import { refuseObject } from '../utils/refuse-object'
 import { realtimeError } from '../utils/realtime-error'
@@ -135,21 +136,40 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
   assertCors(options.websocket?.cors)
 }
 
+const ORIGIN_KINDS = 'a string, a RegExp, a function, an array of strings and RegExps, or a boolean'
+
+/** Whether an origin entry is one Socket.IO matches by itself: a string, or a RegExp of this realm. */
+function isOriginEntry(entry: unknown): boolean {
+  return typeof entry === 'string' || entry instanceof RegExp
+}
+
 /**
- * Refuse a `cors` block whose `origin` is set to nothing, and a `credentials` that is not a boolean. An origin
- * that is `null` or `undefined` is not the same as no origin: Socket.IO closes the server for it, and reading it
- * as unset would answer every origin, so the host is told to give the allowlist or leave the key out.
+ * Refuse an `origin` of a kind Socket.IO does not match by itself. It reads anything else as "allow", so an
+ * object, a number, a symbol, a list with such an entry and a RegExp from another realm would each be answered
+ * with the origin that asked. `null` and `undefined` are refused here too: they are not an allowlist.
+ */
+function assertOrigin(origin: unknown): void {
+  const kind = typeof origin
+  if (kind === 'string' || kind === 'function' || kind === 'boolean' || origin instanceof RegExp)
+    return
+  if (Array.isArray(origin)) {
+    for (const entry of origin as unknown[])
+      if (!isOriginEntry(entry)) refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
+    return
+  }
+  refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
+}
+
+/**
+ * Refuse a `cors` that is present and not an object, an `origin` of a kind Socket.IO reads as "any origin", and a
+ * `credentials` that is not a boolean. An absent or `null` block is left to Socket.IO's own default, which sends no
+ * CORS header; a block with no `origin` key answers `*`, as documented.
  */
 function assertCors(cors: unknown): void {
-  if (typeof cors !== 'object' || cors === null) return
+  if (cors === undefined || cors === null) return
+  if (typeof cors !== 'object' || isBuiltInValue(cors)) refuse('websocket.cors', 'an object', cors)
   const block = cors as Record<string, unknown>
-  if ('origin' in block && (block.origin === null || block.origin === undefined)) {
-    refuse(
-      'websocket.cors.origin',
-      'a string, a RegExp, a function, an array or false',
-      block.origin,
-    )
-  }
+  if ('origin' in block) assertOrigin(block.origin)
   assertBoolean('websocket.cors.credentials', block.credentials)
 }
 
