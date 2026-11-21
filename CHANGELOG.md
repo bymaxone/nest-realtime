@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.25] - 2026-11-21
+
 ### Fixed
 
 - **A `tenantResolver` is given the authenticator's own result again, and the library keeps its own record.** From 1.2.22 to 1.2.24 the resolver received a copy of the result, and every shape of host object turned out to lose something in a copy: a hidden or symbol-keyed field, a field a class default or `Object.create` supplies from the prototype, an accessor that shadows one, a getter over a private field that throws on the copy. The resolver is now handed the object the authenticator returned, so none of that applies. The record the library keeps is built by name (`userId`, `tenantId`, `roles`, `rooms`, `metadata`), each field read once, before the resolver runs; what a resolver writes to the result does not change it, and `roles`, `rooms` and `metadata` stay shared. What the resolver returns is what routes, so the tenant that was tested and the tenant that is used stay one value.
@@ -1284,7 +1286,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.24...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.25...HEAD
+[1.2.25]: https://github.com/bymaxone/nest-realtime/compare/v1.2.24...v1.2.25
 [1.2.24]: https://github.com/bymaxone/nest-realtime/compare/v1.2.23...v1.2.24
 [1.2.23]: https://github.com/bymaxone/nest-realtime/compare/v1.2.22...v1.2.23
 [1.2.22]: https://github.com/bymaxone/nest-realtime/compare/v1.2.21...v1.2.22
