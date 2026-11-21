@@ -152,8 +152,9 @@ function assertOrigin(origin: unknown): void {
   if (kind === 'string' || kind === 'function' || kind === 'boolean' || origin instanceof RegExp)
     return
   if (Array.isArray(origin)) {
-    for (const entry of origin as unknown[])
-      if (!isOriginEntry(entry)) refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
+    for (let index = 0; index < origin.length; index += 1) {
+      if (!isOriginEntry(origin[index])) refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
+    }
     return
   }
   refuse('websocket.cors.origin', ORIGIN_KINDS, origin)

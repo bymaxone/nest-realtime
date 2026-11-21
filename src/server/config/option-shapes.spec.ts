@@ -365,6 +365,37 @@ describe('websocket.cors', () => {
     )
   })
 
+  // Scenario: an origin list whose length is not a count of at most 1,000 entries, or that has a hole. Expected:
+  // refused; the list is copied once, so a length that is read is a length that is checked.
+  it.each([
+    ['1,001 entries', () => Array.from({ length: 1001 }, () => 'https://a.example')],
+    ['a hole', () => new Array<string>(2).fill('https://a.example', 0, 1)],
+    [
+      'a length that is not an integer',
+      () =>
+        new Proxy(['https://a.example'], {
+          get: (t, k, r) => (k === 'length' ? 1.5 : Reflect.get(t, k, r)),
+        }),
+    ],
+    [
+      'a negative length',
+      () =>
+        new Proxy(['https://a.example'], {
+          get: (t, k, r) => (k === 'length' ? -1 : Reflect.get(t, k, r)),
+        }),
+    ],
+  ])('refuses an origin list of %s', (_name, build) => {
+    expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
+      'options.websocket.cors.origin must be',
+    )
+  })
+
+  it('accepts an origin list of exactly 1,000 entries', () => {
+    const origin = Array.from({ length: 1000 }, () => 'https://a.example')
+
+    expect(() => validateOptions(corsOptions({ origin }))).not.toThrow()
+  })
+
   // Scenario: the kinds an origin may be. Expected: accepted.
   it.each([
     ['https://a.example'],

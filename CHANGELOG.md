@@ -13,10 +13,13 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 - **A `websocket.cors.origin` of a kind Socket.IO reads as "any origin", and a `cors` that is not an object, no longer open the server.** Socket.IO matches an origin that is a string, a `RegExp` of its own realm or a list of those, and answers the asking origin for anything else: an object, a number, a symbol, a list with such an entry and a `RegExp` from another realm. A `cors` that is a string, a number, `true`, an array or a `Map` was ignored, so the server answered `*`; `false` closed the server, and is refused with the others because `cors` is an object. All of these are now refused at boot with `REALTIME_INVALID_OPTIONS`, naming `options.websocket.cors.origin` or `options.websocket.cors`.
 
+- **An origin list is copied once, and capped, instead of being read again on every request.** Socket.IO matches the list it is given by index and length on each request, while validation walked it through its iterator, so a subclass whose iterator and indexes differ, a proxy that answered differently the second time, and a list the host pushed to after boot each passed validation and then allowed any origin. The length and each entry are now read once into a frozen copy that is both validated and handed to Socket.IO; the length must be an integer from 0 to 1,000. A function, and a `RegExp` subclass that overrides `test`, remain the host's own code and are trusted as such.
+- **A `cors` object that holds none of `origin`, `credentials` or `methods` and is not a plain object is refused** (an `Error`, a `Date`, a `Map`, an array), instead of being read as an empty block that answers `*`.
+
 ### Changed
 
 - **`CorsConfig.origin` is typed as what Socket.IO accepts.** The declaration now includes `RegExp`, a list of strings and `RegExp`s, and the function Socket.IO calls per origin, which the runtime already honoured. `true` stays accepted and answers every origin; `false` answers none.
-- **A `cors` that is absent or `null` stays valid.** Socket.IO sends no CORS header for it, so the server is closed to browsers on other origins.
+- **A `cors` that is absent or `null` stays valid, and `cors: {}` or a block with only `credentials` still answers `*`.** Socket.IO sends no CORS header for it, so the server is closed to browsers on other origins.
 
 #### Apply to a derived backend
 
