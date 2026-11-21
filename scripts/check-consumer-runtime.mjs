@@ -288,6 +288,62 @@ const IORedisMock = require('ioredis-mock')
 const FORMAT = 'CJS'
 ${probeBody}`
 
+/**
+ * The rejection probe, identical in both formats. A `tenantResolver` that returns a rejecting promise must not
+ * leave an unhandled rejection in the consumer's process, whatever kind of promise it is. It runs as its own
+ * process against the packed artifact because a test runner installs handlers of its own that can hide the
+ * very event this probe is looking for.
+ */
+const rejectionProbeBody = `
+const unhandled = []
+process.on('unhandledRejection', (reason) => unhandled.push(String(reason && reason.message ? reason.message : reason)))
+
+class OverridesCatch extends Promise {
+  catch() {
+    throw new Error('own catch')
+  }
+}
+const withOwnThen = Promise.reject(new Error('own then'))
+Object.defineProperty(withOwnThen, 'then', {
+  value: () => {
+    throw new Error('own then called')
+  },
+})
+const kinds = {
+  'a native promise': () => Promise.reject(new Error('native')),
+  'a promise from another realm': () => vm.runInNewContext("Promise.reject(new Error('cross-realm'))"),
+  'a subclass that overrides catch': () => OverridesCatch.reject(new Error('subclass')),
+  'a promise with a then of its own': () => withOwnThen,
+}
+
+for (const [name, build] of Object.entries(kinds)) {
+  try {
+    resolveAuthTenant({ tenantResolver: build }, { userId: 'u1' })
+  } catch (error) {
+    console.error('  ✗ ' + FORMAT + ': ' + name + ' made resolveAuthTenant throw: ' + error.message)
+    process.exit(1)
+  }
+}
+
+setTimeout(() => {
+  if (unhandled.length > 0) {
+    console.error('  ✗ ' + FORMAT + ': an unhandled rejection reached the process: ' + unhandled.join(', '))
+    process.exit(1)
+  }
+  console.log('  ✓ ' + FORMAT + ': a rejecting promise from a tenantResolver leaves no unhandled rejection, ' + Object.keys(kinds).length + ' kinds')
+}, 50)
+`
+
+const esmRejectionProbe = `import vm from 'node:vm'
+import { resolveAuthTenant } from '${packageName}/internal'
+const FORMAT = 'ESM'
+${rejectionProbeBody}`
+
+const cjsRejectionProbe = `const vm = require('node:vm')
+const { resolveAuthTenant } = require('${packageName}/internal')
+const FORMAT = 'CJS'
+${rejectionProbeBody}`
+
 function run(command, args, options = {}) {
   return execFileSync(command, args, { encoding: 'utf8', stdio: 'pipe', ...options })
 }
@@ -354,6 +410,8 @@ try {
   )
   writeFileSync(join(consumerDir, 'probe.mjs'), esmProbe)
   writeFileSync(join(consumerDir, 'probe.cjs'), cjsProbe)
+  writeFileSync(join(consumerDir, 'rejections.mjs'), esmRejectionProbe)
+  writeFileSync(join(consumerDir, 'rejections.cjs'), cjsRejectionProbe)
 
   // A consumer's bundler picks the package's `import` build by the consumer's import syntax, whatever
   // format it emits. The same probe, bundled to CommonJS with esbuild (the engine of this repo's own
@@ -394,7 +452,13 @@ try {
     logLevel: 'silent',
   })
 
-  for (const probe of ['probe.mjs', 'probe.cjs', 'probe-rebundled.cjs']) {
+  for (const probe of [
+    'probe.mjs',
+    'probe.cjs',
+    'probe-rebundled.cjs',
+    'rejections.mjs',
+    'rejections.cjs',
+  ]) {
     try {
       process.stdout.write(run('node', [probe], { cwd: consumerDir, stdio: 'pipe' }))
     } catch (error) {

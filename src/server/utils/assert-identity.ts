@@ -2,7 +2,6 @@
  * @fileoverview Tenant resolution and rejection of blank identity traits.
  * @layer utils
  */
-import { types } from 'node:util'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
@@ -60,15 +59,15 @@ export function resolveAuthTenant(
 
 /**
  * Handle the rejection of a promise a synchronous resolver returned, so it cannot end the process. The intrinsic
- * `then` is used rather than the value's own methods, so a promise from another realm, a subclass that overrides
- * `catch` and a promise with a `then` of its own are all handled; a value that is not a promise is not touched.
+ * `then` is used rather than the value's own methods, and it accepts only a real promise, of any realm, so a
+ * promise from another realm, a subclass that overrides `catch` and a promise with a `then` of its own are all
+ * handled, while any other value is refused by the intrinsic before a property of it is read.
  */
 function absorbRejection(value: unknown): void {
-  if (!types.isPromise(value)) return
   try {
     Promise.prototype.then.call(value, undefined, () => undefined)
   } catch {
-    // A promise whose species cannot be read has nothing to absorb on this path.
+    // Not a promise, or a promise whose species cannot be read: there is no rejection to absorb on this path.
   }
 }
 

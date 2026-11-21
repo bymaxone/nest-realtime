@@ -12,7 +12,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Fixed
 
 - **`roles` is read with a bound, and a `roles` that cannot be read is refused in every shape.** A revoked proxy over an array made `Array.isArray` throw a raw `TypeError` before the guard; the check now sits inside it, so the refusal is `REALTIME_AUTH_FAILED` with the host's error as the cause. The copy stops at 1,024 roles: an authentication result with more is refused with `REALTIME_AUTH_FAILED`, and an iterator that never ends is no longer read to exhaustion. The bound is there to cap the cost of the copy, not to say how many roles a user may hold; exactly 1,024 is admitted.
-- **The rejection of a promise a `tenantResolver` returns is absorbed whatever kind of promise it is.** The check was `instanceof Promise`, which a promise from another realm fails, and the handler was the promise's own `catch`, which a subclass can override; either left an unhandled rejection that ended the process. It now recognises a promise with `util.types.isPromise` and attaches the handler with the intrinsic `then`.
+- **The rejection of a promise a `tenantResolver` returns is absorbed whatever kind of promise it is.** The check was `instanceof Promise`, which a promise from another realm fails, and the handler was the promise's own `catch`, which a subclass can override; either left an unhandled rejection that ended the process. The handler is now attached with the intrinsic `then`, which accepts a real promise of any realm and refuses every other value without reading it.
 
 ### Documentation
 
