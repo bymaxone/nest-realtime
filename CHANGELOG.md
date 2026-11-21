@@ -11,7 +11,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Security
 
-- **A `websocket.cors.origin` of a kind Socket.IO reads as "any origin", and a `cors` that is not an object, no longer open the server.** Socket.IO matches an origin that is a string, a `RegExp` of its own realm or a list of those, and answers the asking origin for anything else: an object, a number, a symbol, a list with such an entry and a `RegExp` from another realm. A `cors` that is a string, a number, `true`, `false`, an array or a `Map` was ignored, so the server answered `*`. All of these are now refused at boot with `REALTIME_INVALID_OPTIONS`, naming `options.websocket.cors.origin` or `options.websocket.cors`.
+- **A `websocket.cors.origin` of a kind Socket.IO reads as "any origin", and a `cors` that is not an object, no longer open the server.** Socket.IO matches an origin that is a string, a `RegExp` of its own realm or a list of those, and answers the asking origin for anything else: an object, a number, a symbol, a list with such an entry and a `RegExp` from another realm. A `cors` that is a string, a number, `true`, an array or a `Map` was ignored, so the server answered `*`; `false` closed the server, and is refused with the others because `cors` is an object. All of these are now refused at boot with `REALTIME_INVALID_OPTIONS`, naming `options.websocket.cors.origin` or `options.websocket.cors`.
 
 ### Changed
 
