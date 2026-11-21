@@ -328,6 +328,14 @@ describe('websocket.cors', () => {
     )
   })
 
+  // Scenario: shapes are checked on a block that is null or not an object, as `validateShapes` is called on its own.
+  // Expected: nothing to check, and no TypeError from looking an origin up on null.
+  it.each([null, 'cors'])('leaves a cors block of %p to the other checks', (cors) => {
+    expect(() =>
+      validateShapes({ transport: 'websocket', authenticator, websocket: { cors } } as never),
+    ).not.toThrow()
+  })
+
   // Scenario: no origin key. Expected: accepted, the documented `*`.
   it('accepts a block with no origin', () => {
     expect(() => validateOptions(corsOptions({ credentials: true }))).not.toThrow()
