@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.23] - 2026-11-20
+
 ### Fixed
 
 - **A field named `msg` or `level` can no longer reach a log line.** A structured logger reads `msg` as the text of a line and `level` as its severity, so a field of either name could change what a library line says or how it is filed. `logEvent` drops them, as it already did `err`; `event` and `message` stay the library's own.
@@ -1260,7 +1262,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.22...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.23...HEAD
+[1.2.23]: https://github.com/bymaxone/nest-realtime/compare/v1.2.22...v1.2.23
 [1.2.22]: https://github.com/bymaxone/nest-realtime/compare/v1.2.21...v1.2.22
 [1.2.21]: https://github.com/bymaxone/nest-realtime/compare/v1.2.20...v1.2.21
 [1.2.20]: https://github.com/bymaxone/nest-realtime/compare/v1.2.19...v1.2.20
