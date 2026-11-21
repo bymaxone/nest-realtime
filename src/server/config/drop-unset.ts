@@ -98,8 +98,8 @@ function readSet(source: object, known: Readonly<Record<string, true>>): Record<
  * fields or getters, so each known key is read by property access rather than from the own keys alone.
  * Values that carry behaviour (the authenticator, a queue, a hook table) are kept by reference. A group
  * that is not an object, or is an array or a built-in such as a `Date`, is left as it is. The CORS block
- * of `websocket` is read the same way, because the origin allowlist it carries reaches Socket.IO, which
- * copies what it is given: an `origin` held as a getter or on a prototype would be lost in that copy and
+ * of `websocket` is read by the same names whenever it is an object, however it reports its type, because
+ * the origin allowlist it carries reaches Socket.IO, which copies what it is given: an `origin` held as a getter or on a prototype would be lost in that copy and
  * the server would answer every origin.
  *
  * @param options - The options as the host wrote them.
@@ -114,7 +114,9 @@ export function dropUnset<T extends object>(options: T): T {
   const websocket = kept.websocket
   if (isPlainObject(websocket)) {
     const cors = (websocket as Record<string, unknown>).cors
-    if (isPlainObject(cors)) (websocket as Record<string, unknown>).cors = readSet(cors, CORS_KEYS)
+    if (typeof cors === 'object' && cors !== null && !Array.isArray(cors)) {
+      ;(websocket as Record<string, unknown>).cors = readSet(cors, CORS_KEYS)
+    }
   }
   return kept as T
 }
