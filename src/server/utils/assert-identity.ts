@@ -35,7 +35,7 @@ function isBlank(value: unknown): boolean {
  *
  * @param options - The module options, read for an optional `tenantResolver`.
  * @param auth - The authentication result the consumer's authenticator returned.
- * @returns The same result with `tenantId` resolved, or absent when there is none.
+ * @returns A copy of the result with `tenantId` resolved, or absent when there is none.
  */
 export function resolveAuthTenant(
   options: Pick<BymaxRealtimeModuleOptions, 'tenantResolver'>,

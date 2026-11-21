@@ -13,8 +13,7 @@ import { isPlainObject } from '../utils/is-plain-object'
 
 /**
  * The keys each object is read for. Each table is typed against its interface, so a key added to an
- * interface and missing here fails to compile, and an object handed over as a class instance is read
- * through the same property access the services use, getters included.
+ * interface and missing here fails to compile.
  */
 const SSE_KEYS = {
   endpoint: true,

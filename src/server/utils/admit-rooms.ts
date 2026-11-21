@@ -17,8 +17,8 @@ function refuse(detail: string): never {
 }
 
 /**
- * The roles the connection keeps: a frozen copy of an array, read once here. Roles reach the client and every
- * hook after the admission, so a read that throws is refused now, as the authenticator's fault, with the host's
+ * The roles the connection keeps: a frozen copy of an array, read once here. A read that throws is refused
+ * at admission, as the authenticator's fault, with the host's
  * error as the cause. A value that is not an array is left as it is.
  */
 function admitRoles(roles: AuthenticationResult['roles']): AuthenticationResult['roles'] {
@@ -49,9 +49,9 @@ function admitRoles(roles: AuthenticationResult['roles']): AuthenticationResult[
  * await, so reading the original there would join whatever it holds by then.
  *
  * @param auth - The resolved authentication result.
- * @returns `auth` itself when it has no `rooms`; otherwise a result with the same fields and a
- *   frozen copy of its `rooms`.
- * @throws Error carrying `REALTIME_AUTH_FAILED` when `rooms` is present and invalid.
+ * @returns `auth` itself when it has no `rooms` and no array `roles`; otherwise a result with the
+ *   same fields and a frozen copy of each of those it has.
+ * @throws Error carrying `REALTIME_AUTH_FAILED` when `rooms` is present and invalid, or `roles` cannot be read.
  */
 export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
   const roles = admitRoles(auth.roles)
