@@ -7,6 +7,27 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.27] - 2026-11-21
+
+### Fixed
+
+- **`roles` is read with a bound, and a `roles` that cannot be read is refused in every shape.** A revoked proxy over an array made `Array.isArray` throw a raw `TypeError` before the guard; the check now sits inside it, so the refusal is `REALTIME_AUTH_FAILED` with the host's error as the cause. The copy stops at 1,024 roles: an authentication result with more is refused with `REALTIME_AUTH_FAILED`, and an iterator that never ends is no longer read to exhaustion. The bound is there to cap the cost of the copy, not to say how many roles a user may hold; exactly 1,024 is admitted.
+- **The rejection of a promise a `tenantResolver` returns is absorbed whatever kind of promise it is.** The check was `instanceof Promise`, which a promise from another realm fails, and the handler was the promise's own `catch`, which a subclass can override; either left an unhandled rejection that ended the process. It now recognises a promise with `util.types.isPromise` and attaches the handler with the intrinsic `then`.
+
+### Documentation
+
+- **What a `tenantResolver` that returns something other than a native promise gets.** A thenable that is not a promise is never asked for its `then`, because asking could run a lazy query, so its own rejection is not absorbed; a promise whose `constructor` cannot be read cannot be given a handler either. Both are refused as a blank tenant.
+- **`roles` that is not an array is kept as it is.** A string, a `Set` or an array-like proxy is not copied, so it is read later by whoever uses it.
+- **A `websocket.cors` key outside `CorsConfig`.** Only the keys the library names (`origin`, `credentials`, `methods`) and the block's own enumerable keys are carried; any other key defined as a getter on a prototype or as non-enumerable is not.
+
+### Tests
+
+- Rows for `websocket.cors` with `origin: false`, a `RegExp`, a function and a proxy over an empty target that answers by name, over a real Socket.IO server.
+
+#### Apply to a derived backend
+
+An authenticator that returns more than 1,024 roles is now refused; none is expected to.
+
 ## [1.2.26] - 2026-11-21
 
 ### Fixed
@@ -1298,7 +1319,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.26...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.27...HEAD
+[1.2.27]: https://github.com/bymaxone/nest-realtime/compare/v1.2.26...v1.2.27
 [1.2.26]: https://github.com/bymaxone/nest-realtime/compare/v1.2.25...v1.2.26
 [1.2.25]: https://github.com/bymaxone/nest-realtime/compare/v1.2.24...v1.2.25
 [1.2.24]: https://github.com/bymaxone/nest-realtime/compare/v1.2.23...v1.2.24

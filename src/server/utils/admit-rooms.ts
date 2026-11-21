@@ -8,6 +8,9 @@ import type { AuthenticationResult } from '../interfaces/connection-authenticato
 import { realtimeError } from './realtime-error'
 import { reservedRoomPrefix } from './reserved-room'
 
+/** The most roles one authentication result may carry. It bounds the cost of the copy, not what a user may hold; kept here rather than in the public limits table. */
+const MAX_ROLES = 1024
+
 function refuse(detail: string): never {
   throw realtimeError(
     REALTIME_ERROR_CODES.AUTH_FAILED,
@@ -17,14 +20,22 @@ function refuse(detail: string): never {
 }
 
 /**
- * The roles the connection keeps: a frozen copy of an array, read once here. A read that throws is refused
- * at admission, as the authenticator's fault, with the host's
- * error as the cause. A value that is not an array is left as it is.
+ * The roles the connection keeps: a frozen copy of an array, read once here and no further than the bound.
+ * A read that throws, or an array that is not readable, is refused at admission, as the authenticator's
+ * fault, with the host's error as the cause. A value that is not an array is left as it is.
  */
 function admitRoles(roles: AuthenticationResult['roles']): AuthenticationResult['roles'] {
-  if (!Array.isArray(roles)) return roles
+  const admitted: string[] = []
+  let overflow = false
   try {
-    return Object.freeze([...(roles as readonly string[])])
+    if (!Array.isArray(roles)) return roles
+    for (const role of roles as Iterable<string>) {
+      if (admitted.length === MAX_ROLES) {
+        overflow = true
+        break
+      }
+      admitted.push(role)
+    }
   } catch (error) {
     throw realtimeError(
       REALTIME_ERROR_CODES.AUTH_FAILED,
@@ -32,6 +43,13 @@ function admitRoles(roles: AuthenticationResult['roles']): AuthenticationResult[
       { cause: error },
     )
   }
+  if (overflow) {
+    throw realtimeError(
+      REALTIME_ERROR_CODES.AUTH_FAILED,
+      `the authenticator returned more than ${MAX_ROLES} roles: the limit is ${MAX_ROLES}`,
+    )
+  }
+  return Object.freeze(admitted)
 }
 
 /**

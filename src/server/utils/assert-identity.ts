@@ -2,6 +2,7 @@
  * @fileoverview Tenant resolution and rejection of blank identity traits.
  * @layer utils
  */
+import { types } from 'node:util'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
@@ -52,9 +53,23 @@ export function resolveAuthTenant(
   const own = auth.tenantId
   const kept = keepByName(auth)
   const resolved: unknown = options.tenantResolver?.(auth) ?? own
-  if (resolved instanceof Promise) resolved.catch(() => undefined)
+  absorbRejection(resolved)
   if (resolved === undefined || resolved === null) return kept
   return { ...kept, tenantId: resolved as string }
+}
+
+/**
+ * Handle the rejection of a promise a synchronous resolver returned, so it cannot end the process. The intrinsic
+ * `then` is used rather than the value's own methods, so a promise from another realm, a subclass that overrides
+ * `catch` and a promise with a `then` of its own are all handled; a value that is not a promise is not touched.
+ */
+function absorbRejection(value: unknown): void {
+  if (!types.isPromise(value)) return
+  try {
+    Promise.prototype.then.call(value, undefined, () => undefined)
+  } catch {
+    // A promise whose species cannot be read has nothing to absorb on this path.
+  }
 }
 
 /** The fields of a result the library keeps, besides the tenant: the ones it names, read once and left out when absent. */

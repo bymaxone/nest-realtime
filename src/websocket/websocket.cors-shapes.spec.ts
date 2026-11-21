@@ -84,6 +84,29 @@ const tagged: ReadonlyArray<readonly [string, () => object]> = [
   ],
 ]
 
+/** Origins the block may carry besides a list: refused-by-default, a pattern, a function, and a proxy that answers by name only. */
+const answers: ReadonlyArray<
+  readonly [string, () => object, string | undefined, string | undefined]
+> = [
+  ['origin false', () => ({ origin: false }), undefined, undefined],
+  ['a RegExp origin', () => ({ origin: /^https:\/\/good\.example$/ }), undefined, GOOD],
+  [
+    'a function origin',
+    () => ({
+      origin: (origin: string | undefined, done: (error: Error | null, ok?: boolean) => void) =>
+        done(null, origin === GOOD),
+    }),
+    undefined,
+    GOOD,
+  ],
+  [
+    'a proxy over an empty target that answers by name',
+    () => new Proxy({}, { get: (_target, key) => (key === 'origin' ? ALLOWED : undefined) }),
+    undefined,
+    GOOD,
+  ],
+]
+
 describe('websocket.cors over a real server', () => {
   let app: INestApplication
 
@@ -123,6 +146,14 @@ describe('websocket.cors over a real server', () => {
     expect(await answerTo(build(), EVIL)).toBeUndefined()
     await app.close()
     expect(await answerTo(build(), GOOD)).toBe(GOOD)
+  })
+
+  // Scenario: origins that are not a list. Expected: the evil origin gets no header, and the allowed one is
+  // answered only where the block allows it.
+  it.each(answers)('answers by the rule of %s', async (_name, build, evil, good) => {
+    expect(await answerTo(build(), EVIL)).toBe(evil)
+    await app.close()
+    expect(await answerTo(build(), GOOD)).toBe(good)
   })
 
   // Scenario: a block `Object.prototype.toString` does not call a plain object, or that throws when asked.
