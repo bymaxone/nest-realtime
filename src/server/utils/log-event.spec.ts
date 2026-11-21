@@ -132,7 +132,7 @@ describe('logEvent and the names a logger adds to a line itself', () => {
   // logger's name, the format version and the request and response serializers). Expected: none reaches the line. Why:
   // the logger writes those itself, and a field of the same name would replace its value or be replaced, so a line
   // would carry two answers to one question.
-  it.each(['time', 'pid', 'hostname', 'name', 'v', 'req', 'res'])(
+  it.each(['time', 'pid', 'hostname', 'name', 'v', 'req', 'res', 'service', 'version'])(
     'drops a field named %s',
     (key) => {
       const warn = jest.fn()

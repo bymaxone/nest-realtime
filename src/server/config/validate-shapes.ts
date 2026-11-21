@@ -5,7 +5,7 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { describeReceived } from '../utils/describe-received'
-import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
+import { readPlainObject } from '../utils/is-plain-object'
 import { refuseObject } from '../utils/refuse-object'
 import { realtimeError } from '../utils/realtime-error'
 
@@ -28,6 +28,9 @@ const HOOK_NAMES = [
 /** The option groups, each an object holding the options of one concern. */
 const GROUP_NAMES = ['sse', 'websocket', 'reauthenticationPolicy'] as const
 
+/** What a refusal says of a value whose type could not be read, so the text does not depend on a second read of it. */
+const UNREADABLE = 'an object that could not be read'
+
 function refuse(
   path: string,
   expected: string,
@@ -36,7 +39,7 @@ function refuse(
 ): never {
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `options.${path} must be ${expected}, received ${describeReceived(received)}`,
+    `options.${path} must be ${expected}, received ${cause === undefined ? describeReceived(received) : UNREADABLE}`,
     cause === undefined
       ? { who: 'BymaxRealtimeModule' }
       : { who: 'BymaxRealtimeModule', cause: cause.error },
@@ -149,17 +152,20 @@ export function assertExtraProviders(value: unknown): void {
     )
   }
   value.forEach((entry: unknown, index) => {
-    const isClass = typeof entry === 'function'
-    const hasProvide = isPlainObject(entry) && 'provide' in entry
-    if (isClass || hasProvide) return
-    const received =
-      isPlainObject(entry) && !Array.isArray(entry)
+    if (typeof entry === 'function') return
+    const read = readPlainObject(entry)
+    if (read.plain && 'provide' in (entry as object)) return
+    const received = read.threw
+      ? UNREADABLE
+      : read.plain && !Array.isArray(entry)
         ? 'an object with no provide'
         : describeReceived(entry)
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
       `extraProviders[${index}] must be a provider (a class or an object with provide), received ${received}`,
-      { who: 'BymaxRealtimeModule' },
+      read.threw
+        ? { who: 'BymaxRealtimeModule', cause: read.error }
+        : { who: 'BymaxRealtimeModule' },
     )
   })
 }

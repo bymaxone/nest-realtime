@@ -203,7 +203,7 @@ describe('options whose read throws', () => {
       return proxy
     }
     expect(() => BymaxRealtimeModule.forRoot(revoked() as never)).toThrow(
-      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options must be an object, received a built-in object',
+      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options must be an object, received an object that could not be read',
     )
     await expect(
       Test.createTestingModule({
@@ -232,6 +232,72 @@ describe('options whose read throws', () => {
     expect(() => validateOptions({ transport: 'ftp', authenticator } as never)).toThrow(
       "options.transport must be one of 'sse' | 'websocket' | 'both'",
     )
+  })
+})
+
+describe('a revoked proxy where a function is expected', () => {
+  // Scenario: a hook is a revoked proxy. Expected: the typed refusal that names the option and says what it received,
+  // not the engine's TypeError. Why: describing the value asks whether it is an array, and that question throws on a
+  // revoked proxy; this is the path that does not read the value's type first.
+  it('is refused with the typed error', () => {
+    const { proxy, revoke } = Proxy.revocable({}, {})
+    revoke()
+
+    expect(() =>
+      validateOptions({ transport: 'sse', authenticator, hooks: { onConnect: proxy } } as never),
+    ).toThrow(
+      /REALTIME_INVALID_OPTIONS: options\.hooks\.onConnect must be .*, received a built-in object/,
+    )
+  })
+})
+
+describe('an entry of extraProviders whose reads throw', () => {
+  const register = (entry: object): unknown =>
+    BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
+      useFactory: () => ({ transport: 'sse', authenticator }),
+      extraProviders: [entry],
+    } as never)
+
+  // Scenario: an entry throws on the check that it has `provide`. Expected: the typed refusal that the registration
+  // could not be read, with the host's error as the cause.
+  it('is refused with the cause when it throws on a has check', async () => {
+    const entry = new Proxy(
+      { provide: 'X' },
+      {
+        has: () => {
+          throw new Error(SENTINEL)
+        },
+      },
+    )
+
+    await typedRefusal(() => register(entry), 'the registration')
+  })
+
+  // Scenario: an entry throws when its type is read. Expected: the refusal names the entry and says it could not be
+  // read, with the host's error as the cause. Why: the entry is the host's own object and the library reads it to
+  // check its shape, and a second read of it must not decide the wording.
+  it('names the entry and what could not be read when the type of the entry throws', () => {
+    const entry = new Proxy(
+      {},
+      {
+        get: () => {
+          throw new Error(SENTINEL)
+        },
+      },
+    )
+
+    let caught: Error | undefined
+    try {
+      register(entry)
+    } catch (error) {
+      caught = error as Error
+    }
+
+    expect(caught?.message).toBe(
+      '[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: extraProviders[0] must be a provider (a class or an object with provide), received an object that could not be read',
+    )
+    expect((caught?.cause as Error).message).toBe(SENTINEL)
   })
 })
 

@@ -31,7 +31,7 @@ const registrationOf = (): Record<string, unknown> => ({
   useFactory: () => optionsOf(),
   inject: [],
   imports: [],
-  extraProviders: [],
+  extraProviders: [{ provide: 'EXTRA', useValue: 1 }, class Extra {}],
 })
 
 /** The object, with its Nth operation (counted across it and everything read from it) throwing `host`. */

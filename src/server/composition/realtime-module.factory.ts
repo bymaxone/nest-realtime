@@ -431,7 +431,7 @@ export function composeForRootAsync(
   assertModeSupported(wiring, registration.transport, moduleName)
   assertSseEndpoint('sseEndpoint', registration.sseEndpoint)
   assertSseEndpointApplies(registration, moduleName)
-  assertExtraProviders(registration.extraProviders)
+  guardHostReads('the registration', () => assertExtraProviders(registration.extraProviders))
 
   const FACTORY_TOKEN = Symbol('REALTIME_OPTIONS_FACTORY')
   const instanceId = randomUUID()

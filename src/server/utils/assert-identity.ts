@@ -41,17 +41,33 @@ export function resolveAuthTenant(
   options: Pick<BymaxRealtimeModuleOptions, 'tenantResolver'>,
   auth: AuthenticationResult,
 ): AuthenticationResult {
-  // The tenantId is read here, once, with the rest of the result copied: a getter can answer differently the second
-  // time, and the value that decides the routing room must be the one that was tested. The resolver is given that
-  // copy, so a resolver that reads `auth.tenantId` reads the same value and not the getter again. The copy is its own
-  // object in every case, never the one returned, so a resolver that assigns to a top-level property of it cannot change what is kept; the copy is shallow, and nested objects such as `metadata` are shared.
-  const { tenantId: own, ...rest } = auth
-  const resolved =
-    options.tenantResolver?.(
-      own === undefined || own === null ? { ...rest } : { ...rest, tenantId: own },
-    ) ?? own
-  if (resolved === undefined || resolved === null) return rest
-  return { ...rest, tenantId: resolved }
+  // The record the library keeps is built here, by name, before the resolver runs: each field is read once, the way JS
+  // reads it, so a field that a class default, `Object.create` or an accessor on the prototype supplies counts, and
+  // the value that decides the routing room is the one that was tested. The resolver is given the authenticator's own
+  // result, not a copy of it, so everything on it works as it does for the authenticator's code, and what it writes to
+  // that object cannot reach the record, which is another object. The nested objects (`roles`, `rooms`, `metadata`) are
+  // shared. What the resolver returns is what routes, `undefined` and `null` meaning no opinion.
+  const own = auth.tenantId
+  const kept = keepByName(auth)
+  const resolved = options.tenantResolver?.(auth) ?? own
+  if (resolved === undefined || resolved === null) return kept
+  return { ...kept, tenantId: resolved }
+}
+
+/** The fields of a result the library keeps, besides the tenant: the ones it names, read once and left out when absent. */
+function keepByName(auth: AuthenticationResult): AuthenticationResult {
+  const kept = {} as AuthenticationResult
+  for (const key of ['userId', 'roles', 'rooms', 'metadata'] as const) {
+    const value: unknown = auth[key]
+    if (value === undefined) continue
+    Object.defineProperty(kept, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    })
+  }
+  return kept
 }
 
 /**
