@@ -247,7 +247,7 @@ describe('resolveAuthTenant', () => {
   // Scenario: only some of the fields are on the object itself; the rest come from the prototype, from a class
   // default, from Object.create or from an accessor. Expected: the kept record holds them, read the way JS reads them.
   // Why: the authenticator's own answer is the object as its code reads it, and a field supplied by the prototype is
-  // part of that answer; 1.2.22 to 1.2.24 dropped them.
+  // part of that answer, so the record must hold it.
   it.each([
     [
       'a class default and an accessor',
