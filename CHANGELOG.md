@@ -11,7 +11,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Fixed
 
-- **`roles` is read with a bound, and a `roles` that cannot be read is refused in every shape.** A revoked proxy over an array made `Array.isArray` throw a raw `TypeError` before the guard; the check now sits inside it, so the refusal is `REALTIME_AUTH_FAILED` with the host's error as the cause. The copy stops at 1,024 roles: an authentication result with more is refused with `REALTIME_AUTH_FAILED` (`the authenticator returned more than 1024 roles: the limit is 1024`), and an iterator that never ends is no longer read to exhaustion. The bound is there to cap the cost of the copy, not to say how many roles a user may hold; exactly 1,024 is admitted.
+- **`roles` is read with a bound, and a `roles` that cannot be read is refused in every shape.** A revoked proxy over an array made `Array.isArray` throw a raw `TypeError` before the guard; the check now sits inside it, so the refusal is `REALTIME_AUTH_FAILED` with the host's error as the cause. The copy stops at 1,024 roles: an authentication result with more is refused with `REALTIME_AUTH_FAILED`, and an iterator that never ends is no longer read to exhaustion. The bound is there to cap the cost of the copy, not to say how many roles a user may hold; exactly 1,024 is admitted.
 
 ### Documentation
 
@@ -19,7 +19,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Tests
 
-- Rows for `websocket.cors` with `origin: false`, a `RegExp`, a function and a proxy over an empty target that answers by name, over a real Socket.IO server. A throwing `roles` getter on the SSE path ends as the generic 500, as pinned by a new row.
+- Rows for `websocket.cors` with `origin: false`, a `RegExp`, a function and a proxy over an empty target that answers by name, over a real Socket.IO server.
 
 #### Apply to a derived backend
 
