@@ -131,6 +131,27 @@ describe('dropUnset, the CORS block of websocket', () => {
     expect({ ...kept }).toStrictEqual(expected)
   })
 
+  // Scenario: an object that is not a plain one, such as an Error, an array or a Map, and holds none of the CORS names.
+  // Expected: left as it is, so validation refuses it; copied, it would read as an empty block and answer every
+  // origin. One that holds a CORS name is read like any other block.
+  it.each([
+    ['an Error', () => new Error('x')],
+    ['an array', () => ['https://a.example']],
+    ['a Map', () => new Map([['origin', 'https://a.example']])],
+  ])('leaves %s without a CORS name as it is', (_name, build) => {
+    const cors = build()
+
+    expect(dropUnset({ websocket: { cors } }).websocket?.cors).toBe(cors)
+  })
+
+  it('reads an object that is not a plain one when it holds a CORS name', () => {
+    const cors = Object.assign(new Error('x'), { origin: 'https://a.example' })
+
+    const kept = dropUnset({ websocket: { cors } }).websocket?.cors
+
+    expect({ ...kept }).toStrictEqual({ origin: 'https://a.example' })
+  })
+
   // Scenario: a get-only proxy over an empty target that answers `null` for the origin, so the property is not
   // there for `in` to find. Expected: `null` is a value the host set whatever the object reports, so it stays.
   it('keeps an origin of null that a proxy answers without having the property', () => {

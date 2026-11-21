@@ -243,6 +243,8 @@ describe('websocket.cors over a real server', () => {
     ['an array', () => [GOOD]],
     ['a Map', () => new Map()],
     ['a Map from another realm', () => vm.runInNewContext('new Map()') as unknown],
+    ['an Error', () => new Error('not options')],
+    ['a Date', () => new Date(0)],
   ])('refuses to boot when the cors block is %s', async (_name, build) => {
     let caught: unknown
     try {

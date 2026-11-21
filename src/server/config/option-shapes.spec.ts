@@ -387,6 +387,11 @@ describe('websocket.cors', () => {
     [false, 'a boolean'],
     [[], 'an array'],
     [new Map(), 'a built-in object'],
+    [new Error('x'), 'a built-in object'],
+    [new Date(0), 'a built-in object'],
+    [new Set(), 'a built-in object'],
+    [Promise.resolve(), 'a built-in object'],
+    [new (class Tagged extends Map<string, string> {})(), 'a built-in object'],
   ])('refuses a cors block of %p', (cors, received) => {
     expect(() => validateOptions(corsOptions(cors))).toThrow(
       refusal('websocket.cors', 'an object', received),

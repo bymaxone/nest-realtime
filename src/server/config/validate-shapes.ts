@@ -5,8 +5,7 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { describeReceived } from '../utils/describe-received'
-import { isBuiltInValue } from '../utils/is-built-in-value'
-import { readPlainObject } from '../utils/is-plain-object'
+import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
 import { refuseObject } from '../utils/refuse-object'
 import { realtimeError } from '../utils/realtime-error'
 
@@ -167,7 +166,7 @@ function assertOrigin(origin: unknown): void {
  */
 function assertCors(cors: unknown): void {
   if (cors === undefined || cors === null) return
-  if (typeof cors !== 'object' || isBuiltInValue(cors)) refuse('websocket.cors', 'an object', cors)
+  if (!isPlainObject(cors)) refuse('websocket.cors', 'an object', cors)
   const block = cors as Record<string, unknown>
   if ('origin' in block) assertOrigin(block.origin)
   assertBoolean('websocket.cors.credentials', block.credentials)
