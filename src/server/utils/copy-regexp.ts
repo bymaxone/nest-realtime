@@ -31,7 +31,7 @@ export function hasRegExpBrand(value: unknown): boolean {
 
 /**
  * A new RegExp with the pattern and flags of `value`, without `g` and `y`, or `undefined` when `value` is not a
- * plain RegExp: one of this realm, whose prototype is `RegExp.prototype` and which has no property but `lastIndex`.
+ * plain RegExp: one of this realm, whose prototype is `RegExp.prototype` and which has no property but `lastIndex`, the one every RegExp has.
  * A subclass, a RegExp with a `test` of its own and a RegExp from another realm have behaviour a copy would lose,
  * and Socket.IO calls their own `test`; a copy that is more permissive than the original would answer origins the
  * host meant to refuse, so they get no copy and the caller refuses them. The copy has no state between calls,
@@ -42,8 +42,7 @@ export function hasRegExpBrand(value: unknown): boolean {
 export function copyRegExp(value: unknown): RegExp | undefined {
   try {
     if (Object.getPrototypeOf(value) !== RegExp.prototype) return undefined
-    const keys = Reflect.ownKeys(value as object)
-    if (keys.length !== 1 || keys[0] !== 'lastIndex') return undefined
+    if (Reflect.ownKeys(value as object).length !== 1) return undefined
     return new RegExp(SOURCE.call(value), FLAGS.call(value).replace(/[gy]/g, ''))
   } catch {
     return undefined
