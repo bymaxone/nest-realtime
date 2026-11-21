@@ -42,7 +42,7 @@ describe('copyRegExp', () => {
     expect(hasRegExpBrand(value)).toBe(true)
   })
 
-  it('does not take a plain RegExp, a proxy or a primitive for a RegExp of its own kind', () => {
+  it('recognises a plain RegExp by its brand, and neither a proxy over one nor a primitive', () => {
     expect(hasRegExpBrand(/x/)).toBe(true)
     expect(hasRegExpBrand(new Proxy(/x/, {}))).toBe(false)
     expect(hasRegExpBrand('x')).toBe(false)
