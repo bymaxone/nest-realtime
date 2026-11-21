@@ -474,6 +474,29 @@ describe('resolveAuthTenant', () => {
       }
     })
 
+    // Scenario: a proxy whose get trap binds the methods it hands out, over a rejecting promise. The intrinsic
+    // `then` refuses it (it is not a promise by brand), so the promise's own `catch` is the way to a handler.
+    it('is absorbed: a proxy over a promise, with its methods bound', async () => {
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+      try {
+        const target = rejecting()
+        const proxy = new Proxy(target, {
+          get: (t, key) => {
+            const value = Reflect.get(t, key) as unknown
+            return typeof value === 'function' ? (value as () => unknown).bind(t) : value
+          },
+        })
+        const out = resolveAuthTenant({ tenantResolver: () => proxy as never }, { userId: 'u1' })
+        await settle()
+
+        expect(unhandled).not.toHaveBeenCalled()
+        expect(() => assertIdentityIsNotBlank(out)).toThrow('REALTIME_AUTH_FAILED')
+      } finally {
+        process.off('unhandledRejection', unhandled)
+      }
+    })
+
     // The residual: a promise whose constructor cannot be read cannot be given a handler, so its own rejection
     // is not absorbed; the library still does not throw the host's error, and the result still cannot route.
     it('does not throw the host error for a promise whose constructor cannot be read', () => {
