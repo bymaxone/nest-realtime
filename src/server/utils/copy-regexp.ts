@@ -14,9 +14,9 @@ function accessor<T>(name: string): Getter<T> | undefined {
 
 /** The accessors, the constructor and the introspection the copy relies on, all taken when the module loads. */
 const SOURCE = accessor<string>('source') as Getter<string>
+/** The accessors of the flags a copy keeps and the one it refuses; `global` is not here, because the copy drops it. */
 const FLAG_ACCESSORS: ReadonlyArray<readonly [string, Getter<boolean> | undefined]> = [
   ['d', accessor<boolean>('hasIndices')],
-  ['g', accessor<boolean>('global')],
   ['i', accessor<boolean>('ignoreCase')],
   ['m', accessor<boolean>('multiline')],
   ['s', accessor<boolean>('dotAll')],
@@ -68,7 +68,7 @@ export function copyRegExp(value: unknown): RegExp | undefined {
     for (const [letter, get] of FLAG_ACCESSORS) {
       if (get === undefined || !get.call(value)) continue
       if (letter === 'y') return undefined
-      if (letter !== 'g') flags += letter
+      flags += letter
     }
     return new NewRegExp(source, flags)
   } catch {

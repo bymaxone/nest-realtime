@@ -18,6 +18,16 @@ describe('copyRegExp', () => {
     expect(copy?.flags).toBe('ims')
   })
 
+  // Scenario: every flag a copy keeps. Expected: the copy has each, so a flag is never lost by the table that reads them.
+  it.each([['dimsu'], ['dimsv'], ['']])('keeps the flags %p', (flags) => {
+    expect(copyRegExp(new RegExp('x', flags))?.flags).toBe(flags)
+  })
+
+  // Scenario: the g flag, which a copy drops. Expected: a copy of /x/gi keeps only i.
+  it('drops g and keeps the others', () => {
+    expect(copyRegExp(/x/gi)?.flags).toBe('i')
+  })
+
   // Scenario: a sticky RegExp. Expected: no copy, and it is still known to be a RegExp. The y flag makes `test`
   // match only at the start, so a copy without it would accept what the original rejects.
   it('gives no copy of a sticky RegExp, and knows it for a RegExp', () => {

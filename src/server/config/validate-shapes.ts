@@ -4,7 +4,7 @@
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
-import { copyRegExp, hasRegExpBrand } from '../utils/copy-regexp'
+import { copyRegExp } from '../utils/copy-regexp'
 import { describeReceived } from '../utils/describe-received'
 import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
 import { refuseObject } from '../utils/refuse-object'
@@ -178,15 +178,13 @@ function assertOrigin(origin: unknown): void {
   refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
 }
 
-/** Whether a value is a RegExp or looks like one: it has the brand, has the prototype of one, or has a `test`. */
+/**
+ * Whether a value is a RegExp or looks like one: it has the prototype of one, or a `test` function, which every
+ * RegExp has, of any realm. A read that throws, as the read of `test` on `null` or on a hostile proxy does, is not.
+ */
 function looksLikeRegExp(value: unknown): boolean {
-  if (hasRegExpBrand(value)) return true
   try {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      (value instanceof RegExp || typeof (value as { test?: unknown }).test === 'function')
-    )
+    return value instanceof RegExp || typeof (value as { test?: unknown }).test === 'function'
   } catch {
     return false
   }
