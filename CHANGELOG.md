@@ -11,6 +11,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 - **A `tenantResolver` that writes to the result it receives no longer changes the connection.** With an absent or `null` tenant, the copy handed to the resolver was the object the library kept, so a resolver that assigned to it (for example to `userId`) changed the connection record. The resolver is given its own copy in every case; the copy is shallow, so nested objects are still shared and a write inside them still changes what is kept.
 - **A log field named like what a structured logger writes itself no longer reaches the line.** `logEvent` already dropped `err`, `msg` and `level`; it now also drops `time`, `pid`, `hostname`, `name`, `v`, `req` and `res`, which a logger writes on every line.
+- **Every read of an object the host hands over fails with the library's error and the host's error as its cause.** The keys of a `forRootAsync` registration were read without a guard, so a getter or a proxy on the registration raised the host's own error; they are read once, under the guard. An object that throws when its type is read, as the options, a group or the registration, was refused without the error it threw; the error is now the `cause`. What a synchronous factory returns is read for `then` once and its answer is boxed, so a trap that throws on a later read cannot escape.
 
 ### Documentation
 

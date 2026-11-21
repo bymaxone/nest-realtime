@@ -43,21 +43,25 @@ export function guardHostReads<T>(what: string, read: () => T): T {
 }
 
 /**
- * Reads what a host's factory returned under the guard, so that the read `await` makes of it cannot run a trap
- * outside it. `await` reads `then` on a value, and a proxy whose trap throws, or one that was revoked, throws there,
- * inside the library's own provider and before the options are read. The read is made here first; returning the value
- * from an `async` function then adopts a promise or a thenable as it is, so the rejection of a factory's own promise
- * stays the factory's failure, whatever it threw, and is not this module's to rename. The adoption reads `then` again,
- * so a getter that answers differently the second time is not guarded.
+ * Waits for what a host's factory returned, reading it once and under the guard. `await` reads `then` on a value, and a
+ * proxy whose trap throws, or one that was revoked, throws there, inside the library's own provider and before the
+ * options are read. `then` is read here, once; a value without a callable `then` is answered as it is, and one with
+ * it is waited for by calling that `then`. The answer is boxed, because resolving a promise with the value itself would
+ * read its `then` again, and a trap that throws on a later read would escape the guard. The rejection of a factory's
+ * own promise stays the factory's failure, whatever it threw, and is not this module's to rename.
  *
  * @param returned - What the factory returned.
  * @param what - What is being read, completing "... could not be read".
+ * @returns The answer, in a box that is not itself thenable.
  * @throws Error carrying `REALTIME_INVALID_OPTIONS` when reading `then` on what was returned throws.
  */
-export async function awaitHostResult<T>(
-  returned: T | Promise<T>,
+export function awaitHostResult<T>(
+  returned: T | PromiseLike<T>,
   what = 'the options',
-): Promise<T> {
-  guardHostReads(what, () => (returned as { then?: unknown } | null | undefined)?.then)
-  return returned
+): Promise<{ readonly value: T }> {
+  const then = guardHostReads(what, () => (returned as { then?: unknown } | null | undefined)?.then)
+  if (typeof then !== 'function') return Promise.resolve({ value: returned as T })
+  return new Promise((resolve, reject) => {
+    then.call(returned, (value: T) => resolve({ value }), reject)
+  })
 }

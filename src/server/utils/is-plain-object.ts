@@ -15,11 +15,25 @@
  * @param value - What an option held.
  */
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object') return false
+  return readPlainObject(value).plain
+}
+
+/**
+ * The same test as `isPlainObject`, with the error the read of the type tag raised when it did. A proxy whose reads
+ * throw is the host's own object: it is refused, and its error is not ours to raise, but a caller that refuses it can
+ * keep that error as the cause.
+ *
+ * @param value - What an option held.
+ */
+export function readPlainObject(value: unknown): {
+  plain: boolean
+  threw: boolean
+  error?: unknown
+} {
+  if (typeof value !== 'object') return { plain: false, threw: false }
   try {
-    return Object.prototype.toString.call(value) === '[object Object]'
-  } catch {
-    // A proxy whose reads throw is the host's own object: it is refused, and its error is not ours to raise.
-    return false
+    return { plain: Object.prototype.toString.call(value) === '[object Object]', threw: false }
+  } catch (error) {
+    return { plain: false, threw: true, error }
   }
 }
