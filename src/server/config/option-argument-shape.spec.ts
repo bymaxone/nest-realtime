@@ -48,6 +48,14 @@ describe('the options argument of forRoot', () => {
     )
   })
 
+  // Scenario: the same values, read for their type. Expected: no `cause` at all. Why: reading the type of these values
+  // raised nothing, so there is no error of the host's to carry; a `cause` key holding `undefined` would say there was.
+  it.each(NOT_OPTIONS)('refuses %p without a cause key', (value) => {
+    const caught = thrownBy(() => BymaxRealtimeModule.forRoot(value as never))
+
+    expect('cause' in caught).toBe(false)
+  })
+
   it('refuses the same argument when validateOptions is called on its own', () => {
     expect(() => validateOptions(undefined as never)).toThrow(
       refusal('options', 'an object', 'undefined'),
