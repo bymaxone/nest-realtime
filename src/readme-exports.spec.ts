@@ -103,7 +103,7 @@ describe('the README documents what the package exports', () => {
   // says so rather than claiming own enumerable properties only for the whole copy.
   it('says that a tenantId from an accessor on the prototype counts', () => {
     expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain(
-      'has the prototype of the result',
+      'an accessor on the prototype supplies it',
     )
   })
 
@@ -127,10 +127,10 @@ describe('the README documents what the package exports', () => {
     )
   })
 
-  // A class default or an Object.create prototype supplies data fields such as roles; the resolver reads them.
-  it('says that the resolver copy has the prototype of the result', () => {
+  // A class default or an Object.create prototype supplies data fields such as roles; they are on the copy by value.
+  it('says that inherited data fields are on the copy by value', () => {
     expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain(
-      'has the prototype of the result',
+      'is on the copy too, by value and not enumerable',
     )
   })
 

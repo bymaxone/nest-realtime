@@ -47,10 +47,11 @@ export function resolveAuthTenant(
   // the original object before and a resolver may derive the tenant from a field that is not enumerable. The record
   // that is kept holds the enumerable properties only. The copy is its own object in every case, never the one
   // returned, so a resolver that assigns to a top-level property of it cannot change what is kept; the copy is
-  // shallow, and nested objects such as `metadata` are shared. It has the prototype of the result, so a data field
-  // that a class or `Object.create` supplies from the prototype, `roles` for one, reads on it as it did on the result.
+  // shallow, and nested objects such as `metadata` are shared. Data fields that the prototype chain supplies, `roles`
+  // for one, are on it too, by value and not enumerable; accessors and methods are not, because they would run against
+  // the copy and not the result.
   const own = auth.tenantId
-  const given: AuthenticationResult = Object.create(Reflect.getPrototypeOf(auth))
+  const given = {} as AuthenticationResult
   const kept = {} as AuthenticationResult
   const descriptors = Object.getOwnPropertyDescriptors(auth)
   for (const key of Reflect.ownKeys(descriptors)) {
@@ -61,6 +62,7 @@ export function resolveAuthTenant(
     if (enumerable)
       Object.defineProperty(kept, key, { value, enumerable, writable: true, configurable: true })
   }
+  addInheritedData(auth, given)
   if (own !== undefined && own !== null) {
     Object.defineProperty(given, 'tenantId', {
       value: own,
@@ -72,6 +74,39 @@ export function resolveAuthTenant(
   const resolved = options.tenantResolver?.(given) ?? own
   if (resolved === undefined || resolved === null) return kept
   return { ...kept, tenantId: resolved }
+}
+
+/**
+ * Add to `given` the data fields the prototype chain of `auth` supplies, by value and not enumerable.
+ *
+ * Accessors and methods are left out, because they would run against the copy and not the result; an own property,
+ * the `constructor` and the `tenantId` (the caller sets that one) are left as they are.
+ */
+function addInheritedData(auth: AuthenticationResult, given: AuthenticationResult): void {
+  for (
+    let proto = Reflect.getPrototypeOf(auth);
+    proto !== null && proto !== Object.prototype;
+    proto = Reflect.getPrototypeOf(proto)
+  ) {
+    for (const key of Reflect.ownKeys(proto)) {
+      const inherited = Reflect.getOwnPropertyDescriptor(proto, key)
+      if (
+        key === 'constructor' ||
+        key === 'tenantId' ||
+        Object.hasOwn(given, key) ||
+        inherited === undefined ||
+        !('value' in inherited) ||
+        typeof inherited.value === 'function'
+      )
+        continue
+      Object.defineProperty(given, key, {
+        value: inherited.value as unknown,
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      })
+    }
+  }
 }
 
 /**

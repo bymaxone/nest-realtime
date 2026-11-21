@@ -360,6 +360,55 @@ describe('resolveAuthTenant', () => {
       expect(Object.keys(out)).toEqual(['userId'])
     })
 
+    // Scenario: a getter on the prototype reads a private field, a method sits on the prototype, an own property
+    // shadows an inherited one. Expected: the resolver is not run into the getter with the wrong receiver, gets no
+    // method, and sees the own value. Why: only data fields are handed over by value; running an accessor against the
+    // copy would throw on a private field, and the original object is not given.
+    it('hands over inherited data fields by value, not the prototype', () => {
+      class Result {
+        #secret = ['admin']
+        userId = 'u1'
+        get roles(): string[] {
+          return this.#secret
+        }
+        describe(): string {
+          return 'method'
+        }
+      }
+      Object.defineProperties(Result.prototype, {
+        scope: { value: 'inherited' },
+        userId: { value: 'proto-user' },
+      })
+      let seen: Record<string, unknown> = {}
+
+      const out = resolveAuthTenant(
+        {
+          tenantResolver: (a) => {
+            seen = {
+              scope: a['scope' as keyof typeof a],
+              userId: a.userId,
+              roles: a.roles,
+              describe: (a as unknown as Record<string, unknown>)['describe'],
+              hidden: Object.getOwnPropertyDescriptor(a, 'scope')?.enumerable,
+              hasPrototypeOfResult: Object.getPrototypeOf(a) === Result.prototype,
+            }
+            return undefined
+          },
+        },
+        new Result() as AuthenticationResult,
+      )
+
+      expect(seen).toEqual({
+        scope: 'inherited',
+        userId: 'u1',
+        roles: undefined,
+        describe: undefined,
+        hidden: false,
+        hasPrototypeOfResult: false,
+      })
+      expect(Object.keys(out)).toEqual(['userId'])
+    })
+
     it('keeps only the enumerable properties in what it returns', () => {
       const auth = hide({ userId: 'u1' }, 'scope', 'hidden')
 
