@@ -41,17 +41,36 @@ export function resolveAuthTenant(
   options: Pick<BymaxRealtimeModuleOptions, 'tenantResolver'>,
   auth: AuthenticationResult,
 ): AuthenticationResult {
-  // The tenantId is read here, once, with the rest of the result copied: a getter can answer differently the second
-  // time, and the value that decides the routing room must be the one that was tested. The resolver is given that
-  // copy, so a resolver that reads `auth.tenantId` reads the same value and not the getter again. The copy is its own
-  // object in every case, never the one returned, so a resolver that assigns to a top-level property of it cannot change what is kept; the copy is shallow, and nested objects such as `metadata` are shared.
-  const { tenantId: own, ...rest } = auth
-  const resolved =
-    options.tenantResolver?.(
-      own === undefined || own === null ? { ...rest } : { ...rest, tenantId: own },
-    ) ?? own
-  if (resolved === undefined || resolved === null) return rest
-  return { ...rest, tenantId: resolved }
+  // The tenantId is read here, once, and so is every other own property: a getter can answer differently the second
+  // time, and the value that decides the routing room must be the one that was tested. The resolver is given a copy
+  // that holds all of them, hidden ones and symbol keys included, with their enumerable flags, because it was given
+  // the original object before and a resolver may derive the tenant from a field that is not enumerable. The record
+  // that is kept holds the enumerable properties only. The copy is its own object in every case, never the one
+  // returned, so a resolver that assigns to a top-level property of it cannot change what is kept; the copy is
+  // shallow, and nested objects such as `metadata` are shared.
+  const own = auth.tenantId
+  const given = {} as AuthenticationResult
+  const kept = {} as AuthenticationResult
+  const descriptors = Object.getOwnPropertyDescriptors(auth)
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (key === 'tenantId') continue
+    const value: unknown = Reflect.get(auth, key)
+    const enumerable = (Reflect.get(descriptors, key) as PropertyDescriptor).enumerable === true
+    Object.defineProperty(given, key, { value, enumerable, writable: true, configurable: true })
+    if (enumerable)
+      Object.defineProperty(kept, key, { value, enumerable, writable: true, configurable: true })
+  }
+  if (own !== undefined && own !== null) {
+    Object.defineProperty(given, 'tenantId', {
+      value: own,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    })
+  }
+  const resolved = options.tenantResolver?.(given) ?? own
+  if (resolved === undefined || resolved === null) return kept
+  return { ...kept, tenantId: resolved }
 }
 
 /**

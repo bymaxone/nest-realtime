@@ -254,6 +254,75 @@ describe('resolveAuthTenant', () => {
     expect('inherited' in out).toBe(false)
   })
 
+  // Scenario: fields of the result that are not enumerable (a hidden property, a symbol key). Expected: the resolver
+  // is given them, as it was when it was given the original object, with the same enumerable flag, and the record
+  // that is kept is what it always was: the enumerable properties only. Why: a resolver that derives the tenant
+  // from such a field would otherwise get nothing, and the answer would silently fall back to the authenticator's tenant.
+  describe('with fields that are not enumerable', () => {
+    const hide = <T extends object>(object: T, key: string | symbol, value: unknown): T =>
+      Object.defineProperty(object, key, { value, enumerable: false })
+    const HIDDEN = Symbol('hidden')
+
+    it('lets a resolver derive the tenant from a hidden field', () => {
+      const auth = hide({ userId: 'u1', tenantId: 't-auth' }, 'trustedTenant', 't-trusted')
+
+      const out = resolveAuthTenant(
+        { tenantResolver: (a) => (a as unknown as { trustedTenant: string }).trustedTenant },
+        auth,
+      )
+
+      expect(out.tenantId).toBe('t-trusted')
+    })
+
+    it('gives the resolver the hidden fields with their flags, and a symbol key', () => {
+      const auth = hide(
+        hide({ userId: 'u1', [HIDDEN]: 'visible-symbol' }, 'scope', 'hidden'),
+        HIDDEN,
+        'x',
+      )
+      let given: Record<string | symbol, unknown> | undefined
+      let flags: boolean | undefined
+
+      resolveAuthTenant(
+        {
+          tenantResolver: (a) => {
+            given = a as unknown as Record<string | symbol, unknown>
+            flags = Object.getOwnPropertyDescriptor(a, 'scope')?.enumerable
+            return undefined
+          },
+        },
+        auth,
+      )
+
+      expect(given?.['scope']).toBe('hidden')
+      expect(flags).toBe(false)
+      expect(Object.keys(given ?? {})).toEqual(['userId'])
+    })
+
+    it('keeps only the enumerable properties in what it returns', () => {
+      const auth = hide({ userId: 'u1' }, 'scope', 'hidden')
+
+      const out = resolveAuthTenant({ tenantResolver: () => undefined }, auth)
+
+      expect(Object.getOwnPropertyNames(out)).toEqual(['userId'])
+    })
+
+    it('reads each property of the result once', () => {
+      let reads = 0
+      const auth = {
+        get userId(): string {
+          reads += 1
+          return 'u1'
+        },
+      }
+      hide(auth, 'scope', 'hidden')
+
+      resolveAuthTenant({ tenantResolver: () => undefined }, auth)
+
+      expect(reads).toBe(1)
+    })
+  })
+
   // Scenario: the authenticator's result has a getter that throws. Expected: the library does not wrap it, so the
   // host's own error is what the handshake fails with. Why: the result is the host's own code, the README says so,
   // and the gateway logs the error under `err` and counts the handshake as an error.

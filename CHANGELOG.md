@@ -7,6 +7,14 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `tenantResolver` is given the properties of the result that are not enumerable again.** From 1.2.22 to 1.2.24 the copy handed to a resolver held the enumerable properties only, so a resolver that derived the tenant from a hidden field, a non-enumerable property or a symbol key got nothing, and its answer fell back silently to the authenticator's own tenant. The copy now holds every own property with its enumerable flag, as the original object did. The record the library keeps is unchanged: the enumerable properties only, as before 1.2.22.
+
+#### Apply to a derived backend
+
+A `tenantResolver` written between 1.2.22 and 1.2.24 to work around the missing hidden fields can stop doing so. Nothing else changes.
+
 ## [1.2.24] - 2026-11-20
 
 ### Fixed

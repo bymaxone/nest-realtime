@@ -107,6 +107,12 @@ describe('the README documents what the package exports', () => {
 
   // The copy is shallow: a write to a top-level property stays in the copy, a write inside a nested object does not,
   // because those objects are shared. The paragraph says both.
+  // The resolver is given every own property of the result, hidden ones included, as it was when it was given the
+  // original object; the paragraph says so.
+  it('says that the resolver copy keeps the properties that are not enumerable', () => {
+    expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain('not enumerable')
+  })
+
   it('limits the isolation of the resolver copy to top-level properties', () => {
     const line = lineStartingWith('`tenantResolver` cannot clear a tenant.')
     expect(line).toContain('top-level')
