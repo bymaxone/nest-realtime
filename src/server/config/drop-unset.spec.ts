@@ -131,6 +131,16 @@ describe('dropUnset, the CORS block of websocket', () => {
     expect({ ...kept }).toStrictEqual(expected)
   })
 
+  // Scenario: a get-only proxy over an empty target that answers `null` for the origin, so the property is not
+  // there for `in` to find. Expected: `null` is a value the host set whatever the object reports, so it stays.
+  it('keeps an origin of null that a proxy answers without having the property', () => {
+    const cors = new Proxy({}, { get: (_target, key) => (key === 'origin' ? null : undefined) })
+
+    const kept = dropUnset({ websocket: { cors } }).websocket?.cors as { origin?: unknown }
+
+    expect(kept.origin).toBeNull()
+  })
+
   // Scenario: an origin that is set to undefined without being an enumerable own key: a non-enumerable property, a
   // getter on the prototype, a field a class declared. Expected: kept like the plain own key, because it is just as
   // much a value the host set; read as unset it would answer every origin.
