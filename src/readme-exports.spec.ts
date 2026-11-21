@@ -88,36 +88,22 @@ describe('the README documents what the package exports', () => {
     expect(mentionsIn(lineStartingWith('- `ITransport`:'), 'kind')).toBe(true)
   })
 
-  // The resolver is given a plain copy of the authentication result, with no tenantId key when the tenant is absent or
-  // null, so the three places that describe `tenantResolver` have to say so.
+  // The resolver is given the authenticator's own result, not a copy, so the places that describe `tenantResolver`
+  // have to say so; the paragraph also says what the library keeps and what stays shared.
   it.each([
     ['the options table row', '| **tenantResolver**'],
     ['the paragraph that says it cannot clear a tenant', '`tenantResolver` cannot clear a tenant.'],
-  ])('says in %s that the resolver receives a plain copy', (_name, prefix) => {
+  ])('says in %s that the resolver receives the authenticator own result', (_name, prefix) => {
     const line = lineStartingWith(prefix)
     expect(line).not.toBe('')
-    expect(line).toContain('plain copy')
+    expect(line).toContain("the authenticator's own result")
   })
 
-  // The tenant is read with a plain property read, so one an accessor on the prototype supplies counts; the paragraph
-  // says so rather than claiming own enumerable properties only for the whole copy.
-  it('says that a tenantId from an accessor on the prototype counts', () => {
-    expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain(
-      'an accessor on the prototype supplies it',
-    )
-  })
-
-  // The copy is shallow: a write to a top-level property stays in the copy, a write inside a nested object does not,
-  // because those objects are shared. The paragraph says both.
-  // The resolver is given every own property of the result, hidden ones included, as it was when it was given the
-  // original object; the paragraph says so.
-  it('says that the resolver copy keeps the properties that are not enumerable', () => {
-    expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain('not enumerable')
-  })
-
-  // The options table is what most readers see of `tenantResolver`; it says the copy is shallow, like the paragraph.
-  it('says in the options table row that the resolver copy is shallow', () => {
-    expect(lineStartingWith('| **tenantResolver**')).toContain('shallow')
+  it('says that the library keeps a record built by name before the resolver runs', () => {
+    const line = lineStartingWith('`tenantResolver` cannot clear a tenant.')
+    expect(line).toContain('built by name before the resolver runs')
+    expect(line).toContain('an accessor on the prototype supplies counts')
+    expect(line).toContain('a write inside them changes what the library keeps')
   })
 
   // An object that throws when its type is read is refused as one that could not be read, whatever it would be.
@@ -125,18 +111,5 @@ describe('the README documents what the package exports', () => {
     expect(lineStartingWith('The options are typed per entry point:')).toContain(
       'an object that could not be read',
     )
-  })
-
-  // A class default or an Object.create prototype supplies data fields such as roles; they are on the copy by value.
-  it('says that inherited data fields are on the copy by value', () => {
-    expect(lineStartingWith('`tenantResolver` cannot clear a tenant.')).toContain(
-      'is on the copy too, by value and not enumerable',
-    )
-  })
-
-  it('limits the isolation of the resolver copy to top-level properties', () => {
-    const line = lineStartingWith('`tenantResolver` cannot clear a tenant.')
-    expect(line).toContain('top-level')
-    expect(line).toContain('nested objects are shared')
   })
 })

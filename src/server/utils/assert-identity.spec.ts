@@ -130,12 +130,6 @@ describe('resolveAuthTenant', () => {
     ['no resolver', {}, 't1', 't1'],
     ['a resolver that returns undefined', { tenantResolver: () => undefined }, 't1', 't1'],
     ['a null tenantId', {}, null, undefined],
-    [
-      'a resolver that reads the tenantId itself',
-      { tenantResolver: (a: { tenantId?: string }) => a.tenantId },
-      't1',
-      't1',
-    ],
   ])('reads the tenantId of the auth result once with %s', (_name, options, value, expected) => {
     let reads = 0
     const auth = {
@@ -152,46 +146,90 @@ describe('resolveAuthTenant', () => {
     expect(out.tenantId).toBe(expected)
   })
 
-  // Scenario: the result carries no tenant, or a null one, and a resolver is configured. Expected: the resolver is given
-  // a result without a tenantId, and what it answers routes. Why: the copy handed to the resolver has the key only when
-  // the read found a value, so an absent or null tenant is the same "nothing" for the resolver as it is for the library.
+  // Scenario: the resolver is configured. Expected: it is given the authenticator's own result, the same object, with
+  // everything on it as the authenticator built it. Why: no copy semantics apply to the host's object, so hidden fields,
+  // symbol keys, prototype data, accessors and private fields all work as they do for the authenticator's own code.
   it.each([
-    ['absent', undefined],
-    ['null', null],
-  ])('gives a resolver a result with no tenantId when the tenantId is %s', (_name, value) => {
-    let given: AuthenticationResult | undefined
-    const auth = untyped({ userId: 'u1', ...(value === undefined ? {} : { tenantId: value }) })
+    ['an absent tenantId', { userId: 'u1' }],
+    ['a null tenantId', { userId: 'u1', tenantId: null as unknown as string }],
+    ['a present tenantId', { userId: 'u1', tenantId: 't1' }],
+  ])('gives the resolver the result itself, with %s', (_name, auth) => {
+    let given: unknown
 
-    const out = resolveAuthTenant(
+    resolveAuthTenant(
       {
         tenantResolver: (a) => {
           given = a
-          return 't-resolved'
+          return undefined
         },
       },
       auth,
     )
 
-    expect(given && 'tenantId' in given).toBe(false)
-    expect(out.tenantId).toBe('t-resolved')
+    expect(given).toBe(auth)
   })
 
-  // Scenario: a resolver that writes to the result it was given, with an absent, a null and a present tenant, and with
-  // an answer that adds nothing. Expected: what the library keeps is not changed by the write. Why: the resolver's
-  // argument and the record the library returns must be different objects, or a resolver changes the connection.
+  it('lets a resolver derive the tenant from a hidden field, a symbol key and a prototype field', () => {
+    const SECRET = Symbol('secret')
+    class Result {
+      userId = 'u1'
+      #tenant = 't-private'
+      get trusted(): string {
+        return this.#tenant
+      }
+    }
+    Object.defineProperty(Result.prototype, 'scope', { value: 't-scope' })
+    const hidden = Object.defineProperty({ userId: 'u1' }, 'trustedTenant', {
+      value: 't-hidden',
+      enumerable: false,
+    })
+    const withSymbol = { userId: 'u1', [SECRET]: 't-symbol' }
+    const answers: unknown[] = []
+    const resolver = (a: object): undefined => {
+      answers.push(
+        Reflect.get(a, 'trustedTenant') ??
+          Reflect.get(a, SECRET) ??
+          Reflect.get(a, 'scope') ??
+          Reflect.get(a, 'trusted'),
+      )
+      return undefined
+    }
+
+    resolveAuthTenant({ tenantResolver: resolver }, hidden)
+    resolveAuthTenant({ tenantResolver: resolver }, withSymbol)
+    resolveAuthTenant({ tenantResolver: resolver }, new Result())
+
+    expect(answers).toEqual(['t-hidden', 't-symbol', 't-scope'])
+  })
+
+  // Scenario: the resolver writes to the result it was given, at the top level and inside it, with an absent, a null
+  // and a present tenant. Expected: the top-level writes change nothing the library keeps; the write inside a nested
+  // object is visible in what is kept. Why: the kept record is built, by name, before the resolver runs, so it is a
+  // different object from the one the resolver is handed; nested objects are shared, as the README says.
   it.each([
     ['absent', undefined],
     ['null', null],
     ['present', 't1'],
   ])(
-    'keeps the result it returns apart from what a resolver is given, with a tenantId that is %s',
-    (_name, value) => {
-      const auth = untyped({ userId: 'u1', ...(value === undefined ? {} : { tenantId: value }) })
+    'keeps the record apart from what a resolver writes at the top level, with a tenantId that is %s',
+    (_n, tenant) => {
+      const auth: { -readonly [K in keyof AuthenticationResult]: AuthenticationResult[K] } = {
+        userId: 'u1',
+        roles: ['member'],
+        metadata: { k: 1 },
+      }
+      if (tenant !== undefined) Object.assign(auth, { tenantId: tenant })
 
       const out = resolveAuthTenant(
         {
           tenantResolver: (a) => {
-            ;(a as { userId: string }).userId = 'MUTATED'
+            Object.assign(a, {
+              userId: 'mutated',
+              roles: ['root'],
+              tenantId: 't-mutated',
+              extra: 1,
+            })
+            ;(a.metadata as Record<string, unknown>)['k'] = 2
             return undefined
           },
         },
@@ -199,238 +237,106 @@ describe('resolveAuthTenant', () => {
       )
 
       expect(out.userId).toBe('u1')
+      expect(out.roles).toEqual(['member'])
+      expect('extra' in out).toBe(false)
+      expect(out.tenantId).toBe(tenant ?? undefined)
+      expect(out.metadata).toEqual({ k: 2 })
     },
   )
 
-  // Scenario: a resolver that writes inside a nested object of the result. Expected: the write is visible in what is
-  // returned, because the copy is shallow and the nested object is shared. Why: the documentation limits the isolation
-  // to top-level properties and this pins the other half of that sentence, so it cannot drift into a stronger claim.
-  it('shares the nested objects of the result with the copy a resolver is given', () => {
-    const metadata = { plan: 'free' }
-    const auth: AuthenticationResult = { userId: 'u1', metadata }
-
-    const out = resolveAuthTenant(
-      {
-        tenantResolver: (a) => {
-          if (a.metadata) a.metadata['plan'] = 'changed'
-          return undefined
-        },
+  // Scenario: only some of the fields are on the object itself; the rest come from the prototype, from a class
+  // default, from Object.create or from an accessor. Expected: the kept record holds them, read the way JS reads them.
+  // Why: the authenticator's own answer is the object as its code reads it, and a field supplied by the prototype is
+  // part of that answer; 1.2.22 to 1.2.24 dropped them.
+  it.each([
+    [
+      'a class default and an accessor',
+      () => {
+        class Result {
+          roles = ['admin']
+          get userId(): string {
+            return 'u-proto'
+          }
+        }
+        return new Result() as AuthenticationResult
       },
-      auth,
-    )
+    ],
+    [
+      'Object.create',
+      () => Object.create({ userId: 'u-proto', roles: ['admin'] }) as AuthenticationResult,
+    ],
+  ])(
+    'keeps the fields %s supplies, so a userId only on the prototype is admitted',
+    (_name, build) => {
+      const out = resolveAuthTenant({}, build())
 
-    expect(out.metadata).toBe(metadata)
-    expect(metadata['plan']).toBe('changed')
+      expect(out.userId).toBe('u-proto')
+      expect(out.roles).toEqual(['admin'])
+      expect(() => assertIdentityIsNotBlank(out)).not.toThrow()
+    },
+  )
+
+  it('still refuses a blank userId that the prototype supplies', () => {
+    const auth = Object.create({ userId: '  ' }) as AuthenticationResult
+
+    expect(() => assertIdentityIsNotBlank(resolveAuthTenant({}, auth))).toThrow(/userId/)
   })
 
-  // Scenario: the result is an instance whose tenantId is an accessor on its prototype, and a resolver is configured.
-  // Expected: the tenant is honoured and the resolver is given it, while the other properties come from the instance's
-  // own enumerable ones. Why: the tenant is read with a plain property read, so an inherited accessor counts, and the
-  // documentation says exactly that; the copy of the rest is the own enumerable properties only.
-  it('honours a tenantId supplied by an accessor on the prototype and tells the resolver', () => {
+  // Scenario: the result is a class whose getters read private fields, and a resolver that reads them. Expected: no
+  // error. Why: the resolver is given the instance itself, so the receiver of every getter is right.
+  it('lets a resolver read a getter over a private field', () => {
     class Result {
       userId = 'u1'
-      get tenantId(): string {
-        return 'from-prototype'
-      }
-      inherited(): string {
-        return 'method'
+      #roles = ['admin']
+      get roles(): string[] {
+        return this.#roles
       }
     }
-    let given: AuthenticationResult | undefined
+    let seen: unknown
 
     const out = resolveAuthTenant(
       {
         tenantResolver: (a) => {
-          given = a
+          seen = a.roles
           return undefined
         },
       },
       new Result(),
     )
 
-    expect(out.tenantId).toBe('from-prototype')
-    expect(given?.tenantId).toBe('from-prototype')
-    expect('inherited' in out).toBe(false)
+    expect(seen).toEqual(['admin'])
+    expect(out.roles).toEqual(['admin'])
   })
 
-  // Scenario: fields of the result that are not enumerable (a hidden property, a symbol key). Expected: the resolver
-  // is given them, as it was when it was given the original object, with the same enumerable flag, and the record
-  // that is kept is what it always was: the enumerable properties only. Why: a resolver that derives the tenant
-  // from such a field would otherwise get nothing, and the answer would silently fall back to the authenticator's tenant.
-  describe('with fields that are not enumerable', () => {
-    const hide = <T extends object>(object: T, key: string | symbol, value: unknown): T =>
-      Object.defineProperty(object, key, { value, enumerable: false })
-    const HIDDEN = Symbol('hidden')
+  // Scenario: every field the library keeps is read once. Expected: one read each. Why: a getter can answer differently
+  // the second time and the record must hold the value that was tested.
+  it('reads each field the library keeps once', () => {
+    const reads: Record<string, number> = {}
+    const counted = <T>(name: string, value: T): T => {
+      reads[name] = (reads[name] ?? 0) + 1
+      return value
+    }
+    const auth = {
+      get userId(): string {
+        return counted('userId', 'u1')
+      },
+      get tenantId(): string {
+        return counted('tenantId', 't1')
+      },
+      get roles(): string[] {
+        return counted('roles', ['r'])
+      },
+      get rooms(): string[] {
+        return counted('rooms', ['x'])
+      },
+      get metadata(): Record<string, unknown> {
+        return counted('metadata', {})
+      },
+    }
 
-    it('lets a resolver derive the tenant from a hidden field', () => {
-      const auth = hide({ userId: 'u1', tenantId: 't-auth' }, 'trustedTenant', 't-trusted')
+    resolveAuthTenant({}, auth)
 
-      const out = resolveAuthTenant(
-        { tenantResolver: (a) => (a as unknown as { trustedTenant: string }).trustedTenant },
-        auth,
-      )
-
-      expect(out.tenantId).toBe('t-trusted')
-    })
-
-    it('gives the resolver the hidden fields with their flags, and a symbol key', () => {
-      const auth = hide(
-        hide({ userId: 'u1', [HIDDEN]: 'visible-symbol' }, 'scope', 'hidden'),
-        HIDDEN,
-        'x',
-      )
-      let given: Record<string | symbol, unknown> | undefined
-      let flags: boolean | undefined
-
-      resolveAuthTenant(
-        {
-          tenantResolver: (a) => {
-            given = a as unknown as Record<string | symbol, unknown>
-            flags = Object.getOwnPropertyDescriptor(a, 'scope')?.enumerable
-            return undefined
-          },
-        },
-        auth,
-      )
-
-      expect(given?.['scope']).toBe('hidden')
-      expect(flags).toBe(false)
-      expect(Object.keys(given ?? {})).toEqual(['userId'])
-    })
-
-    it('gives the resolver a hidden tenantId with its flag, and an inherited one as enumerable', () => {
-      const flags: Array<boolean | undefined> = []
-      const record = (a: object): undefined => {
-        flags.push(Object.getOwnPropertyDescriptor(a, 'tenantId')?.enumerable)
-        return undefined
-      }
-      const hidden = hide({ userId: 'u1' }, 'tenantId', 't-hidden')
-      const inherited = Object.create(
-        { tenantId: 't-proto' },
-        { userId: { value: 'u1', enumerable: true } },
-      )
-
-      resolveAuthTenant({ tenantResolver: record }, hidden)
-      resolveAuthTenant({ tenantResolver: record }, inherited as AuthenticationResult)
-
-      expect(flags).toEqual([false, true])
-    })
-
-    // Scenario: the result is a class instance, or built with Object.create, and its roles and tenantId come from the
-    // prototype. Expected: the resolver reads them, as it did on the original object; the record that is kept holds
-    // own enumerable properties only, as it always did. Why: a data field inherited from a prototype is part of what
-    // the authenticator answered, and dropping it from the resolver's copy changes the answer silently.
-    it.each([
-      [
-        'a class default',
-        () => {
-          class Result {
-            userId = 'u1'
-          }
-          Result.prototype.constructor.prototype['roles' as never] = ['admin'] as never
-          return new Result() as AuthenticationResult
-        },
-      ],
-      [
-        'Object.create',
-        () =>
-          Object.create(
-            { roles: ['admin'] },
-            { userId: { value: 'u1', enumerable: true } },
-          ) as AuthenticationResult,
-      ],
-    ])('gives the resolver the data fields inherited through %s', (_name, build) => {
-      let roles: unknown
-      let ownKeys: string[] = []
-
-      const out = resolveAuthTenant(
-        {
-          tenantResolver: (a) => {
-            roles = a.roles
-            ownKeys = Object.keys(a)
-            return undefined
-          },
-        },
-        build(),
-      )
-
-      expect(roles).toEqual(['admin'])
-      expect(ownKeys).toEqual(['userId'])
-      expect(Object.keys(out)).toEqual(['userId'])
-    })
-
-    // Scenario: a getter on the prototype reads a private field, a method sits on the prototype, an own property
-    // shadows an inherited one. Expected: the resolver is not run into the getter with the wrong receiver, gets no
-    // method, and sees the own value. Why: only data fields are handed over by value; running an accessor against the
-    // copy would throw on a private field, and the original object is not given.
-    it('hands over inherited data fields by value, not the prototype', () => {
-      class Result {
-        #secret = ['admin']
-        userId = 'u1'
-        get roles(): string[] {
-          return this.#secret
-        }
-        describe(): string {
-          return 'method'
-        }
-      }
-      Object.defineProperties(Result.prototype, {
-        scope: { value: 'inherited' },
-        userId: { value: 'proto-user' },
-      })
-      let seen: Record<string, unknown> = {}
-
-      const out = resolveAuthTenant(
-        {
-          tenantResolver: (a) => {
-            seen = {
-              scope: a['scope' as keyof typeof a],
-              userId: a.userId,
-              roles: a.roles,
-              describe: (a as unknown as Record<string, unknown>)['describe'],
-              hidden: Object.getOwnPropertyDescriptor(a, 'scope')?.enumerable,
-              hasPrototypeOfResult: Object.getPrototypeOf(a) === Result.prototype,
-            }
-            return undefined
-          },
-        },
-        new Result() as AuthenticationResult,
-      )
-
-      expect(seen).toEqual({
-        scope: 'inherited',
-        userId: 'u1',
-        roles: undefined,
-        describe: undefined,
-        hidden: false,
-        hasPrototypeOfResult: false,
-      })
-      expect(Object.keys(out)).toEqual(['userId'])
-    })
-
-    it('keeps only the enumerable properties in what it returns', () => {
-      const auth = hide({ userId: 'u1' }, 'scope', 'hidden')
-
-      const out = resolveAuthTenant({ tenantResolver: () => undefined }, auth)
-
-      expect(Object.getOwnPropertyNames(out)).toEqual(['userId'])
-    })
-
-    it('reads each property of the result once', () => {
-      let reads = 0
-      const auth = {
-        get userId(): string {
-          reads += 1
-          return 'u1'
-        },
-      }
-      hide(auth, 'scope', 'hidden')
-
-      resolveAuthTenant({ tenantResolver: () => undefined }, auth)
-
-      expect(reads).toBe(1)
-    })
+    expect(reads).toEqual({ userId: 1, tenantId: 1, roles: 1, rooms: 1, metadata: 1 })
   })
 
   // Scenario: the authenticator's result has a getter that throws. Expected: the library does not wrap it, so the

@@ -41,72 +41,33 @@ export function resolveAuthTenant(
   options: Pick<BymaxRealtimeModuleOptions, 'tenantResolver'>,
   auth: AuthenticationResult,
 ): AuthenticationResult {
-  // The tenantId is read here, once, and so is every other own property: a getter can answer differently the second
-  // time, and the value that decides the routing room must be the one that was tested. The resolver is given a copy
-  // that holds all of them, hidden ones and symbol keys included, with their enumerable flags, because it was given
-  // the original object before and a resolver may derive the tenant from a field that is not enumerable. The record
-  // that is kept holds the enumerable properties only. The copy is its own object in every case, never the one
-  // returned, so a resolver that assigns to a top-level property of it cannot change what is kept; the copy is
-  // shallow, and nested objects such as `metadata` are shared. Data fields that the prototype chain supplies, `roles`
-  // for one, are on it too, by value and not enumerable; accessors and methods are not, because they would run against
-  // the copy and not the result.
+  // The record the library keeps is built here, by name, before the resolver runs: each field is read once, the way JS
+  // reads it, so a field that a class default, `Object.create` or an accessor on the prototype supplies counts, and
+  // the value that decides the routing room is the one that was tested. The resolver is given the authenticator's own
+  // result, not a copy of it, so everything on it works as it does for the authenticator's code, and what it writes to
+  // that object cannot reach the record, which is another object. The nested objects (`roles`, `rooms`, `metadata`) are
+  // shared. What the resolver returns is what routes, `undefined` and `null` meaning no opinion.
   const own = auth.tenantId
-  const given = {} as AuthenticationResult
-  const kept = {} as AuthenticationResult
-  const descriptors = Object.getOwnPropertyDescriptors(auth)
-  for (const key of Reflect.ownKeys(descriptors)) {
-    if (key === 'tenantId') continue
-    const value: unknown = Reflect.get(auth, key)
-    const enumerable = (Reflect.get(descriptors, key) as PropertyDescriptor).enumerable === true
-    Object.defineProperty(given, key, { value, enumerable, writable: true, configurable: true })
-    if (enumerable)
-      Object.defineProperty(kept, key, { value, enumerable, writable: true, configurable: true })
-  }
-  addInheritedData(auth, given)
-  if (own !== undefined && own !== null) {
-    Object.defineProperty(given, 'tenantId', {
-      value: own,
-      enumerable: descriptors.tenantId?.enumerable ?? true,
-      writable: true,
-      configurable: true,
-    })
-  }
-  const resolved = options.tenantResolver?.(given) ?? own
+  const kept = keepByName(auth)
+  const resolved = options.tenantResolver?.(auth) ?? own
   if (resolved === undefined || resolved === null) return kept
   return { ...kept, tenantId: resolved }
 }
 
-/**
- * Add to `given` the data fields the prototype chain of `auth` supplies, by value and not enumerable.
- *
- * Accessors and methods are left out, because they would run against the copy and not the result; an own property,
- * the `constructor` and the `tenantId` (the caller sets that one) are left as they are.
- */
-function addInheritedData(auth: AuthenticationResult, given: AuthenticationResult): void {
-  for (
-    let proto = Reflect.getPrototypeOf(auth);
-    proto !== null && proto !== Object.prototype;
-    proto = Reflect.getPrototypeOf(proto)
-  ) {
-    for (const key of Reflect.ownKeys(proto)) {
-      const inherited = Reflect.getOwnPropertyDescriptor(proto, key)
-      if (
-        key === 'constructor' ||
-        key === 'tenantId' ||
-        Object.hasOwn(given, key) ||
-        inherited === undefined ||
-        !('value' in inherited) ||
-        typeof inherited.value === 'function'
-      )
-        continue
-      Object.defineProperty(given, key, {
-        value: inherited.value as unknown,
-        enumerable: false,
-        writable: true,
-        configurable: true,
-      })
-    }
+/** The fields of a result the library keeps, besides the tenant: the ones it names, read once and left out when absent. */
+function keepByName(auth: AuthenticationResult): AuthenticationResult {
+  const kept = {} as AuthenticationResult
+  for (const key of ['userId', 'roles', 'rooms', 'metadata'] as const) {
+    const value: unknown = auth[key]
+    if (value === undefined) continue
+    Object.defineProperty(kept, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    })
   }
+  return kept
 }
 
 /**

@@ -86,17 +86,15 @@ export interface BymaxRealtimeModuleOptions {
   /**
    * Derive the tenant a connection routes on from the authenticated result.
    *
-   * Applied on **both** transports. It receives a plain copy of the authentication
-   * result, not the authenticator's original object: all the result's own properties,
-   * those that are not enumerable and symbol keys included and with the same enumerable
-   * flag, and the data fields a class or `Object.create` supplies from the prototype, such as
-   * `roles`, by value and not enumerable (an accessor or a method of the prototype is not on the copy), and the
-   * `tenantId` as the library read it, which counts when an accessor
-   * on the prototype supplies it and is missing when the tenant is absent or `null`.
-   * The copy is its own object and is shallow: a resolver that assigns to one of its
-   * top-level properties changes nothing the library keeps, while `roles`, `rooms` and
-   * `metadata` are shared with the original, so a write inside them changes what the
-   * library keeps. `undefined` and
+   * Applied on **both** transports. It receives the authenticator's own result, the
+   * object it returned and not a copy, so everything on it works as it does for the
+   * authenticator's code. The library keeps its own record of `userId`, `tenantId`,
+   * `roles`, `rooms` and `metadata`, built by name before the resolver runs and read the
+   * way JavaScript reads a property, so a field that a class default, `Object.create` or
+   * an accessor on the prototype supplies counts. What a resolver writes to the result
+   * does not change that record, which is another object; `roles`, `rooms` and
+   * `metadata` are shared, so a write inside them changes what the library keeps.
+   * `undefined` and
    * `null` both mean "no opinion"
    * and fall back to `auth.tenantId` rather than clearing it; to place a connection
    * in no tenant, return a result without one from the authenticator. `null` is in
