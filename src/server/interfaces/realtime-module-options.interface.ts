@@ -89,7 +89,9 @@ export interface BymaxRealtimeModuleOptions {
    * Applied on **both** transports. It receives a plain copy of the authentication
    * result, not the authenticator's original object: all the result's own properties,
    * those that are not enumerable and symbol keys included and with the same enumerable
-   * flag, and the `tenantId` as the library read it, which counts when an accessor
+   * flag, on an object that has the prototype of the result (a data field a class or
+   * `Object.create` supplies, such as `roles`, reads as it did on the result), and the
+   * `tenantId` as the library read it, which counts when an accessor
    * on the prototype supplies it and is missing when the tenant is absent or `null`.
    * The copy is its own object and is shallow: a resolver that assigns to one of its
    * top-level properties changes nothing the library keeps, while `roles`, `rooms` and

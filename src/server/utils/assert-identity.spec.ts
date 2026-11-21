@@ -317,6 +317,49 @@ describe('resolveAuthTenant', () => {
       expect(flags).toEqual([false, true])
     })
 
+    // Scenario: the result is a class instance, or built with Object.create, and its roles and tenantId come from the
+    // prototype. Expected: the resolver reads them, as it did on the original object; the record that is kept holds
+    // own enumerable properties only, as it always did. Why: a data field inherited from a prototype is part of what
+    // the authenticator answered, and dropping it from the resolver's copy changes the answer silently.
+    it.each([
+      [
+        'a class default',
+        () => {
+          class Result {
+            userId = 'u1'
+          }
+          Result.prototype.constructor.prototype['roles' as never] = ['admin'] as never
+          return new Result() as AuthenticationResult
+        },
+      ],
+      [
+        'Object.create',
+        () =>
+          Object.create(
+            { roles: ['admin'] },
+            { userId: { value: 'u1', enumerable: true } },
+          ) as AuthenticationResult,
+      ],
+    ])('gives the resolver the data fields inherited through %s', (_name, build) => {
+      let roles: unknown
+      let ownKeys: string[] = []
+
+      const out = resolveAuthTenant(
+        {
+          tenantResolver: (a) => {
+            roles = a.roles
+            ownKeys = Object.keys(a)
+            return undefined
+          },
+        },
+        build(),
+      )
+
+      expect(roles).toEqual(['admin'])
+      expect(ownKeys).toEqual(['userId'])
+      expect(Object.keys(out)).toEqual(['userId'])
+    })
+
     it('keeps only the enumerable properties in what it returns', () => {
       const auth = hide({ userId: 'u1' }, 'scope', 'hidden')
 

@@ -47,9 +47,10 @@ export function resolveAuthTenant(
   // the original object before and a resolver may derive the tenant from a field that is not enumerable. The record
   // that is kept holds the enumerable properties only. The copy is its own object in every case, never the one
   // returned, so a resolver that assigns to a top-level property of it cannot change what is kept; the copy is
-  // shallow, and nested objects such as `metadata` are shared.
+  // shallow, and nested objects such as `metadata` are shared. It has the prototype of the result, so a data field
+  // that a class or `Object.create` supplies from the prototype, `roles` for one, reads on it as it did on the result.
   const own = auth.tenantId
-  const given = {} as AuthenticationResult
+  const given: AuthenticationResult = Object.create(Reflect.getPrototypeOf(auth))
   const kept = {} as AuthenticationResult
   const descriptors = Object.getOwnPropertyDescriptors(auth)
   for (const key of Reflect.ownKeys(descriptors)) {
