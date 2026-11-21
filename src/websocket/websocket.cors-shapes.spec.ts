@@ -402,6 +402,33 @@ describe('websocket.cors over a real server', () => {
     expect((caught as Error).message).toContain('use a function origin for custom matching')
   })
 
+  // Scenario: the host changes the block after boot. Expected: an array it gave for allowedHeaders is shared with
+  // Socket.IO, so a push reaches the next preflight, while replacing the property or changing a scalar such as
+  // maxAge does not. This is what the README says.
+  it('shares an array given for allowedHeaders, and not a replaced property or a scalar', async () => {
+    const cors = { origin: GOOD, allowedHeaders: ['x-a'], maxAge: 600 }
+    const port = await boot(cors)
+    const preflight = async (): Promise<Record<string, unknown>> =>
+      (
+        await request(`http://127.0.0.1:${port}`)
+          .options('/socket.io/?EIO=4&transport=polling')
+          .set('Origin', GOOD)
+          .set('Access-Control-Request-Method', 'GET')
+      ).headers
+
+    const before = await preflight()
+    cors.allowedHeaders.push('x-b')
+    cors.maxAge = 0
+    const pushed = await preflight()
+    cors.allowedHeaders = ['x-replaced']
+    const replaced = await preflight()
+
+    expect(before['access-control-allow-headers']).toBe('x-a')
+    expect(pushed['access-control-allow-headers']).toBe('x-a,x-b')
+    expect(pushed['access-control-max-age']).toBe('600')
+    expect(replaced['access-control-allow-headers']).toBe('x-a,x-b')
+  })
+
   // Scenario: a key of the block that the options do not name, here the headers a preflight may ask for. Expected:
   // it reaches Socket.IO as written, which a real preflight shows.
   it('forwards a key the options do not name to Socket.IO as written', async () => {

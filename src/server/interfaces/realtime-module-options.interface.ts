@@ -26,8 +26,9 @@ export interface CorsConfig {
    * copy would lose its own `test`, or, for `y`, match anywhere in the origin and not only at its start: use a
    * function origin for custom matching. A function is host code: the library trusts
    * what it answers, as it trusts any other function the host hands it. Any other key of the block reaches
-   * Socket.IO as written: `allowedHeaders`, `exposedHeaders` and `maxAge` are live references, so a change the host
-   * makes to them after boot reaches later requests, and none of them decides which origin is allowed.
+   * Socket.IO as written: `allowedHeaders` and `exposedHeaders` given as arrays are shared with Socket.IO, so a change
+   * the host makes to the array itself after boot (a `push`, say) reaches later requests, while replacing the
+   * property or changing a scalar such as `maxAge` does not; none of them decides which origin is allowed.
    */
   origin?:
     | string

@@ -16,7 +16,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Changed
 
 - **A value that is or looks like a `RegExp` and cannot be copied gets the same way out**: an object that only has the prototype of a `RegExp`, a proxy over one and an object with a `test` are refused with "use a function origin for custom matching", as a subclass already was.
-- **The README and the `CorsConfig` comment say that `allowedHeaders`, `exposedHeaders` and `maxAge` are live references**: a change made after boot reaches later requests and never decides which origin is allowed.
+- **The README and the `CorsConfig` comment say what happens to `allowedHeaders`, `exposedHeaders` and `maxAge` after boot**: arrays given for the first two are shared with Socket.IO, so a change to the array itself reaches later requests, while replacing the property or changing a scalar such as `maxAge` does not; none of them decides which origin is allowed.
 
 #### Apply to a derived backend
 
