@@ -6,16 +6,23 @@ import vm from 'node:vm'
 import { copyRegExp, hasRegExpBrand } from './copy-regexp'
 
 describe('copyRegExp', () => {
-  // Scenario: a RegExp with the pattern and flags that matter and the two that carry state. Expected: a new
-  // RegExp with the pattern and the other flags, and neither g nor y.
-  it('copies the pattern and the flags except g and y', () => {
-    const original = /good\.example$/gimsy
+  // Scenario: a RegExp with the pattern, flags that matter and the g flag, which only carries state. Expected: a new
+  // RegExp with the pattern and the other flags, and no g.
+  it('copies the pattern and the flags except g', () => {
+    const original = /good\.example$/gims
 
     const copy = copyRegExp(original)
 
     expect(copy).not.toBe(original)
     expect(copy?.source).toBe(original.source)
     expect(copy?.flags).toBe('ims')
+  })
+
+  // Scenario: a sticky RegExp. Expected: no copy, and it is still known to be a RegExp. The y flag makes `test`
+  // match only at the start, so a copy without it would accept what the original rejects.
+  it('gives no copy of a sticky RegExp, and knows it for a RegExp', () => {
+    expect(copyRegExp(/x/y)).toBeUndefined()
+    expect(hasRegExpBrand(/x/y)).toBe(true)
   })
 
   // Scenario: the same copy is asked twice. Expected: it answers the same each time, which a g flag would not.

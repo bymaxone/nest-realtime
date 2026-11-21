@@ -30,12 +30,15 @@ export function hasRegExpBrand(value: unknown): boolean {
 }
 
 /**
- * A new RegExp with the pattern and flags of `value`, without `g` and `y`, or `undefined` when `value` is not a
- * plain RegExp: one of this realm, whose prototype is `RegExp.prototype` and which has no property but `lastIndex`, the one every RegExp has.
- * A subclass, a RegExp with a `test` of its own and a RegExp from another realm have behaviour a copy would lose,
- * and Socket.IO calls their own `test`; a copy that is more permissive than the original would answer origins the
- * host meant to refuse, so they get no copy and the caller refuses them. The copy has no state between calls,
- * because a `g` or `y` flag makes `test` remember where the last match ended and answer alternately.
+ * A new RegExp with the pattern and flags of `value`, without `g`, or `undefined` when `value` cannot be copied
+ * faithfully: it is not a plain RegExp (one of this realm, whose prototype is `RegExp.prototype` and which has no
+ * property but `lastIndex`, the one every RegExp has), or it has the `y` flag. A subclass, a RegExp with a `test` of
+ * its own and a RegExp from another realm have behaviour a copy would lose, and Socket.IO calls their own `test`.
+ * A sticky RegExp matches only at the start of what it is asked about, so a copy without the flag is unanchored and
+ * accepts an origin that merely contains the pattern. A copy that is more permissive than the original would answer
+ * origins the host meant to refuse, so these get no copy and the caller refuses them. The `g` flag only makes `test`
+ * remember where the last match ended and answer alternately, so it is dropped and the copy has no state between
+ * calls.
  *
  * @param value - What an option held.
  */
@@ -43,7 +46,9 @@ export function copyRegExp(value: unknown): RegExp | undefined {
   try {
     if (Object.getPrototypeOf(value) !== RegExp.prototype) return undefined
     if (Reflect.ownKeys(value as object).length !== 1) return undefined
-    return new RegExp(SOURCE.call(value), FLAGS.call(value).replace(/[gy]/g, ''))
+    const flags = FLAGS.call(value)
+    if (flags.includes('y')) return undefined
+    return new RegExp(SOURCE.call(value), flags.replace('g', ''))
   } catch {
     return undefined
   }

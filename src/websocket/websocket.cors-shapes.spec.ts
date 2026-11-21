@@ -304,22 +304,37 @@ describe('websocket.cors over a real server', () => {
     expect(after).toBeUndefined()
   })
 
-  it('answers every request the same for a RegExp entry with the g or y flag', async () => {
+  it('answers every request the same for a RegExp entry with the g flag', async () => {
     const [first, second] = await answersAround({ origin: [/good\.example$/g] }, GOOD)
 
     expect(first).toBe(GOOD)
     expect(second).toBe(GOOD)
   })
 
-  it.each([['a RegExp origin', () => /good\.example$/y]])(
-    'answers every request the same for %s',
-    async (_name, build) => {
-      const [first, second] = await answersAround({ origin: build() }, GOOD)
+  it('answers every request the same for a RegExp origin with the g flag', async () => {
+    const [first, second] = await answersAround({ origin: /good\.example$/g }, GOOD)
 
-      expect(first).toBe(GOOD)
-      expect(second).toBe(GOOD)
-    },
-  )
+    expect(first).toBe(GOOD)
+    expect(second).toBe(GOOD)
+  })
+
+  // Scenario: a sticky RegExp, which matches only at the start of the origin, so it rejects an origin that merely
+  // contains the pattern. Expected: refused at boot, because a copy without the flag is unanchored and would
+  // accept https://evil.io/#https://a.com, which the original rejects.
+  it.each([
+    ['a sticky RegExp', () => /https:\/\/a\.com/y],
+    ['a list holding a sticky RegExp', () => [/https:\/\/a\.com/y]],
+  ])('refuses to boot, and does not widen the pattern, for %s', async (_name, build) => {
+    let caught: unknown
+    try {
+      await answerTo({ origin: build() }, 'https://evil.io/#https://a.com')
+    } catch (error) {
+      caught = error
+    }
+    app = undefined as never
+    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
+    expect((caught as Error).message).toContain('use a function origin for custom matching')
+  })
 
   // Scenario: a RegExp that is not a plain one: a subclass, one with a property of its own, one from another realm.
   // Socket.IO would call its own `test`, which a plain copy cannot keep, and a copy that is more permissive than the

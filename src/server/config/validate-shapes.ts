@@ -178,12 +178,12 @@ function assertOrigin(origin: unknown): void {
   refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
 }
 
-/** Refuse a RegExp that is not a plain one, and say how to get custom matching: with a function. */
+/** Refuse a RegExp that is not a plain one or is sticky, and say how to get custom matching: with a function. */
 function refuseCustomRegExp(value: unknown): void {
   if (!hasRegExpBrand(value)) return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp that is a subclass, has a property of its own or comes from another realm: use a function origin for custom matching`,
+    `options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp that cannot be copied faithfully, as a subclass, one with a property of its own, one from another realm or one with the y flag: use a function origin for custom matching`,
     { who: 'BymaxRealtimeModule' },
   )
 }

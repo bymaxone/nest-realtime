@@ -442,10 +442,11 @@ describe('websocket.cors', () => {
     ['a subclass', () => new (class Mine extends RegExp {})('x')],
     ['a subclass in a list', () => [new (class Mine extends RegExp {})('x')]],
     ['one with a test of its own', () => Object.assign(/x/, { test: () => true })],
+    ['a sticky one', () => /x/y],
   ])('refuses %s with the way out', (_name, build) => {
     expect(() => validateOptions(corsOptions({ origin: build() }))).toThrow(
       new Error(
-        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp that is a subclass, has a property of its own or comes from another realm: use a function origin for custom matching`,
+        `[BymaxRealtimeModule] REALTIME_INVALID_OPTIONS: options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp that cannot be copied faithfully, as a subclass, one with a property of its own, one from another realm or one with the y flag: use a function origin for custom matching`,
       ),
     )
   })
