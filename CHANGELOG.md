@@ -7,22 +7,12 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
-## [1.2.28] - 2026-11-21
-
-### Fixed
-
-- **A proxy over a rejecting promise is absorbed again.** 1.2.27 attached its handler through the intrinsic `then`, which refuses a proxy because it is not a promise by brand, so the rejection of a promise returned through a proxy whose `get` trap binds methods reached the process as an unhandled one. The intrinsic path is still tried first; when it refuses, a value that is an `instanceof Promise` is given its own `catch`. A thenable that is not a promise is still never asked for its `then`. A promise whose `constructor` or species cannot be read cannot be given a handler by either path.
-
-#### Apply to a derived backend
-
-None. A `tenantResolver` that returns a promise still has its connection refused as a blank tenant; only the handling of that promise's rejection changed.
-
 ## [1.2.27] - 2026-11-21
 
 ### Fixed
 
 - **`roles` is read with a bound, and a `roles` that cannot be read is refused in every shape.** A revoked proxy over an array made `Array.isArray` throw a raw `TypeError` before the guard; the check now sits inside it, so the refusal is `REALTIME_AUTH_FAILED` with the host's error as the cause. The copy stops at 1,024 roles: an authentication result with more is refused with `REALTIME_AUTH_FAILED`, and an iterator that never ends is no longer read to exhaustion. The bound is there to cap the cost of the copy, not to say how many roles a user may hold; exactly 1,024 is admitted.
-- **The rejection of a promise a `tenantResolver` returns is absorbed whatever kind of promise it is.** The check was `instanceof Promise`, which a promise from another realm fails, and the handler was the promise's own `catch`, which a subclass can override; either left an unhandled rejection that ended the process. The handler is now attached with the intrinsic `then`, which accepts a real promise of any realm and refuses every other value without reading it.
+- **The rejection of a promise a `tenantResolver` returns is absorbed whatever kind of promise it is.** The check was `instanceof Promise`, which a promise from another realm fails, and the handler was the promise's own `catch`, which a subclass can override; either left an unhandled rejection that ended the process. The handler is now attached with the intrinsic `then`, which accepts a real promise of any realm and refuses every other value without reading a property of it. A proxy over a promise, whose own methods the intrinsic cannot reach, is given its own `catch` when the intrinsic refuses it, so its rejection is absorbed too; a thenable that is not a promise is still never asked for its `then`. A promise whose `constructor` or species cannot be read cannot be given a handler by either path.
 
 ### Documentation
 
@@ -1329,8 +1319,7 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.28...HEAD
-[1.2.28]: https://github.com/bymaxone/nest-realtime/compare/v1.2.27...v1.2.28
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.27...HEAD
 [1.2.27]: https://github.com/bymaxone/nest-realtime/compare/v1.2.26...v1.2.27
 [1.2.26]: https://github.com/bymaxone/nest-realtime/compare/v1.2.25...v1.2.26
 [1.2.25]: https://github.com/bymaxone/nest-realtime/compare/v1.2.24...v1.2.25
