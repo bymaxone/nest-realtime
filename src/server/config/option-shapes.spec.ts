@@ -483,8 +483,9 @@ describe('websocket.cors', () => {
     ).not.toThrow()
   })
 
-  // Scenario: a key the options do not name. Expected: it reaches Socket.IO as written, as documented.
-  it('leaves a key it does not name to Socket.IO', () => {
+  // Scenario: a key the options do not name. Expected: accepted; that it reaches Socket.IO is shown by a real
+  // preflight in the handshake spec.
+  it('accepts a key it does not name', () => {
     expect(() =>
       validateOptions(corsOptions({ origin: 'https://a.example', allowedHeaders: 'x-token' })),
     ).not.toThrow()

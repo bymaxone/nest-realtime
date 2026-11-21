@@ -116,16 +116,11 @@ describe('websocket.cors over a real server', () => {
     jest.restoreAllMocks()
   })
 
-  /**
-   * Boots a server with `cors`, asks it from `origin`, runs `between` while the server is still up, and asks
-   * again. Resolves to both answers.
-   */
-  async function answersAround(
+  /** Boots a server with `cors` and returns the port it listens on. */
+  async function boot(
     cors: object,
-    origin: string,
-    between: () => void = () => undefined,
     wrap: (websocket: object) => object = (websocket) => websocket,
-  ): Promise<[unknown, unknown]> {
+  ): Promise<number> {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     const module = await Test.createTestingModule({
       imports: [
@@ -139,7 +134,20 @@ describe('websocket.cors over a real server', () => {
     app = module.createNestApplication()
     app.useWebSocketAdapter(new RealtimeIoAdapter(app))
     await app.listen(0)
-    const port = (app.getHttpServer().address() as AddressInfo).port
+    return (app.getHttpServer().address() as AddressInfo).port
+  }
+
+  /**
+   * Boots a server with `cors`, asks it from `origin`, runs `between` while the server is still up, and asks
+   * again. Resolves to both answers.
+   */
+  async function answersAround(
+    cors: object,
+    origin: string,
+    between: () => void = () => undefined,
+    wrap: (websocket: object) => object = (websocket) => websocket,
+  ): Promise<[unknown, unknown]> {
+    const port = await boot(cors, wrap)
     const ask = async (): Promise<unknown> =>
       (
         await request(`http://127.0.0.1:${port}`)
@@ -339,6 +347,19 @@ describe('websocket.cors over a real server', () => {
     app = undefined as never
     expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
     expect((caught as Error).message).toContain('use a function origin for custom matching')
+  })
+
+  // Scenario: a key of the block that the options do not name, here the headers a preflight may ask for. Expected:
+  // it reaches Socket.IO as written, which a real preflight shows.
+  it('forwards a key the options do not name to Socket.IO as written', async () => {
+    const port = await boot({ origin: GOOD, allowedHeaders: 'x-forwarded-key' })
+
+    const response = await request(`http://127.0.0.1:${port}`)
+      .options('/socket.io/?EIO=4&transport=polling')
+      .set('Origin', GOOD)
+      .set('Access-Control-Request-Method', 'GET')
+
+    expect(response.headers['access-control-allow-headers']).toBe('x-forwarded-key')
   })
 
   // Scenario: the kinds the option documents. Expected: each is accepted and answers by its own rule.
