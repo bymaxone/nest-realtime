@@ -295,6 +295,7 @@ describe('websocket.cors over a real server', () => {
     ],
   ])('answers by the rule of %s', async (_name, build, good, evil) => {
     expect(await answerTo({ origin: build() }, evil)).toBeUndefined()
+    await app.close()
     expect(await answerTo({ origin: build() }, good)).toBe(good)
   })
 
