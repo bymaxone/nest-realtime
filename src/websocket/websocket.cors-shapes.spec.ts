@@ -164,6 +164,33 @@ describe('websocket.cors over a real server', () => {
     expect(await answerTo(build(), GOOD)).toBe(GOOD)
   })
 
+  // Scenario: an origin that is set to nothing: `null`, `undefined`, or an environment variable that is missing.
+  // Socket.IO answers no origin for these, so reading them as "unset" would open the server to every origin.
+  // Expected: the module refuses to boot, and no server answers.
+  it.each([
+    ['null', () => ({ origin: null })],
+    ['undefined', () => ({ origin: undefined, credentials: true })],
+    [
+      'an environment variable that is missing',
+      () => ({ origin: process.env.NO_SUCH_ORIGIN_9F2C }),
+    ],
+  ])('refuses to boot when origin is %s', async (_name, build) => {
+    let caught: unknown
+    try {
+      await answerTo(build(), EVIL)
+    } catch (error) {
+      caught = error
+    }
+    app = undefined as never
+    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
+    expect((caught as Error).message).toContain('options.websocket.cors.origin must be')
+  })
+
+  // Scenario: a block with no origin key at all. Expected: the documented default, which answers every origin.
+  it('keeps the documented default when the origin key is absent', async () => {
+    expect(await answerTo({ credentials: true }, EVIL)).toBe('*')
+  })
+
   // Scenario: a proxy that throws when a CorsConfig name is read. Expected: the library's refusal, with the
   // host's error as the cause, never a server that answers every origin.
   it('refuses a block whose CorsConfig name cannot be read, with the host error as the cause', async () => {

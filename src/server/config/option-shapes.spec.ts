@@ -283,3 +283,79 @@ describe('validateShapes called on options that still hold null', () => {
     ).not.toThrow()
   })
 })
+
+describe('websocket.cors', () => {
+  const corsOptions = (cors: unknown): never =>
+    ({ transport: 'websocket', authenticator, websocket: { cors } }) as never
+
+  // Scenario: an origin that is present and holds nothing. Expected: refused, naming the option, because the
+  // library cannot tell it from an allowlist that was meant to be there.
+  it.each([
+    [null, 'null'],
+    [undefined, 'undefined'],
+  ])('refuses an origin that is set to %p', (origin, received) => {
+    expect(() => validateOptions(corsOptions({ origin }))).toThrow(
+      refusal(
+        'websocket.cors.origin',
+        'a string, a RegExp, a function, an array or false',
+        received,
+      ),
+    )
+  })
+
+  // Scenario: an origin of undefined that is not an enumerable own key. Expected: refused like the plain key.
+  it.each([
+    [
+      'a non-enumerable own property',
+      () => Object.defineProperty({}, 'origin', { value: undefined }),
+    ],
+    [
+      'a getter on the prototype',
+      () =>
+        new (class {
+          get origin(): undefined {
+            return undefined
+          }
+        })(),
+    ],
+  ])('refuses an origin of undefined held as %s', (_name, build) => {
+    expect(() => validateOptions(corsOptions(build()))).toThrow(
+      refusal(
+        'websocket.cors.origin',
+        'a string, a RegExp, a function, an array or false',
+        'undefined',
+      ),
+    )
+  })
+
+  // Scenario: shapes are checked on a block that is null or not an object, as `validateShapes` is called on its own.
+  // Expected: nothing to check, and no TypeError from looking an origin up on null.
+  it.each([null, 'cors'])('leaves a cors block of %p to the other checks', (cors) => {
+    expect(() =>
+      validateShapes({ transport: 'websocket', authenticator, websocket: { cors } } as never),
+    ).not.toThrow()
+  })
+
+  // Scenario: no origin key. Expected: accepted, the documented `*`.
+  it('accepts a block with no origin', () => {
+    expect(() => validateOptions(corsOptions({ credentials: true }))).not.toThrow()
+  })
+
+  // Scenario: credentials that is a truthy or falsy non-boolean. Expected: refused, not ignored.
+  it.each([
+    ['true', 'a string'],
+    ['false', 'a string'],
+    [1, '1'],
+    [{}, 'an object'],
+  ])('refuses credentials %p', (value, received) => {
+    expect(() =>
+      validateOptions(corsOptions({ origin: 'https://a.example', credentials: value })),
+    ).toThrow(refusal('websocket.cors.credentials', 'a boolean', received))
+  })
+
+  it.each([true, false])('accepts credentials %p', (value) => {
+    expect(() =>
+      validateOptions(corsOptions({ origin: 'https://a.example', credentials: value })),
+    ).not.toThrow()
+  })
+})

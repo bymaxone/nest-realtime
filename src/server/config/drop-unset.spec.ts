@@ -110,12 +110,55 @@ describe('dropUnset, the CORS block of websocket', () => {
     expect({ ...cors }).toStrictEqual({ methods: ['GET'], allowedHeaders: 'x' })
   })
 
-  // Scenario: the block holds nothing for a key. Expected: the key is absent, as at every other level.
+  // Scenario: the block holds nothing for a key other than the origin. Expected: the key is absent, as at every
+  // other level.
   it('drops an unset key of the block', () => {
-    const cors = dropUnset({ websocket: { cors: { origin: undefined, credentials: null } } })
+    const cors = dropUnset({ websocket: { cors: { credentials: null, methods: undefined } } })
       .websocket?.cors
 
     expect({ ...cors }).toStrictEqual({})
+  })
+
+  // Scenario: the origin is set to nothing. Expected: it stays in the copy, so validation can refuse it; read as
+  // unset it would answer every origin. An origin that is not set at all stays absent.
+  it.each([
+    ['null', { origin: null }, { origin: null }],
+    ['undefined as a key of its own', { origin: undefined }, { origin: undefined }],
+    ['absent', {}, {}],
+  ])('keeps an origin that is %s as the host set it', (_name, cors, expected) => {
+    const kept = dropUnset({ websocket: { cors } }).websocket?.cors
+
+    expect({ ...kept }).toStrictEqual(expected)
+  })
+
+  // Scenario: an origin that is set to undefined without being an enumerable own key: a non-enumerable property, a
+  // getter on the prototype, a field a class declared. Expected: kept like the plain own key, because it is just as
+  // much a value the host set; read as unset it would answer every origin.
+  it.each([
+    [
+      'a non-enumerable own property',
+      () => Object.defineProperty({}, 'origin', { value: undefined }),
+    ],
+    [
+      'a getter on the prototype',
+      () =>
+        new (class {
+          get origin(): undefined {
+            return undefined
+          }
+        })(),
+    ],
+    [
+      'a field a class declared',
+      () =>
+        new (class {
+          origin: string | undefined = undefined
+        })(),
+    ],
+  ])('keeps an origin of undefined held as %s', (_name, build) => {
+    const kept = dropUnset({ websocket: { cors: build() } }).websocket?.cors as object
+
+    expect('origin' in kept).toBe(true)
   })
 
   // Scenario: a block that is not an object. Expected: left as it is.

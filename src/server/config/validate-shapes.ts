@@ -132,6 +132,25 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
   assertBoolean('sse.emitConnectionEvent', options.sse?.emitConnectionEvent)
   assertBoolean('websocket.emitConnectionEvent', options.websocket?.emitConnectionEvent)
   assertSseEndpoint('sse.endpoint', options.sse?.endpoint)
+  assertCors(options.websocket?.cors)
+}
+
+/**
+ * Refuse a `cors` block whose `origin` is set to nothing, and a `credentials` that is not a boolean. An origin
+ * that is `null` or `undefined` is not the same as no origin: Socket.IO closes the server for it, and reading it
+ * as unset would answer every origin, so the host is told to give the allowlist or leave the key out.
+ */
+function assertCors(cors: unknown): void {
+  if (typeof cors !== 'object' || cors === null) return
+  const block = cors as Record<string, unknown>
+  if ('origin' in block && (block.origin === null || block.origin === undefined)) {
+    refuse(
+      'websocket.cors.origin',
+      'a string, a RegExp, a function, an array or false',
+      block.origin,
+    )
+  }
+  assertBoolean('websocket.cors.credentials', block.credentials)
 }
 
 /**
