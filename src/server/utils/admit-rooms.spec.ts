@@ -234,6 +234,61 @@ describe('admitRooms', () => {
       expect(Object.isFrozen(admitted.roles)).toBe(true)
     })
 
+    it('refuses roles that are a revoked proxy, with the library code and a cause', () => {
+      const { proxy, revoke } = Proxy.revocable([], {})
+      revoke()
+      let caught: unknown
+      try {
+        admitRooms({ userId: 'u1', roles: proxy })
+      } catch (error) {
+        caught = error
+      }
+
+      expect((caught as { code?: string }).code).toBe('REALTIME_AUTH_FAILED')
+      expect((caught as Error).cause).toBeInstanceOf(TypeError)
+    })
+
+    it('admits as many roles as the limit and refuses one more, reading no further than that', () => {
+      const limit = 1024
+      expect(
+        admitRooms({ userId: 'u1', roles: Array.from({ length: limit }, (_, i) => `r${i}`) }).roles,
+      ).toHaveLength(limit)
+
+      let reads = 0
+      const endless = new Proxy([] as string[], {
+        get(target, key, receiver) {
+          if (key === Symbol.iterator) {
+            return function* () {
+              for (;;) {
+                reads += 1
+                yield 'r'
+              }
+            }
+          }
+          return Reflect.get(target, key, receiver) as unknown
+        },
+      })
+
+      expect(() => admitRooms({ userId: 'u1', roles: endless })).toThrow(`more than ${limit} roles`)
+      expect(reads).toBe(limit + 1)
+    })
+
+    it('refuses 1025 roles with the code and the limit in the message, and admits exactly 1024', () => {
+      const roles = (count: number): string[] => Array.from({ length: count }, (_, i) => `r${i}`)
+      let caught: unknown
+      try {
+        admitRooms({ userId: 'u1', roles: roles(1025) })
+      } catch (error) {
+        caught = error
+      }
+
+      expect((caught as { code?: string }).code).toBe('REALTIME_AUTH_FAILED')
+      expect((caught as Error).message).toBe(
+        'REALTIME_AUTH_FAILED: the authenticator returned more than 1024 roles: the limit is 1024',
+      )
+      expect(admitRooms({ userId: 'u1', roles: roles(1024) }).roles).toHaveLength(1024)
+    })
+
     it('leaves roles that are not an array as they are', () => {
       const auth = { userId: 'u1', roles: 'admin' } as unknown as AuthenticationResult
       expect(admitRooms(auth)).toBe(auth)

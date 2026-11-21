@@ -328,3 +328,22 @@ describe('SseSubscriptionHandler: the place held for a connection', () => {
     })
   })
 })
+
+describe('SseSubscriptionHandler: an authentication result that cannot be read', () => {
+  // The result is read while the tenant is resolved and the identity admitted; a read that throws is the
+  // authenticator's fault and ends as the generic 500, not as the host's own error reaching Nest.
+  it('answers the generic 500 when a field of the result throws as it is read', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    const authenticate = jest.fn().mockResolvedValue({
+      userId: 'u1',
+      get roles(): never {
+        throw new Error('host-read-error')
+      },
+    })
+    const { handler } = setup(5, authenticate)
+
+    await expect(
+      handler.authenticateBeforeCommit(mkReq(), mkClosableRes().res),
+    ).rejects.toBeInstanceOf(InternalServerErrorException)
+  })
+})

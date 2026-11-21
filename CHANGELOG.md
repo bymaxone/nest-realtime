@@ -7,6 +7,24 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.27] - 2026-11-21
+
+### Fixed
+
+- **`roles` is read with a bound, and a `roles` that cannot be read is refused in every shape.** A revoked proxy over an array made `Array.isArray` throw a raw `TypeError` before the guard; the check now sits inside it, so the refusal is `REALTIME_AUTH_FAILED` with the host's error as the cause. The copy stops at 1,024 roles: an authentication result with more is refused with `REALTIME_AUTH_FAILED` (`the authenticator returned more than 1024 roles: the limit is 1024`), and an iterator that never ends is no longer read to exhaustion. The bound is there to cap the cost of the copy, not to say how many roles a user may hold; exactly 1,024 is admitted.
+
+### Documentation
+
+- **What a `tenantResolver` that returns a thenable gets.** Only a native `Promise` has its rejection absorbed. A thenable that is not one is never asked for its `then`, because asking could run a lazy query, so its own rejection is not absorbed by the library; it is refused as a blank tenant either way.
+
+### Tests
+
+- Rows for `websocket.cors` with `origin: false`, a `RegExp`, a function and a proxy over an empty target that answers by name, over a real Socket.IO server. A throwing `roles` getter on the SSE path ends as the generic 500, as pinned by a new row.
+
+#### Apply to a derived backend
+
+An authenticator that returns more than 1,024 roles is now refused; none is expected to.
+
 ## [1.2.26] - 2026-11-21
 
 ### Fixed
@@ -1298,7 +1316,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.26...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.27...HEAD
+[1.2.27]: https://github.com/bymaxone/nest-realtime/compare/v1.2.26...v1.2.27
 [1.2.26]: https://github.com/bymaxone/nest-realtime/compare/v1.2.25...v1.2.26
 [1.2.25]: https://github.com/bymaxone/nest-realtime/compare/v1.2.24...v1.2.25
 [1.2.24]: https://github.com/bymaxone/nest-realtime/compare/v1.2.23...v1.2.24

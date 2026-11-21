@@ -416,15 +416,15 @@ describe('resolveAuthTenant', () => {
     }
   })
 
-  it('does not touch a resolver result that is a thenable whose then throws', () => {
-    const thenable = {
-      get then(): never {
-        throw new Error('host')
-      },
-    }
+  // The residual of absorbing only a native promise: a thenable that is not one is never asked for its `then`
+  // (asking could run a lazy query), so its own rejection is not absorbed, and it still cannot route.
+  it('does not call the then of a thenable that is not a promise, and still refuses it as a tenant', () => {
+    const then = jest.fn()
+    const thenable = { then }
 
-    expect(() =>
-      resolveAuthTenant({ tenantResolver: () => thenable as never }, { userId: 'u1' }),
-    ).not.toThrow()
+    const out = resolveAuthTenant({ tenantResolver: () => thenable as never }, { userId: 'u1' })
+
+    expect(then).not.toHaveBeenCalled()
+    expect(() => assertIdentityIsNotBlank(out)).toThrow('REALTIME_AUTH_FAILED')
   })
 })
