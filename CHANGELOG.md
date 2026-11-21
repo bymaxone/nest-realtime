@@ -7,6 +7,18 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.26] - 2026-11-21
+
+### Fixed
+
+- **An origin allowlist in `websocket.cors` is no longer dropped when it is defined as a class getter, a non-enumerable property or a prototype property.** The block was copied by its own enumerable keys, so `origin` went missing, Socket.IO fell back to its default and answered every origin with `Access-Control-Allow-Origin: *`. The block is now read by the names of `CorsConfig`, as `sse`, `websocket` and `reauthenticationPolicy` already were. The hook table was never affected: it is handed to the services as the host's own object, and the hooks run in every one of those shapes (specs now pin both).
+- **`roles` whose read throws is refused at admission.** A proxy or getter on `roles` was first read when the connection event or a hook needed it, so the host's error reached the framework raw. The array is now read once at admission into a frozen copy, and a read that throws is refused with `REALTIME_AUTH_FAILED` and the host's error as the cause. A `roles` value that is not an array is left as it is.
+- **An `async` `tenantResolver` no longer leaves an unhandled rejection.** The resolver is synchronous; a promise is refused as a tenant that is not a string, and its rejection is now absorbed.
+
+#### Apply to a derived backend
+
+Nothing to change. A host that defined `websocket.cors.origin` as a getter, non-enumerable or on a prototype now gets the allowlist it wrote; check that it is the list you intend, since until now such a server answered every origin.
+
 ## [1.2.25] - 2026-11-21
 
 ### Fixed

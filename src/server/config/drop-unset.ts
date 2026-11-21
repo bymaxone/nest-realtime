@@ -4,6 +4,7 @@
  */
 import type {
   BymaxRealtimeModuleOptions,
+  CorsConfig,
   ReauthenticationPolicy,
   SseOptions,
   WebSocketOptions,
@@ -38,6 +39,12 @@ const WEBSOCKET_KEYS = {
   emitConnectionEvent: true,
   redisAdapter: true,
 } satisfies Record<keyof WebSocketOptions, true>
+
+const CORS_KEYS = {
+  origin: true,
+  credentials: true,
+  methods: true,
+} satisfies Record<keyof CorsConfig, true>
 
 const REAUTHENTICATION_KEYS = {
   intervalSeconds: true,
@@ -91,7 +98,10 @@ function readSet(source: object, known: Readonly<Record<string, true>>): Record<
  * spelled, resolves to its default and is validated as absent. A group may be a class instance with
  * fields or getters, so each known key is read by property access rather than from the own keys alone.
  * Values that carry behaviour (the authenticator, a queue, a hook table) are kept by reference. A group
- * that is not an object, or is an array or a built-in such as a `Date`, is left as it is.
+ * that is not an object, or is an array or a built-in such as a `Date`, is left as it is. The CORS block
+ * of `websocket` is read the same way, because the origin allowlist it carries reaches Socket.IO, which
+ * copies what it is given: an `origin` held as a getter or on a prototype would be lost in that copy and
+ * the server would answer every origin.
  *
  * @param options - The options as the host wrote them.
  * @returns A plain copy in which every unset key is absent.
@@ -101,6 +111,11 @@ export function dropUnset<T extends object>(options: T): T {
   for (const [group, keys] of Object.entries(GROUPS)) {
     const value = kept[group]
     if (isPlainObject(value)) kept[group] = readSet(value, keys)
+  }
+  const websocket = kept.websocket
+  if (isPlainObject(websocket)) {
+    const cors = (websocket as Record<string, unknown>).cors
+    if (isPlainObject(cors)) (websocket as Record<string, unknown>).cors = readSet(cors, CORS_KEYS)
   }
   return kept as T
 }

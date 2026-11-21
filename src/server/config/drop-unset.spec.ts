@@ -2,6 +2,7 @@
  * @fileoverview `dropUnset` removes the own keys that hold nothing, in the options and in each group.
  * @layer composition
  */
+import type { CorsConfig } from '../interfaces/realtime-module-options.interface'
 import { dropUnset } from './drop-unset'
 
 describe('dropUnset', () => {
@@ -46,5 +47,103 @@ describe('dropUnset', () => {
     dropUnset(given)
 
     expect(given).toStrictEqual({ sse: { heartbeatMs: undefined } })
+  })
+})
+
+describe('dropUnset, the CORS block of websocket', () => {
+  const ORIGIN = ['https://good.example']
+
+  /** The ways a host can define `origin`; each is readable by property access and invisible to a spread. */
+  const shapes: ReadonlyArray<readonly [string, () => object]> = [
+    ['an own data property', () => ({ origin: ORIGIN, credentials: true })],
+    [
+      'a class getter',
+      () =>
+        new (class {
+          credentials = true
+          get origin(): readonly string[] {
+            return ORIGIN
+          }
+        })(),
+    ],
+    [
+      'a non-enumerable property',
+      () => Object.defineProperties({ credentials: true }, { origin: { value: ORIGIN } }),
+    ],
+    [
+      'a non-enumerable getter',
+      () =>
+        Object.defineProperties(
+          { credentials: true },
+          { origin: { get: () => ORIGIN, enumerable: false } },
+        ),
+    ],
+    [
+      'a prototype property',
+      () => Object.assign(Object.create({ origin: ORIGIN }), { credentials: true }),
+    ],
+    [
+      'a prototype getter',
+      () =>
+        Object.assign(Object.create(Object.defineProperty({}, 'origin', { get: () => ORIGIN })), {
+          credentials: true,
+        }),
+    ],
+  ]
+
+  // Scenario: the allowlist is defined in a way a spread cannot copy. Expected: the record the library keeps
+  // still names it, so the Socket.IO server never falls back to "any origin".
+  it.each(shapes)('keeps origin and credentials when origin is %s', (_name, build) => {
+    const cors = dropUnset({ websocket: { cors: build() } }).websocket?.cors
+
+    expect({ ...cors }).toStrictEqual({ origin: ORIGIN, credentials: true })
+  })
+
+  // Scenario: methods supplied the same way, and a key the interface does not name. Expected: both kept.
+  it('keeps methods from a prototype and an enumerable key the interface does not name', () => {
+    const cors = dropUnset({
+      websocket: {
+        cors: Object.assign(Object.create({ methods: ['GET'] }), { allowedHeaders: 'x' }),
+      },
+    }).websocket?.cors
+
+    expect({ ...cors }).toStrictEqual({ methods: ['GET'], allowedHeaders: 'x' })
+  })
+
+  // Scenario: the block holds nothing for a key. Expected: the key is absent, as at every other level.
+  it('drops an unset key of the block', () => {
+    const cors = dropUnset({ websocket: { cors: { origin: undefined, credentials: null } } })
+      .websocket?.cors
+
+    expect({ ...cors }).toStrictEqual({})
+  })
+
+  // Scenario: a block that is not an object. Expected: left as it is.
+  it.each([[true], ['*'], [[1]]])('leaves the block %p untouched', (cors) => {
+    expect(dropUnset({ websocket: { cors: cors as CorsConfig } }).websocket?.cors).toBe(cors)
+  })
+
+  // Scenario: the hook table, in each of the shapes. Expected: the host's own object, so every hook still runs.
+  it.each([
+    [
+      'a class getter',
+      () =>
+        new (class {
+          get onConnect() {
+            return () => 'ran'
+          }
+        })(),
+    ],
+    [
+      'a non-enumerable property',
+      () => Object.defineProperty({}, 'onConnect', { value: () => 'ran' }),
+    ],
+    ['a prototype property', () => Object.create({ onConnect: () => 'ran' }) as object],
+  ])('hands the hook table over as it is when a hook is %s', (_name, build) => {
+    const hooks = build()
+    const kept = dropUnset({ hooks }).hooks as { onConnect?: () => string }
+
+    expect(kept).toBe(hooks)
+    expect(kept.onConnect?.()).toBe('ran')
   })
 })

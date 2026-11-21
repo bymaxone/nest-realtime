@@ -395,4 +395,36 @@ describe('resolveAuthTenant', () => {
       metadata: { traceId: 'x' },
     })
   })
+
+  // A resolver written async returns a promise: the connection is refused as a blank tenant, and the promise's
+  // rejection must not be left to the process as an unhandled one.
+  it('handles the rejection of a resolver that is async', async () => {
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      const out = resolveAuthTenant(
+        { tenantResolver: () => Promise.reject(new Error('late')) as never },
+        { userId: 'u1' },
+      )
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(unhandled).not.toHaveBeenCalled()
+      expect(typeof out.tenantId).toBe('object')
+    } finally {
+      process.off('unhandledRejection', unhandled)
+    }
+  })
+
+  it('does not touch a resolver result that is a thenable whose then throws', () => {
+    const thenable = {
+      get then(): never {
+        throw new Error('host')
+      },
+    }
+
+    expect(() =>
+      resolveAuthTenant({ tenantResolver: () => thenable as never }, { userId: 'u1' }),
+    ).not.toThrow()
+  })
 })

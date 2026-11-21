@@ -17,6 +17,24 @@ function refuse(detail: string): never {
 }
 
 /**
+ * The roles the connection keeps: a frozen copy of an array, read once here. Roles reach the client and every
+ * hook after the admission, so a read that throws is refused now, as the authenticator's fault, with the host's
+ * error as the cause. A value that is not an array is left as it is.
+ */
+function admitRoles(roles: AuthenticationResult['roles']): AuthenticationResult['roles'] {
+  if (!Array.isArray(roles)) return roles
+  try {
+    return Object.freeze([...(roles as readonly string[])])
+  } catch (error) {
+    throw realtimeError(
+      REALTIME_ERROR_CODES.AUTH_FAILED,
+      'the authenticator returned roles that could not be read: a getter or a proxy on them throws',
+      { cause: error },
+    )
+  }
+}
+
+/**
  * Validate the `rooms` of an authentication result and return the result the connection is
  * admitted with.
  *
@@ -36,8 +54,10 @@ function refuse(detail: string): never {
  * @throws Error carrying `REALTIME_AUTH_FAILED` when `rooms` is present and invalid.
  */
 export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
+  const roles = admitRoles(auth.roles)
   const { rooms } = auth
-  if (rooms === undefined) return auth
+  const kept = roles === auth.roles ? auth : { ...auth, roles: roles as readonly string[] }
+  if (rooms === undefined) return kept
   if (!Array.isArray(rooms)) refuse('`rooms` is not an array')
   const admitted: unknown[] = []
   for (const room of rooms as Iterable<unknown>) {
@@ -58,5 +78,5 @@ export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
     const reserved = reservedRoomPrefix(room)
     if (reserved !== undefined) refuse(`a room name starts with the reserved prefix "${reserved}"`)
   }
-  return { ...auth, rooms: Object.freeze(admitted as string[]) }
+  return { ...kept, rooms: Object.freeze(admitted as string[]) }
 }
