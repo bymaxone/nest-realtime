@@ -241,6 +241,44 @@ describe('websocket.cors over a real server', () => {
     expect((caught as Error).message).toContain('options.websocket.cors.origin must be')
   })
 
+  // Scenario: a value that is, or looks like, a RegExp but cannot be copied: a prototype-only object, a Proxy over one
+  // and an object with a test of its own. Expected: refused with the same way out as any other RegExp that cannot be
+  // copied, a function origin.
+  it.each([
+    ['a RegExp-shaped object that is not one', () => Object.create(RegExp.prototype) as unknown],
+    ['a Proxy over a RegExp', () => new Proxy(/good\.example$/, {})],
+    ['an object with a test of its own', () => ({ test: () => true })],
+    ['a list holding a Proxy over a RegExp', () => [new Proxy(/good\.example$/, {})]],
+  ])('points to a function origin when origin is %s', async (_name, build) => {
+    let caught: unknown
+    try {
+      await answerTo({ origin: build() }, EVIL)
+    } catch (error) {
+      caught = error
+    }
+    app = undefined as never
+    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
+    expect((caught as Error).message).toContain('use a function origin for custom matching')
+  })
+
+  // Scenario: the flag accessors of RegExp.prototype replaced before the module boots. The generic `flags` accessor
+  // reads them, so a sticky RegExp could be made to look unflagged and be copied unanchored. Expected: the accessors
+  // the library took when it loaded decide, so a sticky RegExp is refused whatever the prototype says now.
+  it('refuses a sticky RegExp even when RegExp.prototype.sticky now says it is not', async () => {
+    const saved = Object.getOwnPropertyDescriptor(RegExp.prototype, 'sticky') as PropertyDescriptor
+    Object.defineProperty(RegExp.prototype, 'sticky', { get: () => false, configurable: true })
+    let caught: unknown
+    try {
+      await answerTo({ origin: /https:\/\/a\.com$/y }, 'https://evil.io/#https://a.com')
+    } catch (error) {
+      caught = error
+    } finally {
+      Object.defineProperty(RegExp.prototype, 'sticky', saved)
+    }
+    app = undefined as never
+    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
+  })
+
   // Scenario: an origin list the host can change after validation, or that reads differently by iterator and by
   // index (Socket.IO's own matching reads it by index and length on every request). Expected: the list that was
   // validated is the list that is used, so no later change or second reading reaches the answer.
@@ -362,6 +400,33 @@ describe('websocket.cors over a real server', () => {
     app = undefined as never
     expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
     expect((caught as Error).message).toContain('use a function origin for custom matching')
+  })
+
+  // Scenario: the host changes the block after boot. Expected: an array it gave for allowedHeaders is shared with
+  // Socket.IO, so a push reaches the next preflight, while replacing the property or changing a scalar such as
+  // maxAge does not. This is what the README says.
+  it('shares an array given for allowedHeaders, and not a replaced property or a scalar', async () => {
+    const cors = { origin: GOOD, allowedHeaders: ['x-a'], maxAge: 600 }
+    const port = await boot(cors)
+    const preflight = async (): Promise<Record<string, unknown>> =>
+      (
+        await request(`http://127.0.0.1:${port}`)
+          .options('/socket.io/?EIO=4&transport=polling')
+          .set('Origin', GOOD)
+          .set('Access-Control-Request-Method', 'GET')
+      ).headers
+
+    const before = await preflight()
+    cors.allowedHeaders.push('x-b')
+    cors.maxAge = 0
+    const pushed = await preflight()
+    cors.allowedHeaders = ['x-replaced']
+    const replaced = await preflight()
+
+    expect(before['access-control-allow-headers']).toBe('x-a')
+    expect(pushed['access-control-allow-headers']).toBe('x-a,x-b')
+    expect(pushed['access-control-max-age']).toBe('600')
+    expect(replaced['access-control-allow-headers']).toBe('x-a,x-b')
   })
 
   // Scenario: a key of the block that the options do not name, here the headers a preflight may ask for. Expected:

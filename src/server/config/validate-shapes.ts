@@ -4,7 +4,7 @@
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
-import { copyRegExp, hasRegExpBrand } from '../utils/copy-regexp'
+import { copyRegExp } from '../utils/copy-regexp'
 import { describeReceived } from '../utils/describe-received'
 import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
 import { refuseObject } from '../utils/refuse-object'
@@ -153,7 +153,8 @@ function isOriginEntry(entry: unknown): boolean {
  * Refuse an `origin` of a kind Socket.IO does not match by itself. It reads anything else as "allow", so an
  * object, a number, a symbol, a list with such an entry and an object that only has the prototype of a RegExp would
  * each be answered with the origin that asked. `null` and `undefined` are refused here too: they are not an
- * allowlist. A RegExp is recognised by its brand, not by its prototype.
+ * allowlist. Only a plain RegExp is accepted, as `copyRegExp` decides; a value that is or looks like one but
+ * cannot be copied gets the way out, a function origin.
  */
 function assertOrigin(origin: unknown): void {
   const kind = typeof origin
@@ -178,12 +179,24 @@ function assertOrigin(origin: unknown): void {
   refuse('websocket.cors.origin', ORIGIN_KINDS, origin)
 }
 
-/** Refuse a RegExp that is not a plain one or is sticky, and say how to get custom matching: with a function. */
+/**
+ * Whether a value is a RegExp or looks like one: it has the prototype of one, or a `test` function, which every
+ * RegExp has, of any realm. A read that throws, as the read of `test` on `null` or on a hostile proxy does, is not.
+ */
+function looksLikeRegExp(value: unknown): boolean {
+  try {
+    return value instanceof RegExp || typeof (value as { test?: unknown }).test === 'function'
+  } catch {
+    return false
+  }
+}
+
+/** Refuse a RegExp that cannot be copied faithfully, or one that looks like it, and say how to get custom matching. */
 function refuseCustomRegExp(value: unknown): void {
-  if (!hasRegExpBrand(value)) return
+  if (!looksLikeRegExp(value)) return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp that cannot be copied faithfully, as a subclass, one with a property of its own, one from another realm or one with the y flag: use a function origin for custom matching`,
+    `options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp, or an object that looks like one, that cannot be copied faithfully: a subclass, one with a property of its own, one from another realm, one with the y flag, a proxy over one or an object that only has its prototype: use a function origin for custom matching`,
     { who: 'BymaxRealtimeModule' },
   )
 }
