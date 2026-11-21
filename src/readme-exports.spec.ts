@@ -87,4 +87,15 @@ describe('the README documents what the package exports', () => {
   it('describes `kind` on the ITransport line', () => {
     expect(mentionsIn(lineStartingWith('- `ITransport`:'), 'kind')).toBe(true)
   })
+
+  // The resolver is given a plain copy of the authentication result, with no tenantId key when the tenant is absent or
+  // null, so the three places that describe `tenantResolver` have to say so.
+  it.each([
+    ['the options table row', '| **tenantResolver**'],
+    ['the paragraph that says it cannot clear a tenant', '`tenantResolver` cannot clear a tenant.'],
+  ])('says in %s that the resolver receives a plain copy', (_name, prefix) => {
+    const line = lineStartingWith(prefix)
+    expect(line).not.toBe('')
+    expect(line).toContain('plain copy')
+  })
 })

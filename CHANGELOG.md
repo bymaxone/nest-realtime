@@ -7,6 +7,14 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- **A field named `msg` or `level` can no longer reach a log line.** A structured logger reads `msg` as the text of a line and `level` as its severity, so a field of either name could change what a library line says or how it is filed. `logEvent` drops them, as it already did `err`; `event` and `message` stay the library's own.
+
+### Documentation
+
+- **The README and the `tenantResolver` documentation say that the resolver receives a plain copy.** The options table, the paragraph on identity and the JSDoc state that the copy has its own enumerable properties only and no `tenantId` when the tenant is absent or `null`. A spec holds the two README places.
+
 ## [1.2.22] - 2026-11-20
 
 ### Fixed

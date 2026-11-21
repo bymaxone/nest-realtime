@@ -35,6 +35,9 @@ export const REALTIME_LOG_EVENTS = [
 /** The code of one warn or error event the library writes, one of `REALTIME_LOG_EVENTS`. */
 export type RealtimeLogEvent = (typeof REALTIME_LOG_EVENTS)[number]
 
+/** Keys a logger reads as its own, which a field cannot carry. */
+const RESERVED_KEYS = ['err', 'msg', 'level'] as const
+
 /** Fields are closed or numeric: a count, a size, a configured limit, a transport name or a library-made id. */
 export type LogFields = Readonly<Record<string, string | number | boolean>>
 
@@ -49,8 +52,8 @@ export type LogFields = Readonly<Record<string, string | number | boolean>>
  * @param level - `warn` for what degrades service, `error` for what fails an operation.
  * @param event - The stable code of the condition.
  * @param message - Human text; the library's own wording, with no host-supplied value in it.
- * @param fields - Closed or numeric fields, built by the library. A key named `event`, `message` or `err` is replaced by the
- *   library's own value or dropped, and a field whose read throws, such as a getter, loses the line like any other
+ * @param fields - Closed or numeric fields, built by the library. A key named `event` or `message` is replaced by the
+ *   library's own value, and one named `err`, `msg` or `level` is dropped, and a field whose read throws, such as a getter, loses the line like any other
  *   throw while writing.
  * @param error - What was thrown, when the event reports a failure. It goes under `err` as the value itself, never
  *   as text in `message`, so the logger's serializer and redaction apply to it: an error raised by host code can
@@ -70,8 +73,9 @@ export function logEvent(
 ): void {
   try {
     const line: Record<string, unknown> = { ...fields, event, message }
-    // `err` is where a logger's serializer reads an error from, so only the error argument may put anything there.
-    delete line['err']
+    // `err` is where a logger's serializer reads an error from, `msg` and `level` are where a structured logger reads a
+    // line's text and severity, so no field may put anything there: only the error argument writes `err`.
+    for (const key of RESERVED_KEYS) delete line[key]
     if (error !== undefined) line['err'] = error
     logger[level](line)
   } catch {

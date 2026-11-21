@@ -102,6 +102,31 @@ describe('logEvent and the err key', () => {
   })
 })
 
+describe('logEvent and the keys a logger reads as its own', () => {
+  // Scenario: fields named `msg` and `level`, with and without an error. Expected: neither reaches the line. Why: a
+  // structured logger reads `msg` as the text and `level` as the severity of a line, so a field of either name would
+  // change what the line says or how it is filed; `event`, `message` and `err` are the library's alone for the same reason.
+  it.each([
+    ['no error', undefined],
+    ['an error', new Error('boom')],
+  ])('drops a field named msg or level, with %s', (_name, error) => {
+    const warn = jest.fn()
+    logEvent(
+      { warn, error: jest.fn() },
+      'warn',
+      'REALTIME_HOOK_FAILED',
+      'a hook failed',
+      { msg: 'from a field', level: 'debug', hook: 'onConnect' } as never,
+      error,
+    )
+    const [line] = warn.mock.calls[0] as [Record<string, unknown>]
+    expect('msg' in line).toBe(false)
+    expect('level' in line).toBe(false)
+    expect(line['hook']).toBe('onConnect')
+    expect(line['message']).toBe('a hook failed')
+  })
+})
+
 describe('the event catalog', () => {
   const sources = shipped(SRC).map((path) => readFileSync(path, 'utf8'))
 
