@@ -9,10 +9,20 @@ import { realtimeError } from './realtime-error'
 export type BuiltinSlot = readonly [target: object, key: PropertyKey]
 
 const describe = Object.getOwnPropertyDescriptor
+const hasOwn = Object.prototype.hasOwnProperty
+const apply = Reflect.apply
 
-/** What a slot holds. Every slot is a data property, so the `value` of its descriptor is the holder's own. */
+/** What a slot holds when it is not a data property: nothing a recorded value can equal, so such a slot counts as replaced. */
+const NOT_DATA = {}
+
+/**
+ * What a slot holds. A descriptor is an ordinary object, so a field it does not hold itself is answered by the root
+ * prototype: `value` is read only when the descriptor holds it, and an accessor, which holds none, is {@link NOT_DATA}.
+ */
 function held(target: object, key: PropertyKey): unknown {
-  return describe(target, key)?.value
+  const descriptor = describe(target, key)
+  if (descriptor === undefined) return undefined
+  return (apply(hasOwn, descriptor, ['value']) as boolean) ? descriptor.value : NOT_DATA
 }
 
 /**

@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  24,944 B → 24,974 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  24,990 B → 25,020 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -63,7 +63,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     before the defaults merge and the type-only wording of every option refusal, with the key tables that read a group's known keys, 436 B, and the construction-time check of
 //     `RedisOfflineQueue`'s two options, with its error, 117 B, and the start-up check of the shape of the
 //     option groups and of the pluggable pieces, 448 B, and the refusal of an options argument, of a registration endpoint and of one with whitespace in it, of a built-in object where a group is expected, and of a queue built without its options or its client, 188 B, and the one test that counts the factory patterns and chooses the provider, so that a pattern set to `null` is read as unset, 42 B, and the read of the CORS block by the names of `CorsConfig` with the frozen copy of `roles` refused when its read throws, and the absorbed rejection of an async resolver, 173 B, with the CORS block read whenever it is an object rather than when it reports a plain type, 1 B, and the bound on the roles copy with its guard, and the absorption of a promise by the intrinsic then, 110 B, measured on 2026-11-21)
-//     and, 819 B more than the figure above, the table of the built-ins the option, validation and admission code call, recorded when the library loads, with the count and the refusal that read it, measured on 2026-11-22)
+//     and, 865 B more than the figure above, the table of the built-ins the option, validation and admission code call, recorded when the library loads, with the count and the refusal that read it, measured on 2026-11-22)
 //   websocket  8,193 B →  8,223 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -100,7 +100,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 24_974 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 25_020 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 8_223 },
   {
     name: 'observability (metrics contributor)',

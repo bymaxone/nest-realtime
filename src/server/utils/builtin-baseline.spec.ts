@@ -202,6 +202,95 @@ describe('the additions the audits asked for', () => {
   })
 })
 
+describe('a built-in removed after the library loaded', () => {
+  // Scenario: a built-in is deleted outright, so the holder has no descriptor for it. Expected: counted as replaced.
+  it('counts a built-in that is no longer there', () => {
+    const saved = describe_(String.prototype, 'trim') as PropertyDescriptor
+    let count = -1
+    Reflect.deleteProperty(String.prototype, 'trim')
+    try {
+      count = replacedBuiltinCount()
+    } finally {
+      define(String.prototype, 'trim', saved)
+    }
+
+    expect(count).toBe(1)
+  })
+})
+
+describe('a built-in replaced by an accessor, with a value planted on Object.prototype', () => {
+  const find = (label: string): number => BUILTIN_SLOTS.findIndex((slot) => labelOf(slot) === label)
+
+  /**
+   * Replaces `String.prototype.startsWith` by an accessor, with `value` planted on the root prototype, runs `run`, and puts
+   * everything back. The descriptors have no prototype, since the planted `value` would otherwise be read into them.
+   */
+  function withAccessorAndPlantedValue(planted: PropertyDescriptor, run: () => void): void {
+    const slot = BUILTIN_SLOTS[
+      find('String.prototype.startsWith')
+    ] as (typeof BUILTIN_SLOTS)[number]
+    const saved = describe_(slot[0], slot[1]) as PropertyDescriptor
+    define(slot[0], slot[1], {
+      __proto__: null,
+      get: () => () => false,
+      configurable: true,
+    } as PropertyDescriptor)
+    define(Object.prototype, 'value', {
+      __proto__: null,
+      ...planted,
+      configurable: true,
+    } as PropertyDescriptor)
+    try {
+      run()
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'value')
+      define(slot[0], slot[1], saved)
+    }
+  }
+
+  // Scenario: the original `startsWith` is planted as `value` on the root prototype, and `startsWith` is replaced by an
+  // accessor, which has no value of its own. Expected: counted as replaced, since the inherited value is not the slot's.
+  it('counts an accessor even when the original is planted as the value it would inherit', () => {
+    const original = String.prototype.startsWith
+    let count = -1
+    let code: unknown
+    withAccessorAndPlantedValue({ value: original, writable: true }, () => {
+      count = replacedBuiltinCount()
+      try {
+        assertBuiltinsIntact()
+      } catch (error) {
+        code = (error as { code?: unknown }).code
+      }
+    })
+
+    expect([count, code]).toStrictEqual([1, 'REALTIME_TRANSPORT_UNAVAILABLE'])
+  })
+
+  // Scenario: the planted `value` is a getter that throws. Expected: the refusal is the count-only one; nothing the host
+  // wrote is run or escapes.
+  it('refuses with the count-only code when the planted value is a getter that throws', () => {
+    let count = -1
+    let code: unknown
+    withAccessorAndPlantedValue(
+      {
+        get: () => {
+          throw new Error('SECRET-planted-getter')
+        },
+      },
+      () => {
+        try {
+          count = replacedBuiltinCount()
+          assertBuiltinsIntact()
+        } catch (error) {
+          code = (error as { code?: unknown }).code
+        }
+      },
+    )
+
+    expect([count, code]).toStrictEqual([1, 'REALTIME_TRANSPORT_UNAVAILABLE'])
+  })
+})
+
 describe('a process whose string iterator was replaced before the library loaded', () => {
   // Scenario: `String.prototype[Symbol.iterator]` is not a function when the library loads, so the list of built-ins cannot
   // be made. Expected: the load does not throw, the list is empty, and every use is refused with a count of one.
@@ -367,5 +456,31 @@ describe('the list of built-ins', () => {
     const missing = [...read].filter((name) => !labels.has(name) && !exempt.has(name)).sort()
 
     expect(missing).toStrictEqual([])
+  })
+})
+
+describe('a process whose hasOwnProperty was replaced before the library loaded', () => {
+  // Scenario: `Object.prototype.hasOwnProperty` is not a function when the library loads, so the baseline cannot be read.
+  // Expected: the load does not throw, and every use is refused with a count of one.
+  it('loads, and refuses every use', () => {
+    type Baseline = typeof BuiltinBaseline
+    const saved = describe_(Object.prototype, 'hasOwnProperty') as PropertyDescriptor
+    let loaded: Baseline | undefined
+    let error: unknown
+    define(Object.prototype, 'hasOwnProperty', { value: 1, configurable: true, writable: true })
+    try {
+      jest.isolateModules(() => {
+        try {
+          loaded = require('./builtin-baseline') as Baseline
+        } catch (caught) {
+          error = caught
+        }
+      })
+    } finally {
+      define(Object.prototype, 'hasOwnProperty', saved)
+    }
+
+    expect(error).toBeUndefined()
+    expect(loaded?.replacedBuiltinCount()).toBe(1)
   })
 })
