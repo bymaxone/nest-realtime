@@ -7,6 +7,17 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.35] - 2026-11-22
+
+### Security
+
+- **`maxAge` of `websocket.cors` must be a whole number of seconds, zero or more.** A negative number, a fraction, `NaN`, `Infinity`, a string, a boolean or an object was handed to Socket.IO, which writes it into `Access-Control-Max-Age`. Each is now refused at boot with `REALTIME_INVALID_OPTIONS`, naming the type and never the value.
+- **The read of the options no longer depends on a built-in a host can replace.** `Object.keys`, `Object.freeze` and `Object.prototype.toString` are taken when the library loads, and the read walks its keys by index, without a `Set`, a spread or a `for...of`, so a program that replaces one afterwards cannot make the cors block lose an option or leave the resolved options unfrozen. The check of `extraProviders` takes `Array.isArray` from the same place and walks the list by index, so a replaced `Array.isArray` or `Array.prototype.forEach` cannot let an invalid one through. The README lists the built-ins trusted as imported.
+
+#### Apply to a derived backend
+
+A `maxAge` that is not a whole number of seconds, zero or more, now refuses boot: write it as `600`, not `'600'` or `600.5`.
+
 ## [1.2.34] - 2026-11-21
 
 ### Security

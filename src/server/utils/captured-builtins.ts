@@ -20,3 +20,9 @@ export const push = Array.prototype.push
 
 /** `Reflect.apply` as it was when the library was imported. */
 export const apply = Reflect.apply
+
+/** `Object.keys` as it was when the library was imported. */
+export const keys = Object.keys
+
+/** `Object.prototype.toString` as it was when the library was imported. */
+export const objectToString = Object.prototype.toString

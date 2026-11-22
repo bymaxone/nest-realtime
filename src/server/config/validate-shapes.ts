@@ -4,7 +4,7 @@
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
-import { isArray } from '../utils/captured-builtins'
+import { isArray, isInteger } from '../utils/captured-builtins'
 import { copyRegExp } from '../utils/copy-regexp'
 import { describeReceived } from '../utils/describe-received'
 import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
@@ -216,6 +216,15 @@ function assertCors(cors: unknown): void {
   assertStringList('allowedHeaders', block.allowedHeaders)
   assertStringList('exposedHeaders', block.exposedHeaders)
   assertBoolean('websocket.cors.credentials', block.credentials)
+  assertMaxAge(block.maxAge)
+}
+
+/** Refuse a `maxAge` that is not a whole number of seconds, zero or more; an unset one is left to Socket.IO. */
+function assertMaxAge(value: unknown): void {
+  if (value === undefined) return
+  if (typeof value !== 'number' || !isInteger(value) || value < 0) {
+    refuse('websocket.cors.maxAge', 'a non-negative integer', value)
+  }
 }
 
 /** Refuse `methods`, `allowedHeaders` or `exposedHeaders` that is neither a string nor a list of strings; an unset one is left to Socket.IO. */
@@ -240,20 +249,22 @@ function assertStringList(key: string, value: unknown): void {
  */
 export function assertExtraProviders(value: unknown): void {
   if (value === undefined || value === null) return
-  if (!Array.isArray(value)) {
+  if (!isArray(value)) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
       `extraProviders must be an array of providers, received ${describeReceived(value)}`,
       { who: 'BymaxRealtimeModule' },
     )
   }
-  value.forEach((entry: unknown, index) => {
-    if (typeof entry === 'function') return
+  const length: number = value.length
+  for (let index = 0; index < length; index += 1) {
+    const entry: unknown = value[index]
+    if (typeof entry === 'function') continue
     const read = readPlainObject(entry)
-    if (read.plain && 'provide' in (entry as object)) return
+    if (read.plain && 'provide' in (entry as object)) continue
     const received = read.threw
       ? UNREADABLE
-      : read.plain && !Array.isArray(entry)
+      : read.plain && !isArray(entry)
         ? 'an object with no provide'
         : describeReceived(entry)
     throw realtimeError(
@@ -263,5 +274,5 @@ export function assertExtraProviders(value: unknown): void {
         ? { who: 'BymaxRealtimeModule', cause: read.error }
         : { who: 'BymaxRealtimeModule' },
     )
-  })
+  }
 }

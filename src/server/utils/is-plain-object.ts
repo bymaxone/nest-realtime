@@ -2,6 +2,7 @@
  * @fileoverview Whether a value is an object that holds options, as opposed to a built-in such as a `Date`.
  * @layer utils
  */
+import { apply, objectToString } from './captured-builtins'
 
 /**
  * Whether a value is an object a host built to hold options: a literal, a null-prototype object or an
@@ -32,7 +33,7 @@ export function readPlainObject(value: unknown): {
 } {
   if (typeof value !== 'object') return { plain: false, threw: false }
   try {
-    return { plain: Object.prototype.toString.call(value) === '[object Object]', threw: false }
+    return { plain: apply(objectToString, value, []) === '[object Object]', threw: false }
   } catch (error) {
     return { plain: false, threw: true, error }
   }
