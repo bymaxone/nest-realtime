@@ -22,8 +22,8 @@ interface FlagAccessor {
 }
 
 /**
- * The accessors of the flags a copy keeps, then the one it refuses; `global` is not here, because the copy drops it.
- * The table is walked by index, so no iterator of a built-in array is asked for, and `sticky` is the last entry.
+ * The accessors of the flags a copy keeps; `global` is not here, because the copy drops it, and `sticky` has its own
+ * constant, because the copy refuses it. The table is walked by index, so no iterator of a built-in array is asked for.
  */
 const FLAG_ACCESSORS: readonly FlagAccessor[] = [
   { letter: 'd', get: accessor<boolean>('hasIndices') },
@@ -32,10 +32,10 @@ const FLAG_ACCESSORS: readonly FlagAccessor[] = [
   { letter: 's', get: accessor<boolean>('dotAll') },
   { letter: 'u', get: accessor<boolean>('unicode') },
   { letter: 'v', get: accessor<boolean>('unicodeSets') },
-  { letter: 'y', get: accessor<boolean>('sticky') },
 ]
-const FLAG_COUNT = 7
-const STICKY = 6
+const FLAG_COUNT = 6
+/** The accessor of the `y` flag; absent, it refuses every RegExp, because a sticky one could not be told from a plain one. */
+const STICKY = accessor<boolean>('sticky')
 /** The longest pattern a copy is made of: a bound on the cost of reading and keeping one, not a judgement of how it runs. */
 const MAX_SOURCE_LENGTH = 1000
 const NewRegExp = RegExp
@@ -67,13 +67,11 @@ export function copyRegExp(value: unknown): RegExp | undefined {
     if (ownKeys(value as object).length !== 1) return undefined
     const source = apply(SOURCE, value, []) as string
     if (source.length > MAX_SOURCE_LENGTH) return undefined
-    if (FLAG_ACCESSORS[STICKY]?.get === undefined) return undefined
+    if (STICKY === undefined || apply(STICKY, value, [])) return undefined
     let flags = ''
     for (let index = 0; index < FLAG_COUNT; index += 1) {
       const entry = FLAG_ACCESSORS[index] as FlagAccessor
-      if (entry.get === undefined || !apply(entry.get, value, [])) continue
-      if (index === STICKY) return undefined
-      flags += entry.letter
+      if (entry.get !== undefined && apply(entry.get, value, [])) flags += entry.letter
     }
     return new NewRegExp(source, flags)
   } catch {

@@ -149,6 +149,45 @@ describe('copyRegExp', () => {
     expect(isolated?.(/x/y)).toBeUndefined()
   })
 
+  // Scenario: the accessors the module took at load, called by it. Expected: each is called with the RegExp as its
+  // receiver and with no arguments, as a getter is.
+  it('calls the accessors with the RegExp as the receiver and no arguments', () => {
+    const calls: Array<{ name: string; receiver: unknown; count: number }> = []
+    const names = ['source', 'ignoreCase', 'sticky']
+    const saved = names.map(
+      (name) => [name, Object.getOwnPropertyDescriptor(RegExp.prototype, name)] as const,
+    )
+    for (const [name, descriptor] of saved) {
+      const original = (descriptor as PropertyDescriptor).get as () => unknown
+      Object.defineProperty(RegExp.prototype, name, {
+        get(this: unknown, ...args: unknown[]) {
+          calls.push({ name, receiver: this, count: args.length })
+          return Reflect.apply(original, this, [])
+        },
+        configurable: true,
+      })
+    }
+    let isolated: typeof copyRegExp | undefined
+    try {
+      jest.isolateModules(() => {
+        isolated = (require('./copy-regexp') as { copyRegExp: typeof copyRegExp }).copyRegExp
+      })
+    } finally {
+      for (const [name, descriptor] of saved) {
+        Object.defineProperty(RegExp.prototype, name, descriptor as PropertyDescriptor)
+      }
+    }
+    const subject = /x/i
+
+    expect(isolated?.(subject)?.flags).toBe('i')
+    expect(calls.map(({ name, count }) => [name, count])).toStrictEqual([
+      ['source', 0],
+      ['sticky', 0],
+      ['ignoreCase', 0],
+    ])
+    expect(calls.every(({ receiver }) => receiver === subject)).toBe(true)
+  })
+
   // Scenario: the accessors of the newer flags (hasIndices, unicodeSets) absent when the module loads, as on an older
   // runtime. Expected: the flags it can read are kept and the copy is made.
   it('copies a RegExp when the accessors of the newer flags were absent at load', () => {
