@@ -1,5 +1,5 @@
 /**
- * @fileoverview The built-ins the copy and the check of a list rely on, taken when the module loads.
+ * @fileoverview The built-ins the reads and checks of the options rely on, taken when the module loads.
  * @layer utils
  *
  * One a host replaces afterwards can neither change what is copied or accepted nor watch it. A host that
