@@ -1,5 +1,5 @@
 /**
- * @fileoverview End-to-end: a hook planted on `Object.prototype` does not run on a real WebSocket connection.
+ * @fileoverview End-to-end: a key planted on `Object.prototype` is not read on a real WebSocket connection, which is refused.
  * @layer e2e
  *
  * Constraint under test: the hook table is the host's. A function planted under `onConnect` or `onDisconnect` on the
@@ -69,8 +69,11 @@ describe('a planted hook over a real WebSocket connection (e2e)', () => {
     jest.restoreAllMocks()
   })
 
-  /** Connects once, stays connected for a moment, then disconnects and waits for the server to notice. */
-  async function connectAndLeave(hooks: IConnectionLifecycleHooks | undefined): Promise<void> {
+  /** Connects once and, when it connects, stays a moment, disconnects and waits for the server to notice. */
+  async function connectAndLeave(
+    hooks: IConnectionLifecycleHooks | undefined,
+    values: Record<string, unknown> = {},
+  ): Promise<'connected' | 'refused'> {
     const moduleRef = await Test.createTestingModule({
       imports: [
         BymaxRealtimeWebSocketModule.forRoot({
@@ -84,45 +87,45 @@ describe('a planted hook over a real WebSocket connection (e2e)', () => {
     app.useWebSocketAdapter(new RealtimeIoAdapter(app))
     await app.listen(0)
     const { port } = app.getHttpServer().address() as AddressInfo
-    const socket = ioClient(`http://127.0.0.1:${port}`, {
-      transports: ['websocket'],
-      reconnection: false,
+    let outcome: 'connected' | 'refused' = 'refused'
+    // The server booted clean; the values are planted from the moment the client connects until the server has noticed.
+    await plantedValues(values, async () => {
+      const socket = ioClient(`http://127.0.0.1:${port}`, {
+        transports: ['websocket'],
+        reconnection: false,
+      })
+      client = socket
+      outcome = await new Promise<'connected' | 'refused'>((resolve) => {
+        socket.once('connect', () => resolve('connected'))
+        socket.once('connect_error', () => resolve('refused'))
+      })
+      await sleep(50)
+      socket.close()
+      await sleep(100)
     })
-    client = socket
-    await new Promise<void>((resolve, reject) => {
-      socket.once('connect', () => resolve())
-      socket.once('connect_error', reject)
-    })
-    await sleep(50)
-    socket.close()
-    await sleep(100)
+    return outcome
   }
 
-  // Scenario: onConnect and onDisconnect are planted and the host gave no hooks. Expected: the client still connects,
-  // and neither planted function runs.
-  it('does not run a planted onConnect or onDisconnect', async () => {
+  // Scenario: onConnect and onDisconnect are planted while the client connects, and the host gave no hooks. Expected: the
+  // WebSocket server refuses the connection, and neither planted function runs.
+  it('refuses a connection while onConnect and onDisconnect are planted, and runs neither', async () => {
     const calls: string[] = []
+    const planted = () => void calls.push('planted')
 
-    await planted(
-      ['onConnect', 'onDisconnect'],
-      () => void calls.push('planted'),
-      () => connectAndLeave(undefined),
-    )
+    const outcome = await connectAndLeave(undefined, { onConnect: planted, onDisconnect: planted })
 
+    expect(outcome).toBe('refused')
     expect(calls).toStrictEqual([])
   })
 
-  // Scenario: the host defined onConnect and the same name is planted. Expected: the host's runs once, the planted one
-  // never.
-  it('runs the onConnect the host defined, and not the planted one', async () => {
+  // Scenario: the host defined onConnect, with nothing planted. Expected: the client connects and the host's hook runs
+  // once.
+  it('runs the onConnect the host defined', async () => {
     const calls: string[] = []
 
-    await planted(
-      ['onConnect'],
-      () => void calls.push('planted'),
-      () => connectAndLeave({ onConnect: () => void calls.push('own') }),
-    )
+    const outcome = await connectAndLeave({ onConnect: () => void calls.push('own') })
 
+    expect(outcome).toBe('connected')
     expect(calls).toStrictEqual(['own'])
   })
 })
@@ -139,9 +142,10 @@ describe('a planted identity field over a real WebSocket connection (e2e)', () =
     jest.restoreAllMocks()
   })
 
-  // Scenario: tenantId and roles are planted on the root prototype and the authenticator's result has neither. Expected:
-  // the client's `connection:established` carries no tenant and no roles, since the connection belongs to none.
-  it('does not give a connection a planted tenantId or roles', async () => {
+  /** Boots a server that authenticates `u1` and connects once, with `values` planted from the moment the client connects. */
+  async function traitsOfConnection(
+    values: Record<string, unknown> = {},
+  ): Promise<{ userId?: string; tenantId?: string; roles?: string[] } | 'refused'> {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -155,23 +159,32 @@ describe('a planted identity field over a real WebSocket connection (e2e)', () =
     app.useWebSocketAdapter(new RealtimeIoAdapter(app))
     await app.listen(0)
     const { port } = app.getHttpServer().address() as AddressInfo
-    const socket = ioClient(`http://127.0.0.1:${port}`, {
-      transports: ['websocket'],
-      reconnection: false,
-    })
-    client = socket
-    const traits = new Promise<{ userId?: string; tenantId?: string; roles?: string[] }>(
-      (resolve, reject) => {
+    let outcome: Awaited<ReturnType<typeof traitsOfConnection>> = 'refused'
+    await plantedValues(values, async () => {
+      const socket = ioClient(`http://127.0.0.1:${port}`, {
+        transports: ['websocket'],
+        reconnection: false,
+      })
+      client = socket
+      outcome = await new Promise((resolve) => {
         socket.once('connection:established', (event: { traits: object }) => resolve(event.traits))
-        socket.once('connect_error', reject)
-      },
-    )
-
-    let received: { userId?: string; tenantId?: string; roles?: string[] } | undefined
-    await plantedValues({ tenantId: 'evil-tenant', roles: ['admin'] }, async () => {
-      received = await traits
+        socket.once('connect_error', () => resolve('refused'))
+      })
     })
+    return outcome
+  }
 
-    expect(received).toStrictEqual({ userId: 'u1' })
+  // Scenario: a connection with nothing planted. Expected: the traits carry the user the authenticator returned, and no
+  // tenant or roles, since it returned none.
+  it('gives a connection the traits the authenticator returned', async () => {
+    expect(await traitsOfConnection()).toStrictEqual({ userId: 'u1' })
+  })
+
+  // Scenario: tenantId and roles are planted on the root prototype while the client connects. Expected: the connection is
+  // refused, so nothing of the planted identity reaches it.
+  it('refuses a connection while tenantId and roles are planted', async () => {
+    const outcome = await traitsOfConnection({ tenantId: 'evil-tenant', roles: ['admin'] })
+
+    expect(outcome).toBe('refused')
   })
 })

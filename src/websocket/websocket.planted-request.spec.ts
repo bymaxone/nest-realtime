@@ -111,35 +111,39 @@ describe('the WebSocket transport, with a key planted while a request is served'
     return interesting(response.status, response.headers)
   }
 
-  // Scenario: one key planted while a handshake is asked from the allowed origin, and from another. Expected: the headers
-  // and the status are those of the same request without it, so no credentials, exposed header or cookie appears.
-  it.each(Object.keys(PLANTED))('answers a handshake as before with %s planted', async (key) => {
-    const baseline = [await handshake(GOOD), await handshake(EVIL)]
+  // Scenario: the server with nothing planted. Expected: it answers the allowed origin with its own header and no other.
+  it('answers a handshake and a preflight from the allowed origin when nothing is planted', async () => {
+    const shaken = await handshake(GOOD)
+    const asked = await handshake(EVIL)
 
+    expect(shaken).toStrictEqual({ status: 200, 'access-control-allow-origin': GOOD })
+    expect(asked).toStrictEqual({ status: 200 })
+    expect(await preflight(GOOD)).toMatchObject({ 'access-control-allow-origin': GOOD })
+  })
+
+  // Scenario: one key planted while a handshake is asked from the allowed origin, and from another. Expected: refused with
+  // a 500 and nothing else, so no credentials, exposed header or cookie appears: the keys the packages read when they copy
+  // the options are not read at all.
+  it.each(Object.keys(PLANTED))('refuses a handshake with %s planted', async (key) => {
     const planted = await whilePlanted({ [key]: PLANTED[key] }, async () => [
       await handshake(GOOD),
       await handshake(EVIL),
     ])
 
-    expect(planted).toStrictEqual(baseline)
-    expect(baseline[0]).toHaveProperty('access-control-allow-origin', GOOD)
+    expect(planted).toStrictEqual([{ status: 500 }, { status: 500 }])
   })
 
-  // Scenario: the same for a preflight, where the max age, the allowed headers and the status of the answer are read.
-  it.each(Object.keys(PLANTED))('answers a preflight as before with %s planted', async (key) => {
-    const baseline = await preflight(GOOD)
-
+  // Scenario: the same for a preflight, which the cors package would otherwise answer by itself.
+  it.each(Object.keys(PLANTED))('refuses a preflight with %s planted', async (key) => {
     const planted = await whilePlanted({ [key]: PLANTED[key] }, () => preflight(GOOD))
 
-    expect(planted).toStrictEqual(baseline)
-    expect(baseline).not.toHaveProperty('access-control-max-age')
+    expect(planted).toStrictEqual({ status: 500 })
   })
 
   // Scenario: a function planted under `allowRequest`, which engine.io calls on each handshake when it finds one.
-  // Expected: it is never called, and the handshake is answered as before.
+  // Expected: it is never called, and the handshake is refused.
   it('does not call a planted allowRequest', async () => {
     const calls: unknown[] = []
-    const baseline = await handshake(GOOD)
 
     const planted = await whilePlanted(
       {
@@ -152,7 +156,7 @@ describe('the WebSocket transport, with a key planted while a request is served'
     )
 
     expect(calls).toStrictEqual([])
-    expect(planted).toStrictEqual(baseline)
+    expect(planted).toStrictEqual({ status: 500 })
   })
 })
 
@@ -234,17 +238,18 @@ describe('the cors block Nest hands the adapter, with a key planted while a requ
     return interesting(response.status, response.headers)
   }
 
-  // Scenario: one key planted while a handshake is asked from the origin the block allows. Expected: the answer is the
-  // one given without it.
-  it.each(['credentials', 'exposedHeaders', 'cookie'])(
-    'answers as before with %s planted',
-    async (key) => {
-      const baseline = await handshake()
+  // Scenario: nothing planted, with the block Nest handed over. Expected: it allows the origin it names.
+  it('answers the origin the block allows when nothing is planted', async () => {
+    expect(await handshake()).toStrictEqual({ status: 200, 'access-control-allow-origin': GOOD })
+  })
 
+  // Scenario: one key planted while a handshake is asked from the origin the block allows. Expected: refused.
+  it.each(['credentials', 'exposedHeaders', 'cookie'])(
+    'refuses a handshake with %s planted',
+    async (key) => {
       const planted = await whilePlanted({ [key]: PLANTED[key] }, handshake)
 
-      expect(planted).toStrictEqual(baseline)
-      expect(baseline).toHaveProperty('access-control-allow-origin', GOOD)
+      expect(planted).toStrictEqual({ status: 500 })
     },
   )
 })
@@ -263,22 +268,40 @@ const NESTED_PLANTED: Readonly<Record<string, unknown>> = {
 }
 
 /** The options Nest can hand the adapter for a gateway, each in a form `cors` or engine.io copy again. */
-const GATEWAY_OPTIONS: ReadonlyArray<readonly [string, () => object]> = [
+const GATEWAY_OPTIONS: ReadonlyArray<
+  readonly [string, () => object, (headers: Record<string, unknown>) => void]
+> = [
   [
     'a cors function',
     () => ({
       cors: (_request: unknown, done: (error: null, options: object) => void) =>
         done(null, { origin: [GOOD] }),
     }),
+    (headers) =>
+      expect(headers).toStrictEqual({ status: 200, 'access-control-allow-origin': GOOD }),
   ],
-  ['cors: true', () => ({ cors: true })],
-  ['a cookie object', () => ({ cors: { origin: [GOOD] }, cookie: { name: 'io' } })],
-  ['cookie: true', () => ({ cors: { origin: [GOOD] }, cookie: true })],
+  [
+    'cors: true',
+    () => ({ cors: true }),
+    (headers) => expect(headers).toStrictEqual({ status: 200, 'access-control-allow-origin': '*' }),
+  ],
+  [
+    'a cookie object',
+    () => ({ cors: { origin: [GOOD] }, cookie: { name: 'io' } }),
+    (headers) =>
+      expect(headers['set-cookie']).toStrictEqual(['io=<id>; Path=/; HttpOnly; SameSite=Lax']),
+  ],
+  [
+    'cookie: true',
+    () => ({ cors: { origin: [GOOD] }, cookie: true }),
+    (headers) =>
+      expect(headers['set-cookie']).toStrictEqual(['io=<id>; Path=/; HttpOnly; SameSite=Lax']),
+  ],
 ]
 
 describe.each(GATEWAY_OPTIONS)(
   'the options Nest hands the adapter as %s, with a key planted while a request is served',
-  (_name, build) => {
+  (_name, build, expectClean) => {
     let app: INestApplication
     let port: number
 
@@ -314,22 +337,24 @@ describe.each(GATEWAY_OPTIONS)(
       return interesting(response.status, response.headers)
     }
 
-    // Scenario: one key planted while a handshake and a preflight are asked. Expected: each answer is the one given
-    // without it, so no cookie attribute, credentials or exposed header appears.
-    it.each(Object.keys(NESTED_PLANTED))('answers as before with %s planted', async (key) => {
-      const baseline = [await handshake(), await preflight()]
+    // Scenario: nothing planted. Expected: the answer is what that form of the option means, so the keys the adapter gives
+    // each form did not override a default beside them (the cookie keeps its name, path, http-only and same-site).
+    it('answers as the option means when nothing is planted', async () => {
+      expectClean(await handshake())
+    })
 
+    // Scenario: one key planted while a handshake and a preflight are asked. Expected: both are refused with a 500.
+    it.each(Object.keys(NESTED_PLANTED))('refuses a request with %s planted', async (key) => {
       const planted = await whilePlanted({ [key]: NESTED_PLANTED[key] }, async () => [
         await handshake(),
         await preflight(),
       ])
 
-      expect(planted).toStrictEqual(baseline)
-      if (_name.includes('cookie')) expect(baseline[0]).toHaveProperty('set-cookie')
+      expect(planted).toStrictEqual([{ status: 500 }, { status: 500 }])
     })
 
     // Scenario: a function planted under `encode`, which the cookie package calls on the value it writes. Expected: it is
-    // never called.
+    // never called, since the request is refused first.
     it('does not call a planted encode', async () => {
       const calls: unknown[] = []
 

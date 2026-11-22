@@ -21,7 +21,6 @@ import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import { BymaxRealtimeWebSocketModule } from './realtime-websocket.module'
 import { RealtimeIoAdapter } from './transports/websocket/realtime-io-adapter'
-import { CONNECTION_STATE_NAMES } from './transports/websocket/server-option-names'
 
 jest.setTimeout(30_000)
 
@@ -107,8 +106,6 @@ describe('the WebSocket server, with a key planted as connection state', () => {
     jest.restoreAllMocks()
   })
 
-  const clients = (): number => (server.engine as unknown as { clientsCount: number }).clientsCount
-
   // Scenario: a function planted under `_corsMiddleware`, which Socket.IO calls on a request for its client file when it
   // holds one, and a server that has none. Expected: it is never called, and the answer is as it was.
   it('does not call a planted _corsMiddleware', async () => {
@@ -138,46 +135,12 @@ describe('the WebSocket server, with a key planted as connection state', () => {
     },
   )
 
-  // Scenario: one of the connection-state names planted while a handshake is asked. Expected: a 500 that names the field
-  // and not its value, and no connection is made.
-  it.each([...CONNECTION_STATE_NAMES])('refuses a request with %s planted', async (name) => {
-    const before = clients()
-
-    const refused = await whilePlanted({ [name]: SECRET }, () => raw(port, 'GET', HANDSHAKE))
-
-    expect(refused.status).toBe(500)
-    expect(refused.body.toString()).toContain(name)
-    expect(refused.body.toString()).not.toContain(SECRET)
-    expect(JSON.parse(refused.body.toString())).toHaveProperty(
-      'code',
-      'REALTIME_TRANSPORT_UNAVAILABLE',
-    )
-    expect(clients()).toBe(before)
-  })
-
   // Scenario: the same request once nothing is planted. Expected: answered, so the guard is not left refusing.
   it('answers a handshake when nothing is planted', async () => {
     const response = await raw(port, 'GET', HANDSHAKE)
 
     expect(response.status).toBe(200)
     expect(response.body.toString()).toContain('"sid"')
-  })
-
-  // Scenario: a name planted when the server is created. Expected: refused at boot with the library's code, naming the
-  // field and not its value.
-  it.each([['req'], ['writable']])('refuses to create a server with %s planted', async (name) => {
-    const outcome = await whilePlanted({ [name]: SECRET }, async () => {
-      try {
-        new RealtimeIoAdapter(app).createIOServer(0, {} as never)
-        return undefined
-      } catch (error) {
-        return error as Error & { code?: string }
-      }
-    })
-
-    expect(outcome?.code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
-    expect(outcome?.message).toContain(name)
-    expect(outcome?.message).not.toContain(SECRET)
   })
 
   /** Opens a polling connection, takes the first poll that the server compresses, and returns how long it is. */
@@ -195,20 +158,14 @@ describe('the WebSocket server, with a key planted as connection state', () => {
     }
   }
 
-  // Scenario: zlib options planted while a long response is compressed: a level that stores the bytes and a window.
-  // Expected: the response is compressed as without them.
-  it('compresses a response as before with zlib options planted', async () => {
-    const baseline = await compressedPoll()
+  // Scenario: a long polling response, with the server clean. Expected: it is compressed, so the compression keys the server
+  // options carry did not break the defaults they stand beside.
+  it('compresses a long polling response', async () => {
+    const poll = await compressedPoll()
 
-    const planted = await whilePlanted({ level: 0, memLevel: 1, windowBits: 9 }, compressedPoll)
-
-    expect(baseline.encoding).toBe('gzip')
-    expect(baseline.text).toContain('aaaaaaaaaa')
-    expect(planted.encoding).toBe('gzip')
-    // The text holds a session id that differs per connection, so the lengths differ by a byte or two; a stored stream
-    // (level 0) of the 6,000 bytes would be several thousand.
-    expect(baseline.length).toBeLessThan(500)
-    expect(planted.length).toBeLessThan(500)
+    expect(poll.encoding).toBe('gzip')
+    expect(poll.text).toContain('aaaaaaaaaa')
+    expect(poll.length).toBeLessThan(500)
   })
 })
 
@@ -353,9 +310,8 @@ describe('the WebSocket server, with a key planted after a client connected', ()
     expect(calls).toStrictEqual([])
   })
 
-  // Scenario: the host registers its own listeners for every event, in both directions, then a key is planted for each
-  // direction in turn (the client library of the test reads the same keys, so one direction at a time keeps it out of
-  // the way). Expected: its own are called, and only its own.
+  // Scenario: the host registers its own listeners for every event, in both directions, on a socket that was given its own
+  // lazy state. Expected: its listeners are called.
   it('still calls the listeners the host registered', async () => {
     const calls: string[] = []
     const socket = await connect()
@@ -363,14 +319,9 @@ describe('the WebSocket server, with a key planted after a client connected', ()
     serverSide.onAny(() => calls.push('incoming'))
     serverSide.onAnyOutgoing(() => calls.push('outgoing'))
 
-    await whilePlanted({ _anyListeners: [() => calls.push('planted')] }, async () => {
-      socket.emit('probe')
-      await settle()
-    })
-    await whilePlanted({ _anyOutgoingListeners: [() => calls.push('planted')] }, async () => {
-      serverSide.emit('probe', 1)
-      await settle()
-    })
+    socket.emit('probe')
+    serverSide.emit('probe', 1)
+    await settle()
 
     expect(calls.sort()).toStrictEqual(['incoming', 'outgoing'])
   })
@@ -441,4 +392,129 @@ describe('the WebSocket server, with a key planted after a session was recovered
 
     expect(calls).toStrictEqual([])
   })
+})
+
+/** Names a package reads off an object it copies, one that crashes the process, one that breaks an upgrade, and one nothing reads. */
+const ANY_NAME = ['reconstructor', 'clients', 'zzNotAKnownName'] as const
+
+describe('the WebSocket server, with any key planted outside the standard set', () => {
+  let app: INestApplication
+  let server: Server
+  let port: number
+  let client: ClientSocket | undefined
+  const connected: Socket[] = []
+  const HANDSHAKE = '/socket.io/?EIO=4&transport=polling'
+
+  beforeAll(async () => {
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    const module = await Test.createTestingModule({
+      imports: [BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator })],
+    }).compile()
+    app = module.createNestApplication()
+    port = await freePort()
+    server = new RealtimeIoAdapter(app).createIOServer(port, {} as never) as Server
+    server.on('connection', (socket) => connected.push(socket))
+  })
+
+  afterEach(() => {
+    client?.close()
+    client = undefined
+    connected.length = 0
+  })
+
+  afterAll(async () => {
+    await server.close()
+    await app.close()
+    jest.restoreAllMocks()
+  })
+
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 200))
+
+  // Scenario: a key outside the standard set planted after boot, and a request. Expected: a 500 that says how many keys and
+  // names neither them nor their values, and no connection is made.
+  it.each(ANY_NAME)(
+    'answers a request with %s planted by a 500 that names only a count',
+    async (name) => {
+      const before = (server.engine as unknown as { clientsCount: number }).clientsCount
+
+      const refused = await whilePlanted({ [name]: SECRET }, () => raw(port, 'GET', HANDSHAKE))
+
+      expect(refused.status).toBe(500)
+      expect(JSON.parse(refused.body.toString())).toMatchObject({
+        code: 'REALTIME_TRANSPORT_UNAVAILABLE',
+      })
+      expect(refused.body.toString()).toMatch(/\b1 key\b/)
+      expect(refused.body.toString()).not.toContain(name)
+      expect(refused.body.toString()).not.toContain(SECRET)
+      expect((server.engine as unknown as { clientsCount: number }).clientsCount).toBe(before)
+    },
+  )
+
+  // Scenario: a key outside the standard set when the server is created. Expected: refused with the library's code, saying how
+  // many and naming neither the keys nor their values.
+  it.each(ANY_NAME)('refuses to create a server with %s planted', async (name) => {
+    const outcome = await whilePlanted({ [name]: SECRET }, async () => {
+      try {
+        new RealtimeIoAdapter(app).createIOServer(0, {} as never)
+        return undefined
+      } catch (error) {
+        return error as Error & { code?: string }
+      }
+    })
+
+    expect(outcome?.code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+    expect(outcome?.message).toMatch(/\b1 key\b/)
+    expect(outcome?.message).not.toContain(name)
+    expect(outcome?.message).not.toContain(SECRET)
+  })
+
+  // Scenario: a WebSocket upgrade with the key planted. Expected: refused, so the client does not connect and nothing
+  // is read off the planted key.
+  it.each(ANY_NAME)('refuses a WebSocket upgrade with %s planted', async (name) => {
+    const outcome = await whilePlanted({ [name]: SECRET }, async () => {
+      const socket = ioClient(`http://127.0.0.1:${port}`, {
+        transports: ['websocket'],
+        reconnection: false,
+      })
+      client = socket
+      return new Promise<string>((resolve) => {
+        socket.once('connect', () => resolve('connected'))
+        socket.once('connect_error', () => resolve('refused'))
+      })
+    })
+
+    expect(outcome).toBe('refused')
+  })
+
+  // Scenario: a client is connected, the key is planted, and the client sends a text event. Expected: the connection is
+  // closed and the decoder never runs on the event, so nothing is read off the planted key and the process goes on.
+  it.each(ANY_NAME)(
+    'closes an open connection that sends an event with %s planted',
+    async (name) => {
+      const calls: unknown[] = []
+      const socket = ioClient(`http://127.0.0.1:${port}`, {
+        transports: ['websocket'],
+        reconnection: false,
+      })
+      client = socket
+      await new Promise<void>((resolve, reject) => {
+        socket.once('connect', () => resolve())
+        socket.once('connect_error', reject)
+      })
+      for (let waited = 0; connected.length === 0; waited += 10) {
+        if (waited >= 3000) throw new Error('the server never reported the connection')
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      const serverSide = connected[0] as Socket
+      serverSide.on('probe', () => calls.push('received'))
+
+      await whilePlanted({ [name]: SECRET }, async () => {
+        socket.emit('probe', 'a text event')
+        await settle()
+      })
+
+      expect(calls).toStrictEqual([])
+      expect(serverSide.connected).toBe(false)
+    },
+  )
 })

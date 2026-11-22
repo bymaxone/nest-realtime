@@ -13,18 +13,19 @@
  * nests inside those (`zlibDeflateOptions`, `zlibInflateOptions`), which are the host's own.
  */
 import { mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
   COMPRESSION_OWN_NAMES,
-  CONNECTION_STATE_NAMES,
   COOKIE_OWN_NAMES,
   CORS_OWN_NAMES,
   DEFLATE_OWN_NAMES,
-  SERVER_INSTANCE_NAMES,
   SERVER_OWN_NAMES,
-  SOCKET_LAZY_NAMES,
+  STANDARD_OBJECT_PROTOTYPE_NAMES,
   corsWithOwnNames,
+  plantedKeyCount,
+  plantedKeyMessage,
   serverOptionsWithOwnNames,
 } from './server-option-names'
 
@@ -228,93 +229,59 @@ describe('the option names the adapter gives an own key', () => {
   })
 })
 
-/**
- * Names the two packages read off themselves that nothing planted could answer, with the reason, which were checked in the
- * sources of the installed versions.
- */
-const SAFE_INSTANCE_NAMES: Readonly<Record<string, string>> = {
-  adapter: 'assigned in the constructors of the namespace, the socket and the broadcast operator',
-  clients: 'assigned in the constructor of the server',
-  httpCompression: 'assigned to each transport by the server, from its own options',
-  maxHttpBufferSize: 'assigned to each transport by the server, from its own options',
-  parentNamespacesFromRegExp: 'assigned in the constructor of the server',
-  protocol: 'assigned in the constructors of the transport and the socket',
-  readyState: 'an accessor of the class',
-  ws: 'assigned by init(), which the constructor of the server calls',
-}
+describe('the keys the WebSocket server accepts on Object.prototype', () => {
+  /** This realm's root prototype, and the one Node's own classes end in, which differ under a test runner. */
+  const roots: object[] = [
+    ...new Set<object>([Object.prototype, Object.getPrototypeOf(EventEmitter.prototype) as object]),
+  ]
 
-/** The block of a `{...}` that opens at or after `start`, braces matched. */
-function blockAt(text: string, start: number): string {
-  const open = text.indexOf('{', start)
-  let depth = 0
-  for (let index = open; index < text.length; index += 1) {
-    if (text[index] === '{') depth += 1
-    if (text[index] === '}' && (depth -= 1) === 0) return text.slice(open, index + 1)
-  }
-  return ''
-}
-
-/**
- * The names a package reads off `this` in a condition or a default, or lazily, that no constructor of the same file
- * assigns: `if (this.x)`, `this.x ||`, `this.x ??`, `this.x?.`, `this.x == null`, `typeof this.x` and `'x' in this`.
- */
-function conditionalReads(directory: string): Set<string> {
-  const names = new Set<string>()
-  for (const text of sources(directory)) {
-    const assigned = new Set<string>()
-    for (const constructor of text.matchAll(/\bconstructor\s*\(/g)) {
-      for (const match of blockAt(text, constructor.index).matchAll(
-        /\bthis\.([A-Za-z_$][\w$]*)\s*=[^=]/g,
-      )) {
-        assigned.add(match[1] as string)
-      }
+  // Scenario: the runtime this suite runs in. Expected: every name `Object.prototype` holds is in the standard set, so a
+  // clean process is never refused; a new runtime that adds a name fails here, and the set is extended on purpose.
+  it('hold exactly the names this runtime puts on Object.prototype, in every root', () => {
+    for (const root of roots) {
+      const extra = Object.getOwnPropertyNames(root).filter(
+        (name) => !(STANDARD_OBJECT_PROTOTYPE_NAMES as readonly string[]).includes(name),
+      )
+      expect(extra).toStrictEqual([])
     }
-    const patterns = [
-      /\bif\s*\(\s*!?\s*this\.([A-Za-z_$][\w$]*)\s*\)/g,
-      /\bthis\.([A-Za-z_$][\w$]*)\s*(?:\|\||\?\?|\?\.|===?|!==?|&&)/g,
-      /\btypeof\s+this\.([A-Za-z_$][\w$]*)/g,
-      /['"]([A-Za-z_$][\w$]*)['"]\s+in\s+this\b/g,
-    ]
-    for (const pattern of patterns) {
-      for (const match of text.matchAll(pattern)) {
-        if (!assigned.has(match[1] as string)) names.add(match[1] as string)
-      }
-    }
-  }
-  return names
-}
-
-describe('the instance names the server guards or shadows', () => {
-  // Scenario: every name engine.io and Socket.IO read in a condition, as a default or lazily off themselves, that no
-  // constructor of the file assigns. Expected: it is shadowed, refused when planted, or one that was checked as safe, with
-  // the reason: a name left out would be answered by a planted key.
-  it.each([
-    ['engine.io', join(engineIoDir, 'build')],
-    ['socket.io', join(socketIoDir, 'dist')],
-  ])('hold every such name the installed %s reads', (_name, directory) => {
-    const known = [
-      ...SERVER_INSTANCE_NAMES,
-      ...CONNECTION_STATE_NAMES,
-      ...SOCKET_LAZY_NAMES,
-      ...Object.keys(SAFE_INSTANCE_NAMES),
-    ]
-
-    expect(missing(conditionalReads(directory), known)).toStrictEqual([])
   })
 
-  // Scenario: the lists. Expected: a name that is listed as safe is not also guarded, and every lazy socket name is
-  // among the guarded ones.
-  it('keep the safe names apart from the guarded ones', () => {
-    const guarded = [...SERVER_INSTANCE_NAMES, ...CONNECTION_STATE_NAMES]
+  // Scenario: nothing planted, then keys planted one at a time. Expected: none counts, then each key counts once, a
+  // standard name that is overwritten does not count, and a key taken away stops counting.
+  it('count the keys outside the standard set', () => {
+    const root = Object.prototype as unknown as Record<string, unknown>
+    const before = Object.getOwnPropertyDescriptor(Object.prototype, 'toString')
 
-    expect(
-      Object.keys(SAFE_INSTANCE_NAMES).filter((name) => guarded.includes(name as never)),
-    ).toStrictEqual([])
-    expect(
-      SOCKET_LAZY_NAMES.filter(
-        (name) => !(CONNECTION_STATE_NAMES as readonly string[]).includes(name),
-      ),
-    ).toStrictEqual([])
+    expect(plantedKeyCount()).toBe(0)
+    Object.defineProperty(Object.prototype, 'zzOne', { value: 1, configurable: true })
+    Object.defineProperty(Object.prototype, 'zzTwo', { value: 2, configurable: true })
+    Object.defineProperty(Object.prototype, 'toString', {
+      value: 3,
+      configurable: true,
+      writable: true,
+    })
+    try {
+      expect(plantedKeyCount()).toBe(2)
+    } finally {
+      delete root.zzOne
+      delete root.zzTwo
+      Object.defineProperty(Object.prototype, 'toString', before as PropertyDescriptor)
+    }
+    expect(plantedKeyCount()).toBe(0)
+  })
+
+  // Scenario: the refusal's text. Expected: it says how many, in the singular and the plural, and nothing else.
+  it.each([
+    [
+      1,
+      '1 key outside the standard set found on Object.prototype: the WebSocket server does not run while it is there',
+    ],
+    [
+      3,
+      '3 keys outside the standard set found on Object.prototype: the WebSocket server does not run while they are there',
+    ],
+  ])('say %p planted keys without naming them', (count, text) => {
+    expect(plantedKeyMessage(count)).toBe(text)
   })
 })
 

@@ -122,8 +122,8 @@ describe('a key planted on the root prototype, over a real handshake', () => {
       expect(headers['access-control-allow-credentials']).toBeUndefined()
     })
 
-    // Scenario: the host set an allowlist and no credentials, and credentials: true is planted. Expected: the allowed
-    // origin is answered, and without credentials.
+    // Scenario: the host set an allowlist and no credentials, and credentials: true is planted. Expected: the request is
+    // refused, so the allowed origin is not answered with credentials.
     it('does not add credentials to an allowlist', async () => {
       const headers = await headersFor(
         make,
@@ -133,23 +133,6 @@ describe('a key planted on the root prototype, over a real handshake', () => {
         GOOD,
       )
 
-      expect(headers['access-control-allow-origin']).toBe(GOOD)
-      expect(headers['access-control-allow-credentials']).toBeUndefined()
-    })
-
-    // Scenario: the payload overwrites `constructor` of the root prototype as it plants an open cors block. Expected: a
-    // foreign origin still gets no header.
-    it('does not open a server when constructor was overwritten too', async () => {
-      const headers = await headersFor(
-        make,
-        { transport: 'websocket', authenticator, websocket: {} },
-        'cors',
-        OPEN,
-        EVIL,
-        1,
-      )
-
-      expect(headers['access-control-allow-origin']).toBeUndefined()
       expect(headers['access-control-allow-credentials']).toBeUndefined()
     })
 

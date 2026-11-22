@@ -130,28 +130,6 @@ export function serverOptionsWithOwnNames(options: object): Record<string, unkno
 export const SERVER_INSTANCE_NAMES = ['_corsMiddleware', '_serveClient', 'httpServer'] as const
 
 /**
- * The names engine.io and Socket.IO read off the objects they create for each connection (a socket, a client, a polling
- * transport), and off the object that generates session ids, that they set only on some paths. The library does not
- * create those objects, so it cannot give them keys: a planted one is refused instead.
- */
-export const CONNECTION_STATE_NAMES = [
-  '_anyListeners',
-  '_anyOutgoingListeners',
-  'bytesBuffer',
-  'bytesBufferIndex',
-  'connectTimeout',
-  'connected',
-  'dataReq',
-  'discarded',
-  'isGeneratingBytes',
-  'req',
-  'request',
-  'sequenceNumber',
-  'shouldClose',
-  'writable',
-] as const
-
-/**
  * The names a Socket.IO socket reads off itself for every event that it sets only when a listener is added, so a key
  * planted after the connection was made would answer them for the life of the connection.
  */
@@ -184,6 +162,13 @@ function shadow(target: object, names: readonly string[]): void {
 }
 
 /**
+ * The names the decoder of Socket.IO reads off itself, on every packet and again when its connection closes, that it sets
+ * only while it reconstructs a binary packet (`reconstructor`) or when a listener is added (`_callbacks`). A key planted
+ * under either, read when a connection closes, ends the process with an uncaught error.
+ */
+export const DECODER_LAZY_NAMES = ['_callbacks', 'reconstructor'] as const
+
+/**
  * Gives a socket an own `undefined` for {@link SOCKET_LAZY_NAMES}, so that a key planted later does not answer them; a
  * listener the host adds sets its own. It is the listener of the `connection` event of a namespace, which Socket.IO
  * emits for every socket before it handles another packet of that socket, a recovered one included: the middleware of a
@@ -195,11 +180,60 @@ export function shadowSocket(socket: object): void {
   shadow(socket, SOCKET_LAZY_NAMES)
 }
 
-/** The names of {@link CONNECTION_STATE_NAMES} that `Object.prototype` holds now. */
-export function plantedStateNames(): string[] {
-  return CONNECTION_STATE_NAMES.filter((name) => name in Object.prototype)
+/**
+ * Gives the decoder class of the server an own `undefined` for {@link DECODER_LAZY_NAMES} on its prototype, which every
+ * decoder the server makes inherits before `Object.prototype`; one that sets the name assigns its own. The server makes a
+ * decoder for each client, so this is the only place the library can reach before the first packet.
+ *
+ * @param server - The Socket.IO server, after it is created.
+ */
+export function shadowDecoder(server: object): void {
+  const parser = (server as { _parser?: { Decoder?: { prototype: object } } })._parser
+  if (parser?.Decoder === undefined) return
+  const prototype = parser.Decoder.prototype
+  for (const name of DECODER_LAZY_NAMES) {
+    if (apply(hasOwn, prototype, [name]) as boolean) continue
+    Object.defineProperty(prototype, name, {
+      value: undefined,
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    })
+  }
 }
 
-/** The refusal's text: it names the fields and never what they hold. */
-export const plantedStateMessage = (names: readonly string[]): string =>
-  `a key planted on Object.prototype is read by the WebSocket server as connection state: ${names.join(', ')}`
+/**
+ * The names `Object.prototype` holds in every runtime this library supports. A key outside this set was put there by
+ * something else, and a package that copies an object, or reads a name off one it made, can read it as its own state: the
+ * WebSocket server refuses to run while one is there, rather than list the names the packages read.
+ */
+export const STANDARD_OBJECT_PROTOTYPE_NAMES = [
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  '__proto__',
+  'constructor',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'toLocaleString',
+  'toString',
+  'valueOf',
+] as const
+
+const standard = new Set<string>(STANDARD_OBJECT_PROTOTYPE_NAMES)
+const ownNames = Object.getOwnPropertyNames
+
+/** How many string keys outside the standard set `Object.prototype` holds now. */
+export function plantedKeyCount(): number {
+  let count = 0
+  for (const name of ownNames(Object.prototype)) {
+    if (!standard.has(name)) count += 1
+  }
+  return count
+}
+
+/** The refusal's text: it says how many keys there are and never what they are called or hold. */
+export const plantedKeyMessage = (count: number): string =>
+  `${count} key${count === 1 ? '' : 's'} outside the standard set found on Object.prototype: the WebSocket server does not run while ${count === 1 ? 'it is' : 'they are'} there`
