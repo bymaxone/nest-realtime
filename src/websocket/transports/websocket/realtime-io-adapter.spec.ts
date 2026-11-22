@@ -23,9 +23,12 @@ function makeApp(options: Partial<BymaxRealtimeModuleOptions> = {}) {
   }
 }
 
-/** Minimal server mock with the `adapter` and `close` methods. */
+/** The namespace methods the adapter calls on a server it created, to give a socket its own state. */
+const namespaces = () => ({ of: jest.fn().mockReturnValue({ use: jest.fn() }), on: jest.fn() })
+
+/** Minimal server mock with the methods the adapter calls on a server it created. */
 function makeServer() {
-  return { adapter: jest.fn(), close: jest.fn().mockResolvedValue(undefined) }
+  return { adapter: jest.fn(), close: jest.fn().mockResolvedValue(undefined), ...namespaces() }
 }
 
 describe('RealtimeIoAdapter', () => {
@@ -210,7 +213,7 @@ describe('RealtimeIoAdapter', () => {
       createAdapter.mockImplementationOnce(() => {
         throw new Error('adapter constructor exploded')
       })
-      const server = { adapter: jest.fn(), close: jest.fn().mockResolvedValue(undefined) }
+      const server = { ...makeServer() }
       superSpy.mockReturnValue(server)
 
       expect(() =>
@@ -230,6 +233,7 @@ describe('RealtimeIoAdapter', () => {
       const server = {
         adapter: jest.fn(),
         close: jest.fn().mockRejectedValue(new Error('close failed')),
+        ...namespaces(),
       }
       superSpy.mockReturnValue(server)
       const unhandled = jest.fn()
@@ -247,7 +251,7 @@ describe('RealtimeIoAdapter', () => {
     })
 
     it('does not close the server when the install succeeds', () => {
-      const server = { adapter: jest.fn(), close: jest.fn() }
+      const server = { adapter: jest.fn(), close: jest.fn(), ...namespaces() }
       superSpy.mockReturnValue(server)
 
       new RealtimeIoAdapter(

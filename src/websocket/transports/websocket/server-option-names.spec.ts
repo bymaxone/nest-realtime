@@ -17,10 +17,13 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
   COMPRESSION_OWN_NAMES,
+  CONNECTION_STATE_NAMES,
   COOKIE_OWN_NAMES,
   CORS_OWN_NAMES,
   DEFLATE_OWN_NAMES,
+  SERVER_INSTANCE_NAMES,
   SERVER_OWN_NAMES,
+  SOCKET_LAZY_NAMES,
   corsWithOwnNames,
   serverOptionsWithOwnNames,
 } from './server-option-names'
@@ -222,6 +225,96 @@ describe('the option names the adapter gives an own key', () => {
     expect([...namesRead(directory, ['opts'])].sort()).toStrictEqual(
       ['bracket', 'destructured', 'membership', 'optional', 'plain', 'renamed', 'viaAlias'].sort(),
     )
+  })
+})
+
+/**
+ * Names the two packages read off themselves that nothing planted could answer, with the reason, which were checked in the
+ * sources of the installed versions.
+ */
+const SAFE_INSTANCE_NAMES: Readonly<Record<string, string>> = {
+  adapter: 'assigned in the constructors of the namespace, the socket and the broadcast operator',
+  clients: 'assigned in the constructor of the server',
+  httpCompression: 'assigned to each transport by the server, from its own options',
+  maxHttpBufferSize: 'assigned to each transport by the server, from its own options',
+  parentNamespacesFromRegExp: 'assigned in the constructor of the server',
+  protocol: 'assigned in the constructors of the transport and the socket',
+  readyState: 'an accessor of the class',
+  ws: 'assigned by init(), which the constructor of the server calls',
+}
+
+/** The block of a `{...}` that opens at or after `start`, braces matched. */
+function blockAt(text: string, start: number): string {
+  const open = text.indexOf('{', start)
+  let depth = 0
+  for (let index = open; index < text.length; index += 1) {
+    if (text[index] === '{') depth += 1
+    if (text[index] === '}' && (depth -= 1) === 0) return text.slice(open, index + 1)
+  }
+  return ''
+}
+
+/**
+ * The names a package reads off `this` in a condition or a default, or lazily, that no constructor of the same file
+ * assigns: `if (this.x)`, `this.x ||`, `this.x ??`, `this.x?.`, `this.x == null`, `typeof this.x` and `'x' in this`.
+ */
+function conditionalReads(directory: string): Set<string> {
+  const names = new Set<string>()
+  for (const text of sources(directory)) {
+    const assigned = new Set<string>()
+    for (const constructor of text.matchAll(/\bconstructor\s*\(/g)) {
+      for (const match of blockAt(text, constructor.index).matchAll(
+        /\bthis\.([A-Za-z_$][\w$]*)\s*=[^=]/g,
+      )) {
+        assigned.add(match[1] as string)
+      }
+    }
+    const patterns = [
+      /\bif\s*\(\s*!?\s*this\.([A-Za-z_$][\w$]*)\s*\)/g,
+      /\bthis\.([A-Za-z_$][\w$]*)\s*(?:\|\||\?\?|\?\.|===?|!==?|&&)/g,
+      /\btypeof\s+this\.([A-Za-z_$][\w$]*)/g,
+      /['"]([A-Za-z_$][\w$]*)['"]\s+in\s+this\b/g,
+    ]
+    for (const pattern of patterns) {
+      for (const match of text.matchAll(pattern)) {
+        if (!assigned.has(match[1] as string)) names.add(match[1] as string)
+      }
+    }
+  }
+  return names
+}
+
+describe('the instance names the server guards or shadows', () => {
+  // Scenario: every name engine.io and Socket.IO read in a condition, as a default or lazily off themselves, that no
+  // constructor of the file assigns. Expected: it is shadowed, refused when planted, or one that was checked as safe, with
+  // the reason: a name left out would be answered by a planted key.
+  it.each([
+    ['engine.io', join(engineIoDir, 'build')],
+    ['socket.io', join(socketIoDir, 'dist')],
+  ])('hold every such name the installed %s reads', (_name, directory) => {
+    const known = [
+      ...SERVER_INSTANCE_NAMES,
+      ...CONNECTION_STATE_NAMES,
+      ...SOCKET_LAZY_NAMES,
+      ...Object.keys(SAFE_INSTANCE_NAMES),
+    ]
+
+    expect(missing(conditionalReads(directory), known)).toStrictEqual([])
+  })
+
+  // Scenario: the lists. Expected: a name that is listed as safe is not also guarded, and every lazy socket name is
+  // among the guarded ones.
+  it('keep the safe names apart from the guarded ones', () => {
+    const guarded = [...SERVER_INSTANCE_NAMES, ...CONNECTION_STATE_NAMES]
+
+    expect(
+      Object.keys(SAFE_INSTANCE_NAMES).filter((name) => guarded.includes(name as never)),
+    ).toStrictEqual([])
+    expect(
+      SOCKET_LAZY_NAMES.filter(
+        (name) => !(CONNECTION_STATE_NAMES as readonly string[]).includes(name),
+      ),
+    ).toStrictEqual([])
   })
 })
 

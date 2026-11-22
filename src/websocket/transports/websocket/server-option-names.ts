@@ -131,21 +131,31 @@ export const SERVER_INSTANCE_NAMES = ['_corsMiddleware', '_serveClient', 'httpSe
 
 /**
  * The names engine.io and Socket.IO read off the objects they create for each connection (a socket, a client, a polling
- * transport) that they set only on some paths. The library does not create those objects, so it cannot give them keys: a
- * planted one is refused instead.
+ * transport), and off the object that generates session ids, that they set only on some paths. The library does not
+ * create those objects, so it cannot give them keys: a planted one is refused instead.
  */
 export const CONNECTION_STATE_NAMES = [
   '_anyListeners',
   '_anyOutgoingListeners',
+  'bytesBuffer',
+  'bytesBufferIndex',
   'connectTimeout',
   'connected',
   'dataReq',
   'discarded',
+  'isGeneratingBytes',
   'req',
   'request',
+  'sequenceNumber',
   'shouldClose',
   'writable',
 ] as const
+
+/**
+ * The names a Socket.IO socket reads off itself for every event that it sets only when a listener is added, so a key
+ * planted after the connection was made would answer them for the life of the connection.
+ */
+export const SOCKET_LAZY_NAMES = ['_anyListeners', '_anyOutgoingListeners'] as const
 
 const hasOwn = Object.prototype.hasOwnProperty
 const apply = Reflect.apply
@@ -157,15 +167,32 @@ const apply = Reflect.apply
  * @param server - The Socket.IO server, after it is created and attached.
  */
 export function shadowServerInstance(server: object): void {
-  for (const name of SERVER_INSTANCE_NAMES) {
-    if (apply(hasOwn, server, [name]) as boolean) continue
-    Object.defineProperty(server, name, {
+  shadow(server, SERVER_INSTANCE_NAMES)
+}
+
+/** Gives `target` an own `undefined` for each of `names` it does not hold. */
+function shadow(target: object, names: readonly string[]): void {
+  for (const name of names) {
+    if (apply(hasOwn, target, [name]) as boolean) continue
+    Object.defineProperty(target, name, {
       value: undefined,
       configurable: true,
       enumerable: true,
       writable: true,
     })
   }
+}
+
+/**
+ * A Socket.IO middleware that gives each socket an own `undefined` for {@link SOCKET_LAZY_NAMES} before it is connected, so
+ * that a key planted later does not answer them; a listener the host adds sets its own.
+ *
+ * @param socket - The socket that is connecting to the namespace.
+ * @param next - Lets the connection go on.
+ */
+export function shadowSocket(socket: object, next: () => void): void {
+  shadow(socket, SOCKET_LAZY_NAMES)
+  next()
 }
 
 /** The names of {@link CONNECTION_STATE_NAMES} that `Object.prototype` holds now. */

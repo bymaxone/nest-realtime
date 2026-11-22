@@ -63,7 +63,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     before the defaults merge and the type-only wording of every option refusal, with the key tables that read a group's known keys, 436 B, and the construction-time check of
 //     `RedisOfflineQueue`'s two options, with its error, 117 B, and the start-up check of the shape of the
 //     option groups and of the pluggable pieces, 448 B, and the refusal of an options argument, of a registration endpoint and of one with whitespace in it, of a built-in object where a group is expected, and of a queue built without its options or its client, 188 B, and the one test that counts the factory patterns and chooses the provider, so that a pattern set to `null` is read as unset, 42 B, and the read of the CORS block by the names of `CorsConfig` with the frozen copy of `roles` refused when its read throws, and the absorbed rejection of an async resolver, 173 B, with the CORS block read whenever it is an object rather than when it reports a plain type, 1 B, and the bound on the roles copy with its guard, and the absorption of a promise by the intrinsic then, 110 B, measured on 2026-11-21)
-//   websocket  7,134 B →  7,164 B (the Socket.IO stack alone: the start-up message that names the
+//   websocket  7,242 B →  7,272 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server
@@ -97,7 +97,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
   { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 24_131 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 7_164 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 7_272 },
   {
     name: 'observability (metrics contributor)',
     path: 'dist/observability/index.mjs',

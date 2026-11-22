@@ -10,12 +10,15 @@
  */
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
+import net from 'node:net'
 import type { AddressInfo } from 'node:net'
 import { gunzipSync } from 'node:zlib'
 import { Logger } from '@nestjs/common'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import type { Server } from 'socket.io'
+import type { Server, Socket } from 'socket.io'
+import { io as ioClient } from 'socket.io-client'
+import type { Socket as ClientSocket } from 'socket.io-client'
 import { BymaxRealtimeWebSocketModule } from './realtime-websocket.module'
 import { RealtimeIoAdapter } from './transports/websocket/realtime-io-adapter'
 import { CONNECTION_STATE_NAMES } from './transports/websocket/server-option-names'
@@ -206,5 +209,119 @@ describe('the WebSocket server, with a key planted as connection state', () => {
     // (level 0) of the 6,000 bytes would be several thousand.
     expect(baseline.length).toBeLessThan(500)
     expect(planted.length).toBeLessThan(500)
+  })
+})
+
+/** A port nothing listens on now. */
+const freePort = (): Promise<number> =>
+  new Promise((resolve, reject) => {
+    const probe = net.createServer()
+    probe.once('error', reject)
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as AddressInfo
+      probe.close(() => resolve(port))
+    })
+  })
+
+describe('the WebSocket server, with a key planted after a client connected', () => {
+  let app: INestApplication
+  let server: Server
+  let port: number
+  let client: ClientSocket | undefined
+  const connected: Socket[] = []
+
+  beforeAll(async () => {
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    const module = await Test.createTestingModule({
+      imports: [BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator })],
+    }).compile()
+    app = module.createNestApplication()
+    // The module's own gateway starts a server on the application's HTTP server, which would take the upgrades; this one
+    // listens on a port of its own.
+    port = await freePort()
+    server = new RealtimeIoAdapter(app).createIOServer(port, {} as never) as Server
+    server.on('connection', (socket) => connected.push(socket))
+  })
+
+  afterEach(() => {
+    client?.close()
+    client = undefined
+    connected.length = 0
+  })
+
+  afterAll(async () => {
+    await server.close()
+    await app.close()
+    jest.restoreAllMocks()
+  })
+
+  /** Connects a client over WebSocket and waits until the server has the connection. */
+  const connect = async (): Promise<ClientSocket> => {
+    const socket = ioClient(`http://127.0.0.1:${port}`, {
+      transports: ['websocket'],
+      reconnection: false,
+    })
+    client = socket
+    await new Promise<void>((resolve, reject) => {
+      socket.once('connect', () => resolve())
+      socket.once('connect_error', reject)
+    })
+    for (let waited = 0; connected.length === 0; waited += 10) {
+      if (waited >= 3000) throw new Error('the server never reported the connection')
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    return socket
+  }
+
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 150))
+
+  // Scenario: a listener list planted under `_anyListeners` once the connection exists, and the client sends an event.
+  // Expected: the planted listener is never called; the guard refuses new requests, but a connection made before the
+  // key was planted has to be safe on its own.
+  it('does not call a planted _anyListeners on an event of an open connection', async () => {
+    const calls: unknown[] = []
+    const socket = await connect()
+
+    await whilePlanted({ _anyListeners: [() => calls.push('planted')] }, async () => {
+      socket.emit('probe')
+      await settle()
+    })
+
+    expect(calls).toStrictEqual([])
+  })
+
+  // Scenario: the same for what the server sends, which Socket.IO passes to `_anyOutgoingListeners`.
+  it('does not call a planted _anyOutgoingListeners on an event the server sends', async () => {
+    const calls: unknown[] = []
+    await connect()
+
+    await whilePlanted({ _anyOutgoingListeners: [() => calls.push('planted')] }, async () => {
+      ;(connected[0] as Socket).emit('probe', 1)
+      await settle()
+    })
+
+    expect(calls).toStrictEqual([])
+  })
+
+  // Scenario: the host registers its own listeners for every event, in both directions, then a key is planted for each
+  // direction in turn (the client library of the test reads the same keys, so one direction at a time keeps it out of
+  // the way). Expected: its own are called, and only its own.
+  it('still calls the listeners the host registered', async () => {
+    const calls: string[] = []
+    const socket = await connect()
+    const serverSide = connected[0] as Socket
+    serverSide.onAny(() => calls.push('incoming'))
+    serverSide.onAnyOutgoing(() => calls.push('outgoing'))
+
+    await whilePlanted({ _anyListeners: [() => calls.push('planted')] }, async () => {
+      socket.emit('probe')
+      await settle()
+    })
+    await whilePlanted({ _anyOutgoingListeners: [() => calls.push('planted')] }, async () => {
+      serverSide.emit('probe', 1)
+      await settle()
+    })
+
+    expect(calls.sort()).toStrictEqual(['incoming', 'outgoing'])
   })
 })

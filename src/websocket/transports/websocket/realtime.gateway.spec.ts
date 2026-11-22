@@ -275,9 +275,12 @@ describe('RealtimeGateway', () => {
 
     it('stays silent when the server came from RealtimeIoAdapter', () => {
       // The adapter is the supported setup, so the gateway has nothing to report.
-      const superSpy = jest
-        .spyOn(IoAdapter.prototype, 'createIOServer')
-        .mockImplementation(() => ({ adapter: jest.fn(), use: jest.fn() }))
+      const superSpy = jest.spyOn(IoAdapter.prototype, 'createIOServer').mockImplementation(() => ({
+        adapter: jest.fn(),
+        use: jest.fn(),
+        of: jest.fn().mockReturnValue({ use: jest.fn() }),
+        on: jest.fn(),
+      }))
       try {
         const app = { get: jest.fn().mockReturnValue({ sse: {} }) }
         const server = new RealtimeIoAdapter(app as never).createIOServer(3000)
