@@ -124,3 +124,25 @@ describe('encodeSseEvent', () => {
     expect(result).toBe('id: 6\nevent: chat\ndata: hi\n\n')
   })
 })
+
+describe('encodeSseEvent, with JSON.stringify replaced after the library loaded', () => {
+  // Scenario: `JSON.stringify` is replaced by a function that answers something else. Expected: the frame is built with the
+  // library's own copy, so what is sent is the serialization of the data, not what the replacement answers.
+  it('serializes with the function it took at load', () => {
+    const original = Object.getOwnPropertyDescriptor(JSON, 'stringify') as PropertyDescriptor
+    let frame = ''
+    Object.defineProperty(JSON, 'stringify', {
+      value: () => '"replaced"',
+      configurable: true,
+      writable: true,
+    })
+    try {
+      frame = encodeSseEvent({ id: '1', type: 'e', data: { a: 1 } })
+    } finally {
+      Object.defineProperty(JSON, 'stringify', original)
+    }
+
+    expect(frame).toContain('data: {"a":1}')
+    expect(frame).not.toContain('replaced')
+  })
+})

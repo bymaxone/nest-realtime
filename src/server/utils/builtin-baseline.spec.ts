@@ -28,7 +28,6 @@ const HOLDERS: [object, string][] = [
   [Array.prototype, 'Array.prototype'],
   [Number, 'Number'],
   [Math, 'Math'],
-  [JSON, 'JSON'],
   [String.prototype, 'String.prototype'],
   [Set.prototype, 'Set.prototype'],
   [Reflect, 'Reflect'],
@@ -156,7 +155,6 @@ describe('the additions the audits asked for', () => {
     'Object',
     'Reflect',
     'Array',
-    'JSON',
     'Math',
     'Number',
     'String',
@@ -199,6 +197,29 @@ describe('the additions the audits asked for', () => {
     })
 
     expect([count, error]).toStrictEqual([4, undefined])
+  })
+})
+
+describe('what the library only uses to serialize', () => {
+  // Scenario: a host's test suite spies on `JSON.stringify`, or a patch replaces it. Expected: not counted, and the
+  // check does not refuse: it serializes, it does not decide who is admitted, so the library takes its own copy at load.
+  it('does not count a replaced JSON.stringify', () => {
+    const original = describe_(JSON, 'stringify') as PropertyDescriptor
+    let count = -1
+    let code: unknown
+    define(JSON, 'stringify', { value: () => '"x"', configurable: true, writable: true })
+    try {
+      count = replacedBuiltinCount()
+      try {
+        assertBuiltinsIntact()
+      } catch (error) {
+        code = (error as { code?: unknown }).code
+      }
+    } finally {
+      define(JSON, 'stringify', original)
+    }
+
+    expect([count, code]).toStrictEqual([0, undefined])
   })
 })
 
@@ -446,7 +467,9 @@ describe('the list of built-ins', () => {
         read.add(`${match[1]}.${match[2]}`)
       }
     }
+    // `JSON.stringify` is taken once, at load, by the captured built-ins, and only serializes: it takes no part in a decision.
     const exempt = new Set([
+      'JSON.stringify',
       'Number.MAX_SAFE_INTEGER',
       'Number.NEGATIVE_INFINITY',
       'Array.prototype',

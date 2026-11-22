@@ -3,6 +3,7 @@
  * @layer transport
  */
 import type { MessageEvent } from '@nestjs/common'
+import { stringify } from './captured-builtins'
 
 /**
  * Encode a NestJS `MessageEvent` into the SSE wire format.
@@ -87,5 +88,5 @@ export function encodeSseEvent(event: MessageEvent): string {
 function serializeData(data: unknown): string {
   if (typeof data === 'string') return data
   if (data === null || data === undefined) return ''
-  return JSON.stringify(data)
+  return stringify(data)
 }

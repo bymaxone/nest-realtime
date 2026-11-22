@@ -6,6 +6,9 @@
  * changes them has to do it before the library is imported.
  */
 
+/** `JSON.stringify` as it was when the library was imported: it serializes, and takes no part in a decision about admission. */
+export const stringify = JSON.stringify
+
 /** `Error` as it was when the library was imported. */
 export const NativeError = Error
 
