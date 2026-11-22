@@ -2,6 +2,7 @@
  * @fileoverview Custom NestJS IoAdapter applying WebSocket options and the @socket.io/redis-adapter.
  * @layer infrastructure
  */
+import type { ServerResponse } from 'node:http'
 import { Logger } from '@nestjs/common'
 import type { INestApplicationContext } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
@@ -15,6 +16,57 @@ import {
   realtimeError,
 } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions, QuitableClient } from '@bymax-one/nest-realtime/internal'
+import {
+  corsWithOwnNames,
+  plantedKeyCount,
+  plantedKeyMessage,
+  serverOptionsWithOwnNames,
+  shadowDecoder,
+  shadowServerInstance,
+  shadowSocket,
+} from './server-option-names'
+
+/** The part of a Socket.IO namespace this adapter uses. */
+type Namespace = { on: (event: 'connection', listener: (socket: object) => void) => void }
+
+/** An engine.io middleware: it is given the request and the response, and calls `next` to let the request go on. */
+type EngineGuard = (request: unknown, response: ServerResponse, next: () => void) => void
+
+/** Refuses a request with a 500 that says how many planted keys there are, when `Object.prototype` holds any. */
+const stateGuard: EngineGuard = (_request, response, next) => {
+  const planted = plantedKeyCount()
+  if (planted === 0) {
+    next()
+    return
+  }
+  response.statusCode = 500
+  response.setHeader('Content-Type', 'application/json')
+  response.end(
+    JSON.stringify({
+      code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+      message: plantedKeyMessage(planted),
+    }),
+  )
+}
+
+/** The part of an engine.io socket this adapter uses to stop a packet from reaching the decoder. */
+type EngineSocket = {
+  prependListener: (event: 'packet', listener: (packet: { type: string }) => void) => void
+  close: (discard?: boolean) => void
+}
+
+/**
+ * Runs before anything else sees a packet of an open connection. While `Object.prototype` holds a planted key the
+ * packet is turned into a no-op, which engine.io does not pass on, and the connection is closed, so that the decoder of
+ * Socket.IO never runs on it.
+ */
+const guardPackets = (connection: EngineSocket): void => {
+  connection.prependListener('packet', (packet) => {
+    if (plantedKeyCount() === 0) return
+    packet.type = 'noop'
+    connection.close(true)
+  })
+}
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
 type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
@@ -96,19 +148,40 @@ export class RealtimeIoAdapter extends IoAdapter {
    * `@socket.io/redis-adapter` lazily: the optional peer is needed only then.
    */
   override createIOServer(port: number, opts?: ServerOptions): unknown {
+    const planted = plantedKeyCount()
+    if (planted > 0) {
+      throw realtimeError(REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE, plantedKeyMessage(planted), {
+        who: 'RealtimeIoAdapter',
+      })
+    }
     const wsOpts = this.options.websocket ?? {}
-    const mergedOpts: ServerOptions = {
+    const mergedOpts = serverOptionsWithOwnNames({
       ...opts,
-      cors: wsOpts.cors ?? opts?.cors,
+      cors: corsWithOwnNames(wsOpts.cors ?? opts?.cors),
       pingInterval: wsOpts.pingIntervalMs ?? 25_000,
       pingTimeout: wsOpts.pingTimeoutMs ?? 20_000,
       maxHttpBufferSize: wsOpts.maxHttpBufferSize ?? 1_000_000,
-    } as ServerOptions
+    }) as unknown as ServerOptions
 
     const server = super.createIOServer(port, mergedOpts) as {
       adapter: (a: unknown) => void
       close: () => Promise<void>
+      engine?: {
+        middlewares: EngineGuard[]
+        on: (event: 'connection', listener: (connection: EngineSocket) => void) => void
+      }
+      of: (name: string) => Namespace
+      on: (event: 'new_namespace', listener: (namespace: Namespace) => void) => void
     }
+    shadowServerInstance(server)
+    shadowDecoder(server)
+    // Per request and per packet, after boot: a key planted since then is refused before anything reads the request, as
+    // the first of the engine's middlewares, and before the decoder of Socket.IO runs on a packet of an open connection.
+    server.engine?.middlewares.unshift(stateGuard)
+    server.engine?.on('connection', guardPackets)
+    // Each socket of each namespace, the main one and every one made later, is given its own lazy state as it connects.
+    server.of('/').on('connection', shadowSocket)
+    server.on('new_namespace', (namespace) => namespace.on('connection', shadowSocket))
 
     if (wsOpts.redisAdapter?.pubClient) {
       try {

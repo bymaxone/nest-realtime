@@ -68,7 +68,7 @@ describe('dropUnset does not use a built-in a host can replace', () => {
     )
 
     expect(outcome.failure).toBeUndefined()
-    expect((outcome.result as { websocket: unknown }).websocket).toStrictEqual({
+    expect(structuredClone((outcome.result as { websocket: unknown }).websocket)).toStrictEqual({
       cors: { origin: 'https://a.example', credentials: true, maxAge: 600 },
     })
   })

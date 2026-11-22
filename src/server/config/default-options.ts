@@ -38,7 +38,8 @@ export type ResolvedRealtimeOptions = Readonly<
 export function applyDefaults(raw: BymaxRealtimeModuleOptions): ResolvedRealtimeOptions {
   const options = dropUnset(raw)
   return freeze({
+    __proto__: null,
     ...options,
-    sse: { ...DEFAULT_SSE, ...(options.sse ?? {}) },
+    sse: { __proto__: null, ...DEFAULT_SSE, ...(options.sse ?? {}) },
   })
 }

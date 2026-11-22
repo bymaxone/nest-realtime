@@ -8,7 +8,7 @@
 import { BymaxHealthIndicator } from '@bymax-one/nest-core/health'
 import type { HealthIndicatorResult, IHealthIndicator } from '@bymax-one/nest-core/health'
 import { Inject, Injectable } from '@nestjs/common'
-import { REALTIME_PUBSUB_TOKEN } from '@bymax-one/nest-realtime/internal'
+import { callHostMethod, REALTIME_PUBSUB_TOKEN } from '@bymax-one/nest-realtime/internal'
 import type { IRealtimePubSub } from '@bymax-one/nest-realtime/internal'
 
 /**
@@ -32,6 +32,8 @@ export class RealtimePubSubHealthIndicator implements IHealthIndicator {
 
   /** The indicator's outcome: `down` only when the bus says it is not subscribed. */
   async check(): Promise<HealthIndicatorResult> {
-    return { status: this.pubsub.isSubscribed?.() === false ? 'down' : 'up' }
+    return {
+      status: callHostMethod<boolean>(this.pubsub, 'isSubscribed', []) === false ? 'down' : 'up',
+    }
   }
 }

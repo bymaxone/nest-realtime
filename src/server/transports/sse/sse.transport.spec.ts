@@ -251,6 +251,7 @@ describe('SseTransport', () => {
     expect(onDisconnect).toHaveBeenCalledWith(
       expect.not.objectContaining({ reason: expect.anything() }),
     )
+    expect(Object.hasOwn(onDisconnect.mock.calls[0][0] as object, 'reason')).toBe(false)
   })
 
   // onDisconnect carries the role snapshot taken at connect time.

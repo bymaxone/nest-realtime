@@ -5,6 +5,7 @@
 import { ADMISSION_ROOM_LIMITS } from '../../shared/constants/admission-rooms.constants'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
+import { readHostKey } from './read-host-key'
 import { realtimeError } from './realtime-error'
 import { reservedRoomPrefix } from './reserved-room'
 
@@ -72,9 +73,13 @@ function admitRoles(roles: AuthenticationResult['roles']): AuthenticationResult[
  * @throws Error carrying `REALTIME_AUTH_FAILED` when `rooms` is present and invalid, or `roles` cannot be read.
  */
 export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
-  const roles = admitRoles(auth.roles)
-  const { rooms } = auth
-  const kept = roles === auth.roles ? auth : { ...auth, roles: roles as readonly string[] }
+  const ownRoles = readHostKey(auth, 'roles') as readonly string[] | undefined
+  const roles = admitRoles(ownRoles)
+  const rooms = readHostKey(auth, 'rooms')
+  const kept =
+    roles === ownRoles
+      ? auth
+      : ({ __proto__: null, ...auth, roles: roles as readonly string[] } as AuthenticationResult)
   if (rooms === undefined) return kept
   if (!Array.isArray(rooms)) refuse('`rooms` is not an array')
   const admitted: unknown[] = []
@@ -96,5 +101,9 @@ export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
     const reserved = reservedRoomPrefix(room)
     if (reserved !== undefined) refuse(`a room name starts with the reserved prefix "${reserved}"`)
   }
-  return { ...kept, rooms: Object.freeze(admitted as string[]) }
+  return {
+    __proto__: null,
+    ...kept,
+    rooms: Object.freeze(admitted as string[]),
+  } as AuthenticationResult
 }

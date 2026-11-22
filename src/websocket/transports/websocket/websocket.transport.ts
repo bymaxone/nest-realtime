@@ -5,6 +5,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import type { Server, Socket } from 'socket.io'
 import {
+  callHostMethod,
   ConnectionRegistry,
   RoomRegistry,
   REALTIME_HOOKS_TOKEN,
@@ -249,17 +250,19 @@ export class WebSocketTransport implements ITransport {
   ): ReturnType<typeof runHook> {
     return runHook(
       () =>
-        this.hooks.onConnect?.({
-          connectionId: socket.id,
-          userId: auth.userId,
-          tenantId: auth.tenantId,
-          roles: auth.roles,
-          metadata: auth.metadata,
-          transport: 'websocket',
-          ip: socket.handshake.address,
-          userAgent: socket.handshake.headers['user-agent'],
-          connectedAt,
-        }),
+        callHostMethod(this.hooks, 'onConnect', [
+          {
+            connectionId: socket.id,
+            userId: auth.userId,
+            tenantId: auth.tenantId,
+            roles: auth.roles,
+            metadata: auth.metadata,
+            transport: 'websocket',
+            ip: socket.handshake.address,
+            userAgent: socket.handshake.headers['user-agent'],
+            connectedAt,
+          },
+        ]),
       this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
     )
   }
@@ -292,7 +295,7 @@ export class WebSocketTransport implements ITransport {
       ...(reason !== undefined ? { reason } : {}),
     }
     const failed = await runHook(
-      () => this.hooks.onDisconnect?.(disconnectMeta),
+      () => callHostMethod(this.hooks, 'onDisconnect', [disconnectMeta]),
       this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
     )
     if (failed) {

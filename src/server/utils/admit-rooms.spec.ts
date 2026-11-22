@@ -182,7 +182,11 @@ describe('admitRooms', () => {
       const returned = ['workspace:w1']
       const admitted = admitRooms({ userId: 'u1', tenantId: 't1', rooms: returned })
 
-      expect(admitted).toStrictEqual({ userId: 'u1', tenantId: 't1', rooms: ['workspace:w1'] })
+      expect(structuredClone(admitted)).toStrictEqual({
+        userId: 'u1',
+        tenantId: 't1',
+        rooms: ['workspace:w1'],
+      })
       expect(admitted.rooms).not.toBe(returned)
       expect(Object.isFrozen(admitted.rooms)).toBe(true)
     })

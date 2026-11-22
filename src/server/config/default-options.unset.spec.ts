@@ -179,7 +179,9 @@ describe.each(GROUPS)('the %s group as a class instance', (group, every) => {
   })
 
   it('keeps every key of a plain group that holds a value', () => {
-    expect(dropUnset({ [group]: { ...every } } as never)[group]).toStrictEqual(every)
+    expect(structuredClone(dropUnset({ [group]: { ...every } } as never)[group])).toStrictEqual(
+      every,
+    )
   })
 })
 

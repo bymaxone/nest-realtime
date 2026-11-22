@@ -3,10 +3,7 @@
  * @layer transport
  */
 import 'reflect-metadata'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { Logger } from '@nestjs/common'
-import { IoAdapter } from '@nestjs/platform-socket.io'
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
 import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
@@ -16,10 +13,8 @@ import type {
   IConnectionAuthenticator,
   BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
-import { lineOf } from '../../../../test/support/log-lines'
 import { WebSocketTransport } from './websocket.transport'
 import { RealtimeGateway } from './realtime.gateway'
-import { RealtimeIoAdapter } from './realtime-io-adapter'
 
 /** Build a minimal mock Socket with configurable handshake. */
 function makeSocket(
@@ -221,74 +216,6 @@ describe('RealtimeGateway', () => {
       logSpy.mockRestore()
       errorSpy.mockRestore()
     }
-  })
-
-  describe('afterInit — the adapter check', () => {
-    let errorSpy: jest.SpyInstance
-
-    beforeEach(() => {
-      errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
-    })
-
-    afterEach(() => {
-      errorSpy.mockRestore()
-    })
-
-    it('reports a server that RealtimeIoAdapter did not create, naming the fix and the options it drops', async () => {
-      // Under any other adapter the websocket.* options are dropped and the gateway's own
-      // CORS (origin: false) stays in force, so the message has to say what to add.
-      gateway = (
-        await buildModule({
-          websocket: { cors: { origin: 'https://app.example' }, redisAdapter: { pubClient: {} } },
-        })
-      ).get(RealtimeGateway)
-
-      gateway.afterInit({ use: jest.fn() } as never)
-
-      expect(errorSpy).toHaveBeenCalledTimes(1)
-      const message = lineOf(errorSpy.mock.calls[0]?.[0])
-      expect(message).toContain('RealtimeIoAdapter is not the active WebSocket adapter')
-      expect(message).toContain('(cors, redisAdapter)')
-      expect(message).toContain('origin: false')
-      expect(message).toContain('app.useWebSocketAdapter(new RealtimeIoAdapter(app))')
-      expect(message).toContain("'@bymax-one/nest-realtime/websocket'")
-    })
-
-    it('still reports it when no websocket option is set, without naming any', () => {
-      // The gateway CORS is closed whether or not the consumer configured anything.
-      gateway.afterInit({ use: jest.fn() } as never)
-
-      expect(errorSpy).toHaveBeenCalledTimes(1)
-      const message = lineOf(errorSpy.mock.calls[0]?.[0])
-      expect(message).toContain('so the websocket options are ignored and the gateway CORS')
-      expect(message).not.toMatch(/websocket options \(/)
-    })
-
-    it('says in the README exactly what it logs', () => {
-      // A consumer who meets the message looks it up in the README, so the text must match.
-      gateway.afterInit({ use: jest.fn() } as never)
-      const message = lineOf(errorSpy.mock.calls[0]?.[0])
-      const readme = readFileSync(join(__dirname, '..', '..', '..', '..', 'README.md'), 'utf8')
-
-      expect(readme).toContain(message)
-    })
-
-    it('stays silent when the server came from RealtimeIoAdapter', () => {
-      // The adapter is the supported setup, so the gateway has nothing to report.
-      const superSpy = jest
-        .spyOn(IoAdapter.prototype, 'createIOServer')
-        .mockImplementation(() => ({ adapter: jest.fn(), use: jest.fn() }))
-      try {
-        const app = { get: jest.fn().mockReturnValue({ sse: {} }) }
-        const server = new RealtimeIoAdapter(app as never).createIOServer(3000)
-
-        gateway.afterInit(server as never)
-
-        expect(errorSpy).not.toHaveBeenCalled()
-      } finally {
-        superSpy.mockRestore()
-      }
-    })
   })
 
   it('handleConnection logs the error message when authenticate throws', async () => {

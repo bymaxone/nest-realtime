@@ -80,6 +80,8 @@ describe('RealtimeIoAdapter subscriber connection', () => {
     jest.spyOn(IoAdapter.prototype, 'createIOServer').mockImplementation(() => ({
       adapter: jest.fn(),
       close: jest.fn().mockResolvedValue(undefined),
+      of: jest.fn().mockReturnValue({ on: jest.fn() }),
+      on: jest.fn(),
     }))
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)

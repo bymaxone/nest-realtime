@@ -22,6 +22,7 @@ import {
 } from '../utils/captured-builtins'
 import { copyRegExp } from '../utils/copy-regexp'
 import { isPlainObject } from '../utils/is-plain-object'
+import { hasHostKey, readHostKey } from '../utils/read-host-key'
 import { realtimeError } from '../utils/realtime-error'
 
 /**
@@ -167,9 +168,9 @@ function readKey(
   key: string,
   keepWhenSet: string | undefined,
 ): void {
-  const value = (source as Record<string, unknown>)[key]
+  const value = readHostKey(source, key)
   if (value !== undefined && value !== null) kept[key] = value
-  else if (key === keepWhenSet && (value === null || key in source)) kept[key] = value
+  else if (key === keepWhenSet && (value === null || hasHostKey(source, key))) kept[key] = value
 }
 
 /**
@@ -183,7 +184,7 @@ function readSet(
   known: readonly string[],
   keepWhenSet?: string,
 ): Record<string, unknown> {
-  const kept: Record<string, unknown> = {}
+  const kept: Record<string, unknown> = { __proto__: null }
   const own = keys(source)
   for (let index = 0; index < own.length; index += 1) {
     readKey(kept, source, own[index] as string, keepWhenSet)

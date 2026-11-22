@@ -411,6 +411,8 @@ describe('WebSocketTransport', () => {
     expect(hooks.onDisconnect).toHaveBeenCalledWith(
       expect.not.objectContaining({ reason: expect.anything() }),
     )
+    const [meta] = (hooks.onDisconnect as unknown as jest.Mock).mock.calls[0] as [object]
+    expect(Object.hasOwn(meta, 'reason')).toBe(false)
   })
 
   it('unregisterSocket is a no-op for unknown connectionId', async () => {

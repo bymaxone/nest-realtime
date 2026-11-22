@@ -18,7 +18,7 @@ describe('dropUnset', () => {
       reauthenticationPolicy: { concurrency: null, intervalSeconds: 60 },
     })
 
-    expect(result).toStrictEqual({
+    expect(structuredClone(result)).toStrictEqual({
       authenticateTimeoutMs: 5,
       sse: { maxQueuedEvents: 0 },
       websocket: { namespace: '/x' },
