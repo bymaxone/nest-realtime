@@ -55,6 +55,8 @@ const REPLACEMENTS: ReadonlyArray<readonly [string, object, PropertyKey, unknown
   ['Object.prototype.toString', Object.prototype, 'toString', () => '[object Other]'],
   ['the iterator of an array', Array.prototype, Symbol.iterator, throws],
   ['Set', globalThis, 'Set', throws],
+  ['Array.prototype.includes', Array.prototype, 'includes', throws],
+  ['Array.prototype.some', Array.prototype, 'some', throws],
 ]
 
 describe('dropUnset does not use a built-in a host can replace', () => {

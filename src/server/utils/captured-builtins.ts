@@ -26,3 +26,9 @@ export const keys = Object.keys
 
 /** `Object.prototype.toString` as it was when the library was imported. */
 export const objectToString = Object.prototype.toString
+
+/** `Array.prototype.includes` as it was when the library was imported. */
+export const includes = Array.prototype.includes
+
+/** `Array.prototype.some` as it was when the library was imported. */
+export const some = Array.prototype.some

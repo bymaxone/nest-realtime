@@ -10,7 +10,16 @@ import type {
   SseOptions,
   WebSocketOptions,
 } from '../interfaces/realtime-module-options.interface'
-import { apply, freeze, isArray, isInteger, keys, push } from '../utils/captured-builtins'
+import {
+  apply,
+  freeze,
+  includes,
+  isArray,
+  isInteger,
+  keys,
+  push,
+  some,
+} from '../utils/captured-builtins'
 import { copyRegExp } from '../utils/copy-regexp'
 import { isPlainObject } from '../utils/is-plain-object'
 import { realtimeError } from '../utils/realtime-error'
@@ -148,10 +157,7 @@ function copied(value: unknown, path: string, kinds: string): unknown {
 
 /** Whether `key` is one of `names`. */
 function includesKey(names: readonly string[], key: string): boolean {
-  for (let index = 0; index < names.length; index += 1) {
-    if (names[index] === key) return true
-  }
-  return false
+  return apply(includes, names, [key]) as boolean
 }
 
 /** Keep what `source[key]` holds, as `readSet` does for each key. */
@@ -234,8 +240,5 @@ export function dropUnset<T extends object>(options: T): T {
 
 /** Whether `read` holds at least one of `names`. */
 function holdsAny(read: object, names: readonly string[]): boolean {
-  for (let index = 0; index < names.length; index += 1) {
-    if ((names[index] as string) in read) return true
-  }
-  return false
+  return apply(some, names, [(name: string) => name in read]) as boolean
 }
