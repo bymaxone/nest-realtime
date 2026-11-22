@@ -33,6 +33,7 @@ export function readPlainObject(value: unknown): {
 } {
   if (typeof value !== 'object') return { plain: false, threw: false }
   try {
+    // Stryker disable next-line ArrayDeclaration: equivalent — `Object.prototype.toString` takes no arguments, so an argument list changes nothing it reads
     return { plain: apply(objectToString, value, []) === '[object Object]', threw: false }
   } catch (error) {
     return { plain: false, threw: true, error }

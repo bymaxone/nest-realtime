@@ -10,6 +10,7 @@ import { ConnectionRegistry } from './services/connection-registry.service'
 import { SseTransport } from './transports/sse/sse.transport'
 import { InMemoryPubSub } from './pubsub/in-memory-pubsub'
 import {
+  REALTIME_AUTHENTICATOR_TOKEN,
   REALTIME_HOOKS_TOKEN,
   REALTIME_OFFLINE_QUEUE_TOKEN,
   REALTIME_PRESENCE_TOKEN,
@@ -245,6 +246,20 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     }).compile()
     expect(mod.get(RealtimeService)).toBeInstanceOf(RealtimeService)
     expect(mod.get(ConnectionRegistry)).toBeInstanceOf(ConnectionRegistry)
+  })
+
+  // The authenticator the factory returned is what the rest of the library is given under its token.
+  it('provides the authenticator of the options a useFactory returned', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeModule.forRootAsync({
+          transport: 'sse',
+          useFactory: async () => ({ transport: 'sse', authenticator }),
+        }),
+      ],
+    }).compile()
+
+    expect(mod.get(REALTIME_AUTHENTICATOR_TOKEN)).toBe(authenticator)
   })
 
   // A DynamicModule with exactly one SSE controller is produced.
