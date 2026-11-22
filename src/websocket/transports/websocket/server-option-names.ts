@@ -125,3 +125,54 @@ export function serverOptionsWithOwnNames(options: object): Record<string, unkno
       : nested(COMPRESSION_OWN_NAMES, merged.httpCompression)
   return merged
 }
+
+/** The names a Socket.IO server reads off itself that it sets only on some paths, so a planted one would answer the rest. */
+export const SERVER_INSTANCE_NAMES = ['_corsMiddleware', '_serveClient', 'httpServer'] as const
+
+/**
+ * The names engine.io and Socket.IO read off the objects they create for each connection (a socket, a client, a polling
+ * transport) that they set only on some paths. The library does not create those objects, so it cannot give them keys: a
+ * planted one is refused instead.
+ */
+export const CONNECTION_STATE_NAMES = [
+  '_anyListeners',
+  '_anyOutgoingListeners',
+  'connectTimeout',
+  'connected',
+  'dataReq',
+  'discarded',
+  'req',
+  'request',
+  'shouldClose',
+  'writable',
+] as const
+
+const hasOwn = Object.prototype.hasOwnProperty
+const apply = Reflect.apply
+
+/**
+ * Gives `server` an own `undefined` for each of {@link SERVER_INSTANCE_NAMES} it does not hold, which shadows a planted
+ * key, and leaves one it holds as it is.
+ *
+ * @param server - The Socket.IO server, after it is created and attached.
+ */
+export function shadowServerInstance(server: object): void {
+  for (const name of SERVER_INSTANCE_NAMES) {
+    if (apply(hasOwn, server, [name]) as boolean) continue
+    Object.defineProperty(server, name, {
+      value: undefined,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    })
+  }
+}
+
+/** The names of {@link CONNECTION_STATE_NAMES} that `Object.prototype` holds now. */
+export function plantedStateNames(): string[] {
+  return CONNECTION_STATE_NAMES.filter((name) => name in Object.prototype)
+}
+
+/** The refusal's text: it names the fields and never what they hold. */
+export const plantedStateMessage = (names: readonly string[]): string =>
+  `a key planted on Object.prototype is read by the WebSocket server as connection state: ${names.join(', ')}`

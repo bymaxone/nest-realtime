@@ -2,6 +2,7 @@
  * @fileoverview Custom NestJS IoAdapter applying WebSocket options and the @socket.io/redis-adapter.
  * @layer infrastructure
  */
+import type { ServerResponse } from 'node:http'
 import { Logger } from '@nestjs/common'
 import type { INestApplicationContext } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
@@ -15,7 +16,33 @@ import {
   realtimeError,
 } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions, QuitableClient } from '@bymax-one/nest-realtime/internal'
-import { corsWithOwnNames, serverOptionsWithOwnNames } from './server-option-names'
+import {
+  corsWithOwnNames,
+  plantedStateMessage,
+  plantedStateNames,
+  serverOptionsWithOwnNames,
+  shadowServerInstance,
+} from './server-option-names'
+
+/** An engine.io middleware: it is given the request and the response, and calls `next` to let the request go on. */
+type EngineGuard = (request: unknown, response: ServerResponse, next: () => void) => void
+
+/** Refuses a request with a 500 that names the planted fields, when `Object.prototype` holds any of them. */
+const stateGuard: EngineGuard = (_request, response, next) => {
+  const planted = plantedStateNames()
+  if (planted.length === 0) {
+    next()
+    return
+  }
+  response.statusCode = 500
+  response.setHeader('Content-Type', 'application/json')
+  response.end(
+    JSON.stringify({
+      code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+      message: plantedStateMessage(planted),
+    }),
+  )
+}
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
 type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
@@ -97,6 +124,16 @@ export class RealtimeIoAdapter extends IoAdapter {
    * `@socket.io/redis-adapter` lazily: the optional peer is needed only then.
    */
   override createIOServer(port: number, opts?: ServerOptions): unknown {
+    const planted = plantedStateNames()
+    if (planted.length > 0) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        plantedStateMessage(planted),
+        {
+          who: 'RealtimeIoAdapter',
+        },
+      )
+    }
     const wsOpts = this.options.websocket ?? {}
     const mergedOpts = serverOptionsWithOwnNames({
       ...opts,
@@ -109,7 +146,11 @@ export class RealtimeIoAdapter extends IoAdapter {
     const server = super.createIOServer(port, mergedOpts) as {
       adapter: (a: unknown) => void
       close: () => Promise<void>
+      engine?: { use: (guard: EngineGuard) => void }
     }
+    shadowServerInstance(server)
+    // Per request, after boot: a key planted since then is refused before engine.io reads the request.
+    server.engine?.use(stateGuard)
 
     if (wsOpts.redisAdapter?.pubClient) {
       try {
