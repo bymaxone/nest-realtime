@@ -508,6 +508,8 @@ describe('a process whose Object.prototype was changed before the library was lo
     }
     return loaded as Names
   }
+  const descriptorOfProto = (): PropertyDescriptor =>
+    Object.getOwnPropertyDescriptor(Object.prototype, '__proto__') as PropertyDescriptor
   const override = (name: string, value: unknown): [() => void, () => void] => {
     const saved = Object.getOwnPropertyDescriptor(Object.prototype, name) as PropertyDescriptor
     return [
@@ -533,6 +535,9 @@ describe('a process whose Object.prototype was changed before the library was lo
         return 1
       },
     ],
+    ['hasOwnProperty', new Proxy(Object.prototype.hasOwnProperty, {})],
+    ['hasOwnProperty', Object.prototype.hasOwnProperty.bind(null)],
+    ['hasOwnProperty', Object.prototype.isPrototypeOf],
     ['constructor', 'x'],
   ])('counts %s, set to %p at load, on every use', (name, value) => {
     const [change, restore] = override(name, value)
@@ -552,8 +557,8 @@ describe('a process whose Object.prototype was changed before the library was lo
     const loaded = loadedWith(
       () =>
         Object.defineProperty(Object.prototype, '__proto__', {
-          get: () => null,
-          set: () => undefined,
+          get: new Proxy(descriptorOfProto().get as () => unknown, {}),
+          set: descriptorOfProto().set as (value: unknown) => void,
           configurable: true,
         }),
       () => Object.defineProperty(Object.prototype, '__proto__', saved),
@@ -600,5 +605,32 @@ describe('a process whose Object.prototype was changed before the library was lo
         () => undefined,
       ).plantedKeyCount(),
     ).toBe(0)
+  })
+})
+
+describe('a descriptor field planted on Object.prototype', () => {
+  const FIELD_NAMES = ['get', 'set', 'value', 'writable', 'enumerable', 'configurable']
+  const planting = <T>(run: () => T): T => {
+    for (const name of FIELD_NAMES) {
+      // The descriptor has no prototype, since defineProperty itself reads the fields a descriptor lacks.
+      const descriptor = Object.assign(Object.create(null) as object, {
+        get: () => {
+          throw new Error(`the field ${name} was read`)
+        },
+        configurable: true,
+      })
+      Object.defineProperty(Object.prototype, name, descriptor)
+    }
+    try {
+      return run()
+    } finally {
+      for (const name of FIELD_NAMES) Reflect.deleteProperty(Object.prototype, name)
+    }
+  }
+
+  // Scenario: accessors named like the fields of a descriptor, which throw, are planted. Expected: counting reads no field
+  // the descriptors do not hold themselves, so it returns the count (one per planted name) and does not throw.
+  it('is not read while the planted keys are counted', () => {
+    expect(planting(() => plantedKeyCount())).toBe(FIELD_NAMES.length)
   })
 })

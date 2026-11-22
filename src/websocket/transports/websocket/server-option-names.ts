@@ -8,6 +8,7 @@
  * `Object.prototype`. An own key, even one that holds `undefined`, is copied over and shadows it. A name that the
  * defaults do name is not given one: the own `undefined` would overwrite the default.
  */
+import { runInNewContext } from 'node:vm'
 
 /** The names `cors` reads that its defaults do not name, so a planted one would answer them. */
 export const CORS_OWN_NAMES = [
@@ -135,8 +136,11 @@ export const SERVER_INSTANCE_NAMES = ['_corsMiddleware', '_serveClient', 'httpSe
  */
 export const SOCKET_LAZY_NAMES = ['_anyListeners', '_anyOutgoingListeners'] as const
 
-const hasOwn = Object.prototype.hasOwnProperty
-const apply = Reflect.apply
+/** `hasOwnProperty` and `apply` as a clean realm has them: a process polluted before the import may have replaced these. */
+const hasOwn = runInNewContext(
+  'Object.prototype.hasOwnProperty',
+) as typeof Object.prototype.hasOwnProperty
+const apply = runInNewContext('Reflect.apply') as typeof Reflect.apply
 
 /**
  * Gives `server` an own `undefined` for each of {@link SERVER_INSTANCE_NAMES} it does not hold, which shadows a planted
@@ -232,27 +236,42 @@ const standardAtLoad = new Map<string, PropertyDescriptor | undefined>(
   STANDARD_OBJECT_PROTOTYPE_NAMES.map((name) => [name, describe(Object.prototype, name)]),
 )
 
-const functionSource = Function.prototype.toString
+/**
+ * A realm of its own, made when the library loads, whose `Object.prototype` and `Function.prototype.toString` nothing in
+ * this process could have changed: what a standard name is meant to hold is read there, not from the realm that may have
+ * been polluted before the import.
+ */
+const pristine = {
+  prototype: runInNewContext('Object.prototype') as object,
+  source: runInNewContext('Function.prototype.toString') as (this: unknown) => string,
+}
 
-/** Whether `value` is a function the engine provides, which is what a function written in JavaScript is not. */
-const isBuiltIn = (value: unknown): boolean =>
-  typeof value === 'function' &&
-  (apply(functionSource, value, []) as string).includes('[native code]')
+/** The source text of `value` as the pristine realm prints it: a bound function, a proxy and a function written in JavaScript each print another. */
+const sourceOf = (value: unknown): unknown =>
+  typeof value === 'function' ? apply(pristine.source, value, []) : undefined
 
 /**
- * Whether a standard name held what it holds in every runtime when the library was loaded: `__proto__` an accessor of
- * built-in functions, and the others a built-in function with the name they are known by (`constructor` is `Object`). A
+ * One field of a descriptor, read only when the descriptor holds it itself: a descriptor is an ordinary object, so a field it
+ * lacks would be answered by `Object.prototype`, which is the object being checked.
+ */
+const field = (descriptor: PropertyDescriptor, name: keyof PropertyDescriptor): unknown =>
+  (apply(hasOwn, descriptor, [name]) as boolean) ? descriptor[name] : undefined
+
+/**
+ * Whether a standard name held, at load, the built-in function of a clean runtime (`__proto__` an accessor of two). A
  * process polluted before the import has a baseline that is not this one, and a snapshot of it would call the pollution
- * standard. A replacement that is itself a bound or native function of the same name is not told apart.
+ * standard; the text of a function is what a replacement of the same name, a bound function and a proxy cannot copy.
  */
 function standardKind(name: string, descriptor: PropertyDescriptor | undefined): boolean {
+  const reference = describe(pristine.prototype, name) as PropertyDescriptor
   if (descriptor === undefined) return false
-  if (name === '__proto__') return isBuiltIn(descriptor.get) && isBuiltIn(descriptor.set)
-  const { value } = descriptor as { value: unknown }
-  return (
-    isBuiltIn(value) &&
-    (value as { name: unknown }).name === (name === 'constructor' ? 'Object' : name)
-  )
+  if (name === '__proto__') {
+    return (
+      sourceOf(field(descriptor, 'get')) === sourceOf(reference.get) &&
+      sourceOf(field(descriptor, 'set')) === sourceOf(reference.set)
+    )
+  }
+  return sourceOf(field(descriptor, 'value')) === sourceOf(reference.value)
 }
 
 /** How many standard names were not what they should be at load: counted on every use, so the server refuses to run. */
@@ -260,20 +279,15 @@ const unexpectedAtLoad = STANDARD_OBJECT_PROTOTYPE_NAMES.filter(
   (name) => !standardKind(name, standardAtLoad.get(name)),
 ).length
 
+const FIELDS = ['value', 'get', 'set', 'writable', 'enumerable', 'configurable'] as const
+
 /** Whether `now` is not the descriptor `before` was: another value, accessor, or attribute, or one that appeared or went. */
 function changed(
   before: PropertyDescriptor | undefined,
   now: PropertyDescriptor | undefined,
 ): boolean {
   if (before === undefined || now === undefined) return before !== now
-  return (
-    !Object.is(before.value, now.value) ||
-    before.get !== now.get ||
-    before.set !== now.set ||
-    before.writable !== now.writable ||
-    before.enumerable !== now.enumerable ||
-    before.configurable !== now.configurable
-  )
+  return FIELDS.some((name) => !Object.is(field(before, name), field(now, name)))
 }
 
 /**
