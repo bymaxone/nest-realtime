@@ -16,11 +16,11 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Changed
 
-- **`CorsConfig` declares `allowedHeaders`, `exposedHeaders` and `maxAge`**, which Socket.IO accepted and the library already copied or handed over, so a TypeScript host can write them without a cast. The block is now read for those names like the others.
+- **The types now declare the existing `allowedHeaders`, `exposedHeaders` and `maxAge` of `CorsConfig`**, which Socket.IO accepted and the library already copied or handed over, so a TypeScript host can write them without a cast. The block is now read for those names like the others.
 
 ### Tooling
 
-- **`scripts/check-dist-fresh.mjs` is the family template at its current version**, which skips its comparison only with a flag the size script does not pass, so the size script no longer clears `PACKAGE_TARBALL`; it names the manifest and the two tsconfig files the build reads besides `tsup.config.ts`, and its test runs the check with a build older than each of them.
+- **`scripts/check-dist-fresh.mjs` skips its comparison only with a flag the size script does not pass**, so the size script no longer clears `PACKAGE_TARBALL`; it names the manifest and the two tsconfig files the build reads besides `tsup.config.ts`.
 
 #### Apply to a derived backend
 
