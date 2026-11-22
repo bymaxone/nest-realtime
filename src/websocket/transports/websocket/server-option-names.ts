@@ -232,6 +232,28 @@ const standardAtLoad = new Map<string, PropertyDescriptor | undefined>(
   STANDARD_OBJECT_PROTOTYPE_NAMES.map((name) => [name, describe(Object.prototype, name)]),
 )
 
+/**
+ * Whether a standard name held what it holds in every runtime when the library was loaded: `__proto__` an accessor, and the
+ * others a function with the name they are known by (`constructor` is `Object`). A process polluted before the import has
+ * a baseline that is not this one, and a snapshot of it would call the pollution standard.
+ */
+function standardKind(name: string, descriptor: PropertyDescriptor | undefined): boolean {
+  if (descriptor === undefined) return false
+  if (name === '__proto__') {
+    return typeof descriptor.get === 'function' && typeof descriptor.set === 'function'
+  }
+  const { value } = descriptor as { value: unknown }
+  return (
+    typeof value === 'function' &&
+    (value as { name: unknown }).name === (name === 'constructor' ? 'Object' : name)
+  )
+}
+
+/** How many standard names were not what they should be at load: counted on every use, so the server refuses to run. */
+const unexpectedAtLoad = STANDARD_OBJECT_PROTOTYPE_NAMES.filter(
+  (name) => !standardKind(name, standardAtLoad.get(name)),
+).length
+
 /** Whether `now` is not the descriptor `before` was: another value, accessor, or attribute, or one that appeared or went. */
 function changed(
   before: PropertyDescriptor | undefined,
@@ -254,7 +276,7 @@ function changed(
  * `hasOwnProperty = 1` is as much a planted key as a new name, since engine.io calls it.
  */
 export function plantedKeyCount(): number {
-  let count = 0
+  let count = unexpectedAtLoad
   for (const name of ownNames(Object.prototype)) {
     if (!standard.has(name)) count += 1
   }

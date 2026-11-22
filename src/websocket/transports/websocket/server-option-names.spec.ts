@@ -29,6 +29,7 @@ import {
   serverOptionsWithOwnNames,
   shadowDecoder,
 } from './server-option-names'
+import type * as ServerOptionNames from './server-option-names'
 
 /** The names `cors` reads that its defaults name: the copy has them as its own, so nothing planted can answer. */
 const CORS_DEFAULTED_NAMES = [
@@ -490,5 +491,83 @@ describe('shadowDecoder', () => {
 
     expect(() => shadowDecoder(server)).not.toThrow()
     expect(server).toStrictEqual(before)
+  })
+})
+
+describe('a process whose Object.prototype was changed before the library was loaded', () => {
+  type Names = typeof ServerOptionNames
+  const loadedWith = (change: () => void, restore: () => void): Names => {
+    let loaded: Names | undefined
+    change()
+    try {
+      jest.isolateModules(() => {
+        loaded = require('./server-option-names') as Names
+      })
+    } finally {
+      restore()
+    }
+    return loaded as Names
+  }
+  const override = (name: string, value: unknown): [() => void, () => void] => {
+    const saved = Object.getOwnPropertyDescriptor(Object.prototype, name) as PropertyDescriptor
+    return [
+      () => Object.defineProperty(Object.prototype, name, { ...saved, value }),
+      () => Object.defineProperty(Object.prototype, name, saved),
+    ]
+  }
+
+  // Scenario: a standard name holds a non-function, a function with another name, or (for __proto__) a plain value when
+  // the library is loaded. Expected: the library loads, and the count is not zero on any use after, restored or not.
+  it.each([
+    ['hasOwnProperty', 1],
+    ['toString', function other() {}],
+    ['constructor', 'x'],
+  ])('counts %s, set to %p at load, on every use', (name, value) => {
+    const [change, restore] = override(name, value)
+    const loaded = loadedWith(change, restore)
+
+    // The one at load, and the name that is not what the polluted snapshot holds once it is restored.
+    expect(loaded.plantedKeyCount()).toBe(2)
+    expect(loaded.plantedKeyCount()).toBe(2)
+  })
+
+  it('counts a __proto__ that is not an accessor at load', () => {
+    const saved = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      '__proto__',
+    ) as PropertyDescriptor
+    const loaded = loadedWith(
+      () =>
+        Object.defineProperty(Object.prototype, '__proto__', {
+          value: 1,
+          configurable: true,
+          writable: true,
+        }),
+      () => Object.defineProperty(Object.prototype, '__proto__', saved),
+    )
+
+    expect(loaded.plantedKeyCount()).toBe(2)
+  })
+
+  it('counts a standard name that is missing at load', () => {
+    const saved = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'isPrototypeOf',
+    ) as PropertyDescriptor
+    const loaded = loadedWith(
+      () => Reflect.deleteProperty(Object.prototype, 'isPrototypeOf'),
+      () => Object.defineProperty(Object.prototype, 'isPrototypeOf', saved),
+    )
+
+    expect(loaded.plantedKeyCount()).toBe(2)
+  })
+
+  it('counts nothing for a clean process', () => {
+    expect(
+      loadedWith(
+        () => undefined,
+        () => undefined,
+      ).plantedKeyCount(),
+    ).toBe(0)
   })
 })
