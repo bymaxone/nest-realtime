@@ -141,6 +141,45 @@ describe('what a host defines on its own prototype', () => {
   })
 })
 
+describe('the root prototype of another realm whose constructor was overwritten as well', () => {
+  const groupFrom = (script: string): object => vm.runInNewContext(script) as object
+  const read = (group: object): string[] =>
+    Object.keys(
+      (
+        dropUnset({ transport: 'websocket', authenticator, websocket: group } as never) as {
+          websocket: object
+        }
+      ).websocket,
+    )
+
+  // Scenario: the payload that plants cors in another realm overwrites that realm's `constructor` first, to a number, a
+  // string, a function or nothing. Expected: the root prototype is still recognized by what only a root prototype
+  // holds, so cors is not read.
+  it.each(['1', "'x'", '(function () {})', 'undefined'])(
+    'does not read a planted cors, constructor = %s',
+    (value) => {
+      const group = groupFrom(
+        `Object.prototype.constructor = ${value}; Object.prototype.cors = { origin: true, credentials: true }; ({})`,
+      )
+
+      expect(read(group)).toStrictEqual([])
+    },
+  )
+
+  // Scenario: a prototype with no prototype of its own that is the host's: it holds a key, and `hasOwnProperty` that is
+  // not a function, or `isPrototypeOf` missing. Expected: it is not a root prototype, so its key is read.
+  it.each([
+    ['hasOwnProperty that is not a function', { hasOwnProperty: 1, isPrototypeOf: () => true }],
+    ['no isPrototypeOf', { hasOwnProperty: () => true }],
+  ])('still reads a key of a host prototype with %s', (_name, extra) => {
+    const parent = Object.assign(Object.create(null), extra, {
+      cors: { origin: ['https://good.example'] },
+    })
+
+    expect(read(Object.create(parent) as object)).toStrictEqual(['cors'])
+  })
+})
+
 describe('the copies the module makes', () => {
   // Scenario: the options as read. Expected: every object in them has no prototype, so a read of a key that is absent
   // finds nothing, whatever was planted afterwards.

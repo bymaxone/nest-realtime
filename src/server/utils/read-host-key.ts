@@ -8,21 +8,29 @@
  */
 import { apply, getPrototypeOf, hasOwnProperty, objectPrototype } from './captured-builtins'
 
+/** Whether `holder` has an own property `name` that is a function. */
+function ownsFunction(holder: object, name: string): boolean {
+  return (
+    (apply(hasOwnProperty, holder, [name]) as boolean) &&
+    typeof (holder as Record<string, unknown>)[name] === 'function'
+  )
+}
+
 /**
  * Whether `holder` is the root prototype of a realm. This realm's is known by identity, since the payload that plants a
- * key can overwrite its `constructor` too; another realm's has no prototype and is the `prototype` of its own
- * `constructor`.
+ * key can overwrite its `constructor` too. Another realm's has no prototype and either is the `prototype` of its own
+ * `constructor` or still holds the methods every object inherits, `hasOwnProperty` and `isPrototypeOf`.
  */
 function isRealmRoot(holder: object): boolean {
   if (holder === objectPrototype) return true
-  if (
-    getPrototypeOf(holder) !== null ||
-    !(apply(hasOwnProperty, holder, ['constructor']) as boolean)
-  ) {
-    return false
-  }
-  const constructor = (holder as { constructor?: { prototype?: unknown } }).constructor
-  return typeof constructor === 'function' && constructor.prototype === holder
+  if (getPrototypeOf(holder) !== null) return false
+  const constructor = ownsFunction(holder, 'constructor')
+    ? (holder as { constructor: { prototype?: unknown } }).constructor
+    : undefined
+  return (
+    constructor?.prototype === holder ||
+    (ownsFunction(holder, 'hasOwnProperty') && ownsFunction(holder, 'isPrototypeOf'))
+  )
 }
 
 /** Whether the first object of the prototype chain that holds `key` is the root prototype of a realm. */
