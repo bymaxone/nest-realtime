@@ -109,7 +109,8 @@ export function corsWithOwnNames(cors: unknown): unknown {
 
 /**
  * The server options as engine.io and Socket.IO get them: an own key for each name they read that no default names, and
- * the same for the cookie, per-message deflate and HTTP compression options, which engine.io copies once more.
+ * the same for the cookie and per-message deflate options, which engine.io copies once more, and for the HTTP compression
+ * options, which it hands to zlib as they are.
  *
  * @param options - What the adapter merged: the options Nest passed and the library's own.
  */
