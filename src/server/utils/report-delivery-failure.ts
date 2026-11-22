@@ -9,6 +9,7 @@ import type {
 } from '../interfaces/connection-lifecycle-hooks.interface'
 import { describeError } from './describe-error'
 import { logEvent } from './log-event'
+import { callHostMethod } from './read-host-key'
 
 /**
  * Logs a delivery failure with its stable code and the operation, and hands it to the
@@ -42,7 +43,7 @@ export function reportDeliveryFailure(
     error: failure.error instanceof Error ? failure.error : new Error(describeError(failure.error)),
   }
   void Promise.resolve()
-    .then(() => hooks?.onDeliveryFailure?.(reported))
+    .then(() => callHostMethod(hooks, 'onDeliveryFailure', [reported]))
     .catch((err: unknown) => {
       logEvent(
         logger,

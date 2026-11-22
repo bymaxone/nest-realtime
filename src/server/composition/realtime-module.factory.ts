@@ -26,6 +26,7 @@ import {
   REALTIME_TRANSPORT_TOKEN,
 } from '../constants/injection-tokens.constants'
 import { createSseController } from '../factories/sse-controller.factory'
+import type { IConnectionLifecycleHooks } from '../interfaces/connection-lifecycle-hooks.interface'
 import type {
   BymaxRealtimeModuleAsyncOptions,
   BymaxRealtimeModuleOptions,
@@ -147,7 +148,7 @@ function buildCommonProviders(
     { provide: REALTIME_INSTANCE_ID_TOKEN, useValue: instanceId },
     { provide: REALTIME_AUTHENTICATOR_TOKEN, useValue: resolved.authenticator },
     { provide: REALTIME_PUBSUB_TOKEN, useValue: resolved.pubsub ?? new InMemoryPubSub() },
-    { provide: REALTIME_HOOKS_TOKEN, useValue: resolved.hooks ?? {} },
+    { provide: REALTIME_HOOKS_TOKEN, useValue: resolved.hooks ?? NO_HOOKS },
     { provide: REALTIME_OFFLINE_QUEUE_TOKEN, useValue: resolved.offlineQueue },
     { provide: REALTIME_PRESENCE_TOKEN, useValue: resolved.presence },
     ...SHARED_SERVICES,
@@ -355,7 +356,7 @@ function buildOptionDerivedProviders(logger: Logger, instanceId: string): Provid
       warnIfSingleInstance(opts.pubsub, opts.transport, logger)
       return opts.pubsub ?? new InMemoryPubSub()
     }),
-    fromOptions(REALTIME_HOOKS_TOKEN, (opts) => opts.hooks ?? {}),
+    fromOptions(REALTIME_HOOKS_TOKEN, (opts) => opts.hooks ?? NO_HOOKS),
     { provide: REALTIME_INSTANCE_ID_TOKEN, useValue: instanceId },
     fromOptions(REALTIME_OFFLINE_QUEUE_TOKEN, (opts) => opts.offlineQueue),
     fromOptions(REALTIME_PRESENCE_TOKEN, (opts) => opts.presence),
@@ -383,6 +384,9 @@ function buildResolver(
     return bindSseEndpoint(resolved, declaredEndpoint, boundSseEndpoint, moduleName)
   }
 }
+
+/** The hook table of a host that gave none: it holds no hook and has no prototype to inherit one from. */
+const NO_HOOKS = { __proto__: null } as IConnectionLifecycleHooks
 
 /** A host array copied, or the value as it is when it is not an array, so the checks that follow can refuse it. */
 const copied = (value: unknown): unknown =>

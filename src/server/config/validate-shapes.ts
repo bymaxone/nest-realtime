@@ -8,6 +8,7 @@ import { isArray, isInteger } from '../utils/captured-builtins'
 import { copyRegExp } from '../utils/copy-regexp'
 import { describeReceived } from '../utils/describe-received'
 import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
+import { readHostKey } from '../utils/read-host-key'
 import { refuseObject } from '../utils/refuse-object'
 import { realtimeError } from '../utils/realtime-error'
 import { METHODS_KINDS, ORIGIN_KINDS } from './drop-unset'
@@ -110,8 +111,7 @@ function validatePieces(options: BymaxRealtimeModuleOptions): void {
     const piece: unknown = options[name as keyof typeof REQUIRED_FUNCTIONS]
     assertObject(name, piece)
     if (piece === undefined) continue
-    for (const fn of functions)
-      assertFunction(`${name}.${fn}`, (piece as Record<string, unknown>)[fn])
+    for (const fn of functions) assertFunction(`${name}.${fn}`, readHostKey(piece as object, fn))
   }
 }
 
@@ -120,7 +120,7 @@ function validateHooks(options: BymaxRealtimeModuleOptions): void {
   assertObject('hooks', hooks)
   if (hooks === undefined) return
   for (const hook of HOOK_NAMES)
-    assertOptionalFunction(`hooks.${hook}`, (hooks as Record<string, unknown>)[hook])
+    assertOptionalFunction(`hooks.${hook}`, readHostKey(hooks as object, hook))
 }
 
 /**

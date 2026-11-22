@@ -6,6 +6,7 @@ import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constan
 import { HEARTBEAT_MAX_MS, HEARTBEAT_MIN_MS } from '../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { describeReceived } from '../utils/describe-received'
+import { readHostKey } from '../utils/read-host-key'
 import { realtimeError } from '../utils/realtime-error'
 import { dropUnset } from './drop-unset'
 import { guardHostReads } from './guard-host-reads'
@@ -44,7 +45,7 @@ function validateReadOptions(raw: BymaxRealtimeModuleOptions): void {
       { who: 'BymaxRealtimeModule' },
     )
   }
-  if (typeof options.authenticator.authenticate !== 'function') {
+  if (typeof readHostKey(options.authenticator, 'authenticate') !== 'function') {
     throw realtimeError(
       REALTIME_ERROR_CODES.NO_AUTHENTICATOR,
       `options.authenticator must implement IConnectionAuthenticator.authenticate(context)`,

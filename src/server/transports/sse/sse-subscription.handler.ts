@@ -40,6 +40,7 @@ import type {
 import type { IConnectionLifecycleHooks } from '../../interfaces/connection-lifecycle-hooks.interface'
 import type { BymaxRealtimeModuleOptions } from '../../interfaces/realtime-module-options.interface'
 import type { SseRequest, SseResponse } from '../../interfaces/sse-http.interface'
+import { callHostMethod } from '../../utils/read-host-key'
 import { admitRooms } from '../../utils/admit-rooms'
 import { assertIdentityIsNotBlank, resolveAuthTenant } from '../../utils/assert-identity'
 import { logEvent } from '../../utils/log-event'
@@ -544,7 +545,9 @@ export class SseSubscriptionHandler {
         takeUntil(close$),
         catchError((error: unknown) => {
           this.fireHook(() =>
-            this.hooks?.onError?.({ connectionId, error: error as Error, transport: 'sse' }),
+            callHostMethod(this.hooks, 'onError', [
+              { connectionId, error: error as Error, transport: 'sse' },
+            ]),
           )
           return EMPTY
         }),
@@ -591,7 +594,9 @@ export class SseSubscriptionHandler {
       .then(() => this.onRegistered(p, subscriber))
       .catch((err: unknown) => {
         this.fireHook(() =>
-          this.hooks?.onError?.({ connectionId, error: err as Error, transport: 'sse' }),
+          callHostMethod(this.hooks, 'onError', [
+            { connectionId, error: err as Error, transport: 'sse' },
+          ]),
         )
         subscriber.error(this.serverError(err, 'SSE registration failed'))
       })
@@ -616,7 +621,7 @@ export class SseSubscriptionHandler {
     const record = this.transport.getConnection(connectionId)
     if (record) {
       this.fireHook(
-        () => this.hooks?.onConnect?.(buildMeta(record)),
+        () => callHostMethod(this.hooks, 'onConnect', [buildMeta(record)]),
         this.options.onConnectFailure === 'close' ? () => subscriber.complete() : undefined,
       )
     }

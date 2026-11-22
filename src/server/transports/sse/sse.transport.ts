@@ -35,6 +35,7 @@ import { ConnectionRegistry } from '../../services/connection-registry.service'
 import type { ConnectionRecord } from '../../services/connection-registry.service'
 import { EventIdGenerator } from '../../services/event-id-generator.service'
 import { RoomRegistry } from '../../services/room-registry.service'
+import { callHostMethod } from '../../utils/read-host-key'
 import { composeRoomId } from '../../utils/compose-room-id'
 import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { ConnectionAdmission, UNBOUNDED_TICKET } from '../../services/connection-admission.service'
@@ -256,19 +257,21 @@ export class SseTransport implements ITransport {
   ): Promise<void> {
     const failed = await runHook(
       () =>
-        this.hooks.onDisconnect?.({
-          connectionId: record.connectionId,
-          userId: record.userId,
-          tenantId: record.tenantId,
-          roles: record.originalAuth.roles,
-          metadata: record.originalAuth.metadata,
-          transport: 'sse',
-          ip: record.ip,
-          userAgent: record.userAgent,
-          connectedAt: record.connectedAt,
-          durationMs: Date.now() - record.connectedAt.getTime(),
-          ...(reason !== undefined ? { reason } : {}),
-        }),
+        callHostMethod(this.hooks, 'onDisconnect', [
+          {
+            connectionId: record.connectionId,
+            userId: record.userId,
+            tenantId: record.tenantId,
+            roles: record.originalAuth.roles,
+            metadata: record.originalAuth.metadata,
+            transport: 'sse',
+            ip: record.ip,
+            userAgent: record.userAgent,
+            connectedAt: record.connectedAt,
+            durationMs: Date.now() - record.connectedAt.getTime(),
+            ...(reason !== undefined ? { reason } : {}),
+          },
+        ]),
       this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS,
     )
     if (failed) {

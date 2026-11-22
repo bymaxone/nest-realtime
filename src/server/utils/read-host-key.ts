@@ -42,3 +42,36 @@ export function readHostKey(source: object, key: string): unknown {
 export function hasHostKey(source: object, key: string): boolean {
   return key in source && !isPlanted(source, key)
 }
+
+/**
+ * The function `owner` holds under `name` the way a host gave it, or `undefined` when it holds none: a method of its
+ * own or of its class counts, and one found only on a prototype with no prototype of its own does not.
+ *
+ * @param owner - An object a host wrote, such as the authenticator or the hook table.
+ * @param name - The optional method.
+ */
+export function hostMethod(
+  owner: object | null | undefined,
+  name: string,
+): ((...args: never[]) => unknown) | undefined {
+  if (owner === null || owner === undefined) return undefined
+  const method = readHostKey(owner, name)
+  return typeof method === 'function' ? (method as (...args: never[]) => unknown) : undefined
+}
+
+/**
+ * Calls the method `owner` holds under `name` with `owner` as `this`, as `owner.name(...args)` would; `undefined` when
+ * it holds none, by the same rule as `hostMethod`.
+ *
+ * @param owner - An object a host wrote, such as the hook table.
+ * @param name - The optional method.
+ * @param args - What the method is given.
+ */
+export function callHostMethod<Result = void | Promise<void>>(
+  owner: object | null | undefined,
+  name: string,
+  args: readonly unknown[],
+): Result | undefined {
+  const method = hostMethod(owner, name)
+  return method === undefined ? undefined : (apply(method, owner, args) as Result)
+}

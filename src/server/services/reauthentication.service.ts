@@ -24,6 +24,7 @@ import type {
   ReauthenticationPolicy,
 } from '../interfaces/realtime-module-options.interface'
 import { RealtimeTracing } from '../observability/realtime-tracing'
+import { callHostMethod, hostMethod } from '../utils/read-host-key'
 import { logEvent } from '../utils/log-event'
 import { Semaphore } from '../utils/semaphore'
 import { runHook } from '../utils/run-hook'
@@ -115,7 +116,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    * idle and emits an informative log.
    */
   onModuleInit(): void {
-    if (!this.auth.revalidate) {
+    if (hostMethod(this.auth, 'revalidate') === undefined) {
       this.logger.log('Authenticator does not implement revalidate() — reauthentication disabled')
       return
     }
@@ -192,7 +193,8 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   }
 
   private async revalidate(conn: ConnectionRecord, now: number): Promise<void> {
-    const revalidate = this.auth.revalidate?.bind(this.auth)
+    const found = hostMethod(this.auth, 'revalidate') as IConnectionAuthenticator['revalidate']
+    const revalidate = found?.bind(this.auth)
     if (!revalidate) {
       // No `revalidate` is a configuration with nothing to check, not an answer that refuses.
       conn.revalidatedAt = now
@@ -296,17 +298,19 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     // Fire the hook best-effort — a hook that throws, before it returns or after, must not block
     // the disconnect.
     void runHook(() =>
-      this.hooks?.onReauthenticationFailed?.({
-        connectionId: conn.connectionId,
-        userId: conn.userId,
-        tenantId: conn.tenantId,
-        roles: conn.originalAuth.roles,
-        metadata: conn.originalAuth.metadata,
-        transport: conn.transport,
-        ip: conn.ip,
-        userAgent: conn.userAgent,
-        connectedAt: conn.connectedAt,
-      }),
+      callHostMethod(this.hooks, 'onReauthenticationFailed', [
+        {
+          connectionId: conn.connectionId,
+          userId: conn.userId,
+          tenantId: conn.tenantId,
+          roles: conn.originalAuth.roles,
+          metadata: conn.originalAuth.metadata,
+          transport: conn.transport,
+          ip: conn.ip,
+          userAgent: conn.userAgent,
+          connectedAt: conn.connectedAt,
+        },
+      ]),
     ).then((failed) => {
       if (failed) {
         logEvent(

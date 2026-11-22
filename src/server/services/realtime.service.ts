@@ -10,6 +10,7 @@ import {
 import type { IRealtimePubSub } from '../interfaces/realtime-pubsub.interface'
 import type { ITransport } from '../interfaces/transport.interface'
 import { RealtimeMetricsTally } from '../observability/realtime-metrics-tally'
+import { callHostMethod } from '../utils/read-host-key'
 import { refuseReservedRoom, requireRoomName } from '../utils/reserved-room'
 
 /**
@@ -43,7 +44,7 @@ export class RealtimeService {
   isPubSubReady(): boolean {
     // Only the SSE wiring subscribes to the bus; WebSocket-only scaling goes through the adapter.
     if (this.transport.kind === 'websocket') return true
-    return this.pubsub?.isSubscribed?.() ?? true
+    return callHostMethod<boolean>(this.pubsub, 'isSubscribed', []) ?? true
   }
 
   /**
