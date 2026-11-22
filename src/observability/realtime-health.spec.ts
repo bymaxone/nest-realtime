@@ -24,6 +24,15 @@ describe('RealtimePubSubHealthIndicator', () => {
     expect(new RealtimePubSubHealthIndicator(bus()).name).toBe('realtime-pubsub')
   })
 
+  // Scenario: any check. Expected: the bus is asked for its state with no arguments, since its answer is its own.
+  it('asks the bus for its state with no arguments', async () => {
+    const isSubscribed = jest.fn().mockReturnValue(true)
+
+    await new RealtimePubSubHealthIndicator(bus(isSubscribed)).check()
+
+    expect(isSubscribed).toHaveBeenCalledWith()
+  })
+
   // Scenario: the bus reports it is subscribed. Expected: up.
   it('is up while the bus is subscribed', async () => {
     await expect(new RealtimePubSubHealthIndicator(bus(() => true)).check()).resolves.toEqual({
