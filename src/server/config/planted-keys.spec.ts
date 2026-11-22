@@ -63,6 +63,23 @@ function withPlanted<T>(key: string, value: unknown, call: () => T): T {
   }
 }
 
+/** The same as `withPlanted` for a call that is asynchronous: the key stays planted until what `call` returns has settled. */
+async function withPlantedAsync<T>(
+  key: string,
+  value: unknown,
+  call: () => Promise<T>,
+): Promise<T> {
+  const root = Object.prototype as unknown as Record<string, unknown>
+  const before = Object.getOwnPropertyDescriptor(Object.prototype, key)
+  Object.defineProperty(Object.prototype, key, { value, configurable: true, writable: true })
+  try {
+    return await call()
+  } finally {
+    if (before === undefined) delete root[key]
+    else Object.defineProperty(Object.prototype, key, before)
+  }
+}
+
 /** A shape of options in which the planted key is absent, and a group or block that holds the rest. */
 const SHAPES: ReadonlyArray<readonly [string, () => object]> = [
   ['an SSE host', () => ({ transport: 'sse', authenticator })],
@@ -276,7 +293,7 @@ describe('the authenticator', () => {
         }).compile(),
     ],
   ])('is refused by %s when only a planted one exists', async (_name, make) => {
-    const outcome = await withPlanted('authenticator', authenticator, async () => {
+    const outcome = await withPlantedAsync('authenticator', authenticator, async () => {
       try {
         await make()
         return 'accepted'
