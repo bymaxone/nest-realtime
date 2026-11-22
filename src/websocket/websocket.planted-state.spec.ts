@@ -40,7 +40,12 @@ const ROOTS: object[] = [
 async function whilePlanted<T>(values: Record<string, unknown>, run: () => Promise<T>): Promise<T> {
   for (const root of ROOTS) {
     for (const [name, value] of Object.entries(values)) {
-      Object.defineProperty(root, name, { value, configurable: true, writable: true })
+      Object.defineProperty(root, name, {
+        value,
+        configurable: true,
+        enumerable: true,
+        writable: true,
+      })
     }
   }
   try {
@@ -480,10 +485,10 @@ describe('the WebSocket server, with any key planted outside the standard set', 
       const refused = await whilePlanted({ [name]: SECRET }, () => raw(port, 'GET', HANDSHAKE))
 
       expect(refused.status).toBe(500)
-      expect(JSON.parse(refused.body.toString())).toMatchObject({
+      expect(JSON.parse(refused.body.toString())).toStrictEqual({
         code: 'REALTIME_TRANSPORT_UNAVAILABLE',
+        count: 1,
       })
-      expect(refused.body.toString()).toMatch(/\b1 key\b/)
       expect(refused.body.toString()).not.toContain(name)
       expect(refused.body.toString()).not.toContain(SECRET)
       expect((server.engine as unknown as { clientsCount: number }).clientsCount).toBe(before)
@@ -516,7 +521,10 @@ describe('the WebSocket server, with any key planted outside the standard set', 
       const refused = await whileOverwritten(name, 1, () => raw(port, 'GET', HANDSHAKE))
 
       expect(refused.status).toBe(500)
-      expect(refused.body.toString()).toMatch(/\b1 key\b/)
+      expect(JSON.parse(refused.body.toString())).toStrictEqual({
+        code: 'REALTIME_TRANSPORT_UNAVAILABLE',
+        count: 1,
+      })
       expect(refused.body.toString()).not.toContain(name)
     },
   )

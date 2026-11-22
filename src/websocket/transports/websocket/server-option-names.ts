@@ -78,8 +78,13 @@ export const COMPRESSION_OWN_NAMES = [
 /** `base` with an own `undefined` for every name in `names` that it does not hold, in an object with no prototype. */
 function withOwn(names: readonly string[], base: object): Record<string, unknown> {
   const own: Record<string, unknown> = { __proto__: null }
-  for (const name of names) own[name] = undefined
-  return Object.assign(own, base)
+  for (let i = 0; i < names.length; i += 1) own[names[i] as string] = undefined
+  const held = clean.keys(base)
+  for (let i = 0; i < held.length; i += 1) {
+    const name = held[i] as string
+    own[name] = (base as Record<string, unknown>)[name]
+  }
+  return own
 }
 
 /** An object `value` is copied into with own keys for `names`; `true`, which means the defaults, becomes an empty one. */
@@ -136,28 +141,67 @@ export const SERVER_INSTANCE_NAMES = ['_corsMiddleware', '_serveClient', 'httpSe
  */
 export const SOCKET_LAZY_NAMES = ['_anyListeners', '_anyOutgoingListeners'] as const
 
-/**
- * The built-ins this file relies on, taken from a realm made when the library loads, and the realm's own `Object.prototype`.
- * Nothing in this process could have changed that realm, so a function replaced, or a prototype method planted, in the
- * process before or after the import does not reach what the count below calls. The descriptors it returns inherit that
- * realm's `Object.prototype` too, so reading a field off one never consults the one being checked.
- */
-const clean = runInNewContext(`({
-  names: Object.getOwnPropertyNames,
-  describe: Object.getOwnPropertyDescriptor,
-  is: Object.is,
-  hasOwn: Object.prototype.hasOwnProperty,
-  apply: Reflect.apply,
-  source: Function.prototype.toString,
-  prototype: Object.prototype,
-})`) as {
+type Clean = {
   names: (target: object) => string[]
   describe: (target: object, name: string) => PropertyDescriptor | undefined
   is: (a: unknown, b: unknown) => boolean
   hasOwn: typeof Object.prototype.hasOwnProperty
   apply: typeof Reflect.apply
+  keys: (target: object) => string[]
+  define: (target: object, name: string, descriptor: PropertyDescriptor) => object
+  unshift: (this: unknown[], ...items: unknown[]) => number
   source: (this: unknown) => string
   prototype: object
+}
+
+/**
+ * Makes the realm below, or says it could not be made. `vm` reads its options with inheritance, so a wrong-typed value
+ * planted under one of their names makes it throw, with the planted value in the message: the error is caught and
+ * dropped, never kept or printed.
+ */
+function makeClean(): Clean | undefined {
+  try {
+    return runInNewContext(`({
+  names: Object.getOwnPropertyNames,
+  describe: Object.getOwnPropertyDescriptor,
+  is: Object.is,
+  hasOwn: Object.prototype.hasOwnProperty,
+  apply: Reflect.apply,
+  keys: Object.keys,
+  define: Object.defineProperty,
+  unshift: Array.prototype.unshift,
+  source: Function.prototype.toString,
+  prototype: Object.prototype,
+})`) as Clean
+  } catch {
+    return undefined
+  }
+}
+
+const made = makeClean()
+
+/** Whether the realm could not be made, so no baseline of the standard names exists to compare against. */
+const unverifiable = made === undefined
+
+/**
+ * The built-ins this file relies on, taken from a realm made when the library loads, and the realm's own `Object.prototype`.
+ * Nothing in this process could have changed that realm, so a function replaced, or a prototype method planted, in the
+ * process before or after the import does not reach what the count below calls. The descriptors it returns inherit that
+ * realm's `Object.prototype` too, so reading a field off one never consults the one being checked. When the realm could
+ * not be made these are the process's own, which nothing calls: the count is one, on every use, and the server refuses to
+ * run.
+ */
+const clean: Clean = made ?? {
+  names: Object.getOwnPropertyNames,
+  describe: Object.getOwnPropertyDescriptor,
+  is: Object.is,
+  hasOwn: Object.prototype.hasOwnProperty,
+  apply: Reflect.apply,
+  keys: Object.keys,
+  define: Object.defineProperty,
+  unshift: Array.prototype.unshift,
+  source: Function.prototype.toString,
+  prototype: Object.prototype,
 }
 const hasOwn = clean.hasOwn
 const apply = clean.apply
@@ -174,15 +218,31 @@ export function shadowServerInstance(server: object): void {
 
 /** Gives `target` an own `undefined` for each of `names` it does not hold. */
 function shadow(target: object, names: readonly string[]): void {
-  for (const name of names) {
+  for (let i = 0; i < names.length; i += 1) {
+    const name = names[i] as string
     if (apply(hasOwn, target, [name]) as boolean) continue
-    Object.defineProperty(target, name, {
+    // No prototype, since `defineProperty` reads the fields of a descriptor with inheritance, and a `get` planted on the
+    // root prototype would turn this one into an accessor.
+    clean.define(target, name, {
+      __proto__: null,
       value: undefined,
       configurable: true,
       enumerable: true,
       writable: true,
-    })
+    } as PropertyDescriptor)
   }
+}
+
+/**
+ * Puts `item` first in `list` with the `unshift` of the clean realm, and says whether it is there afterwards: the list is a
+ * host's, so a method of the process's own `Array.prototype` is not called, and the answer is read by index, not trusted.
+ *
+ * @param list - The array of an engine.io server's middlewares.
+ * @param item - What has to run first.
+ */
+export function placeFirst(list: unknown[], item: unknown): boolean {
+  apply(clean.unshift, list, [item])
+  return list[0] === item
 }
 
 /**
@@ -312,10 +372,12 @@ function isStandard(name: string): boolean {
  * How many things `Object.prototype` holds now that it did not hold when the library was loaded: a string key outside the
  * standard set, a standard name that was not the built-in of a clean runtime when the library loaded, and a standard name
  * that was overwritten, made an accessor, changed in an attribute, or removed. Writing `hasOwnProperty = 1` is as much a
- * planted key as a new name, since engine.io calls it. It calls only what the clean realm provides, in index loops, so
+ * planted key as a new name, since engine.io calls it. When the clean realm could not be made it is one, as there is nothing
+ * to compare with. It calls only what the clean realm provides, in index loops, so
  * nothing a host plants on `Array.prototype`, `Set.prototype` or the iterators changes the answer.
  */
 export function plantedKeyCount(): number {
+  if (unverifiable) return 1
   let count = unexpectedAtLoad
   const names = clean.names(root)
   for (let i = 0; i < names.length; i += 1) {

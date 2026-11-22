@@ -32,7 +32,12 @@ const viaForRootAsync: Make = (options) =>
 async function planted<T>(key: string, value: unknown, run: () => Promise<T>): Promise<T> {
   const root = Object.prototype as unknown as Record<string, unknown>
   const before = Object.getOwnPropertyDescriptor(Object.prototype, key)
-  Object.defineProperty(Object.prototype, key, { value, configurable: true, writable: true })
+  Object.defineProperty(Object.prototype, key, {
+    value,
+    configurable: true,
+    enumerable: true,
+    writable: true,
+  })
   try {
     return await run()
   } finally {

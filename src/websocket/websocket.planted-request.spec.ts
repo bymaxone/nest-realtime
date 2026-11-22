@@ -41,7 +41,12 @@ const PLANTED: Readonly<Record<string, unknown>> = {
 async function whilePlanted<T>(values: Record<string, unknown>, run: () => Promise<T>): Promise<T> {
   const root = Object.prototype as unknown as Record<string, unknown>
   for (const [name, value] of Object.entries(values)) {
-    Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
+    Object.defineProperty(Object.prototype, name, {
+      value,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    })
   }
   try {
     return await run()
