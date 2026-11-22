@@ -38,6 +38,3 @@ export const getPrototypeOf = Object.getPrototypeOf
 
 /** `Object.prototype.hasOwnProperty` as it was when the library was imported. */
 export const hasOwnProperty = Object.prototype.hasOwnProperty
-
-/** `Object.prototype`, the root prototype of this realm, as the library was imported. */
-export const objectPrototype = Object.prototype

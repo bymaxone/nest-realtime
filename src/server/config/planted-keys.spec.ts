@@ -118,15 +118,41 @@ describe('what a host defines on its own prototype', () => {
     )
   })
 
-  // Scenario: a group inherits from an object with no prototype of its own. Expected: its keys are read.
-  it('is still read from a prototype that is not the root of a realm', () => {
-    const parent = Object.assign(Object.create(null), {
-      cors: { origin: ['https://good.example'] },
-    })
-    const group = Object.create(parent) as object
-    const read = dropUnset({ transport: 'websocket', authenticator, websocket: group } as never)
+  // Scenario: a group inherits from a prototype that itself has a prototype, as a class does. Expected: its keys are read.
+  it('is still read from a prototype that has a prototype', () => {
+    const parent = Object.create(
+      {},
+      { cors: { value: { origin: ['https://good.example'] }, enumerable: false } },
+    )
+    const read = dropUnset({
+      transport: 'websocket',
+      authenticator,
+      websocket: Object.create(parent) as object,
+    } as never)
 
     expect(Object.keys((read as { websocket: object }).websocket)).toStrictEqual(['cors'])
+  })
+
+  // Scenario: a group inherits from a prototype that has no prototype of its own. Expected: its keys are not read,
+  // whoever wrote them, because that is also what the root prototype of a realm is and nothing about one can be trusted
+  // once the payload that plants a key has run.
+  it.each([
+    ['one with a key', {}],
+    [
+      'one that holds hasOwnProperty and isPrototypeOf as functions',
+      { hasOwnProperty: () => true, isPrototypeOf: () => true },
+    ],
+  ])('does not read a key of a prototype with no prototype, %s', (_name, extra) => {
+    const parent = Object.assign(Object.create(null), extra, {
+      cors: { origin: ['https://good.example'] },
+    })
+    const read = dropUnset({
+      transport: 'websocket',
+      authenticator,
+      websocket: Object.create(parent) as object,
+    } as never)
+
+    expect(Object.keys((read as { websocket: object }).websocket)).toStrictEqual([])
   })
 
   // Scenario: the key is planted on the root prototype of another realm, under an object from that realm. Expected: the
@@ -141,7 +167,7 @@ describe('what a host defines on its own prototype', () => {
   })
 })
 
-describe('the root prototype of another realm whose constructor was overwritten as well', () => {
+describe('the root prototype of another realm after the payload overwrote what it holds', () => {
   const groupFrom = (script: string): object => vm.runInNewContext(script) as object
   const read = (group: object): string[] =>
     Object.keys(
@@ -151,32 +177,31 @@ describe('the root prototype of another realm whose constructor was overwritten 
         }
       ).websocket,
     )
+  const PLANT = 'Object.prototype.cors = { origin: true, credentials: true }; ({})'
 
-  // Scenario: the payload that plants cors in another realm overwrites that realm's `constructor` first, to a number, a
-  // string, a function or nothing. Expected: the root prototype is still recognized by what only a root prototype
-  // holds, so cors is not read.
-  it.each(['1', "'x'", '(function () {})', 'undefined'])(
-    'does not read a planted cors, constructor = %s',
-    (value) => {
-      const group = groupFrom(
-        `Object.prototype.constructor = ${value}; Object.prototype.cors = { origin: true, credentials: true }; ({})`,
-      )
-
-      expect(read(group)).toStrictEqual([])
-    },
-  )
-
-  // Scenario: a prototype with no prototype of its own that is the host's: it holds a key, and `hasOwnProperty` that is
-  // not a function, or `isPrototypeOf` missing. Expected: it is not a root prototype, so its key is read.
+  // Scenario: the payload that plants cors in another realm overwrites some of what that root prototype holds first.
+  // Expected: cors is not read, whichever of them it was, since the root is told by having no prototype and by nothing
+  // it holds.
   it.each([
-    ['hasOwnProperty that is not a function', { hasOwnProperty: 1, isPrototypeOf: () => true }],
-    ['no isPrototypeOf', { hasOwnProperty: () => true }],
-  ])('still reads a key of a host prototype with %s', (_name, extra) => {
-    const parent = Object.assign(Object.create(null), extra, {
-      cors: { origin: ['https://good.example'] },
-    })
-
-    expect(read(Object.create(parent) as object)).toStrictEqual(['cors'])
+    ['constructor = 1', 'Object.prototype.constructor = 1;'],
+    ['constructor = a function', 'Object.prototype.constructor = function () {};'],
+    ['constructor = undefined', 'Object.prototype.constructor = undefined;'],
+    [
+      'constructor and hasOwnProperty = 1',
+      'Object.prototype.constructor = 1; Object.prototype.hasOwnProperty = 1;',
+    ],
+    [
+      'constructor and isPrototypeOf = 1',
+      'Object.prototype.constructor = 1; Object.prototype.isPrototypeOf = 1;',
+    ],
+    ['hasOwnProperty = 1', 'Object.prototype.hasOwnProperty = 1;'],
+    ['isPrototypeOf = 1', 'Object.prototype.isPrototypeOf = 1;'],
+    [
+      'constructor, hasOwnProperty, isPrototypeOf, valueOf and toString all overwritten',
+      'for (const k of ["constructor", "hasOwnProperty", "isPrototypeOf", "valueOf", "toString"]) Object.prototype[k] = 1;',
+    ],
+  ])('does not read a planted cors, %s', (_name, overwrite) => {
+    expect(read(groupFrom(`${overwrite} ${PLANT}`))).toStrictEqual([])
   })
 })
 
@@ -313,7 +338,9 @@ describe('a root prototype whose constructor was overwritten as well', () => {
     const baseline = shown(dropUnset(shapeOf()))
 
     const read = withPlanted('constructor', 1, () =>
-      withPlanted(key, PLANTED[key], () => shown(dropUnset(shapeOf()))),
+      withPlanted('hasOwnProperty', 1, () =>
+        withPlanted(key, PLANTED[key], () => shown(dropUnset(shapeOf()))),
+      ),
     )
 
     expect(read).toBe(baseline)
