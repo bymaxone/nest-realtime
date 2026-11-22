@@ -45,6 +45,7 @@ import { EventReplayBuffer } from '../transports/sse/event-replay-buffer'
 import { HeartbeatService } from '../transports/sse/heartbeat.service'
 import { logEvent } from '../utils/log-event'
 import { normalizeEndpointPath } from '../utils/normalize-endpoint-path'
+import { readHostKey } from '../utils/read-host-key'
 import { realtimeError } from '../utils/realtime-error'
 import type { TransportWiring } from './transport-wiring.interface'
 
@@ -396,14 +397,15 @@ function readRegistration(
   registration: BymaxRealtimeModuleAsyncOptions,
 ): BymaxRealtimeModuleAsyncOptions {
   return guardHostReads('the registration', () => ({
-    transport: registration.transport,
-    sseEndpoint: registration.sseEndpoint,
-    useFactory: registration.useFactory,
-    useClass: registration.useClass,
-    useExisting: registration.useExisting,
-    inject: copied(registration.inject),
-    imports: copied(registration.imports),
-    extraProviders: copied(registration.extraProviders),
+    __proto__: null,
+    transport: readHostKey(registration, 'transport'),
+    sseEndpoint: readHostKey(registration, 'sseEndpoint'),
+    useFactory: readHostKey(registration, 'useFactory'),
+    useClass: readHostKey(registration, 'useClass'),
+    useExisting: readHostKey(registration, 'useExisting'),
+    inject: copied(readHostKey(registration, 'inject')),
+    imports: copied(readHostKey(registration, 'imports')),
+    extraProviders: copied(readHostKey(registration, 'extraProviders')),
   })) as BymaxRealtimeModuleAsyncOptions
 }
 

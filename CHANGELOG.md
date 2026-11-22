@@ -13,10 +13,13 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 - **`maxAge` of `websocket.cors` must be a whole number of seconds, zero or more.** A negative number, a fraction, `NaN`, `Infinity`, a string, a boolean or an object was handed to Socket.IO, which writes it into `Access-Control-Max-Age`. Each is now refused at boot with `REALTIME_INVALID_OPTIONS`, naming the type and never the value.
 - **The read of the options no longer depends on a built-in a host can replace.** `Object.keys`, `Object.freeze` and `Object.prototype.toString` are taken when the library loads, and the read walks its keys by index, without a `Set`, a spread or a `for...of`, so a program that replaces one afterwards cannot make the cors block lose an option or leave the resolved options unfrozen. The check of `extraProviders` takes `Array.isArray` from the same place and walks the list by index, so a replaced `Array.isArray` or `Array.prototype.forEach` cannot let an invalid one through. The README lists the built-ins trusted as imported.
+- **A key planted on `Object.prototype` is no longer read as an option the host set.** Something that merges untrusted data into an object can plant a key on the root prototype of the realm, and every option the host left out then answered it: a `cors` block that allows every origin with credentials for a `websocket` group that had none, `credentials: true` added to an allowlist, a `websocket` group, an `authenticator` that satisfied the missing-authenticator check, and the `useFactory`, `useClass`, `useExisting`, `inject`, `imports` and `extraProviders` of a `forRootAsync` registration. A key found only on the root prototype of a realm (this one or another) is now not read, while one a host's own class prototype defines still is. The options and the groups, the cors block and the registration are copied without a prototype, so a read of an absent key finds nothing either.
 
 #### Apply to a derived backend
 
 A `maxAge` that is not a whole number of seconds, zero or more, now refuses boot: write it as `600`, not `'600'` or `600.5`.
+
+The resolved options, their groups and the cors block have no prototype: read a key with `in` or `Object.hasOwn`, and do not call `hasOwnProperty` or another `Object.prototype` method on them.
 
 ## [1.2.34] - 2026-11-21
 

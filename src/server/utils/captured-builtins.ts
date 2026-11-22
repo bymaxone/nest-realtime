@@ -32,3 +32,9 @@ export const includes = Array.prototype.includes
 
 /** `Array.prototype.some` as it was when the library was imported. */
 export const some = Array.prototype.some
+
+/** `Object.getPrototypeOf` as it was when the library was imported. */
+export const getPrototypeOf = Object.getPrototypeOf
+
+/** `Object.prototype.hasOwnProperty` as it was when the library was imported. */
+export const hasOwnProperty = Object.prototype.hasOwnProperty
