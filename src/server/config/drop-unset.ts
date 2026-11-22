@@ -10,6 +10,7 @@ import type {
   SseOptions,
   WebSocketOptions,
 } from '../interfaces/realtime-module-options.interface'
+import { apply, freeze, isArray, isInteger, push } from '../utils/captured-builtins'
 import { copyRegExp } from '../utils/copy-regexp'
 import { isPlainObject } from '../utils/is-plain-object'
 import { realtimeError } from '../utils/realtime-error'
@@ -86,16 +87,6 @@ const GROUPS = {
 
 /** The most entries an origin or a methods list may hold: a bound on the copy, not on how many a host may name. */
 const MAX_LIST_ENTRIES = 1000
-
-/**
- * The built-ins the copy of a list relies on, taken when the module loads, so that one a host replaces afterwards can
- * neither change what is copied nor watch it. A host that changes them has to do it before the library is imported.
- */
-const isArray = Array.isArray
-const isInteger = Number.isInteger
-const freeze = Object.freeze
-const push = Array.prototype.push
-const apply = Reflect.apply
 
 /**
  * A copy of a list, with its length and each of its entries read once, and each RegExp replaced by a pristine copy

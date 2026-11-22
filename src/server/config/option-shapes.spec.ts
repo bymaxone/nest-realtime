@@ -534,6 +534,32 @@ describe('websocket.cors', () => {
     ).not.toThrow()
   })
 
+  // Scenario: Array.isArray replaced after the module loaded, to say yes to everything. Expected: validation uses the one
+  // it took at load, so an object for allowedHeaders, exposedHeaders, methods or origin is still refused, not read as a
+  // list whose length is undefined. The assertions run after the built-in is put back.
+  it.each(['allowedHeaders', 'exposedHeaders', 'methods', 'origin'])(
+    'still refuses an object for %s when Array.isArray now says yes',
+    (key) => {
+      const original = Array.isArray
+      let outcome: unknown
+      Array.isArray = ((_value: unknown): boolean => true) as typeof Array.isArray
+      try {
+        outcome = (() => {
+          try {
+            validateOptions(corsOptions({ origin: 'https://a.example', [key]: {} }))
+            return 'accepted'
+          } catch (error) {
+            return (error as { code?: string }).code
+          }
+        })()
+      } finally {
+        Array.isArray = original
+      }
+
+      expect(outcome).toBe('REALTIME_INVALID_OPTIONS')
+    },
+  )
+
   // Scenario: a headers list over the bound, or with a length that is not a count. Expected: refused whole, as an
   // origin list or a methods list is, whichever of the two keys holds it.
   it.each(['allowedHeaders', 'exposedHeaders'])('refuses an over-long %s list, whole', (key) => {

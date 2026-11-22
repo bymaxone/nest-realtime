@@ -4,6 +4,7 @@
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { isArray } from '../utils/captured-builtins'
 import { copyRegExp } from '../utils/copy-regexp'
 import { describeReceived } from '../utils/describe-received'
 import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
@@ -166,7 +167,7 @@ function assertOrigin(origin: unknown): void {
   ) {
     return
   }
-  if (Array.isArray(origin)) {
+  if (isArray(origin)) {
     for (let index = 0; index < origin.length; index += 1) {
       const entry: unknown = origin[index]
       if (isOriginEntry(entry)) continue
@@ -220,7 +221,7 @@ function assertCors(cors: unknown): void {
 /** Refuse `methods`, `allowedHeaders` or `exposedHeaders` that is neither a string nor a list of strings; an unset one is left to Socket.IO. */
 function assertStringList(key: string, value: unknown): void {
   if (value === undefined || typeof value === 'string') return
-  if (Array.isArray(value)) {
+  if (isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
       if (typeof value[index] !== 'string') refuse(`websocket.cors.${key}`, METHODS_KINDS, value)
     }
