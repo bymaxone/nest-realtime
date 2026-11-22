@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { Logger } from '@nestjs/common'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import type { TestingModule } from '@nestjs/testing'
 import request from 'supertest'
 import { BymaxRealtimeWebSocketModule } from './realtime-websocket.module'
 import { RealtimeIoAdapter } from './transports/websocket/realtime-io-adapter'
@@ -27,13 +28,16 @@ const viaForRootAsync: Make = (options) =>
     useFactory: () => options as never,
   })
 
-/** `key` planted on the root prototype while `run` runs; it is taken away again when `run` settles. */
+/** `key` planted on the root prototype while `run` runs; what it held under that name is put back when `run` settles. */
 async function planted<T>(key: string, value: unknown, run: () => Promise<T>): Promise<T> {
+  const root = Object.prototype as unknown as Record<string, unknown>
+  const before = Object.getOwnPropertyDescriptor(Object.prototype, key)
   Object.defineProperty(Object.prototype, key, { value, configurable: true, writable: true })
   try {
     return await run()
   } finally {
-    delete (Object.prototype as unknown as Record<string, unknown>)[key]
+    if (before === undefined) delete root[key]
+    else Object.defineProperty(Object.prototype, key, before)
   }
 }
 
@@ -46,17 +50,23 @@ describe('a key planted on the root prototype, over a real handshake', () => {
     jest.restoreAllMocks()
   })
 
-  /** Boots the module with the planted key present while it is built, and asks it from `origin`. */
+  /**
+   * Boots the module with the planted key present while it is built (and `constructor` of the root prototype
+   * overwritten too, when `constructorValue` is given), and asks it from `origin`.
+   */
   async function headersFor(
     make: Make,
     options: object,
     key: string,
     value: unknown,
     origin: string,
+    constructorValue?: unknown,
   ): Promise<Record<string, unknown>> {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    const build = (): Promise<TestingModule> =>
+      Test.createTestingModule({ imports: [make(options)] }).compile()
     const module = await planted(key, value, () =>
-      Test.createTestingModule({ imports: [make(options)] }).compile(),
+      constructorValue === undefined ? build() : planted('constructor', constructorValue, build),
     )
     app = module.createNestApplication()
     app.useWebSocketAdapter(new RealtimeIoAdapter(app))
@@ -117,6 +127,22 @@ describe('a key planted on the root prototype, over a real handshake', () => {
       )
 
       expect(headers['access-control-allow-origin']).toBe(GOOD)
+      expect(headers['access-control-allow-credentials']).toBeUndefined()
+    })
+
+    // Scenario: the payload overwrites `constructor` of the root prototype as it plants an open cors block. Expected: a
+    // foreign origin still gets no header.
+    it('does not open a server when constructor was overwritten too', async () => {
+      const headers = await headersFor(
+        make,
+        { transport: 'websocket', authenticator, websocket: {} },
+        'cors',
+        OPEN,
+        EVIL,
+        1,
+      )
+
+      expect(headers['access-control-allow-origin']).toBeUndefined()
       expect(headers['access-control-allow-credentials']).toBeUndefined()
     })
 

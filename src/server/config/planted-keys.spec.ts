@@ -47,13 +47,19 @@ const PLANTED: Readonly<Record<string, unknown>> = {
   intervalSeconds: 1,
 }
 
-/** What `call` returns with `key` planted on `Object.prototype`, which is taken away again before anything is asserted. */
+/**
+ * What `call` returns with `key` planted on `Object.prototype`. What the root prototype held under that name before is
+ * put back, or the key taken away, before anything is asserted.
+ */
 function withPlanted<T>(key: string, value: unknown, call: () => T): T {
+  const root = Object.prototype as unknown as Record<string, unknown>
+  const before = Object.getOwnPropertyDescriptor(Object.prototype, key)
   Object.defineProperty(Object.prototype, key, { value, configurable: true, writable: true })
   try {
     return call()
   } finally {
-    delete (Object.prototype as unknown as Record<string, unknown>)[key]
+    if (before === undefined) delete root[key]
+    else Object.defineProperty(Object.prototype, key, before)
   }
 }
 
@@ -257,5 +263,40 @@ describe('the registration of forRootAsync', () => {
 
     expect(module.imports ?? []).toHaveLength(0)
     expect(shown(module.providers)).not.toContain('PLANTED')
+  })
+})
+
+describe('a root prototype whose constructor was overwritten as well', () => {
+  // Scenario: the same payload that plants the option overwrites `constructor` of the root prototype first. Expected:
+  // the root prototype is still recognized, so the planted key is not read.
+  it.each(['cors', 'websocket', 'authenticator', 'sse'])('does not read a planted %s', (key) => {
+    const shapeOf = (): object => ({ transport: 'websocket', authenticator, websocket: {} })
+    const baseline = shown(dropUnset(shapeOf()))
+
+    const read = withPlanted('constructor', 1, () =>
+      withPlanted(key, PLANTED[key], () => shown(dropUnset(shapeOf()))),
+    )
+
+    expect(read).toBe(baseline)
+  })
+
+  // Scenario: the registration of forRootAsync under the same payload. Expected: no planted factory is taken.
+  it('does not take a planted useFactory', () => {
+    const outcome = withPlanted('constructor', 'x', () =>
+      withPlanted(
+        'useFactory',
+        () => ({ transport: 'sse', authenticator }),
+        () => {
+          try {
+            BymaxRealtimeModule.forRootAsync({ transport: 'sse' } as never)
+            return 'accepted'
+          } catch (error) {
+            return (error as { code?: string }).code
+          }
+        },
+      ),
+    )
+
+    expect(outcome).toBe('REALTIME_INVALID_OPTIONS')
   })
 })

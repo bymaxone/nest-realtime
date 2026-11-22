@@ -6,10 +6,15 @@
  * that lacks that key answers it. A key a host's own class prototype defines is the host's, so it is still read;
  * only a key found nowhere but on the root prototype of a realm, in this realm or another, is not.
  */
-import { apply, getPrototypeOf, hasOwnProperty } from './captured-builtins'
+import { apply, getPrototypeOf, hasOwnProperty, objectPrototype } from './captured-builtins'
 
-/** Whether `holder` is the root prototype of a realm: it has no prototype, and is the `prototype` of its own `constructor`. */
+/**
+ * Whether `holder` is the root prototype of a realm. This realm's is known by identity, since the payload that plants a
+ * key can overwrite its `constructor` too; another realm's has no prototype and is the `prototype` of its own
+ * `constructor`.
+ */
 function isRealmRoot(holder: object): boolean {
+  if (holder === objectPrototype) return true
   if (
     getPrototypeOf(holder) !== null ||
     !(apply(hasOwnProperty, holder, ['constructor']) as boolean)
