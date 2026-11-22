@@ -634,3 +634,63 @@ describe('a descriptor field planted on Object.prototype', () => {
     expect(planting(() => plantedKeyCount())).toBe(FIELD_NAMES.length)
   })
 })
+
+describe('the count, with the built-ins of the process replaced after the library loaded', () => {
+  type Slot = [object, PropertyKey]
+  const SLOTS: Slot[] = [
+    [Array.prototype, 'some'],
+    [Array.prototype, 'every'],
+    [Array.prototype, 'filter'],
+    [Array.prototype, 'indexOf'],
+    [Array.prototype, 'includes'],
+    [Array.prototype, Symbol.iterator],
+    [Set.prototype, 'has'],
+    [Map.prototype, 'get'],
+    [Object, 'is'],
+    [Object, 'getOwnPropertyNames'],
+    [Object, 'getOwnPropertyDescriptor'],
+    [Reflect, 'apply'],
+    [Function.prototype, 'call'],
+    [Function.prototype, 'apply'],
+    [Function.prototype, 'toString'],
+  ]
+
+  // Scenario: each built-in the check could have used is replaced by one that answers as if nothing changed, and a standard
+  // name is then overwritten. Expected: the overwrite is still counted, and so is a key outside the standard names.
+  it('still counts an overwrite and a new key', () => {
+    // Index loops and no destructuring throughout: the iterator protocol is one of the things replaced.
+    const saved: (PropertyDescriptor | undefined)[] = []
+    for (let n = 0; n < SLOTS.length; n += 1) {
+      const slot = SLOTS[n] as Slot
+      saved[n] = Object.getOwnPropertyDescriptor(slot[0], slot[1])
+    }
+    const toStringBefore = Object.getOwnPropertyDescriptor(Object.prototype, 'toString')
+    let count = -1
+    try {
+      for (let n = 0; n < SLOTS.length; n += 1) {
+        const slot = SLOTS[n] as Slot
+        Object.defineProperty(slot[0], slot[1], {
+          value: () => false,
+          configurable: true,
+          writable: true,
+        })
+      }
+      Object.defineProperty(Object.prototype, 'toString', {
+        value: 0,
+        configurable: true,
+        writable: true,
+      })
+      Object.defineProperty(Object.prototype, 'zzNew', { value: 1, configurable: true })
+      count = plantedKeyCount()
+    } finally {
+      for (let n = 0; n < SLOTS.length; n += 1) {
+        const slot = SLOTS[n] as Slot
+        Object.defineProperty(slot[0], slot[1], saved[n] as PropertyDescriptor)
+      }
+      Object.defineProperty(Object.prototype, 'toString', toStringBefore as PropertyDescriptor)
+      Reflect.deleteProperty(Object.prototype, 'zzNew')
+    }
+
+    expect(count).toBe(2)
+  })
+})

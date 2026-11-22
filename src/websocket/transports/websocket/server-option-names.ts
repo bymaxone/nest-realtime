@@ -136,11 +136,31 @@ export const SERVER_INSTANCE_NAMES = ['_corsMiddleware', '_serveClient', 'httpSe
  */
 export const SOCKET_LAZY_NAMES = ['_anyListeners', '_anyOutgoingListeners'] as const
 
-/** `hasOwnProperty` and `apply` as a clean realm has them: a process polluted before the import may have replaced these. */
-const hasOwn = runInNewContext(
-  'Object.prototype.hasOwnProperty',
-) as typeof Object.prototype.hasOwnProperty
-const apply = runInNewContext('Reflect.apply') as typeof Reflect.apply
+/**
+ * The built-ins this file relies on, taken from a realm made when the library loads, and the realm's own `Object.prototype`.
+ * Nothing in this process could have changed that realm, so a function replaced, or a prototype method planted, in the
+ * process before or after the import does not reach what the count below calls. The descriptors it returns inherit that
+ * realm's `Object.prototype` too, so reading a field off one never consults the one being checked.
+ */
+const clean = runInNewContext(`({
+  names: Object.getOwnPropertyNames,
+  describe: Object.getOwnPropertyDescriptor,
+  is: Object.is,
+  hasOwn: Object.prototype.hasOwnProperty,
+  apply: Reflect.apply,
+  source: Function.prototype.toString,
+  prototype: Object.prototype,
+})`) as {
+  names: (target: object) => string[]
+  describe: (target: object, name: string) => PropertyDescriptor | undefined
+  is: (a: unknown, b: unknown) => boolean
+  hasOwn: typeof Object.prototype.hasOwnProperty
+  apply: typeof Reflect.apply
+  source: (this: unknown) => string
+  prototype: object
+}
+const hasOwn = clean.hasOwn
+const apply = clean.apply
 
 /**
  * Gives `server` an own `undefined` for each of {@link SERVER_INSTANCE_NAMES} it does not hold, which shadows a planted
@@ -227,35 +247,16 @@ export const STANDARD_OBJECT_PROTOTYPE_NAMES = [
   'valueOf',
 ] as const
 
-const standard = new Set<string>(STANDARD_OBJECT_PROTOTYPE_NAMES)
-const ownNames = Object.getOwnPropertyNames
-const describe = Object.getOwnPropertyDescriptor
-
-/** The descriptor each standard name had when the library was loaded: a standard name is only the same while it still has it. */
-const standardAtLoad = new Map<string, PropertyDescriptor | undefined>(
-  STANDARD_OBJECT_PROTOTYPE_NAMES.map((name) => [name, describe(Object.prototype, name)]),
-)
-
-/**
- * A realm of its own, made when the library loads, whose `Object.prototype` and `Function.prototype.toString` nothing in
- * this process could have changed: what a standard name is meant to hold is read there, not from the realm that may have
- * been polluted before the import.
- */
-const pristine = {
-  prototype: runInNewContext('Object.prototype') as object,
-  source: runInNewContext('Function.prototype.toString') as (this: unknown) => string,
+/** The root prototype of this realm, and what it held under each standard name when the library was loaded. */
+const root = Object.prototype
+const baseline: (PropertyDescriptor | undefined)[] = []
+for (let i = 0; i < STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
+  baseline[i] = clean.describe(root, STANDARD_OBJECT_PROTOTYPE_NAMES[i] as string)
 }
 
-/** The source text of `value` as the pristine realm prints it: a bound function, a proxy and a function written in JavaScript each print another. */
+/** The source text of `value` as the clean realm prints it: a bound function, a proxy and a function written in JavaScript each print another. */
 const sourceOf = (value: unknown): unknown =>
-  typeof value === 'function' ? apply(pristine.source, value, []) : undefined
-
-/**
- * One field of a descriptor, read only when the descriptor holds it itself: a descriptor is an ordinary object, so a field it
- * lacks would be answered by `Object.prototype`, which is the object being checked.
- */
-const field = (descriptor: PropertyDescriptor, name: keyof PropertyDescriptor): unknown =>
-  (apply(hasOwn, descriptor, [name]) as boolean) ? descriptor[name] : undefined
+  typeof value === 'function' ? apply(clean.source, value, []) : undefined
 
 /**
  * Whether a standard name held, at load, the built-in function of a clean runtime (`__proto__` an accessor of two). A
@@ -263,21 +264,23 @@ const field = (descriptor: PropertyDescriptor, name: keyof PropertyDescriptor): 
  * standard; the text of a function is what a replacement of the same name, a bound function and a proxy cannot copy.
  */
 function standardKind(name: string, descriptor: PropertyDescriptor | undefined): boolean {
-  const reference = describe(pristine.prototype, name) as PropertyDescriptor
+  const reference = clean.describe(clean.prototype, name) as PropertyDescriptor
   if (descriptor === undefined) return false
   if (name === '__proto__') {
     return (
-      sourceOf(field(descriptor, 'get')) === sourceOf(reference.get) &&
-      sourceOf(field(descriptor, 'set')) === sourceOf(reference.set)
+      sourceOf(descriptor.get) === sourceOf(reference.get) &&
+      sourceOf(descriptor.set) === sourceOf(reference.set)
     )
   }
-  return sourceOf(field(descriptor, 'value')) === sourceOf(reference.value)
+  return sourceOf(descriptor.value) === sourceOf(reference.value)
 }
 
 /** How many standard names were not what they should be at load: counted on every use, so the server refuses to run. */
-const unexpectedAtLoad = STANDARD_OBJECT_PROTOTYPE_NAMES.filter(
-  (name) => !standardKind(name, standardAtLoad.get(name)),
-).length
+let unexpectedAtLoad = 0
+for (let i = 0; i < STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
+  if (!standardKind(STANDARD_OBJECT_PROTOTYPE_NAMES[i] as string, baseline[i]))
+    unexpectedAtLoad += 1
+}
 
 const FIELDS = ['value', 'get', 'set', 'writable', 'enumerable', 'configurable'] as const
 
@@ -287,21 +290,38 @@ function changed(
   now: PropertyDescriptor | undefined,
 ): boolean {
   if (before === undefined || now === undefined) return before !== now
-  return FIELDS.some((name) => !Object.is(field(before, name), field(now, name)))
+  for (let i = 0; i < FIELDS.length; i += 1) {
+    const name = FIELDS[i] as (typeof FIELDS)[number]
+    if (!clean.is(before[name], now[name])) return true
+  }
+  return false
+}
+
+/** Whether `name` is one of the standard names. */
+function isStandard(name: string): boolean {
+  for (let i = 0; i < STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
+    if (STANDARD_OBJECT_PROTOTYPE_NAMES[i] === name) return true
+  }
+  return false
 }
 
 /**
  * How many things `Object.prototype` holds now that it did not hold when the library was loaded: a string key outside the
- * standard set, and a standard name that was overwritten, made an accessor, changed in an attribute, or removed. Writing
- * `hasOwnProperty = 1` is as much a planted key as a new name, since engine.io calls it.
+ * standard set, a standard name that was not the built-in of a clean runtime when the library loaded, and a standard name
+ * that was overwritten, made an accessor, changed in an attribute, or removed. Writing `hasOwnProperty = 1` is as much a
+ * planted key as a new name, since engine.io calls it. It calls only what the clean realm provides, in index loops, so
+ * nothing a host plants on `Array.prototype`, `Set.prototype` or the iterators changes the answer.
  */
 export function plantedKeyCount(): number {
   let count = unexpectedAtLoad
-  for (const name of ownNames(Object.prototype)) {
-    if (!standard.has(name)) count += 1
+  const names = clean.names(root)
+  for (let i = 0; i < names.length; i += 1) {
+    if (!isStandard(names[i] as string)) count += 1
   }
-  for (const [name, before] of standardAtLoad) {
-    if (changed(before, describe(Object.prototype, name))) count += 1
+  for (let i = 0; i < STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
+    if (changed(baseline[i], clean.describe(root, STANDARD_OBJECT_PROTOTYPE_NAMES[i] as string))) {
+      count += 1
+    }
   }
   return count
 }
