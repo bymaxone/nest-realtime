@@ -26,7 +26,7 @@ import {
 } from './server-option-names'
 
 /** The part of a Socket.IO namespace this adapter uses. */
-type Namespace = { use: (middleware: (socket: object, next: () => void) => void) => void }
+type Namespace = { on: (event: 'connection', listener: (socket: object) => void) => void }
 
 /** An engine.io middleware: it is given the request and the response, and calls `next` to let the request go on. */
 type EngineGuard = (request: unknown, response: ServerResponse, next: () => void) => void
@@ -157,9 +157,9 @@ export class RealtimeIoAdapter extends IoAdapter {
     shadowServerInstance(server)
     // Per request, after boot: a key planted since then is refused before engine.io reads the request.
     server.engine?.use(stateGuard)
-    // Each socket of each namespace, the main one and every one made later, is given its own lazy state before it connects.
-    server.of('/').use(shadowSocket)
-    server.on('new_namespace', (namespace) => namespace.use(shadowSocket))
+    // Each socket of each namespace, the main one and every one made later, is given its own lazy state as it connects.
+    server.of('/').on('connection', shadowSocket)
+    server.on('new_namespace', (namespace) => namespace.on('connection', shadowSocket))
 
     if (wsOpts.redisAdapter?.pubClient) {
       try {

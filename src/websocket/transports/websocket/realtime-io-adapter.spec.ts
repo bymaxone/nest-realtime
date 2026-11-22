@@ -24,7 +24,7 @@ function makeApp(options: Partial<BymaxRealtimeModuleOptions> = {}) {
 }
 
 /** The namespace methods the adapter calls on a server it created, to give a socket its own state. */
-const namespaces = () => ({ of: jest.fn().mockReturnValue({ use: jest.fn() }), on: jest.fn() })
+const namespaces = () => ({ of: jest.fn().mockReturnValue({ on: jest.fn() }), on: jest.fn() })
 
 /** Minimal server mock with the methods the adapter calls on a server it created. */
 function makeServer() {

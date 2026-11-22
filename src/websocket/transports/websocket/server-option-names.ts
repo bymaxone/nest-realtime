@@ -184,15 +184,15 @@ function shadow(target: object, names: readonly string[]): void {
 }
 
 /**
- * A Socket.IO middleware that gives each socket an own `undefined` for {@link SOCKET_LAZY_NAMES} before it is connected, so
- * that a key planted later does not answer them; a listener the host adds sets its own.
+ * Gives a socket an own `undefined` for {@link SOCKET_LAZY_NAMES}, so that a key planted later does not answer them; a
+ * listener the host adds sets its own. It is the listener of the `connection` event of a namespace, which Socket.IO
+ * emits for every socket before it handles another packet of that socket, a recovered one included: the middleware of a
+ * namespace is skipped for a recovered session when `skipMiddlewares` is on.
  *
- * @param socket - The socket that is connecting to the namespace.
- * @param next - Lets the connection go on.
+ * @param socket - The socket that has connected to the namespace.
  */
-export function shadowSocket(socket: object, next: () => void): void {
+export function shadowSocket(socket: object): void {
   shadow(socket, SOCKET_LAZY_NAMES)
-  next()
 }
 
 /** The names of {@link CONNECTION_STATE_NAMES} that `Object.prototype` holds now. */

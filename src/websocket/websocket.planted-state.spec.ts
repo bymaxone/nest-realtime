@@ -375,3 +375,70 @@ describe('the WebSocket server, with a key planted after a client connected', ()
     expect(calls.sort()).toStrictEqual(['incoming', 'outgoing'])
   })
 })
+
+describe('the WebSocket server, with a key planted after a session was recovered', () => {
+  let app: INestApplication
+  let server: Server
+  let port: number
+  let client: ClientSocket | undefined
+  const connected: Socket[] = []
+
+  beforeAll(async () => {
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    const module = await Test.createTestingModule({
+      imports: [BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator })],
+    }).compile()
+    app = module.createNestApplication()
+    port = await freePort()
+    // With `skipMiddlewares` Socket.IO does not run the namespace middleware for a socket whose session it recovers.
+    server = new RealtimeIoAdapter(app).createIOServer(port, {
+      connectionStateRecovery: { maxDisconnectionDuration: 60_000, skipMiddlewares: true },
+    } as never) as Server
+    // An event with an offset is what a client needs to have received for its session to be recovered.
+    server.on('connection', (socket) => {
+      connected.push(socket)
+      socket.emit('hello', 1)
+    })
+  })
+
+  afterEach(() => {
+    client?.close()
+    client = undefined
+    connected.length = 0
+  })
+
+  afterAll(async () => {
+    await server.close()
+    await app.close()
+    jest.restoreAllMocks()
+  })
+
+  // Scenario: a client connects, loses its transport, and reconnects with its session recovered; a key is planted once the
+  // recovered socket exists and the client sends an event. Expected: the planted listener is never called, though no
+  // namespace middleware ran for the recovered socket.
+  it('does not call a planted _anyListeners on an event of a recovered socket', async () => {
+    const calls: unknown[] = []
+    const socket = ioClient(`http://127.0.0.1:${port}`, {
+      transports: ['websocket'],
+      reconnectionDelay: 50,
+      reconnectionDelayMax: 50,
+    })
+    client = socket
+    await new Promise<void>((resolve) => socket.once('hello', () => resolve()))
+    socket.io.engine.close()
+    await new Promise<void>((resolve) => socket.once('connect', () => resolve()))
+    for (let waited = 0; connected.length < 2; waited += 10) {
+      if (waited >= 3000) throw new Error('the session was never reported as reconnected')
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+
+    expect(socket.recovered).toBe(true)
+    expect((connected[1] as Socket).recovered).toBe(true)
+    await whilePlanted({ _anyListeners: [() => calls.push('planted')] }, async () => {
+      socket.emit('probe')
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    })
+
+    expect(calls).toStrictEqual([])
+  })
+})
