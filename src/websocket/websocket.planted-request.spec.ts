@@ -50,6 +50,12 @@ async function whilePlanted<T>(values: Record<string, unknown>, run: () => Promi
   }
 }
 
+/** A cookie with the session id taken out, since it is new on every handshake and what the attributes follow is the point. */
+const withoutSessionId = (cookies: unknown): unknown =>
+  Array.isArray(cookies)
+    ? cookies.map((cookie: string) => cookie.replace(/^([^=]+=)[^;]*/, '$1<id>'))
+    : cookies
+
 /** The headers of a response that name CORS or set a cookie, and its status. */
 const interesting = (
   status: number,
@@ -57,9 +63,9 @@ const interesting = (
 ): Record<string, unknown> => ({
   status,
   ...Object.fromEntries(
-    Object.entries(headers).filter(
-      ([name]) => name.startsWith('access-control') || name === 'set-cookie',
-    ),
+    Object.entries(headers)
+      .filter(([name]) => name.startsWith('access-control') || name === 'set-cookie')
+      .map(([name, value]) => [name, name === 'set-cookie' ? withoutSessionId(value) : value]),
   ),
 })
 
@@ -242,3 +248,94 @@ describe('the cors block Nest hands the adapter, with a key planted while a requ
     },
   )
 })
+
+/** Keys that a cookie, and the compression of the response, would read: planted one at a time. */
+const NESTED_PLANTED: Readonly<Record<string, unknown>> = {
+  domain: 'evil.example',
+  secure: true,
+  maxAge: 999,
+  expires: new Date('2099-01-01T00:00:00Z'),
+  partitioned: true,
+  priority: 'high',
+  credentials: true,
+  exposedHeaders: ['X-Evil'],
+  allowedHeaders: ['X-Evil'],
+}
+
+/** The options Nest can hand the adapter for a gateway, each in a form `cors` or engine.io copy again. */
+const GATEWAY_OPTIONS: ReadonlyArray<readonly [string, () => object]> = [
+  [
+    'a cors function',
+    () => ({
+      cors: (_request: unknown, done: (error: null, options: object) => void) =>
+        done(null, { origin: [GOOD] }),
+    }),
+  ],
+  ['cors: true', () => ({ cors: true })],
+  ['a cookie object', () => ({ cors: { origin: [GOOD] }, cookie: { name: 'io' } })],
+  ['cookie: true', () => ({ cors: { origin: [GOOD] }, cookie: true })],
+]
+
+describe.each(GATEWAY_OPTIONS)(
+  'the options Nest hands the adapter as %s, with a key planted while a request is served',
+  (_name, build) => {
+    let app: INestApplication
+    let port: number
+
+    beforeAll(async () => {
+      jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+      const module = await Test.createTestingModule({
+        imports: [BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator })],
+      }).compile()
+      app = module.createNestApplication()
+      await app.listen(0)
+      port = (app.getHttpServer().address() as AddressInfo).port
+      new RealtimeIoAdapter(app).createIOServer(0, build() as never)
+    })
+
+    afterAll(async () => {
+      await app.close()
+      jest.restoreAllMocks()
+    })
+
+    const handshake = async (): Promise<Record<string, unknown>> => {
+      const response = await request(`http://127.0.0.1:${port}`)
+        .get('/socket.io/?EIO=4&transport=polling')
+        .set('Origin', GOOD)
+      return interesting(response.status, response.headers)
+    }
+
+    const preflight = async (): Promise<Record<string, unknown>> => {
+      const response = await request(`http://127.0.0.1:${port}`)
+        .options('/socket.io/?EIO=4&transport=polling')
+        .set('Origin', GOOD)
+        .set('Access-Control-Request-Method', 'GET')
+        .set('Access-Control-Request-Headers', 'x-client')
+      return interesting(response.status, response.headers)
+    }
+
+    // Scenario: one key planted while a handshake and a preflight are asked. Expected: each answer is the one given
+    // without it, so no cookie attribute, credentials or exposed header appears.
+    it.each(Object.keys(NESTED_PLANTED))('answers as before with %s planted', async (key) => {
+      const baseline = [await handshake(), await preflight()]
+
+      const planted = await whilePlanted({ [key]: NESTED_PLANTED[key] }, async () => [
+        await handshake(),
+        await preflight(),
+      ])
+
+      expect(planted).toStrictEqual(baseline)
+      if (_name.includes('cookie')) expect(baseline[0]).toHaveProperty('set-cookie')
+    })
+
+    // Scenario: a function planted under `encode`, which the cookie package calls on the value it writes. Expected: it is
+    // never called.
+    it('does not call a planted encode', async () => {
+      const calls: unknown[] = []
+
+      await whilePlanted({ encode: (value: string) => (calls.push('planted'), value) }, handshake)
+
+      expect(calls).toStrictEqual([])
+    })
+  },
+)
