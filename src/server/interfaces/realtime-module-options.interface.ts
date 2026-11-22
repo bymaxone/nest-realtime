@@ -50,6 +50,15 @@ export interface CorsConfig {
   credentials?: boolean
   /** The HTTP methods allowed, as a string or a list of at most 1,000 strings; refused at boot when it is anything else. */
   methods?: string | readonly string[]
+  /**
+   * The request headers a preflight may ask for, as a string or a list of at most 1,000 strings, copied once at boot;
+   * refused at boot when it is anything else. Left out, Socket.IO answers with the headers the preflight asked for.
+   */
+  allowedHeaders?: string | readonly string[]
+  /** The response headers a browser may read, as a string or a list of at most 1,000 strings, copied once at boot. */
+  exposedHeaders?: string | readonly string[]
+  /** How long, in seconds, a browser may cache a preflight; read once at boot and handed to Socket.IO as written. */
+  maxAge?: number
 }
 
 /**

@@ -46,6 +46,9 @@ const CORS_KEYS = {
   origin: true,
   credentials: true,
   methods: true,
+  allowedHeaders: true,
+  exposedHeaders: true,
+  maxAge: true,
 } satisfies Record<keyof CorsConfig, true>
 
 const REAUTHENTICATION_KEYS = {
@@ -85,6 +88,16 @@ const GROUPS = {
 const MAX_LIST_ENTRIES = 1000
 
 /**
+ * The built-ins the copy of a list relies on, taken when the module loads, so that one a host replaces afterwards can
+ * neither change what is copied nor watch it. A host that changes them has to do it before the library is imported.
+ */
+const isArray = Array.isArray
+const isInteger = Number.isInteger
+const freeze = Object.freeze
+const push = Array.prototype.push
+const apply = Reflect.apply
+
+/**
  * A copy of a list, with its length and each of its entries read once, and each RegExp replaced by a pristine copy
  * without `g` and `y`. Socket.IO matches the list it is given by index and length on every request, and an entry by
  * its prototype, so the list that was validated has to be the list it holds: a subclass whose iterator and indexes
@@ -99,12 +112,7 @@ const MAX_LIST_ENTRIES = 1000
  */
 function snapshotList(list: readonly unknown[], path: string, kinds: string): readonly unknown[] {
   const length: unknown = list.length
-  if (
-    typeof length !== 'number' ||
-    !Number.isInteger(length) ||
-    length < 0 ||
-    length > MAX_LIST_ENTRIES
-  ) {
+  if (typeof length !== 'number' || !isInteger(length) || length < 0 || length > MAX_LIST_ENTRIES) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
       `options.${path} must be ${kinds}, received a list whose length is not an integer from 0 to ${MAX_LIST_ENTRIES}`,
@@ -114,9 +122,9 @@ function snapshotList(list: readonly unknown[], path: string, kinds: string): re
   const entries: unknown[] = []
   for (let index = 0; index < length; index += 1) {
     const entry = list[index]
-    entries.push(copyRegExp(entry) ?? entry)
+    apply(push, entries, [copyRegExp(entry) ?? entry])
   }
-  return Object.freeze(entries)
+  return freeze(entries)
 }
 
 /** The kinds an origin may be, for the refusal of a list that cannot be copied. */
@@ -136,7 +144,7 @@ const COPIED_LISTS: ReadonlyArray<readonly [string, string]> = [
 
 /** A list as a copy, a RegExp as a pristine one, and anything else, `undefined` included, as it is. */
 function copied(value: unknown, path: string, kinds: string): unknown {
-  if (Array.isArray(value)) return snapshotList(value as unknown[], path, kinds)
+  if (isArray(value)) return snapshotList(value as unknown[], path, kinds)
   return copyRegExp(value) ?? value
 }
 

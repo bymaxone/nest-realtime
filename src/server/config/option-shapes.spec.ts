@@ -492,6 +492,34 @@ describe('websocket.cors', () => {
     )
   })
 
+  // Scenario: `methods`, `allowedHeaders` and `exposedHeaders` hold header tokens, which are strings. Expected: a value that is
+  // not a string or a list of strings, and a list with an entry that is not a string (an object, a nested list, a
+  // number, a hole), is refused whole with the type only, whichever of the three keys holds it.
+  const TOKEN_KEYS = ['methods', 'allowedHeaders', 'exposedHeaders']
+  const wrongTokens: ReadonlyArray<readonly [string, () => unknown, string]> = [
+    ['a number', () => 5, 'a number'],
+    ['a Set', () => new Set(['x-a']), 'a built-in object'],
+    ['an object', () => ({}), 'an object'],
+    ['a list holding an object', () => ['x-a', {}], 'an array'],
+    ['a list holding a nested list', () => ['x-a', ['x-b']], 'an array'],
+    ['a list holding a number', () => ['x-a', 1], 'an array'],
+    ['a list with a hole', () => new Array<string>(2).fill('x-a', 0, 1), 'an array'],
+  ]
+
+  describe.each(TOKEN_KEYS)('%s', (key) => {
+    it.each(wrongTokens)('refuses %s', (_name, build, received) => {
+      expect(() =>
+        validateOptions(corsOptions({ origin: 'https://a.example', [key]: build() })),
+      ).toThrow(refusal(`websocket.cors.${key}`, METHODS_KINDS, received))
+    })
+
+    it.each([['x-a,x-b'], [['x-a', 'x-b']], [[]]])('accepts %p', (value) => {
+      expect(() =>
+        validateOptions(corsOptions({ origin: 'https://a.example', [key]: value })),
+      ).not.toThrow()
+    })
+  })
+
   it('refuses a methods list of more than 1,000 entries, without printing the count', () => {
     const methods = Array.from({ length: 1001 }, () => 'GET')
 
