@@ -52,7 +52,7 @@ describe('a key planted on the root prototype, over a real handshake', () => {
 
   /**
    * Boots the module with the planted key present while it is built (and `constructor` of the root prototype
-   * overwritten too, when `constructorValue` is given), and asks it from `origin`.
+   * overwritten too, when `constructorValue` is given), and asks it from `origin` with the key planted again.
    */
   async function headersFor(
     make: Make,
@@ -72,11 +72,18 @@ describe('a key planted on the root prototype, over a real handshake', () => {
     app.useWebSocketAdapter(new RealtimeIoAdapter(app))
     await app.listen(0)
     const port = (app.getHttpServer().address() as AddressInfo).port
-    return (
-      await request(`http://127.0.0.1:${port}`)
-        .get('/socket.io/?EIO=4&transport=polling')
-        .set('Origin', origin)
-    ).headers
+    // The key is planted again while the request is served: the packages the server hands its options to read them
+    // at request time as well as at boot.
+    return planted(
+      key,
+      value,
+      async () =>
+        (
+          await request(`http://127.0.0.1:${port}`)
+            .get('/socket.io/?EIO=4&transport=polling')
+            .set('Origin', origin)
+        ).headers,
+    )
   }
 
   const registrations: ReadonlyArray<readonly [string, Make]> = [

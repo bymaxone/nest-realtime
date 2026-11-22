@@ -15,6 +15,7 @@ import {
   realtimeError,
 } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions, QuitableClient } from '@bymax-one/nest-realtime/internal'
+import { corsWithOwnNames, serverOptionsWithOwnNames } from './server-option-names'
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
 type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
@@ -97,13 +98,16 @@ export class RealtimeIoAdapter extends IoAdapter {
    */
   override createIOServer(port: number, opts?: ServerOptions): unknown {
     const wsOpts = this.options.websocket ?? {}
-    const mergedOpts: ServerOptions = {
+    const mergedOpts = serverOptionsWithOwnNames({
       ...opts,
-      cors: wsOpts.cors ?? opts?.cors,
+      cors:
+        wsOpts.cors === undefined || wsOpts.cors === null
+          ? opts?.cors
+          : corsWithOwnNames(wsOpts.cors),
       pingInterval: wsOpts.pingIntervalMs ?? 25_000,
       pingTimeout: wsOpts.pingTimeoutMs ?? 20_000,
       maxHttpBufferSize: wsOpts.maxHttpBufferSize ?? 1_000_000,
-    } as ServerOptions
+    }) as unknown as ServerOptions
 
     const server = super.createIOServer(port, mergedOpts) as {
       adapter: (a: unknown) => void
