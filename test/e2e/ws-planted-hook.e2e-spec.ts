@@ -37,6 +37,22 @@ async function planted(
   }
 }
 
+/** Each of `values` planted on `Object.prototype` while `run` runs; they are taken away again when it settles. */
+async function plantedValues(
+  values: Record<string, unknown>,
+  run: () => Promise<void>,
+): Promise<void> {
+  const root = Object.prototype as unknown as Record<string, unknown>
+  for (const [name, value] of Object.entries(values)) {
+    Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
+  }
+  try {
+    await run()
+  } finally {
+    for (const name of Object.keys(values)) delete root[name]
+  }
+}
+
 describe('a planted hook over a real WebSocket connection (e2e)', () => {
   let app: INestApplication | undefined
   let client: ClientSocket | undefined
@@ -108,5 +124,54 @@ describe('a planted hook over a real WebSocket connection (e2e)', () => {
     )
 
     expect(calls).toStrictEqual(['own'])
+  })
+})
+
+describe('a planted identity field over a real WebSocket connection (e2e)', () => {
+  let app: INestApplication | undefined
+  let client: ClientSocket | undefined
+
+  afterEach(async () => {
+    client?.close()
+    await app?.close()
+    app = undefined
+    client = undefined
+    jest.restoreAllMocks()
+  })
+
+  // Scenario: tenantId and roles are planted on the root prototype and the authenticator's result has neither. Expected:
+  // the client's `connection:established` carries no tenant and no roles, since the connection belongs to none.
+  it('does not give a connection a planted tenantId or roles', async () => {
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        BymaxRealtimeWebSocketModule.forRoot({
+          transport: 'websocket',
+          authenticator: { authenticate: async () => ({ userId: 'u1' }) },
+        }),
+      ],
+    }).compile()
+    app = moduleRef.createNestApplication()
+    app.useWebSocketAdapter(new RealtimeIoAdapter(app))
+    await app.listen(0)
+    const { port } = app.getHttpServer().address() as AddressInfo
+    const socket = ioClient(`http://127.0.0.1:${port}`, {
+      transports: ['websocket'],
+      reconnection: false,
+    })
+    client = socket
+    const traits = new Promise<{ userId?: string; tenantId?: string; roles?: string[] }>(
+      (resolve, reject) => {
+        socket.once('connection:established', (event: { traits: object }) => resolve(event.traits))
+        socket.once('connect_error', reject)
+      },
+    )
+
+    let received: { userId?: string; tenantId?: string; roles?: string[] } | undefined
+    await plantedValues({ tenantId: 'evil-tenant', roles: ['admin'] }, async () => {
+      received = await traits
+    })
+
+    expect(received).toStrictEqual({ userId: 'u1' })
   })
 })

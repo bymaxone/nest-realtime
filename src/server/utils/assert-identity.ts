@@ -5,6 +5,7 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { readHostKey } from './read-host-key'
 import { realtimeError } from './realtime-error'
 
 /**
@@ -49,12 +50,12 @@ export function resolveAuthTenant(
   // shared. What the resolver returns is what routes, `undefined` and `null` meaning no opinion. The resolver is
   // synchronous: a promise is not a tenant and is refused as one, and its own rejection is absorbed so that it does
   // not reach the process as an unhandled one.
-  const own = auth.tenantId
+  const own = readHostKey(auth, 'tenantId')
   const kept = keepByName(auth)
   const resolved: unknown = options.tenantResolver?.(auth) ?? own
   absorbRejection(resolved)
   if (resolved === undefined || resolved === null) return kept
-  return { ...kept, tenantId: resolved as string }
+  return { __proto__: null, ...kept, tenantId: resolved as string } as AuthenticationResult
 }
 
 /**
@@ -80,9 +81,9 @@ function absorbRejection(value: unknown): void {
 
 /** The fields of a result the library keeps, besides the tenant: the ones it names, read once and left out when absent. */
 function keepByName(auth: AuthenticationResult): AuthenticationResult {
-  const kept = {} as AuthenticationResult
+  const kept = { __proto__: null } as unknown as AuthenticationResult
   for (const key of ['userId', 'roles', 'rooms', 'metadata'] as const) {
-    const value: unknown = auth[key]
+    const value: unknown = readHostKey(auth, key)
     if (value === undefined) continue
     Object.defineProperty(kept, key, {
       value,

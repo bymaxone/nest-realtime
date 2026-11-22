@@ -46,7 +46,7 @@ import { EventReplayBuffer } from '../transports/sse/event-replay-buffer'
 import { HeartbeatService } from '../transports/sse/heartbeat.service'
 import { logEvent } from '../utils/log-event'
 import { normalizeEndpointPath } from '../utils/normalize-endpoint-path'
-import { readHostKey } from '../utils/read-host-key'
+import { hostMethod, readHostKey } from '../utils/read-host-key'
 import { realtimeError } from '../utils/realtime-error'
 import type { TransportWiring } from './transport-wiring.interface'
 
@@ -233,7 +233,11 @@ function bindSseEndpoint(
       { who: moduleName },
     )
   }
-  return Object.freeze({ ...resolved, sse: { ...resolved.sse, endpoint: bound } })
+  return Object.freeze({
+    __proto__: null,
+    ...resolved,
+    sse: { __proto__: null, ...resolved.sse, endpoint: bound },
+  })
 }
 
 /**
@@ -324,9 +328,8 @@ function buildOptionsProvider(
   return {
     provide: REALTIME_OPTIONS_TOKEN,
     useFactory: async (factory: { createRealtimeOptions?: () => unknown } | null | undefined) => {
-      const create = guardHostReads(
-        'the provider named by useExisting or useClass',
-        () => factory?.createRealtimeOptions,
+      const create = guardHostReads('the provider named by useExisting or useClass', () =>
+        hostMethod(factory, 'createRealtimeOptions'),
       )
       if (typeof create !== 'function') {
         throw realtimeError(

@@ -11,8 +11,13 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { REALTIME_HOOKS_TOKEN } from '../constants/injection-tokens.constants'
+import {
+  REALTIME_HOOKS_TOKEN,
+  REALTIME_OPTIONS_TOKEN,
+} from '../constants/injection-tokens.constants'
 import { BymaxRealtimeModule } from '../realtime.module'
+import { admitRooms } from '../utils/admit-rooms'
+import { resolveAuthTenant } from '../utils/assert-identity'
 import { callHostMethod, hostMethod } from '../utils/read-host-key'
 import { ReauthenticationService } from '../services/reauthentication.service'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
@@ -276,6 +281,131 @@ describe('the hook table of a host that gave none', () => {
     expect(Object.getPrototypeOf(hooks)).toBeNull()
     expect(Object.keys(hooks)).toStrictEqual([])
     await module.close()
+  })
+})
+
+/** The options a `forRootAsync` registration resolved to, with `key` planted on the root prototype while it was built. */
+async function resolvedWith(
+  registration: object,
+  key: string,
+  value: unknown,
+): Promise<Record<string, unknown>> {
+  jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+  const module = await plantedAsync(key, value, () =>
+    Test.createTestingModule({
+      imports: [BymaxRealtimeModule.forRootAsync(registration as never)],
+    }).compile(),
+  )
+  const options = module.get<Record<string, unknown>>(REALTIME_OPTIONS_TOKEN, { strict: false })
+  await module.close()
+  return options
+}
+
+describe('the options a forRootAsync registration resolves to', () => {
+  afterEach(() => jest.restoreAllMocks())
+
+  class Provider {
+    createRealtimeOptions(): object {
+      return { transport: 'sse', authenticator: { authenticate } }
+    }
+  }
+  const registrations: ReadonlyArray<readonly [string, () => object]> = [
+    [
+      'useFactory',
+      () => ({
+        transport: 'sse',
+        useFactory: () => ({ transport: 'sse', authenticator: { authenticate } }),
+      }),
+    ],
+    ['useClass', () => ({ transport: 'sse', useClass: Provider })],
+  ]
+  const KEYS = [
+    'tenantResolver',
+    'hooks',
+    'presence',
+    'offlineQueue',
+    'pubsub',
+    'maxConnections',
+    'reauthenticationPolicy',
+    'onConnectFailure',
+    'hookTimeoutMs',
+  ]
+
+  // Scenario: a key of every option the module reads is planted while the module is built, and the host left it out.
+  // Expected: the resolved options have no prototype and answer nothing for it, so no later read of the options finds
+  // a planted resolver, hook table or pluggable piece.
+  describe.each(registrations)('through %s', (_name, build) => {
+    it.each(KEYS)('answers nothing for a planted %s', async (key) => {
+      const options = await resolvedWith(build(), key, key === 'tenantResolver' ? () => 'evil' : {})
+
+      expect(Object.getPrototypeOf(options)).toBeNull()
+      expect(options[key]).toBeUndefined()
+    })
+  })
+
+  // Scenario: the provider a registration names has no `createRealtimeOptions`, and one is planted that supplies a whole
+  // options object, authenticator included. Expected: refused as a provider that does not implement it.
+  it.each([['useClass', { transport: 'sse', useClass: class Empty {} }]])(
+    'refuses a planted createRealtimeOptions through %s',
+    async (_name, registration) => {
+      jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+
+      const code = await plantedAsync(
+        'createRealtimeOptions',
+        () => ({ transport: 'sse', authenticator: { authenticate } }),
+        async () => {
+          try {
+            await Test.createTestingModule({
+              imports: [BymaxRealtimeModule.forRootAsync(registration as never)],
+            }).compile()
+            return 'built'
+          } catch (error) {
+            return (error as { code?: string }).code
+          }
+        },
+      )
+
+      expect(code).toBe('REALTIME_INVALID_OPTIONS')
+    },
+  )
+})
+
+describe('the result of the authenticator', () => {
+  const FIELDS: ReadonlyArray<readonly [string, unknown]> = [
+    ['tenantId', 'evil-tenant'],
+    ['roles', ['admin']],
+    ['rooms', ['resource:evil:1']],
+    ['metadata', { evil: true }],
+    ['userId', 'evil-user'],
+  ]
+
+  // Scenario: a field of the result is planted and the authenticator's result lacks it. Expected: the record the
+  // library keeps does not have it, before and after rooms are admitted.
+  it.each(FIELDS)('does not take a planted %s', (field, value) => {
+    const kept = planted(field, value, () =>
+      admitRooms(resolveAuthTenant({}, { userId: 'u1' } as never)),
+    ) as unknown as Record<string, unknown>
+
+    expect(kept.userId).toBe('u1')
+    for (const [name] of FIELDS.filter(([n]) => n !== 'userId')) expect(kept[name]).toBeUndefined()
+    expect(Object.getPrototypeOf(kept)).toBeNull()
+  })
+
+  // Scenario: the authenticator's own fields and the ones its class supplies, with others planted. Expected: its are kept.
+  it('keeps the fields the authenticator and its class give', () => {
+    class Result {
+      get tenantId(): string {
+        return 't1'
+      }
+    }
+    const result = Object.assign(new Result(), { userId: 'u1', roles: ['r1'] })
+
+    const kept = planted('roles', ['admin'], () =>
+      admitRooms(resolveAuthTenant({}, result as never)),
+    )
+
+    expect(kept.tenantId).toBe('t1')
+    expect(kept.roles).toStrictEqual(['r1'])
   })
 })
 
