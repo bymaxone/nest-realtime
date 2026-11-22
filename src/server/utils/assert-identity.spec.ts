@@ -514,3 +514,33 @@ describe('resolveAuthTenant', () => {
     })
   })
 })
+
+describe('resolveAuthTenant, with get, set or value planted on Object.prototype', () => {
+  // Scenario: a data property named like a field of a descriptor is planted on the root prototype, and a result is resolved.
+  // Expected: the record is built and no error is raised: the descriptors the library defines with have no prototype, so
+  // nothing planted turns one into an accessor or adds a field it did not name.
+  it.each(['get', 'set', 'value'])('builds the record with %s planted', (name) => {
+    Object.defineProperty(Object.prototype, name, {
+      value: 1,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    })
+    let resolved: AuthenticationResult | undefined
+    let error: unknown
+    try {
+      resolved = resolveAuthTenant({}, { userId: 'u1', tenantId: 't1', roles: ['admin'] })
+    } catch (caught) {
+      error = caught
+    } finally {
+      Reflect.deleteProperty(Object.prototype, name)
+    }
+
+    expect(error).toBeUndefined()
+    expect([resolved?.userId, resolved?.tenantId, resolved?.roles]).toStrictEqual([
+      'u1',
+      't1',
+      ['admin'],
+    ])
+  })
+})

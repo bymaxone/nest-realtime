@@ -106,3 +106,42 @@ describe('RealtimeService', () => {
     expect(transport.disconnect).toHaveBeenCalledWith('c1', 'bye')
   })
 })
+
+describe('RealtimeService, with a built-in the library calls replaced', () => {
+  // Scenario: each entry that sends, joins, leaves or disconnects is called while one built-in is replaced. Expected: each
+  // refuses with the count-only code before the transport is asked, so nothing is delivered or joined.
+  it.each([
+    ['emitToUser', (s: RealtimeService): Promise<void> => s.emitToUser('u1', 'e', {})],
+    ['emitToTenant', (s: RealtimeService): Promise<void> => s.emitToTenant('t1', 'e', {})],
+    ['emitToRoom', (s: RealtimeService): Promise<void> => s.emitToRoom('workspace:w1', 'e', {})],
+    ['broadcast', (s: RealtimeService): Promise<void> => s.broadcast('e', {})],
+    ['joinRoom', (s: RealtimeService): Promise<void> => s.joinRoom('c1', 'workspace:w1')],
+    ['leaveRoom', (s: RealtimeService): Promise<void> => s.leaveRoom('c1', 'workspace:w1')],
+    ['disconnect', (s: RealtimeService): Promise<void> => s.disconnect('c1')],
+  ])('%s refuses first', async (_name, call) => {
+    const transport = mockTransport()
+    const original = Object.getOwnPropertyDescriptor(Object, 'keys') as PropertyDescriptor
+    let code: unknown
+    Object.defineProperty(Object, 'keys', { value: () => [], configurable: true, writable: true })
+    try {
+      await call(new RealtimeService(transport))
+    } catch (caught) {
+      code = (caught as { code?: string }).code
+    } finally {
+      Object.defineProperty(Object, 'keys', original)
+    }
+
+    expect(code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+    for (const method of [
+      'emitToUser',
+      'emitToTenant',
+      'emitToRoom',
+      'broadcast',
+      'joinRoom',
+      'leaveRoom',
+      'disconnect',
+    ] as const) {
+      expect(transport[method]).not.toHaveBeenCalled()
+    }
+  })
+})

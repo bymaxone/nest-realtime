@@ -5,6 +5,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import type { Server, Socket } from 'socket.io'
 import {
+  assertBuiltinsIntact,
   callHostMethod,
   ConnectionRegistry,
   RoomRegistry,
@@ -130,6 +131,7 @@ export class WebSocketTransport implements ITransport {
    * then delivers nothing and still resolves; that is logged once, not once per emit.
    */
   private attached(op: string): Server | null {
+    assertBuiltinsIntact()
     if (!this.server && !this.warnedUnattached) {
       this.warnedUnattached = true
       logEvent(
@@ -228,18 +230,36 @@ export class WebSocketTransport implements ITransport {
     )
   }
 
-  /** Join the socket to its canonical rooms and the ones the authenticator named, here and in the registry. */
+  /**
+   * Join the socket to its canonical rooms and the ones the authenticator named, here and in the registry. The rooms are the
+   * admitted copy, walked by index: the joins are separated by `await`s, and the check that the built-ins the library calls are
+   * the ones it recorded runs immediately before each of them, so a host cannot change what is joined between two of them.
+   */
   private async joinRooms(socket: Socket, auth: AuthenticationResult): Promise<void> {
-    await socket.join(`${ROOM_PREFIXES.USER}:${auth.userId}`)
-    if (auth.tenantId) await socket.join(`${ROOM_PREFIXES.TENANT}:${auth.tenantId}`)
+    const user = `${ROOM_PREFIXES.USER}:${auth.userId}`
+    const tenant = auth.tenantId ? `${ROOM_PREFIXES.TENANT}:${auth.tenantId}` : undefined
+    const named = auth.rooms ?? []
+    await this.joinSocket(socket, user)
+    if (tenant) await this.joinSocket(socket, tenant)
     // Per-connection room — enables adapter-aware cross-node revocation in disconnect().
-    await socket.join(`${CONNECTION_ROOM_PREFIX}:${socket.id}`)
+    await this.joinSocket(socket, `${CONNECTION_ROOM_PREFIX}:${socket.id}`)
+    for (let i = 0; i < named.length; i += 1) await this.joinSocket(socket, named[i] as string)
 
-    for (const room of auth.rooms ?? []) await socket.join(room)
+    this.recordJoin(socket.id, user)
+    if (tenant) this.recordJoin(socket.id, tenant)
+    for (let i = 0; i < named.length; i += 1) this.recordJoin(socket.id, named[i] as string)
+  }
 
-    this.rooms.join(socket.id, `${ROOM_PREFIXES.USER}:${auth.userId}`)
-    if (auth.tenantId) this.rooms.join(socket.id, `${ROOM_PREFIXES.TENANT}:${auth.tenantId}`)
-    for (const room of auth.rooms ?? []) this.rooms.join(socket.id, room)
+  /** Join one room in Socket.IO, after checking that the built-ins the library calls are what they were. */
+  private async joinSocket(socket: Socket, room: string): Promise<void> {
+    assertBuiltinsIntact()
+    await socket.join(room)
+  }
+
+  /** Record one join in the registry, after the same check. */
+  private recordJoin(connectionId: string, room: string): void {
+    assertBuiltinsIntact()
+    this.rooms.join(connectionId, room)
   }
 
   /** Run `onConnect` for a registered socket, bounded by `hookTimeoutMs`; resolves with its failure, if any. */
@@ -370,8 +390,8 @@ export class WebSocketTransport implements ITransport {
     refuseReservedRoom('joinRoom', roomId)
     const socket = this.localSockets()?.get(connectionId)
     if (socket) {
-      await socket.join(roomId)
-      this.rooms.join(connectionId, roomId)
+      await this.joinSocket(socket, roomId)
+      this.recordJoin(connectionId, roomId)
     }
   }
 

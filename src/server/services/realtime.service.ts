@@ -10,6 +10,7 @@ import {
 import type { IRealtimePubSub } from '../interfaces/realtime-pubsub.interface'
 import type { ITransport } from '../interfaces/transport.interface'
 import { RealtimeMetricsTally } from '../observability/realtime-metrics-tally'
+import { assertBuiltinsIntact } from '../utils/builtin-baseline'
 import { callHostMethod } from '../utils/read-host-key'
 import { refuseReservedRoom, requireRoomName } from '../utils/reserved-room'
 
@@ -55,12 +56,14 @@ export class RealtimeService {
    * await realtime.emitToUser('u_abc', 'invoice.paid', { id: 'inv_123' })
    * ```
    */
-  emitToUser(userId: string, event: string, data: unknown): Promise<void> {
+  async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
+    assertBuiltinsIntact()
     return this.transport.emitToUser(userId, event, data)
   }
 
   /** Send to every connection in a tenant. */
-  emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
+  async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
+    assertBuiltinsIntact()
     return this.transport.emitToTenant(tenantId, event, data)
   }
 
@@ -72,12 +75,14 @@ export class RealtimeService {
    *   reads an array as several rooms.
    */
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
+    assertBuiltinsIntact()
     requireRoomName('emitToRoom', roomId)
     return this.transport.emitToRoom(roomId, event, data)
   }
 
   /** Send to every connected client. Use sparingly. */
-  broadcast(event: string, data: unknown): Promise<void> {
+  async broadcast(event: string, data: unknown): Promise<void> {
+    assertBuiltinsIntact()
     return this.transport.broadcast(event, data)
   }
 
@@ -94,6 +99,7 @@ export class RealtimeService {
    * nothing. A failure of the transport that holds the connection rejects the call.
    */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
+    assertBuiltinsIntact()
     refuseReservedRoom('joinRoom', roomId)
     return this.transport.joinRoom(connectionId, roomId)
   }
@@ -106,6 +112,7 @@ export class RealtimeService {
    * nothing. A failure of the transport that holds the connection rejects the call.
    */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
+    assertBuiltinsIntact()
     refuseReservedRoom('leaveRoom', roomId)
     return this.transport.leaveRoom(connectionId, roomId)
   }
@@ -121,6 +128,7 @@ export class RealtimeService {
    *   The connection may still be connected: retry.
    */
   async disconnect(connectionId: string, reason?: string): Promise<void> {
+    assertBuiltinsIntact()
     await this.transport.disconnect(connectionId, reason)
     // Counted here, once, because under `'both'` the composite asks each transport to close the id.
     this.tally?.evicted('revoked')

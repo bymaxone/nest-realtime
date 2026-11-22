@@ -48,17 +48,27 @@ function labelOf(slot: (typeof BUILTIN_SLOTS)[number]): string {
 }
 
 /**
- * Replaces one built-in by a function that answers nothing, runs `run`, and puts it back. Plain locals only inside the
- * window: the iterator protocol and the array methods are among what is replaced.
+ * Replaces each of the built-ins at `indexes` by a function that answers nothing, runs `run`, and puts them all back. Plain
+ * locals and indexed loops only inside the window: the iterator protocol and the array methods are among what is replaced.
  */
-function whileReplaced(index: number, run: () => void): void {
-  const slot = BUILTIN_SLOTS[index] as (typeof BUILTIN_SLOTS)[number]
-  const saved = describe_(slot[0], slot[1]) as PropertyDescriptor
-  define(slot[0], slot[1], { value: () => undefined, configurable: true, writable: true })
+function whileReplaced(indexes: number | readonly number[], run: () => void): void {
+  const wanted = typeof indexes === 'number' ? [indexes] : indexes
+  const saved: PropertyDescriptor[] = []
+  for (let n = 0; n < wanted.length; n += 1) {
+    const slot = BUILTIN_SLOTS[wanted[n] as number] as (typeof BUILTIN_SLOTS)[number]
+    saved[n] = describe_(slot[0], slot[1]) as PropertyDescriptor
+  }
   try {
+    for (let n = 0; n < wanted.length; n += 1) {
+      const slot = BUILTIN_SLOTS[wanted[n] as number] as (typeof BUILTIN_SLOTS)[number]
+      define(slot[0], slot[1], { value: () => undefined, configurable: true, writable: true })
+    }
     run()
   } finally {
-    define(slot[0], slot[1], saved)
+    for (let n = 0; n < wanted.length; n += 1) {
+      const slot = BUILTIN_SLOTS[wanted[n] as number] as (typeof BUILTIN_SLOTS)[number]
+      define(slot[0], slot[1], saved[n] as PropertyDescriptor)
+    }
   }
 }
 
@@ -107,15 +117,13 @@ describe('the built-ins the library calls', () => {
   // Scenario: two are replaced at once. Expected: the count is two and the text is the plural.
   it('counts two replaced together', () => {
     let message = ''
-    whileReplaced(0, () =>
-      whileReplaced(1, () => {
-        try {
-          assertBuiltinsIntact()
-        } catch (error) {
-          message = (error as Error).message
-        }
-      }),
-    )
+    whileReplaced([0, 1], () => {
+      try {
+        assertBuiltinsIntact()
+      } catch (error) {
+        message = (error as Error).message
+      }
+    })
 
     expect(message).toBe(
       'REALTIME_TRANSPORT_UNAVAILABLE: 2 built-ins the library calls were replaced after it was loaded',
@@ -176,19 +184,19 @@ describe('the additions the audits asked for', () => {
   it('counts while the iterators and push are replaced, since the loop is indexed', () => {
     let count = -1
     let error: unknown
-    whileReplaced(find('Array.prototype.[Symbol.iterator]'), () =>
-      whileReplaced(find('String.prototype.[Symbol.iterator]'), () =>
-        whileReplaced(find('Set.prototype.[Symbol.iterator]'), () =>
-          whileReplaced(find('Array.prototype.push'), () => {
-            try {
-              count = replacedBuiltinCount()
-            } catch (caught) {
-              error = caught
-            }
-          }),
-        ),
-      ),
-    )
+    const together = [
+      find('Array.prototype.[Symbol.iterator]'),
+      find('String.prototype.[Symbol.iterator]'),
+      find('Set.prototype.[Symbol.iterator]'),
+      find('Array.prototype.push'),
+    ]
+    whileReplaced(together, () => {
+      try {
+        count = replacedBuiltinCount()
+      } catch (caught) {
+        error = caught
+      }
+    })
 
     expect([count, error]).toStrictEqual([4, undefined])
   })

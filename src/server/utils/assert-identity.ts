@@ -87,12 +87,15 @@ function keepByName(auth: AuthenticationResult): AuthenticationResult {
   for (const key of ['userId', 'roles', 'rooms', 'metadata'] as const) {
     const value: unknown = readHostKey(auth, key)
     if (value === undefined) continue
+    // No prototype on the descriptor: `defineProperty` reads its fields with inheritance, and a `get` or `set` planted on
+    // the root prototype would make this one an accessor, or throw.
     Object.defineProperty(kept, key, {
+      __proto__: null,
       value,
       enumerable: true,
       writable: true,
       configurable: true,
-    })
+    } as PropertyDescriptor)
   }
   return kept
 }
