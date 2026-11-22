@@ -521,6 +521,18 @@ describe('a process whose Object.prototype was changed before the library was lo
   it.each([
     ['hasOwnProperty', 1],
     ['toString', function other() {}],
+    [
+      'hasOwnProperty',
+      function hasOwnProperty() {
+        return false
+      },
+    ],
+    [
+      'valueOf',
+      function valueOf() {
+        return 1
+      },
+    ],
     ['constructor', 'x'],
   ])('counts %s, set to %p at load, on every use', (name, value) => {
     const [change, restore] = override(name, value)
@@ -528,6 +540,25 @@ describe('a process whose Object.prototype was changed before the library was lo
 
     // The one at load, and the name that is not what the polluted snapshot holds once it is restored.
     expect(loaded.plantedKeyCount()).toBe(2)
+    expect(loaded.plantedKeyCount()).toBe(2)
+  })
+
+  // Scenario: __proto__ is an accessor whose getter and setter are plain JavaScript functions at load. Expected: counted.
+  it('counts a __proto__ whose accessor is not built in', () => {
+    const saved = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      '__proto__',
+    ) as PropertyDescriptor
+    const loaded = loadedWith(
+      () =>
+        Object.defineProperty(Object.prototype, '__proto__', {
+          get: () => null,
+          set: () => undefined,
+          configurable: true,
+        }),
+      () => Object.defineProperty(Object.prototype, '__proto__', saved),
+    )
+
     expect(loaded.plantedKeyCount()).toBe(2)
   })
 

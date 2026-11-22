@@ -232,19 +232,25 @@ const standardAtLoad = new Map<string, PropertyDescriptor | undefined>(
   STANDARD_OBJECT_PROTOTYPE_NAMES.map((name) => [name, describe(Object.prototype, name)]),
 )
 
+const functionSource = Function.prototype.toString
+
+/** Whether `value` is a function the engine provides, which is what a function written in JavaScript is not. */
+const isBuiltIn = (value: unknown): boolean =>
+  typeof value === 'function' &&
+  (apply(functionSource, value, []) as string).includes('[native code]')
+
 /**
- * Whether a standard name held what it holds in every runtime when the library was loaded: `__proto__` an accessor, and the
- * others a function with the name they are known by (`constructor` is `Object`). A process polluted before the import has
- * a baseline that is not this one, and a snapshot of it would call the pollution standard.
+ * Whether a standard name held what it holds in every runtime when the library was loaded: `__proto__` an accessor of
+ * built-in functions, and the others a built-in function with the name they are known by (`constructor` is `Object`). A
+ * process polluted before the import has a baseline that is not this one, and a snapshot of it would call the pollution
+ * standard. A replacement that is itself a bound or native function of the same name is not told apart.
  */
 function standardKind(name: string, descriptor: PropertyDescriptor | undefined): boolean {
   if (descriptor === undefined) return false
-  if (name === '__proto__') {
-    return typeof descriptor.get === 'function' && typeof descriptor.set === 'function'
-  }
+  if (name === '__proto__') return isBuiltIn(descriptor.get) && isBuiltIn(descriptor.set)
   const { value } = descriptor as { value: unknown }
   return (
-    typeof value === 'function' &&
+    isBuiltIn(value) &&
     (value as { name: unknown }).name === (name === 'constructor' ? 'Object' : name)
   )
 }
