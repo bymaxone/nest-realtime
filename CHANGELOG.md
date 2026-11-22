@@ -16,6 +16,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 - **Replacing a built-in after the import no longer blinds the guard's installation.** The helpers that give a server its own keys and put the request guard first now call the clean realm's functions and walk arrays by index, and the descriptor they define has no prototype. A server whose guard did not end up first in the engine's middleware list is closed and refused with `REALTIME_TRANSPORT_UNAVAILABLE`, not handed out unguarded. Not covered: the methods of the objects the host and Node hand over, which are theirs.
 
+- **A built-in the library calls that was replaced after it loaded is refused, not trusted.** The built-ins that the options, their validation and the admission of a connection call (the `Object` and `Array` functions, the array, string and `Set` methods, the iterators behind `for...of`, spread and destructuring, `Function.prototype.call`, `apply` and `bind`, and the global bindings the code names) are recorded when the library loads and compared by identity. `validateOptions`, the admission of a connection (its identity, tenant and rooms) and the checks of `joinRoom` and `leaveRoom` refuse first with `REALTIME_TRANSPORT_UNAVAILABLE` and a count, and the WebSocket guard counts them with the keys on every boot, request and packet. A replaced `startsWith` used to let a room of another tenant through the reserved-prefix check. The refusal says how many changes there are and never what was replaced. `Promise` methods and `Date` are not listed: instrumentation patches them on purpose.
+
 ### Documentation
 
 - A host that builds only the SSE endpoint is not refused when a `cors` key is planted before `NestFactory.create`: Nest answers every route, the endpoint included, with that block, which the library neither adds nor can stop. The README says so.
@@ -23,7 +25,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Apply to a derived backend
 
-A client that reads the `message` key of the guard's 500 body reads `count` instead: the body is `{"code":"REALTIME_TRANSPORT_UNAVAILABLE","count":N}`.
+A client that reads the `message` key of the guard's 500 body reads `count` instead: the body is `{"code":"REALTIME_TRANSPORT_UNAVAILABLE","count":N}`. A program that replaces one of the built-ins above after importing the library, with a polyfill or a patch, makes the library refuse until it is put back: do it before the import. The boot error of the WebSocket server counts changes (`N changes to Object.prototype or to a built-in the library calls found`), not keys.
 
 ## [1.2.35] - 2026-11-22
 

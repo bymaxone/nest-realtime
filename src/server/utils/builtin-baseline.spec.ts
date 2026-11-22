@@ -1,0 +1,363 @@
+/**
+ * @fileoverview The built-ins the options, their validation and the admission of a connection call are compared with what they were at load.
+ * @layer utils
+ *
+ * A replaced `startsWith`, `includes` or iterator makes a check pass or a loop end where it should not, so the code that
+ * follows must not run: each entry point refuses first, with the count and nothing of what was replaced.
+ */
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { validateOptions } from '../config/validate-options'
+import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
+import { admitRooms } from './admit-rooms'
+import { assertIdentityIsNotBlank, resolveAuthTenant } from './assert-identity'
+import { BUILTIN_SLOTS, assertBuiltinsIntact, replacedBuiltinCount } from './builtin-baseline'
+import type * as BuiltinBaseline from './builtin-baseline'
+import { reservedRoomPrefix } from './reserved-room'
+
+type Outcome = { count: number; code?: unknown; message?: string; threw: boolean }
+
+// Kept in locals first: `Object.defineProperty` is one of what is replaced, and it is also what puts each back.
+const define = Object.defineProperty
+const describe_ = Object.getOwnPropertyDescriptor
+
+/** What each holder of a built-in is called in the source, for the label of a slot: the holder and the key. */
+const HOLDERS: [object, string][] = [
+  [Object, 'Object'],
+  [Array, 'Array'],
+  [Array.prototype, 'Array.prototype'],
+  [Number, 'Number'],
+  [Math, 'Math'],
+  [JSON, 'JSON'],
+  [String.prototype, 'String.prototype'],
+  [Set.prototype, 'Set.prototype'],
+  [Reflect, 'Reflect'],
+  [Function.prototype, 'Function.prototype'],
+  [RegExp.prototype, 'RegExp.prototype'],
+  [globalThis, 'globalThis'],
+  [Object.getPrototypeOf([][Symbol.iterator]()) as object, 'ArrayIterator.prototype'],
+  [Object.getPrototypeOf(''[Symbol.iterator]()) as object, 'StringIterator.prototype'],
+  [Object.getPrototypeOf(new Set()[Symbol.iterator]()) as object, 'SetIterator.prototype'],
+]
+
+/** The label of a slot, as `Holder.key`. */
+function labelOf(slot: (typeof BUILTIN_SLOTS)[number]): string {
+  const holder = HOLDERS.find((entry) => entry[0] === slot[0])
+  const key = typeof slot[1] === 'symbol' ? `[${slot[1].description}]` : String(slot[1])
+  return `${holder?.[1] ?? '?'}.${key}`
+}
+
+/**
+ * Replaces one built-in by a function that answers nothing, runs `run`, and puts it back. Plain locals only inside the
+ * window: the iterator protocol and the array methods are among what is replaced.
+ */
+function whileReplaced(index: number, run: () => void): void {
+  const slot = BUILTIN_SLOTS[index] as (typeof BUILTIN_SLOTS)[number]
+  const saved = describe_(slot[0], slot[1]) as PropertyDescriptor
+  define(slot[0], slot[1], { value: () => undefined, configurable: true, writable: true })
+  try {
+    run()
+  } finally {
+    define(slot[0], slot[1], saved)
+  }
+}
+
+describe('the built-ins the library calls', () => {
+  // Scenario: nothing was replaced. Expected: a count of zero, and no refusal.
+  it('counts none and refuses nothing while all are what they were', () => {
+    expect(replacedBuiltinCount()).toBe(0)
+    expect(() => assertBuiltinsIntact()).not.toThrow()
+  })
+
+  // Scenario: each built-in of the list is replaced in turn, after the import. Expected: it is counted once and the refusal
+  // has the code and the count, never the name of what was replaced; and all are back afterwards.
+  it('counts each one that is replaced, and refuses with a count and nothing else', () => {
+    const outcomes: Outcome[] = []
+    for (let i = 0; i < BUILTIN_SLOTS.length; i += 1) {
+      whileReplaced(i, () => {
+        const outcome: Outcome = { count: replacedBuiltinCount(), threw: false }
+        try {
+          assertBuiltinsIntact()
+        } catch (error) {
+          outcome.threw = true
+          outcome.code = (error as { code?: unknown }).code
+          outcome.message = (error as Error).message
+        }
+        outcomes[i] = outcome
+      })
+    }
+
+    expect(outcomes).toHaveLength(BUILTIN_SLOTS.length)
+    for (let i = 0; i < outcomes.length; i += 1) {
+      const outcome = outcomes[i] as Outcome
+      const label = labelOf(BUILTIN_SLOTS[i] as (typeof BUILTIN_SLOTS)[number])
+      expect([label, outcome.count, outcome.threw, outcome.code]).toStrictEqual([
+        label,
+        1,
+        true,
+        'REALTIME_TRANSPORT_UNAVAILABLE',
+      ])
+      expect(outcome.message).toBe(
+        'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls was replaced after it was loaded',
+      )
+    }
+    expect(replacedBuiltinCount()).toBe(0)
+  })
+
+  // Scenario: two are replaced at once. Expected: the count is two and the text is the plural.
+  it('counts two replaced together', () => {
+    let message = ''
+    whileReplaced(0, () =>
+      whileReplaced(1, () => {
+        try {
+          assertBuiltinsIntact()
+        } catch (error) {
+          message = (error as Error).message
+        }
+      }),
+    )
+
+    expect(message).toBe(
+      'REALTIME_TRANSPORT_UNAVAILABLE: 2 built-ins the library calls were replaced after it was loaded',
+    )
+  })
+})
+
+describe('the additions the audits asked for', () => {
+  const find = (label: string): number => BUILTIN_SLOTS.findIndex((slot) => labelOf(slot) === label)
+
+  // Scenario: `Function.prototype.bind` is replaced. A filter over `typeof` of the constructor prototypes would not list it.
+  // Expected: it is a slot of its own, and admission is refused while it is replaced.
+  it('lists Function.prototype.bind, and refuses while it is replaced', () => {
+    let code: unknown
+    whileReplaced(find('Function.prototype.bind'), () => {
+      try {
+        admitRooms({ userId: 'u1', rooms: ['workspace:w1'] })
+      } catch (error) {
+        code = (error as { code?: unknown }).code
+      }
+    })
+
+    expect(find('Function.prototype.bind')).toBeGreaterThanOrEqual(0)
+    expect(code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+  })
+
+  // Scenario: the global binding `Object` is replaced, while `Object.keys` and every other member is the original.
+  // Expected: counted once, by identity of the binding, and refused.
+  it.each([
+    'Object',
+    'Reflect',
+    'Array',
+    'JSON',
+    'Math',
+    'Number',
+    'String',
+    'Set',
+    'Map',
+    'Promise',
+    'Error',
+  ])('counts the global binding %s when it is replaced', (name) => {
+    let count = -1
+    let code: unknown
+    whileReplaced(find(`globalThis.${name}`), () => {
+      count = replacedBuiltinCount()
+      try {
+        assertBuiltinsIntact()
+      } catch (error) {
+        code = (error as { code?: unknown }).code
+      }
+    })
+
+    expect([count, code]).toStrictEqual([1, 'REALTIME_TRANSPORT_UNAVAILABLE'])
+  })
+
+  // Scenario: the three iterators and `push` are replaced together, the things a loop over the list would use if it were
+  // written with `for...of` or a method. Expected: the count is four and the check does not throw, so the loop is indexed.
+  it('counts while the iterators and push are replaced, since the loop is indexed', () => {
+    let count = -1
+    let error: unknown
+    whileReplaced(find('Array.prototype.[Symbol.iterator]'), () =>
+      whileReplaced(find('String.prototype.[Symbol.iterator]'), () =>
+        whileReplaced(find('Set.prototype.[Symbol.iterator]'), () =>
+          whileReplaced(find('Array.prototype.push'), () => {
+            try {
+              count = replacedBuiltinCount()
+            } catch (caught) {
+              error = caught
+            }
+          }),
+        ),
+      ),
+    )
+
+    expect([count, error]).toStrictEqual([4, undefined])
+  })
+})
+
+describe('a process whose string iterator was replaced before the library loaded', () => {
+  // Scenario: `String.prototype[Symbol.iterator]` is not a function when the library loads, so the list of built-ins cannot
+  // be made. Expected: the load does not throw, the list is empty, and every use is refused with a count of one.
+  it('loads, and refuses every use', () => {
+    type Baseline = typeof BuiltinBaseline
+    const saved = describe_(String.prototype, Symbol.iterator) as PropertyDescriptor
+    let loaded: Baseline | undefined
+    let error: unknown
+    define(String.prototype, Symbol.iterator, { value: 1, configurable: true, writable: true })
+    try {
+      jest.isolateModules(() => {
+        try {
+          loaded = require('./builtin-baseline') as Baseline
+        } catch (caught) {
+          error = caught
+        }
+      })
+    } finally {
+      define(String.prototype, Symbol.iterator, saved)
+    }
+
+    expect(error).toBeUndefined()
+    expect(loaded?.BUILTIN_SLOTS).toHaveLength(0)
+    expect(loaded?.replacedBuiltinCount()).toBe(1)
+    expect(() => loaded?.assertBuiltinsIntact()).toThrow(
+      'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls was replaced after it was loaded',
+    )
+  })
+})
+
+describe('the entry points that read options and admit a connection', () => {
+  const index = (label: string): number =>
+    BUILTIN_SLOTS.findIndex((slot) => labelOf(slot) === label)
+  const auth = (extra: object): AuthenticationResult =>
+    ({ userId: 'u1', tenantId: 't1', ...extra }) as AuthenticationResult
+
+  // Scenario: `startsWith` is replaced by a function that says no, and an authenticator names a room of another tenant.
+  // Expected: admission is refused, as the count, and nothing is joined: the reserved-prefix check was blinded, and the
+  // refusal comes first. This is the cross-tenant join the replacement would otherwise allow.
+  it('refuses to admit a room of another tenant while startsWith is replaced', () => {
+    const attempt = (): unknown => admitRooms(auth({ rooms: ['tenant:t2'] }))
+    let thrown: unknown
+    let admitted: unknown
+    whileReplaced(index('String.prototype.startsWith'), () => {
+      try {
+        admitted = attempt()
+      } catch (error) {
+        thrown = error
+      }
+    })
+
+    expect(admitted).toBeUndefined()
+    expect((thrown as { code?: unknown }).code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+    expect(() => admitRooms(auth({ rooms: ['tenant:t2'] }))).toThrow('reserved prefix')
+  })
+
+  // Scenario: the iterator and the array methods are replaced while rooms and roles are admitted. Expected: refused, not
+  // admitted with fewer of them, and not with none.
+  it.each([
+    'Array.prototype.[Symbol.iterator]',
+    'Array.prototype.push',
+    'Array.prototype.includes',
+  ])('refuses to admit roles and rooms while %s is replaced', (label) => {
+    let code: unknown
+    whileReplaced(index(label), () => {
+      try {
+        admitRooms(auth({ roles: ['admin'], rooms: ['workspace:w1'] }))
+      } catch (error) {
+        code = (error as { code?: unknown }).code
+      }
+    })
+
+    expect(code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+  })
+
+  // Scenario: each entry point is called with a built-in it uses replaced. Expected: each refuses first, with the same code.
+  it.each([
+    ['validateOptions', (): unknown => validateOptions({ transport: 'sse' } as never)],
+    ['resolveAuthTenant', (): unknown => resolveAuthTenant({}, auth({}))],
+    ['assertIdentityIsNotBlank', (): unknown => assertIdentityIsNotBlank(auth({}))],
+    ['reservedRoomPrefix', (): unknown => reservedRoomPrefix('workspace:w1')],
+  ])('%s refuses first while a built-in it calls is replaced', (_name, call) => {
+    let code: unknown
+    whileReplaced(index('Object.keys'), () => {
+      try {
+        call()
+      } catch (error) {
+        code = (error as { code?: unknown }).code
+      }
+    })
+
+    expect(code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+  })
+})
+
+describe('the list of built-ins', () => {
+  /** What the scan does not hold to the list, with the reason: none of these is a built-in the checks depend on. */
+  const EXEMPT: Record<string, string> = {
+    authenticate: 'a method of the host, not a built-in',
+    build: 'a function of this library',
+    buildAsync: 'a function of this library',
+    buildCommonProviders: 'a function of this library',
+    buildOptionDerivedProviders: 'a function of this library',
+    quit: 'a method of the host',
+    disconnect: 'a method of the host',
+    log: 'a method of the logger',
+    unref: 'a method of a timer',
+    iteratorSlots: 'a function of this library',
+    now: 'Date.now, which a host replaces on purpose to control time',
+    then: 'Promise.prototype.then, which instrumentation and zone libraries patch on purpose',
+    catch: 'Promise.prototype.catch, patched like then',
+    resolve: 'Promise.resolve, patched like then',
+    race: 'Promise.race, patched like then',
+  }
+
+  const directories = ['config', 'composition', 'utils'].map((name) => join(__dirname, '..', name))
+
+  /** The source of every file of the options, their validation and admission, with its comments taken out. */
+  function sources(): string[] {
+    return directories.flatMap((directory) =>
+      readdirSync(directory)
+        .filter((name) => name.endsWith('.ts') && !name.endsWith('.spec.ts'))
+        .map((name) =>
+          readFileSync(join(directory, name), 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/[^\n]*/g, ''),
+        ),
+    )
+  }
+
+  // Scenario: every method called by name in those files. Expected: its name is the key of a built-in in the list, or is
+  // exempt with a reason. A call added later that is in neither fails here, and has to be listed or explained.
+  it('holds every built-in the options, validation and admission code calls by name', () => {
+    const keys = new Set(BUILTIN_SLOTS.map((slot) => String(slot[1])))
+    const called = new Set<string>()
+    for (const source of sources()) {
+      for (const match of source.matchAll(/\.([A-Za-z_]+)\(/g)) called.add(match[1] as string)
+    }
+
+    const missing = [...called].filter((name) => !keys.has(name) && !(name in EXEMPT)).sort()
+
+    expect(missing).toStrictEqual([])
+  })
+
+  // Scenario: every static of a built-in object read in those files. Expected: it is in the list, or is exempt.
+  it('holds every static of a built-in the code reads', () => {
+    const labels = new Set(BUILTIN_SLOTS.map((slot) => labelOf(slot)))
+    const read = new Set<string>()
+    for (const source of sources()) {
+      for (const match of source.matchAll(
+        /\b(Object|Array|Number|Math|JSON|Reflect)\.([A-Za-z_]+)\b/g,
+      )) {
+        read.add(`${match[1]}.${match[2]}`)
+      }
+    }
+    const exempt = new Set([
+      'Number.MAX_SAFE_INTEGER',
+      'Number.NEGATIVE_INFINITY',
+      'Array.prototype',
+      'Object.prototype',
+    ])
+
+    const missing = [...read].filter((name) => !labels.has(name) && !exempt.has(name)).sort()
+
+    expect(missing).toStrictEqual([])
+  })
+})

@@ -534,9 +534,9 @@ describe('websocket.cors', () => {
     ).not.toThrow()
   })
 
-  // Scenario: Array.isArray replaced after the module loaded, to say yes to everything. Expected: validation uses the one
-  // it took at load, so an object for allowedHeaders, exposedHeaders, methods or origin is still refused, not read as a
-  // list whose length is undefined. The assertions run after the built-in is put back.
+  // Scenario: Array.isArray replaced after the module loaded, to say yes to everything. Expected: validation refuses
+  // first, with the count of built-ins replaced, so an object for allowedHeaders, exposedHeaders, methods or origin is not
+  // read as a list whose length is undefined. The assertions run after the built-in is put back.
   it.each(['allowedHeaders', 'exposedHeaders', 'methods', 'origin'])(
     'still refuses an object for %s when Array.isArray now says yes',
     (key) => {
@@ -556,7 +556,7 @@ describe('websocket.cors', () => {
         Array.isArray = original
       }
 
-      expect(outcome).toBe('REALTIME_INVALID_OPTIONS')
+      expect(outcome).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
     },
   )
 

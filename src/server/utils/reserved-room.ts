@@ -4,6 +4,7 @@
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { ROOM_PREFIXES } from '../../shared/constants/room-prefixes.constants'
+import { assertBuiltinsIntact } from './builtin-baseline'
 import { realtimeError } from './realtime-error'
 
 /**
@@ -26,6 +27,7 @@ const RESERVED_ROOM_PREFIXES: readonly string[] = [
  * @param room - The room name.
  */
 export function reservedRoomPrefix(room: string): string | undefined {
+  assertBuiltinsIntact()
   return RESERVED_ROOM_PREFIXES.find((prefix) => room.startsWith(prefix))
 }
 

@@ -3,6 +3,7 @@
  * @layer utils
  */
 import type { RealtimeErrorCode } from '../../shared/constants/error-codes.constants'
+import { NativeError, assign } from './captured-builtins'
 
 /** An error that carries one of the library's stable codes as a property. */
 export type CodedError = Error & { readonly code: RealtimeErrorCode }
@@ -26,6 +27,8 @@ export function realtimeError(
   const lead = options.who === undefined ? code : `[${options.who}] ${code}`
   const message = `${lead}: ${detail}`
   const error =
-    'cause' in options ? new Error(message, { cause: options.cause }) : new Error(message)
-  return Object.assign(error, { code })
+    'cause' in options
+      ? new NativeError(message, { cause: options.cause })
+      : new NativeError(message)
+  return assign(error, { code })
 }

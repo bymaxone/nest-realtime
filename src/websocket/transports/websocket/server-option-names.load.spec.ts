@@ -10,15 +10,27 @@ import { EventEmitter } from 'node:events'
 import { plantedKeyCount, shadowDecoder } from './server-option-names'
 import type * as ServerOptionNames from './server-option-names'
 
+/**
+ * The module, loaded afresh. It imports the baseline of built-ins from the package's shared runtime, which loads the whole of
+ * Nest, and Nest cannot load in a process whose standard names were replaced before it: the rows that replace them stand in
+ * for that one function, which has its own rows in the spec of the baseline.
+ */
+function loadFresh(): typeof ServerOptionNames {
+  let loaded: typeof ServerOptionNames | undefined
+  jest.isolateModules(() => {
+    jest.doMock('@bymax-one/nest-realtime/internal', () => ({ replacedBuiltinCount: () => 0 }))
+    loaded = require('./server-option-names') as typeof ServerOptionNames
+  })
+  return loaded as typeof ServerOptionNames
+}
+
 describe('a process whose Object.prototype was changed before the library was loaded', () => {
   type Names = typeof ServerOptionNames
   const loadedWith = (change: () => void, restore: () => void): Names => {
     let loaded: Names | undefined
     change()
     try {
-      jest.isolateModules(() => {
-        loaded = require('./server-option-names') as Names
-      })
+      loaded = loadFresh()
     } finally {
       restore()
     }
@@ -172,7 +184,8 @@ describe('the count, with the built-ins of the process replaced after the librar
   ]
 
   // Scenario: each built-in the check could have used is replaced by one that answers as if nothing changed, and a standard
-  // name is then overwritten. Expected: the overwrite is still counted, and so is a key outside the standard names.
+  // name is then overwritten. Expected: the overwrite is still counted, so is a key outside the standard names, and so is each
+  // replaced built-in the library's other code calls (13 of the 15 are in that list).
   it('still counts an overwrite and a new key', () => {
     // Index loops and no destructuring throughout: the iterator protocol is one of the things replaced.
     const saved: (PropertyDescriptor | undefined)[] = []
@@ -207,7 +220,7 @@ describe('the count, with the built-ins of the process replaced after the librar
       Reflect.deleteProperty(Object.prototype, 'zzNew')
     }
 
-    expect(count).toBe(2)
+    expect(count).toBe(15)
   })
 })
 
@@ -224,9 +237,7 @@ describe('the count, in the cases a loop bound or a branch could hide', () => {
     let count = -1
     try {
       Reflect.deleteProperty(Object.prototype, 'isPrototypeOf')
-      jest.isolateModules(() => {
-        count = (require('./server-option-names') as Names).plantedKeyCount()
-      })
+      count = loadFresh().plantedKeyCount()
     } finally {
       Object.defineProperty(Object.prototype, 'isPrototypeOf', saved)
     }
@@ -263,9 +274,7 @@ describe('the count, in the cases a loop bound or a branch could hide', () => {
         set: () => undefined,
         configurable: true,
       })
-      jest.isolateModules(() => {
-        loaded = require('./server-option-names') as Names
-      })
+      loaded = loadFresh()
     } finally {
       Object.defineProperty(Object.prototype, '__proto__', saved)
     }
@@ -314,9 +323,7 @@ describe('a process whose vm options were planted before the library loaded', ()
         })
       }
       try {
-        jest.isolateModules(() => {
-          loaded = require('./server-option-names') as Names
-        })
+        loaded = loadFresh()
       } finally {
         for (const root of roots) Reflect.deleteProperty(root, name)
       }
@@ -331,6 +338,7 @@ describe('a process whose vm options were planted before the library loaded', ()
   it('loads, and refuses every use, when the realm cannot be made', () => {
     let loaded: Names | undefined
     jest.isolateModules(() => {
+      jest.doMock('@bymax-one/nest-realtime/internal', () => ({ replacedBuiltinCount: () => 0 }))
       jest.doMock('node:vm', () => ({
         runInNewContext: () => {
           throw new Error(SECRET)

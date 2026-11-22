@@ -5,6 +5,7 @@
 import { ADMISSION_ROOM_LIMITS } from '../../shared/constants/admission-rooms.constants'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
+import { assertBuiltinsIntact } from './builtin-baseline'
 import { readHostKey } from './read-host-key'
 import { realtimeError } from './realtime-error'
 import { reservedRoomPrefix } from './reserved-room'
@@ -73,6 +74,7 @@ function admitRoles(roles: AuthenticationResult['roles']): AuthenticationResult[
  * @throws Error carrying `REALTIME_AUTH_FAILED` when `rooms` is present and invalid, or `roles` cannot be read.
  */
 export function admitRooms(auth: AuthenticationResult): AuthenticationResult {
+  assertBuiltinsIntact()
   const ownRoles = readHostKey(auth, 'roles') as readonly string[] | undefined
   const roles = admitRoles(ownRoles)
   const rooms = readHostKey(auth, 'rooms')

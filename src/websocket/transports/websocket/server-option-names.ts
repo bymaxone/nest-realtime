@@ -9,6 +9,7 @@
  * defaults do name is not given one: the own `undefined` would overwrite the default.
  */
 import { runInNewContext } from 'node:vm'
+import { replacedBuiltinCount } from '@bymax-one/nest-realtime/internal'
 
 /** The names `cors` reads that its defaults do not name, so a planted one would answer them. */
 export const CORS_OWN_NAMES = [
@@ -373,12 +374,13 @@ function isStandard(name: string): boolean {
  * standard set, a standard name that was not the built-in of a clean runtime when the library loaded, and a standard name
  * that was overwritten, made an accessor, changed in an attribute, or removed. Writing `hasOwnProperty = 1` is as much a
  * planted key as a new name, since engine.io calls it. When the clean realm could not be made it is one, as there is nothing
- * to compare with. It calls only what the clean realm provides, in index loops, so
+ * to compare with. A built-in the options, their validation and the admission of a connection call that is not what it was
+ * when the library loaded counts as one change each. It calls only what the clean realm provides, in index loops, so
  * nothing a host plants on `Array.prototype`, `Set.prototype` or the iterators changes the answer.
  */
 export function plantedKeyCount(): number {
   if (unverifiable) return 1
-  let count = unexpectedAtLoad
+  let count = unexpectedAtLoad + replacedBuiltinCount()
   const names = clean.names(root)
   for (let i = 0; i < names.length; i += 1) {
     if (!isStandard(names[i] as string)) count += 1
@@ -391,6 +393,6 @@ export function plantedKeyCount(): number {
   return count
 }
 
-/** The refusal's text: it says how many keys there are and never what they are called or hold. */
+/** The refusal's text: it says how many changes there are and never what they are called or hold. */
 export const plantedKeyMessage = (count: number): string =>
-  `${count} key${count === 1 ? '' : 's'} outside the standard set found on Object.prototype: the WebSocket server does not run while ${count === 1 ? 'it is' : 'they are'} there`
+  `${count} change${count === 1 ? '' : 's'} to Object.prototype or to a built-in the library calls found: the WebSocket server does not run while ${count === 1 ? 'it is' : 'they are'} there`

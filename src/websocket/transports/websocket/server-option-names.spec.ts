@@ -325,11 +325,11 @@ describe('the keys the WebSocket server accepts on Object.prototype', () => {
   it.each([
     [
       1,
-      '1 key outside the standard set found on Object.prototype: the WebSocket server does not run while it is there',
+      '1 change to Object.prototype or to a built-in the library calls found: the WebSocket server does not run while it is there',
     ],
     [
       3,
-      '3 keys outside the standard set found on Object.prototype: the WebSocket server does not run while they are there',
+      '3 changes to Object.prototype or to a built-in the library calls found: the WebSocket server does not run while they are there',
     ],
   ])('say %p planted keys without naming them', (count, text) => {
     expect(plantedKeyMessage(count)).toBe(text)

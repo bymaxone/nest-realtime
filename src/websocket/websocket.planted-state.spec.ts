@@ -508,7 +508,7 @@ describe('the WebSocket server, with any key planted outside the standard set', 
     })
 
     expect(outcome?.code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
-    expect(outcome?.message).toMatch(/\b1 key\b/)
+    expect(outcome?.message).toMatch(/\b1 change\b/)
     expect(outcome?.message).not.toContain(name)
     expect(outcome?.message).not.toContain(SECRET)
   })
@@ -542,7 +542,7 @@ describe('the WebSocket server, with any key planted outside the standard set', 
       })
 
       expect(outcome?.code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
-      expect(outcome?.message).toMatch(/\b1 key\b/)
+      expect(outcome?.message).toMatch(/\b1 change\b/)
     },
   )
 

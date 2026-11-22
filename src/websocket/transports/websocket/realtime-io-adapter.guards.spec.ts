@@ -5,6 +5,7 @@
 import 'reflect-metadata'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
+import { BUILTIN_SLOTS } from '../../../server/utils/builtin-baseline'
 import { RealtimeIoAdapter } from './realtime-io-adapter'
 import { shadowSocket } from './server-option-names'
 
@@ -41,9 +42,14 @@ function planted<T>(run: () => T): T {
 
 type Slot = [object, PropertyKey]
 
-/** The built-ins the adapter and its helpers could call, each of which a host could replace after the library is loaded. */
-const REPLACED: Slot[] = [
+/** What the adapter's helpers call and the baseline does not list: they take these from the clean realm. */
+const UNLISTED: Slot[] = [
   [Array.prototype, 'unshift'],
+  [Reflect, 'defineProperty'],
+]
+
+/** What the adapter's helpers call that the options and admission code call too, so the baseline lists it. */
+const LISTED: Slot[] = [
   [Array.prototype, 'push'],
   [Array.prototype, Symbol.iterator],
   [Object, 'assign'],
@@ -52,24 +58,26 @@ const REPLACED: Slot[] = [
   [Object, 'defineProperty'],
   [Object, 'create'],
   [Reflect, 'ownKeys'],
-  [Reflect, 'defineProperty'],
 ]
 
 /**
- * Runs `run` with every built-in of {@link REPLACED} replaced by one that does nothing, and puts them back. Plain loops and
+ * Runs `run` with every built-in of `slots` replaced by one that does nothing, and puts them back. Plain loops and
  * locals only: the iterator protocol and `Object.defineProperty`, which restores them, are among what is replaced.
  */
-function withBuiltinsReplaced(run: () => unknown): { value?: unknown; error?: unknown } {
+function withBuiltinsReplaced(
+  slots: Slot[],
+  run: () => unknown,
+): { value?: unknown; error?: unknown } {
   const define = Object.defineProperty
   const saved: (PropertyDescriptor | undefined)[] = []
-  for (let n = 0; n < REPLACED.length; n += 1) {
-    const slot = REPLACED[n] as Slot
+  for (let n = 0; n < slots.length; n += 1) {
+    const slot = slots[n] as Slot
     saved[n] = Object.getOwnPropertyDescriptor(slot[0], slot[1])
   }
   const outcome: { value?: unknown; error?: unknown } = {}
   try {
-    for (let n = 0; n < REPLACED.length; n += 1) {
-      const slot = REPLACED[n] as Slot
+    for (let n = 0; n < slots.length; n += 1) {
+      const slot = slots[n] as Slot
       define(slot[0], slot[1], { value: () => undefined, configurable: true, writable: true })
     }
     try {
@@ -78,8 +86,8 @@ function withBuiltinsReplaced(run: () => unknown): { value?: unknown; error?: un
       outcome.error = caught
     }
   } finally {
-    for (let n = 0; n < REPLACED.length; n += 1) {
-      const slot = REPLACED[n] as Slot
+    for (let n = 0; n < slots.length; n += 1) {
+      const slot = slots[n] as Slot
       define(slot[0], slot[1], saved[n] as PropertyDescriptor)
     }
   }
@@ -106,7 +114,7 @@ describe('RealtimeIoAdapter guards', () => {
     const attempt = (): unknown => planted(() => adapter.createIOServer(3000))
 
     expect(attempt).toThrow(
-      '[RealtimeIoAdapter] REALTIME_TRANSPORT_UNAVAILABLE: 1 key outside the standard set found on Object.prototype',
+      '[RealtimeIoAdapter] REALTIME_TRANSPORT_UNAVAILABLE: 1 change to Object.prototype or to a built-in the library calls found',
     )
     expect(superSpy).not.toHaveBeenCalled()
   })
@@ -197,11 +205,11 @@ describe('RealtimeIoAdapter guards', () => {
     expect(namespace.on).toHaveBeenCalledWith('connection', shadowSocket)
   })
 
-  // Scenario: each built-in the adapter and its helpers could call is replaced, after the import, by one that does nothing,
-  // and a server is created. Expected: the guard is still the first middleware and still refuses, the options still carry
-  // their own keys, and a socket is still given its own state: nothing the helpers use is read live.
-  it('installs the guard and the own keys with the built-ins of the process replaced', () => {
-    const outcome = withBuiltinsReplaced(() =>
+  // Scenario: the built-ins the install helpers take from the clean realm and the baseline does not list are replaced after the
+  // import, and a server is created. Expected: the guard is still the first middleware and still refuses, the options still
+  // carry their own keys, and a socket is still given its own state.
+  it('installs the guard and the own keys with the unlisted built-ins replaced', () => {
+    const outcome = withBuiltinsReplaced(UNLISTED, () =>
       adapter.createIOServer(3000, { cors: { origin: 'https://a.example' } } as never),
     )
 
@@ -219,6 +227,17 @@ describe('RealtimeIoAdapter guards', () => {
     expect(Object.hasOwn(socket, '_anyListeners')).toBe(true)
   })
 
+  // Scenario: the built-ins the install helpers share with the options and admission code are replaced and a server is
+  // created. Expected: it is refused with the count of what was replaced, not created with a guard that is not there.
+  it('refuses to create a server while the listed built-ins are replaced', () => {
+    const outcome = withBuiltinsReplaced(LISTED, () => adapter.createIOServer(3000))
+
+    expect((outcome.error as Error).message).toBe(
+      '[RealtimeIoAdapter] REALTIME_TRANSPORT_UNAVAILABLE: 8 changes to Object.prototype or to a built-in the library calls found: the WebSocket server does not run while they are there',
+    )
+    expect(superSpy).not.toHaveBeenCalled()
+  })
+
   // Scenario: the engine's middleware list takes no new entry first (a list that ignores what is written to it). Expected:
   // the server is not handed out, since it would answer requests unguarded: it is closed, and the refusal says why, with
   // the code and who raised it.
@@ -231,5 +250,54 @@ describe('RealtimeIoAdapter guards', () => {
       '[RealtimeIoAdapter] REALTIME_TRANSPORT_UNAVAILABLE: the request guard could not be installed first',
     )
     expect(server.close).toHaveBeenCalledTimes(1)
+  })
+
+  // Scenario: each built-in the options, their validation and the admission of a connection call is replaced in turn, after
+  // the import, and a request reaches the guard. Expected: every one is refused with a 500 of the code and a count of one
+  // and is not passed on, and nothing of what was replaced is in the body. Plain objects and loops only inside the window.
+  it('refuses a request while any one built-in the library calls is replaced', () => {
+    adapter.createIOServer(3000)
+    const guard = server.engine.middlewares[0] as Guard
+    const define = Object.defineProperty
+    const bodies: string[] = []
+    const passed: boolean[] = []
+    for (let n = 0; n < BUILTIN_SLOTS.length; n += 1) {
+      const slot = BUILTIN_SLOTS[n] as (typeof BUILTIN_SLOTS)[number]
+      const saved = Object.getOwnPropertyDescriptor(slot[0], slot[1]) as PropertyDescriptor
+      define(slot[0], slot[1], { value: () => undefined, configurable: true, writable: true })
+      try {
+        let body = ''
+        let nextCalled = false
+        guard(
+          {},
+          {
+            statusCode: 200,
+            setHeader: () => undefined,
+            end: (text: string) => {
+              body = text
+            },
+          },
+          () => {
+            nextCalled = true
+          },
+        )
+        bodies[n] = body
+        passed[n] = nextCalled
+      } finally {
+        define(slot[0], slot[1], saved)
+      }
+    }
+
+    for (let n = 0; n < BUILTIN_SLOTS.length; n += 1) {
+      expect([
+        String((BUILTIN_SLOTS[n] as (typeof BUILTIN_SLOTS)[number])[1]),
+        bodies[n],
+        passed[n],
+      ]).toStrictEqual([
+        String((BUILTIN_SLOTS[n] as (typeof BUILTIN_SLOTS)[number])[1]),
+        '{"code":"REALTIME_TRANSPORT_UNAVAILABLE","count":1}',
+        false,
+      ])
+    }
   })
 })

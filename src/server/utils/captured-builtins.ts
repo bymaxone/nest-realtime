@@ -6,6 +6,12 @@
  * changes them has to do it before the library is imported.
  */
 
+/** `Error` as it was when the library was imported. */
+export const NativeError = Error
+
+/** `Object.assign` as it was when the library was imported. */
+export const assign = Object.assign
+
 /** `Array.isArray` as it was when the library was imported. */
 export const isArray = Array.isArray
 

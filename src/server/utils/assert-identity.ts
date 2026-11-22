@@ -5,6 +5,7 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { assertBuiltinsIntact } from './builtin-baseline'
 import { readHostKey } from './read-host-key'
 import { realtimeError } from './realtime-error'
 
@@ -42,6 +43,7 @@ export function resolveAuthTenant(
   options: Pick<BymaxRealtimeModuleOptions, 'tenantResolver'>,
   auth: AuthenticationResult,
 ): AuthenticationResult {
+  assertBuiltinsIntact()
   // The record the library keeps is built here, by name, before the resolver runs: each field is read once, the way JS
   // reads it, so a field that a class default, `Object.create` or an accessor on the prototype supplies counts, and
   // the value that decides the routing room is the one that was tested. The resolver is given the authenticator's own
@@ -116,6 +118,7 @@ function keepByName(auth: AuthenticationResult): AuthenticationResult {
  * @throws Error carrying `REALTIME_AUTH_FAILED` when a trait is present but blank.
  */
 export function assertIdentityIsNotBlank(auth: AuthenticationResult): void {
+  assertBuiltinsIntact()
   if (isBlank(auth.userId)) {
     throw realtimeError(
       REALTIME_ERROR_CODES.AUTH_FAILED,

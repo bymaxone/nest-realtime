@@ -374,7 +374,7 @@ for (const phase of ['while the key is planted', 'after it is removed']) {
   const error = refusal()
   if (error === undefined) fail('the server was created ' + phase)
   if (error.code !== 'REALTIME_TRANSPORT_UNAVAILABLE') fail('the refusal ' + phase + ' had the code ' + error.code)
-  if (!/\\b1 key\\b/.test(error.message)) fail('the refusal ' + phase + ' did not count one key: ' + error.message)
+  if (!/\\b1 change\\b/.test(error.message)) fail('the refusal ' + phase + ' did not count one change: ' + error.message)
   if (error.message.includes(SECRET)) fail('the refusal ' + phase + ' holds the planted value')
   delete Object.prototype.microtaskMode
 }
