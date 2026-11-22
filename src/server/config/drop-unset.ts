@@ -10,7 +10,16 @@ import type {
   SseOptions,
   WebSocketOptions,
 } from '../interfaces/realtime-module-options.interface'
-import { apply, freeze, isArray, isInteger, push } from '../utils/captured-builtins'
+import {
+  apply,
+  freeze,
+  includes,
+  isArray,
+  isInteger,
+  keys,
+  push,
+  some,
+} from '../utils/captured-builtins'
 import { copyRegExp } from '../utils/copy-regexp'
 import { isPlainObject } from '../utils/is-plain-object'
 import { realtimeError } from '../utils/realtime-error'
@@ -78,12 +87,19 @@ const TOP_LEVEL_KEYS = {
   reauthenticationPolicy: true,
 } satisfies Record<keyof BymaxRealtimeModuleOptions, true>
 
-/** The option groups whose keys are merged with defaults or read as bounds. */
-const GROUPS = {
-  sse: SSE_KEYS,
-  websocket: WEBSOCKET_KEYS,
-  reauthenticationPolicy: REAUTHENTICATION_KEYS,
-} as const
+/** The names in a table of keys, taken when the module loads. */
+const SSE_NAMES = keys(SSE_KEYS)
+const WEBSOCKET_NAMES = keys(WEBSOCKET_KEYS)
+const CORS_NAMES = keys(CORS_KEYS)
+const REAUTHENTICATION_NAMES = keys(REAUTHENTICATION_KEYS)
+const TOP_LEVEL_NAMES = keys(TOP_LEVEL_KEYS)
+
+/** The option groups whose keys are merged with defaults or read as bounds, each with the names it is read for. */
+const GROUPS: ReadonlyArray<readonly [string, readonly string[]]> = [
+  ['sse', SSE_NAMES],
+  ['websocket', WEBSOCKET_NAMES],
+  ['reauthenticationPolicy', REAUTHENTICATION_NAMES],
+]
 
 /** The most entries an origin or a methods list may hold: a bound on the copy, not on how many a host may name. */
 const MAX_LIST_ENTRIES = 1000
@@ -139,21 +155,42 @@ function copied(value: unknown, path: string, kinds: string): unknown {
   return copyRegExp(value) ?? value
 }
 
+/** Whether `key` is one of `names`. */
+function includesKey(names: readonly string[], key: string): boolean {
+  return apply(includes, names, [key]) as boolean
+}
+
+/** Keep what `source[key]` holds, as `readSet` does for each key. */
+function readKey(
+  kept: Record<string, unknown>,
+  source: object,
+  key: string,
+  keepWhenSet: string | undefined,
+): void {
+  const value = (source as Record<string, unknown>)[key]
+  if (value !== undefined && value !== null) kept[key] = value
+  else if (key === keepWhenSet && (value === null || key in source)) kept[key] = value
+}
+
 /**
  * Read the own keys of `source` and the `known` ones by property access, keeping what holds a value. A key in
  * `keepWhenSet` is also kept when it holds `null`, or `undefined` while the object has the property, however it
- * has it: that is a value the host set to nothing, which validation refuses, not an option left unset.
+ * has it: that is a value the host set to nothing, which validation refuses, not an option left unset. Each key is
+ * read once, with the `Object.keys` taken at load and without a `Set` or an iterator, which a host can replace.
  */
 function readSet(
   source: object,
-  known: Readonly<Record<string, true>>,
+  known: readonly string[],
   keepWhenSet?: string,
 ): Record<string, unknown> {
   const kept: Record<string, unknown> = {}
-  for (const key of new Set([...Object.keys(source), ...Object.keys(known)])) {
-    const value = (source as Record<string, unknown>)[key]
-    if (value !== undefined && value !== null) kept[key] = value
-    else if (key === keepWhenSet && (value === null || key in source)) kept[key] = value
+  const own = keys(source)
+  for (let index = 0; index < own.length; index += 1) {
+    readKey(kept, source, own[index] as string, keepWhenSet)
+  }
+  for (let index = 0; index < known.length; index += 1) {
+    const key = known[index] as string
+    if (!includesKey(own, key)) readKey(kept, source, key, keepWhenSet)
   }
   return kept
 }
@@ -177,23 +214,31 @@ function readSet(
  * @returns A plain copy in which every unset key is absent.
  */
 export function dropUnset<T extends object>(options: T): T {
-  const kept = readSet(options, TOP_LEVEL_KEYS)
-  for (const [group, keys] of Object.entries(GROUPS)) {
-    const value = kept[group]
-    if (isPlainObject(value)) kept[group] = readSet(value, keys)
+  const kept = readSet(options, TOP_LEVEL_NAMES)
+  for (let index = 0; index < GROUPS.length; index += 1) {
+    const entry = GROUPS[index] as readonly [string, readonly string[]]
+    const value = kept[entry[0]]
+    if (isPlainObject(value)) kept[entry[0]] = readSet(value, entry[1])
   }
   const websocket = kept.websocket
   if (isPlainObject(websocket)) {
     const cors = (websocket as Record<string, unknown>).cors
     if (typeof cors === 'object' && cors !== null) {
-      const read = readSet(cors, CORS_KEYS, 'origin')
-      if (isPlainObject(cors) || Object.keys(CORS_KEYS).some((key) => key in read)) {
-        for (const [key, kinds] of COPIED_LISTS) {
-          if (key in read) read[key] = copied(read[key], `websocket.cors.${key}`, kinds)
+      const read = readSet(cors, CORS_NAMES, 'origin')
+      if (isPlainObject(cors) || holdsAny(read, CORS_NAMES)) {
+        for (let index = 0; index < COPIED_LISTS.length; index += 1) {
+          const entry = COPIED_LISTS[index] as readonly [string, string]
+          const key = entry[0]
+          if (key in read) read[key] = copied(read[key], `websocket.cors.${key}`, entry[1])
         }
         ;(websocket as Record<string, unknown>).cors = read
       }
     }
   }
   return kept as T
+}
+
+/** Whether `read` holds at least one of `names`. */
+function holdsAny(read: object, names: readonly string[]): boolean {
+  return apply(some, names, [(name: string) => name in read]) as boolean
 }

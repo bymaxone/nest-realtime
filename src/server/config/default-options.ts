@@ -6,6 +6,7 @@ import type {
   BymaxRealtimeModuleOptions,
   SseOptions,
 } from '../interfaces/realtime-module-options.interface'
+import { freeze } from '../utils/captured-builtins'
 import { dropUnset } from './drop-unset'
 
 /** Library defaults for the SSE transport. */
@@ -36,7 +37,7 @@ export type ResolvedRealtimeOptions = Readonly<
  */
 export function applyDefaults(raw: BymaxRealtimeModuleOptions): ResolvedRealtimeOptions {
   const options = dropUnset(raw)
-  return Object.freeze({
+  return freeze({
     ...options,
     sse: { ...DEFAULT_SSE, ...(options.sse ?? {}) },
   })
