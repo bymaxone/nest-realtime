@@ -694,3 +694,84 @@ describe('the count, with the built-ins of the process replaced after the librar
     expect(count).toBe(2)
   })
 })
+
+describe('the count, in the cases a loop bound or a branch could hide', () => {
+  type Names = typeof ServerOptionNames
+
+  // Scenario: a standard name is missing when the library loads and is still missing when it counts. Expected: one, for
+  // the name that was not there at load, and nothing for a name that has not changed since.
+  it('counts a name that was missing at load once while it stays missing', () => {
+    const saved = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'isPrototypeOf',
+    ) as PropertyDescriptor
+    let count = -1
+    try {
+      Reflect.deleteProperty(Object.prototype, 'isPrototypeOf')
+      jest.isolateModules(() => {
+        count = (require('./server-option-names') as Names).plantedKeyCount()
+      })
+    } finally {
+      Object.defineProperty(Object.prototype, 'isPrototypeOf', saved)
+    }
+
+    expect(count).toBe(1)
+  })
+
+  // Scenario: a key named `undefined` is planted. Expected: it is one planted key, like any other new name.
+  it('counts a key named undefined once', () => {
+    Object.defineProperty(Object.prototype, 'undefined', {
+      value: 1,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    })
+    try {
+      expect(plantedKeyCount()).toBe(1)
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'undefined')
+    }
+  })
+
+  // Scenario: __proto__ keeps its built-in getter but has a setter written in JavaScript when the library loads.
+  // Expected: counted, so the setter is compared as well as the getter.
+  it('counts a __proto__ whose setter is not built in', () => {
+    const saved = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      '__proto__',
+    ) as PropertyDescriptor
+    let loaded: Names | undefined
+    try {
+      Object.defineProperty(Object.prototype, '__proto__', {
+        get: saved.get as () => unknown,
+        set: () => undefined,
+        configurable: true,
+      })
+      jest.isolateModules(() => {
+        loaded = require('./server-option-names') as Names
+      })
+    } finally {
+      Object.defineProperty(Object.prototype, '__proto__', saved)
+    }
+
+    expect(loaded?.plantedKeyCount()).toBe(2)
+  })
+
+  // Scenario: a decoder of the replaced class. Expected: its two own names can be removed and rewritten by the host's
+  // listener code, and show up when the object is enumerated, as an own name the class would have set itself.
+  it('gives a decoder its own names as ordinary, changeable properties', () => {
+    class Decoder {}
+    const server: { _parser?: { Decoder: new () => object } } = { _parser: { Decoder } }
+    shadowDecoder(server)
+    const decoder = new (server._parser?.Decoder as new () => object)()
+
+    for (const name of ['reconstructor', '_callbacks']) {
+      expect(Object.getOwnPropertyDescriptor(decoder, name)).toStrictEqual({
+        value: undefined,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      })
+    }
+  })
+})

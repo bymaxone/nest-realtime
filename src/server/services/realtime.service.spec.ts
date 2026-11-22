@@ -25,6 +25,15 @@ describe('RealtimeService readiness', () => {
     expect(service.isPubSubReady()).toBe(state)
   })
 
+  // The bus is asked without arguments: its answer is its own state, not a function of what the caller passes.
+  it('asks the bus for its state with no arguments', () => {
+    const isSubscribed = jest.fn().mockReturnValue(true)
+
+    new RealtimeService(mockTransport(), { isSubscribed } as never).isPubSubReady()
+
+    expect(isSubscribed).toHaveBeenCalledWith()
+  })
+
   // WebSocket-only wiring never subscribes to the bus, so a bus passed there is not a reason to
   // report the instance unready.
   it('is ready on the websocket transport even when the bus reports not subscribed', () => {

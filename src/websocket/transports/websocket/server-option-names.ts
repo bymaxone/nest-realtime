@@ -215,8 +215,8 @@ export function shadowSocket(socket: object): void {
 export function shadowDecoder(server: object): void {
   const holder = server as { _parser?: { Decoder?: new () => object } }
   const parser = holder._parser
-  const Base = parser?.Decoder
-  if (parser === undefined || Base === undefined) return
+  if (parser?.Decoder === undefined) return
+  const Base = parser.Decoder
   class ShadowedDecoder extends Base {
     constructor() {
       super()
@@ -250,13 +250,14 @@ export const STANDARD_OBJECT_PROTOTYPE_NAMES = [
 /** The root prototype of this realm, and what it held under each standard name when the library was loaded. */
 const root = Object.prototype
 const baseline: (PropertyDescriptor | undefined)[] = []
+// Stryker disable next-line EqualityOperator: equivalent — a read past the last name stores one more entry that nothing reads, since every loop that uses `baseline` is bounded by the names
 for (let i = 0; i < STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
   baseline[i] = clean.describe(root, STANDARD_OBJECT_PROTOTYPE_NAMES[i] as string)
 }
 
 /** The source text of `value` as the clean realm prints it: a bound function, a proxy and a function written in JavaScript each print another. */
 const sourceOf = (value: unknown): unknown =>
-  typeof value === 'function' ? apply(clean.source, value, []) : undefined
+  typeof value === 'function' ? clean.source.call(value) : undefined
 
 /**
  * Whether a standard name held, at load, the built-in function of a clean runtime (`__proto__` an accessor of two). A
@@ -290,6 +291,7 @@ function changed(
   now: PropertyDescriptor | undefined,
 ): boolean {
   if (before === undefined || now === undefined) return before !== now
+  // Stryker disable next-line EqualityOperator: equivalent — past the last field the name is `undefined`, a key neither descriptor holds, so both reads are `undefined` and equal
   for (let i = 0; i < FIELDS.length; i += 1) {
     const name = FIELDS[i] as (typeof FIELDS)[number]
     if (!clean.is(before[name], now[name])) return true
@@ -299,6 +301,7 @@ function changed(
 
 /** Whether `name` is one of the standard names. */
 function isStandard(name: string): boolean {
+  // Stryker disable next-line EqualityOperator: equivalent — past the last name the element is `undefined`, which no string equals
   for (let i = 0; i < STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
     if (STANDARD_OBJECT_PROTOTYPE_NAMES[i] === name) return true
   }
