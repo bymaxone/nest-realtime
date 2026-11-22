@@ -14,22 +14,35 @@ function accessor<T>(name: string): Getter<T> | undefined {
 
 /** The accessors, the constructor and the introspection the copy relies on, all taken when the module loads. */
 const SOURCE = accessor<string>('source') as Getter<string>
-/** The accessors of the flags a copy keeps and the one it refuses; `global` is not here, because the copy drops it. */
-const FLAG_ACCESSORS: ReadonlyArray<readonly [string, Getter<boolean> | undefined]> = [
-  ['d', accessor<boolean>('hasIndices')],
-  ['i', accessor<boolean>('ignoreCase')],
-  ['m', accessor<boolean>('multiline')],
-  ['s', accessor<boolean>('dotAll')],
-  ['u', accessor<boolean>('unicode')],
-  ['v', accessor<boolean>('unicodeSets')],
-  ['y', accessor<boolean>('sticky')],
+
+/** A flag the copy keeps, and the accessor that says whether a RegExp has it. */
+interface FlagAccessor {
+  readonly letter: string
+  readonly get: Getter<boolean> | undefined
+}
+
+/**
+ * The accessors of the flags a copy keeps, then the one it refuses; `global` is not here, because the copy drops it.
+ * The table is walked by index, so no iterator of a built-in array is asked for, and `sticky` is the last entry.
+ */
+const FLAG_ACCESSORS: readonly FlagAccessor[] = [
+  { letter: 'd', get: accessor<boolean>('hasIndices') },
+  { letter: 'i', get: accessor<boolean>('ignoreCase') },
+  { letter: 'm', get: accessor<boolean>('multiline') },
+  { letter: 's', get: accessor<boolean>('dotAll') },
+  { letter: 'u', get: accessor<boolean>('unicode') },
+  { letter: 'v', get: accessor<boolean>('unicodeSets') },
+  { letter: 'y', get: accessor<boolean>('sticky') },
 ]
+const FLAG_COUNT = 7
+const STICKY = 6
 /** The longest pattern a copy is made of: a bound on the cost of reading and keeping one, not a judgement of how it runs. */
 const MAX_SOURCE_LENGTH = 1000
 const NewRegExp = RegExp
 const PROTOTYPE = RegExp.prototype
 const getPrototypeOf = Object.getPrototypeOf
 const ownKeys = Reflect.ownKeys
+const apply = Reflect.apply
 
 /**
  * A new RegExp with the pattern and flags of `value`, without `g`, or `undefined` when `value` cannot be copied
@@ -41,7 +54,10 @@ const ownKeys = Reflect.ownKeys
  * origins the host meant to refuse, so these get no copy and the caller refuses them. The `g` flag only makes `test`
  * remember where the last match ended and answer alternately, so it is dropped and the copy has no state between
  * calls. The flags are built from the accessors taken at load, one by one, never through the `flags` accessor, which
- * reads whatever `RegExp.prototype` holds at the time.
+ * reads whatever `RegExp.prototype` holds at the time. The built-ins the copy itself uses (`Reflect.apply`, the
+ * constructor, the introspection) are taken at load too, the table is walked by index, and a `sticky` accessor that
+ * was absent at load refuses every RegExp, because a sticky one could not be told from a plain one. The module trusts
+ * the built-ins as they were when it loaded, so a host that changes them has to do it before the library is imported.
  *
  * @param value - What an option held.
  */
@@ -49,13 +65,15 @@ export function copyRegExp(value: unknown): RegExp | undefined {
   try {
     if (getPrototypeOf(value) !== PROTOTYPE) return undefined
     if (ownKeys(value as object).length !== 1) return undefined
-    const source = SOURCE.call(value)
+    const source = apply(SOURCE, value, []) as string
     if (source.length > MAX_SOURCE_LENGTH) return undefined
+    if (FLAG_ACCESSORS[STICKY]?.get === undefined) return undefined
     let flags = ''
-    for (const [letter, get] of FLAG_ACCESSORS) {
-      if (get === undefined || !get.call(value)) continue
-      if (letter === 'y') return undefined
-      flags += letter
+    for (let index = 0; index < FLAG_COUNT; index += 1) {
+      const entry = FLAG_ACCESSORS[index] as FlagAccessor
+      if (entry.get === undefined || !apply(entry.get, value, [])) continue
+      if (index === STICKY) return undefined
+      flags += entry.letter
     }
     return new NewRegExp(source, flags)
   } catch {
