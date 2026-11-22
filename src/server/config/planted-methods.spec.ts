@@ -7,7 +7,7 @@
  * exists, and must not be called as an optional one: a planted `revalidate` would decide whether a session stays
  * authenticated. A method of the object itself or of its class prototype is still the host's.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -282,10 +282,10 @@ describe('the hook table of a host that gave none', () => {
 describe('the source', () => {
   /** The files of `src` that are not specs, declarations or interfaces, with their comments taken out. */
   const sources = (dir: string): Array<[string, string]> =>
-    readdirSync(dir).flatMap((entry): Array<[string, string]> => {
-      const path = join(dir, entry)
-      if (statSync(path).isDirectory()) return sources(path)
-      if (!/\.tsx?$/.test(entry) || /\.(spec|test|d)\.tsx?$/.test(entry)) return []
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry): Array<[string, string]> => {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) return sources(path)
+      if (!/\.tsx?$/.test(entry.name) || /\.(spec|test|d)\.tsx?$/.test(entry.name)) return []
       const text = readFileSync(path, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/^\s*\/\/.*$/gm, '')
