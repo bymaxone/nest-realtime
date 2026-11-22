@@ -100,10 +100,7 @@ export class RealtimeIoAdapter extends IoAdapter {
     const wsOpts = this.options.websocket ?? {}
     const mergedOpts = serverOptionsWithOwnNames({
       ...opts,
-      cors:
-        wsOpts.cors === undefined || wsOpts.cors === null
-          ? opts?.cors
-          : corsWithOwnNames(wsOpts.cors),
+      cors: corsWithOwnNames(wsOpts.cors ?? opts?.cors),
       pingInterval: wsOpts.pingIntervalMs ?? 25_000,
       pingTimeout: wsOpts.pingTimeoutMs ?? 20_000,
       maxHttpBufferSize: wsOpts.maxHttpBufferSize ?? 1_000_000,

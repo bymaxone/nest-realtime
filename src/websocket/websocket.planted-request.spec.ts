@@ -198,3 +198,47 @@ describe('the SSE transport, with a key planted while a request is served', () =
     expect(planted.status).toBe(200)
   })
 })
+
+describe('the cors block Nest hands the adapter, with a key planted while a request is served', () => {
+  let app: INestApplication
+  let port: number
+
+  beforeAll(async () => {
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    const module = await Test.createTestingModule({
+      imports: [BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator })],
+    }).compile()
+    app = module.createNestApplication()
+    await app.listen(0)
+    port = (app.getHttpServer().address() as AddressInfo).port
+    // The block comes from the options Nest passes for a gateway, since the module has no `websocket.cors`; with port 0
+    // Nest attaches the server to the application's own HTTP server, which is listening.
+    new RealtimeIoAdapter(app).createIOServer(0, { cors: { origin: [GOOD] } } as never)
+  })
+
+  afterAll(async () => {
+    await app.close()
+    jest.restoreAllMocks()
+  })
+
+  const handshake = async (): Promise<Record<string, unknown>> => {
+    const response = await request(`http://127.0.0.1:${port}`)
+      .get('/socket.io/?EIO=4&transport=polling')
+      .set('Origin', GOOD)
+    return interesting(response.status, response.headers)
+  }
+
+  // Scenario: one key planted while a handshake is asked from the origin the block allows. Expected: the answer is the
+  // one given without it.
+  it.each(['credentials', 'exposedHeaders', 'cookie'])(
+    'answers as before with %s planted',
+    async (key) => {
+      const baseline = await handshake()
+
+      const planted = await whilePlanted({ [key]: PLANTED[key] }, handshake)
+
+      expect(planted).toStrictEqual(baseline)
+      expect(baseline).toHaveProperty('access-control-allow-origin', GOOD)
+    },
+  )
+})
