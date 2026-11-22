@@ -303,6 +303,56 @@ describe('the WebSocket server, with a key planted after a client connected', ()
     expect(calls).toStrictEqual([])
   })
 
+  // Scenario: a namespace made after the server was created, which a socket joins over WebSocket, and a key planted once it
+  // is connected. Expected: the same as for the main namespace, since every namespace gives its sockets their own state.
+  it('does not call a planted _anyListeners on a socket of a namespace made later', async () => {
+    const calls: unknown[] = []
+    const sockets: Socket[] = []
+    server.of('/chat').on('connection', (socket) => sockets.push(socket))
+    const socket = ioClient(`http://127.0.0.1:${port}/chat`, {
+      transports: ['websocket'],
+      reconnection: false,
+    })
+    client = socket
+    await new Promise<void>((resolve, reject) => {
+      socket.once('connect', () => resolve())
+      socket.once('connect_error', reject)
+    })
+    for (let waited = 0; sockets.length === 0; waited += 10) {
+      if (waited >= 3000) throw new Error('the namespace never reported the connection')
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+
+    await whilePlanted({ _anyListeners: [() => calls.push('planted')] }, async () => {
+      socket.emit('probe')
+      await settle()
+    })
+
+    expect(calls).toStrictEqual([])
+  })
+
+  // Scenario: a connection over polling, where every event is a request, and a key planted once it is connected.
+  // Expected: the request is refused by the guard, so the planted listener is not called either.
+  it('does not call a planted _anyListeners on an event of a polling connection', async () => {
+    const calls: unknown[] = []
+    const socket = ioClient(`http://127.0.0.1:${port}`, {
+      transports: ['polling'],
+      reconnection: false,
+    })
+    client = socket
+    await new Promise<void>((resolve, reject) => {
+      socket.once('connect', () => resolve())
+      socket.once('connect_error', reject)
+    })
+
+    await whilePlanted({ _anyListeners: [() => calls.push('planted')] }, async () => {
+      socket.emit('probe')
+      await settle()
+    })
+
+    expect(calls).toStrictEqual([])
+  })
+
   // Scenario: the host registers its own listeners for every event, in both directions, then a key is planted for each
   // direction in turn (the client library of the test reads the same keys, so one direction at a time keeps it out of
   // the way). Expected: its own are called, and only its own.
