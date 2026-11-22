@@ -381,10 +381,11 @@ describe('the WebSocket server, with a key planted after a session was recovered
     server = new RealtimeIoAdapter(app).createIOServer(port, {
       connectionStateRecovery: { maxDisconnectionDuration: 60_000, skipMiddlewares: true },
     } as never) as Server
-    // An event with an offset is what a client needs to have received for its session to be recovered.
+    // An event with an offset is what a client needs to have received for its session to be recovered. Only the first
+    // socket sends it: the client of the test reads its own listeners off the planted key, so an event that reached it
+    // from the recovered socket during the plant would be counted as the server's.
     server.on('connection', (socket) => {
-      connected.push(socket)
-      socket.emit('hello', 1)
+      if (connected.push(socket) === 1) socket.emit('hello', 1)
     })
   })
 
