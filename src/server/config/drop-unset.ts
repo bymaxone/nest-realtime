@@ -126,6 +126,14 @@ export const ORIGIN_KINDS =
 /** The kinds `methods` may be. */
 export const METHODS_KINDS = 'a string or a list of at most 1000 strings'
 
+/** The keys of the cors block whose lists are copied once, with what each may be, for the refusal of one that cannot be. */
+const COPIED_LISTS: ReadonlyArray<readonly [string, string]> = [
+  ['origin', ORIGIN_KINDS],
+  ['methods', METHODS_KINDS],
+  ['allowedHeaders', METHODS_KINDS],
+  ['exposedHeaders', METHODS_KINDS],
+]
+
 /** A list as a copy, a RegExp as a pristine one, and anything else, `undefined` included, as it is. */
 function copied(value: unknown, path: string, kinds: string): unknown {
   if (Array.isArray(value)) return snapshotList(value as unknown[], path, kinds)
@@ -181,10 +189,8 @@ export function dropUnset<T extends object>(options: T): T {
     if (typeof cors === 'object' && cors !== null) {
       const read = readSet(cors, CORS_KEYS, 'origin')
       if (isPlainObject(cors) || Object.keys(CORS_KEYS).some((key) => key in read)) {
-        if ('origin' in read)
-          read.origin = copied(read.origin, 'websocket.cors.origin', ORIGIN_KINDS)
-        if ('methods' in read) {
-          read.methods = copied(read.methods, 'websocket.cors.methods', METHODS_KINDS)
+        for (const [key, kinds] of COPIED_LISTS) {
+          if (key in read) read[key] = copied(read[key], `websocket.cors.${key}`, kinds)
         }
         ;(websocket as Record<string, unknown>).cors = read
       }

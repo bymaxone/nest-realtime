@@ -196,7 +196,7 @@ function refuseCustomRegExp(value: unknown): void {
   if (!looksLikeRegExp(value)) return
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    `options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp, or an object that looks like one, that cannot be copied faithfully: a subclass, one with a property of its own, one from another realm, one with the y flag, a proxy over one or an object that only has its prototype: use a function origin for custom matching`,
+    `options.websocket.cors.origin must be ${ORIGIN_KINDS}, received a RegExp, or an object that looks like one, that cannot be copied faithfully: a subclass, one with a property of its own, one from another realm, one with the y flag, one whose source is longer than 1000 characters, a proxy over one or an object that only has its prototype: use a function origin for custom matching`,
     { who: 'BymaxRealtimeModule' },
   )
 }

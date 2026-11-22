@@ -79,6 +79,136 @@ describe('copyRegExp', () => {
     })
   })
 
+  // Scenario: a pattern longer than the bound the copy allows. Expected: no copy for one over it, a copy for one at it.
+  // The bound limits the cost of reading and keeping a pattern; how it behaves on input is the host's to judge.
+  it('copies a pattern of exactly 1,000 characters and not one of 1,001', () => {
+    expect(copyRegExp(new RegExp('a'.repeat(1000)))).toBeInstanceOf(RegExp)
+    expect(copyRegExp(new RegExp('a'.repeat(1001)))).toBeUndefined()
+  })
+
+  // Scenario: the built-ins the copy itself would use, replaced after the module loaded: `Function.prototype.call`, the
+  // iterator of an array and a `Symbol.iterator` of a string. Expected: the copy touches none of them, so a host
+  // that replaced one cannot make it lie, and it is not told that it ran.
+  describe('with the built-ins it would use replaced after the module loaded', () => {
+    // The assertions run after the built-in is put back: the test framework calls it too.
+    it('does not call the live Function.prototype.call', () => {
+      const original = Function.prototype.call
+      let calls = 0
+      let plain: RegExp | undefined
+      let sticky: RegExp | undefined
+      Function.prototype.call = function (this: Function, ...args: unknown[]): unknown {
+        calls += 1
+        return (original as (...a: unknown[]) => unknown).apply(this, args)
+      } as typeof Function.prototype.call
+      try {
+        plain = copyRegExp(/x/i)
+        sticky = copyRegExp(/x/y)
+      } finally {
+        Function.prototype.call = original
+      }
+
+      expect(calls).toBe(0)
+      expect(plain).toBeInstanceOf(RegExp)
+      expect(sticky).toBeUndefined()
+    })
+
+    it('does not walk the live iterator of an array', () => {
+      const original = Array.prototype[Symbol.iterator]
+      let walks = 0
+      let copy: RegExp | undefined
+      Array.prototype[Symbol.iterator] = function (this: unknown[]): ArrayIterator<unknown> {
+        walks += 1
+        return original.call(this)
+      } as (typeof Array.prototype)[typeof Symbol.iterator]
+      try {
+        copy = copyRegExp(/x/im)
+      } finally {
+        Array.prototype[Symbol.iterator] = original
+      }
+
+      expect(walks).toBe(0)
+      expect(copy).toBeInstanceOf(RegExp)
+    })
+  })
+
+  // Scenario: the sticky accessor absent from RegExp.prototype when the module loads. Expected: every RegExp is refused,
+  // not read as one without the y flag, because a sticky one could not be told from a plain one.
+  it('refuses every RegExp when the sticky accessor was absent at load', () => {
+    const saved = Object.getOwnPropertyDescriptor(RegExp.prototype, 'sticky') as PropertyDescriptor
+    let isolated: typeof copyRegExp | undefined
+    Reflect.deleteProperty(RegExp.prototype, 'sticky')
+    try {
+      jest.isolateModules(() => {
+        isolated = (require('./copy-regexp') as { copyRegExp: typeof copyRegExp }).copyRegExp
+      })
+    } finally {
+      Object.defineProperty(RegExp.prototype, 'sticky', saved)
+    }
+
+    expect(isolated?.(/x/)).toBeUndefined()
+    expect(isolated?.(/x/y)).toBeUndefined()
+  })
+
+  // Scenario: the accessors the module took at load, called by it. Expected: each is called with the RegExp as its
+  // receiver and with no arguments, as a getter is.
+  it('calls the accessors with the RegExp as the receiver and no arguments', () => {
+    const calls: Array<{ name: string; receiver: unknown; count: number }> = []
+    const names = ['source', 'ignoreCase', 'sticky']
+    const saved = names.map(
+      (name) => [name, Object.getOwnPropertyDescriptor(RegExp.prototype, name)] as const,
+    )
+    for (const [name, descriptor] of saved) {
+      const original = (descriptor as PropertyDescriptor).get as () => unknown
+      Object.defineProperty(RegExp.prototype, name, {
+        get(this: unknown, ...args: unknown[]) {
+          calls.push({ name, receiver: this, count: args.length })
+          return Reflect.apply(original, this, [])
+        },
+        configurable: true,
+      })
+    }
+    let isolated: typeof copyRegExp | undefined
+    try {
+      jest.isolateModules(() => {
+        isolated = (require('./copy-regexp') as { copyRegExp: typeof copyRegExp }).copyRegExp
+      })
+    } finally {
+      for (const [name, descriptor] of saved) {
+        Object.defineProperty(RegExp.prototype, name, descriptor as PropertyDescriptor)
+      }
+    }
+    const subject = /x/i
+
+    expect(isolated?.(subject)?.flags).toBe('i')
+    expect(calls.map(({ name, count }) => [name, count])).toStrictEqual([
+      ['source', 0],
+      ['sticky', 0],
+      ['ignoreCase', 0],
+    ])
+    expect(calls.every(({ receiver }) => receiver === subject)).toBe(true)
+  })
+
+  // Scenario: the accessors of the newer flags (hasIndices, unicodeSets) absent when the module loads, as on an older
+  // runtime. Expected: the flags it can read are kept and the copy is made.
+  it('copies a RegExp when the accessors of the newer flags were absent at load', () => {
+    const saved = ['hasIndices', 'unicodeSets'].map(
+      (name) => [name, Object.getOwnPropertyDescriptor(RegExp.prototype, name)] as const,
+    )
+    let isolated: typeof copyRegExp | undefined
+    for (const [name] of saved) Reflect.deleteProperty(RegExp.prototype, name)
+    try {
+      jest.isolateModules(() => {
+        isolated = (require('./copy-regexp') as { copyRegExp: typeof copyRegExp }).copyRegExp
+      })
+    } finally {
+      for (const [name, descriptor] of saved) {
+        Object.defineProperty(RegExp.prototype, name, descriptor as PropertyDescriptor)
+      }
+    }
+
+    expect(isolated?.(/x/im)?.flags).toBe('im')
+  })
+
   // Scenario: the same copy is asked twice. Expected: it answers the same each time, which a g flag would not.
   it('answers the same however many times it is tested', () => {
     const copy = copyRegExp(/good/g)

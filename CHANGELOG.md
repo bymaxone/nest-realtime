@@ -7,6 +7,28 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.33] - 2026-11-21
+
+### Security
+
+- **The lists `allowedHeaders` and `exposedHeaders` of `websocket.cors` are copied once at boot**, like `origin` and `methods`: a list given for either was shared with Socket.IO, so a `push` after boot reached later requests, and a list over 1,000 entries or with a length that is not a count was never checked. Neither decides which origin is allowed, but a list the host can still change is not the list that was configured. A change made after boot now reaches nothing.
+- **A `RegExp` whose source is over 1,000 characters is refused at boot**, with "use a function origin for custom matching". The bound limits the cost of reading and keeping a pattern. A pattern runs as written, so how it behaves on a hostile origin (a catastrophic backtrack, say) is the host's to judge, and the README says so.
+
+- **The copy of a `RegExp` no longer calls through the live built-ins.** It called the accessors it took at load through `Function.prototype.call` and walked its flag table with the iterator of an array, both of which a host could replace after the library was imported; it now calls through the `Reflect.apply` taken at load and walks the table by index, and a `sticky` accessor that was absent at load refuses every `RegExp`, because a sticky one could not be told from a plain one. The copy trusts the built-ins as they were when the library was imported, so import order matters.
+
+### Changed
+
+- **The `CorsConfig` comment and the README say where origins are matched.** `websocket.cors` is the WebSocket transport's alone; the SSE endpoint is a plain HTTP GET whose cross-origin access is the host's `app.enableCors`. A real request to the SSE endpoint gets no `Access-Control-Allow-Origin` from the module, with the allowlist set or not, and a test says so.
+
+### Tooling
+
+- **`pnpm size` refuses a `dist` older than the sources** (`scripts/check-dist-fresh.mjs`), so a size budget is not measured on a stale build, whatever `PACKAGE_TARBALL` holds, because the budget always measures `dist/`; its test and the test of that wiring run with `pnpm lint`.
+- **The no-AI-attribution caller workflow sets `contents: read` at the top**, which clears a code-scanning alert for a workflow without top-level permissions.
+
+#### Apply to a derived backend
+
+A `RegExp` origin with a source over 1,000 characters now refuses boot: use a function origin, or a shorter pattern. A list for `allowedHeaders` or `exposedHeaders` that is changed after boot no longer reaches Socket.IO.
+
 ## [1.2.32] - 2026-11-21
 
 ### Security
@@ -1397,7 +1419,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.32...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.33...HEAD
+[1.2.33]: https://github.com/bymaxone/nest-realtime/compare/v1.2.32...v1.2.33
 [1.2.32]: https://github.com/bymaxone/nest-realtime/compare/v1.2.31...v1.2.32
 [1.2.31]: https://github.com/bymaxone/nest-realtime/compare/v1.2.30...v1.2.31
 [1.2.30]: https://github.com/bymaxone/nest-realtime/compare/v1.2.29...v1.2.30
