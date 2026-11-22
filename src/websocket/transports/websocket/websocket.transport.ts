@@ -406,6 +406,7 @@ export class WebSocketTransport implements ITransport {
     const socket = this.localSockets()?.get(connectionId)
     if (socket) {
       await socket.leave(roomId)
+      assertBuiltinsIntact()
       this.rooms.leave(connectionId, roomId)
     }
   }
@@ -426,6 +427,7 @@ export class WebSocketTransport implements ITransport {
    *   fan-out throws: the revocation did not leave this node.
    */
   async disconnect(connectionId: string, _reason?: string): Promise<void> {
+    assertBuiltinsIntact()
     const server = this.server
     if (!server) {
       throw unavailableError(

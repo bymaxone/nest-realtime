@@ -179,4 +179,53 @@ describe('WebSocketTransport, with a built-in replaced after admission', () => {
     expect(to).not.toHaveBeenCalled()
     expect(emit).not.toHaveBeenCalled()
   })
+
+  // Scenario: a built-in is replaced during the await of `leave`, and the registry is then asked to forget the membership.
+  // Expected: refused after the await, as before it, with the count-only code.
+  it('leaveRoom checks again after the await, before it touches the registry', async () => {
+    const joined: Joined = []
+    const original = Object.getOwnPropertyDescriptor(Object, 'keys') as PropertyDescriptor
+    const socket = {
+      ...makeSocket(joined, () => undefined),
+      leave: async (): Promise<void> => {
+        Object.defineProperty(Object, 'keys', {
+          value: () => [],
+          configurable: true,
+          writable: true,
+        })
+        await Promise.resolve()
+      },
+    }
+    transport.setServer({ sockets: { sockets: new Map([['sock-1', socket]]) } } as never)
+    let code: unknown
+    try {
+      await transport.leaveRoom('sock-1', 'workspace:w1')
+    } catch (caught) {
+      code = (caught as { code?: string }).code
+    } finally {
+      Object.defineProperty(Object, 'keys', original)
+    }
+
+    expect(code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+  })
+
+  // Scenario: a built-in is replaced and the API disconnects a connection. Expected: refused before the socket is touched.
+  it('disconnect refuses while a built-in is replaced', async () => {
+    const disconnect = jest.fn()
+    const socket = { ...makeSocket([], () => undefined), disconnect }
+    transport.setServer({ sockets: { sockets: new Map([['sock-1', socket]]) } } as never)
+    const original = Object.getOwnPropertyDescriptor(Object, 'keys') as PropertyDescriptor
+    let code: unknown
+    Object.defineProperty(Object, 'keys', { value: () => [], configurable: true, writable: true })
+    try {
+      await transport.disconnect('sock-1')
+    } catch (caught) {
+      code = (caught as { code?: string }).code
+    } finally {
+      Object.defineProperty(Object, 'keys', original)
+    }
+
+    expect(code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+    expect(disconnect).not.toHaveBeenCalled()
+  })
 })
