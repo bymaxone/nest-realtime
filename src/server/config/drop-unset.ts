@@ -10,6 +10,7 @@ import type {
   SseOptions,
   WebSocketOptions,
 } from '../interfaces/realtime-module-options.interface'
+import { apply, freeze, isArray, isInteger, push } from '../utils/captured-builtins'
 import { copyRegExp } from '../utils/copy-regexp'
 import { isPlainObject } from '../utils/is-plain-object'
 import { realtimeError } from '../utils/realtime-error'
@@ -46,6 +47,9 @@ const CORS_KEYS = {
   origin: true,
   credentials: true,
   methods: true,
+  allowedHeaders: true,
+  exposedHeaders: true,
+  maxAge: true,
 } satisfies Record<keyof CorsConfig, true>
 
 const REAUTHENTICATION_KEYS = {
@@ -99,12 +103,7 @@ const MAX_LIST_ENTRIES = 1000
  */
 function snapshotList(list: readonly unknown[], path: string, kinds: string): readonly unknown[] {
   const length: unknown = list.length
-  if (
-    typeof length !== 'number' ||
-    !Number.isInteger(length) ||
-    length < 0 ||
-    length > MAX_LIST_ENTRIES
-  ) {
+  if (typeof length !== 'number' || !isInteger(length) || length < 0 || length > MAX_LIST_ENTRIES) {
     throw realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
       `options.${path} must be ${kinds}, received a list whose length is not an integer from 0 to ${MAX_LIST_ENTRIES}`,
@@ -114,9 +113,9 @@ function snapshotList(list: readonly unknown[], path: string, kinds: string): re
   const entries: unknown[] = []
   for (let index = 0; index < length; index += 1) {
     const entry = list[index]
-    entries.push(copyRegExp(entry) ?? entry)
+    apply(push, entries, [copyRegExp(entry) ?? entry])
   }
-  return Object.freeze(entries)
+  return freeze(entries)
 }
 
 /** The kinds an origin may be, for the refusal of a list that cannot be copied. */
@@ -136,7 +135,7 @@ const COPIED_LISTS: ReadonlyArray<readonly [string, string]> = [
 
 /** A list as a copy, a RegExp as a pristine one, and anything else, `undefined` included, as it is. */
 function copied(value: unknown, path: string, kinds: string): unknown {
-  if (Array.isArray(value)) return snapshotList(value as unknown[], path, kinds)
+  if (isArray(value)) return snapshotList(value as unknown[], path, kinds)
   return copyRegExp(value) ?? value
 }
 

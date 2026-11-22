@@ -7,6 +7,25 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.34] - 2026-11-21
+
+### Security
+
+- **The entries of `methods`, `allowedHeaders` and `exposedHeaders` must be strings.** A list entry that was an object, a nested list, a number or a hole, and a value that was a number, a `Set` or an object, was handed to Socket.IO, which joins it into a header. Each is now refused at boot with `REALTIME_INVALID_OPTIONS`, naming the option and saying only what kind of value it received.
+- **The copy of a list takes `Array.isArray`, `Number.isInteger`, `Object.freeze` and `Array.prototype.push` when the library loads**, like the rest of what the copy relies on, so one a host replaces afterwards can neither change what is copied nor watch it. The README says which built-ins are trusted as imported.
+
+### Changed
+
+- **The types now declare the existing `allowedHeaders`, `exposedHeaders` and `maxAge` of `CorsConfig`**, which Socket.IO accepted and the library already copied or handed over, so a TypeScript host can write them without a cast. The block is now read for those names like the others.
+
+### Tooling
+
+- **`scripts/check-dist-fresh.mjs` skips its comparison only with a flag the size script does not pass**, so the size script no longer clears `PACKAGE_TARBALL`; it names the manifest and the two tsconfig files the build reads besides `tsup.config.ts`.
+
+#### Apply to a derived backend
+
+A `methods`, `allowedHeaders` or `exposedHeaders` with an entry that is not a string, or that is not a string or a list, now refuses boot: write each header token as a string.
+
 ## [1.2.33] - 2026-11-21
 
 ### Security
@@ -1419,7 +1438,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.33...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.34...HEAD
+[1.2.34]: https://github.com/bymaxone/nest-realtime/compare/v1.2.33...v1.2.34
 [1.2.33]: https://github.com/bymaxone/nest-realtime/compare/v1.2.32...v1.2.33
 [1.2.32]: https://github.com/bymaxone/nest-realtime/compare/v1.2.31...v1.2.32
 [1.2.31]: https://github.com/bymaxone/nest-realtime/compare/v1.2.30...v1.2.31

@@ -221,3 +221,49 @@ describe('dropUnset, the CORS block of websocket', () => {
     expect(kept.onConnect?.()).toBe('ran')
   })
 })
+
+describe('dropUnset, the built-ins the copy of a list relies on', () => {
+  // Scenario: Array.isArray, Number.isInteger, Object.freeze and Array.prototype.push replaced after the module loaded.
+  // Expected: the copy of a list touches none of them, so a host that replaced one cannot change or watch it. The
+  // assertions run after the built-ins are put back, because the test framework uses them too.
+  it('does not call the live Array.isArray, Number.isInteger, Object.freeze or Array.prototype.push', () => {
+    const calls: string[] = []
+    const originals = {
+      isArray: Array.isArray,
+      isInteger: Number.isInteger,
+      freeze: Object.freeze,
+      push: Array.prototype.push,
+    }
+    Array.isArray = ((value: unknown): boolean => {
+      calls.push('isArray')
+      return originals.isArray(value)
+    }) as typeof Array.isArray
+    Number.isInteger = ((value: unknown): boolean => {
+      calls.push('isInteger')
+      return originals.isInteger(value)
+    }) as typeof Number.isInteger
+    Object.freeze = ((value: unknown): unknown => {
+      calls.push('freeze')
+      return originals.freeze(value as object)
+    }) as typeof Object.freeze
+    Array.prototype.push = function (this: unknown[], ...items: unknown[]): number {
+      calls.push('push')
+      return originals.push.apply(this, items)
+    }
+    let copy: { websocket?: { cors?: { origin?: unknown; allowedHeaders?: unknown } } } | undefined
+    try {
+      copy = dropUnset({
+        websocket: { cors: { origin: ['https://a.example'], allowedHeaders: ['x-a'] } },
+      })
+    } finally {
+      Array.isArray = originals.isArray
+      Number.isInteger = originals.isInteger
+      Object.freeze = originals.freeze
+      Array.prototype.push = originals.push
+    }
+
+    expect(calls).toStrictEqual([])
+    expect(copy?.websocket?.cors?.origin).toStrictEqual(['https://a.example'])
+    expect(copy?.websocket?.cors?.allowedHeaders).toStrictEqual(['x-a'])
+  })
+})

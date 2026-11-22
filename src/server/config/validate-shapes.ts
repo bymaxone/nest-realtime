@@ -4,6 +4,7 @@
  */
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { isArray } from '../utils/captured-builtins'
 import { copyRegExp } from '../utils/copy-regexp'
 import { describeReceived } from '../utils/describe-received'
 import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
@@ -166,7 +167,7 @@ function assertOrigin(origin: unknown): void {
   ) {
     return
   }
-  if (Array.isArray(origin)) {
+  if (isArray(origin)) {
     for (let index = 0; index < origin.length; index += 1) {
       const entry: unknown = origin[index]
       if (isOriginEntry(entry)) continue
@@ -211,21 +212,22 @@ function assertCors(cors: unknown): void {
   if (!isPlainObject(cors)) refuse('websocket.cors', 'an object', cors)
   const block = cors as Record<string, unknown>
   if ('origin' in block) assertOrigin(block.origin)
-  assertMethods(block.methods)
+  assertStringList('methods', block.methods)
+  assertStringList('allowedHeaders', block.allowedHeaders)
+  assertStringList('exposedHeaders', block.exposedHeaders)
   assertBoolean('websocket.cors.credentials', block.credentials)
 }
 
-/** Refuse `methods` that is neither a string nor a list of strings; an unset one is left to Socket.IO. */
-function assertMethods(methods: unknown): void {
-  if (methods === undefined || typeof methods === 'string') return
-  if (Array.isArray(methods)) {
-    for (let index = 0; index < methods.length; index += 1) {
-      if (typeof methods[index] !== 'string')
-        refuse('websocket.cors.methods', METHODS_KINDS, methods)
+/** Refuse `methods`, `allowedHeaders` or `exposedHeaders` that is neither a string nor a list of strings; an unset one is left to Socket.IO. */
+function assertStringList(key: string, value: unknown): void {
+  if (value === undefined || typeof value === 'string') return
+  if (isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      if (typeof value[index] !== 'string') refuse(`websocket.cors.${key}`, METHODS_KINDS, value)
     }
     return
   }
-  refuse('websocket.cors.methods', METHODS_KINDS, methods)
+  refuse(`websocket.cors.${key}`, METHODS_KINDS, value)
 }
 
 /**

@@ -13,6 +13,14 @@ import { RealtimeIoAdapter } from './transports/websocket/realtime-io-adapter'
 
 jest.setTimeout(20_000)
 
+/** The names of CorsConfig other than origin: a strict block answers them and throws for any other key. */
+const CORS_NAMES: ReadonlySet<string | symbol> = new Set([
+  'credentials',
+  'methods',
+  'allowedHeaders',
+  'exposedHeaders',
+  'maxAge',
+])
 const GOOD = 'https://good.example'
 const EVIL = 'https://evil.example'
 const ALLOWED = [GOOD]
@@ -67,7 +75,7 @@ const tagged: ReadonlyArray<readonly [string, () => object]> = [
         {
           get: (_target, key) => {
             if (key === 'origin') return ALLOWED
-            if (key === 'credentials' || key === 'methods') return undefined
+            if (CORS_NAMES.has(key)) return undefined
             throw new Error(`strict: ${String(key)}`)
           },
         },
@@ -78,7 +86,7 @@ const tagged: ReadonlyArray<readonly [string, () => object]> = [
     () =>
       new Proxy(Object.defineProperties({}, { origin: { value: ALLOWED } }), {
         get: (target, key) => {
-          if (key === 'credentials' || key === 'methods') return undefined
+          if (CORS_NAMES.has(key)) return undefined
           return (target as Record<PropertyKey, unknown>)[key]
         },
       }),
