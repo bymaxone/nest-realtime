@@ -126,7 +126,7 @@
     "mutation:dry-run": "stryker run --dryRunOnly",
     "prepublishOnly": "pnpm verify && pnpm check:runtime",
     "release": "npm publish --provenance --access public",
-    "size": "env -u PACKAGE_TARBALL node scripts/check-dist-fresh.mjs && node scripts/check-size.mjs",
+    "size": "node scripts/check-dist-fresh.mjs --also tsup.config.ts --also package.json --also tsconfig.build.json --also tsconfig.json && node scripts/check-size.mjs",
     "test": "jest",
     "test:all": "pnpm test && pnpm test:e2e",
     "test:cov": "jest --config jest.coverage.config.ts --coverage",
