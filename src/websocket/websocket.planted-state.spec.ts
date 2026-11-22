@@ -52,6 +52,42 @@ async function whilePlanted<T>(values: Record<string, unknown>, run: () => Promi
   }
 }
 
+/** Runs `run` with `name` on `Object.prototype` set to `value` on both root prototypes, and puts each original back. */
+function whileOverwrittenSync<T>(name: string, value: unknown, run: () => T): T {
+  const before = ROOTS.map(
+    (root) => Object.getOwnPropertyDescriptor(root, name) as PropertyDescriptor,
+  )
+  for (const root of ROOTS)
+    Object.defineProperty(root, name, { ...before[ROOTS.indexOf(root)], value })
+  try {
+    return run()
+  } finally {
+    ROOTS.forEach((root, index) =>
+      Object.defineProperty(root, name, before[index] as PropertyDescriptor),
+    )
+  }
+}
+
+/** The same for a call that settles later. */
+async function whileOverwritten<T>(
+  name: string,
+  value: unknown,
+  run: () => Promise<T>,
+): Promise<T> {
+  const before = ROOTS.map(
+    (root) => Object.getOwnPropertyDescriptor(root, name) as PropertyDescriptor,
+  )
+  for (const root of ROOTS)
+    Object.defineProperty(root, name, { ...before[ROOTS.indexOf(root)], value })
+  try {
+    return await run()
+  } finally {
+    ROOTS.forEach((root, index) =>
+      Object.defineProperty(root, name, before[index] as PropertyDescriptor),
+    )
+  }
+}
+
 interface Raw {
   status: number
   headers: http.IncomingHttpHeaders
@@ -405,6 +441,9 @@ describe('the WebSocket server, with any key planted outside the standard set', 
   const connected: Socket[] = []
   const HANDSHAKE = '/socket.io/?EIO=4&transport=polling'
 
+  /** The parser of the server under test, whose decoders hold their lazy names, so the client of the test does not read a planted one. */
+  const clientParser = (): never => (server as unknown as { _parser: never })._parser
+
   beforeAll(async () => {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
     const module = await Test.createTestingModule({
@@ -468,6 +507,72 @@ describe('the WebSocket server, with any key planted outside the standard set', 
     expect(outcome?.message).not.toContain(SECRET)
   })
 
+  // Scenario: a standard name overwritten after boot (`hasOwnProperty = 1` ended the process on the next request, because
+  // engine.io calls it). Expected: refused like any other planted key, with a count and nothing else.
+  it.each(['hasOwnProperty', 'toString', 'constructor'])(
+    'answers a request with %s overwritten by a 500 that names only a count',
+    async (name) => {
+      const refused = await whileOverwritten(name, 1, () => raw(port, 'GET', HANDSHAKE))
+
+      expect(refused.status).toBe(500)
+      expect(refused.body.toString()).toMatch(/\b1 key\b/)
+      expect(refused.body.toString()).not.toContain(name)
+    },
+  )
+
+  it.each(['hasOwnProperty', 'toString', 'constructor'])(
+    'refuses to create a server with %s overwritten',
+    (name) => {
+      const outcome = whileOverwrittenSync(name, 1, () => {
+        try {
+          new RealtimeIoAdapter(app).createIOServer(0, {} as never)
+          return undefined
+        } catch (error) {
+          return error as Error & { code?: string }
+        }
+      })
+
+      expect(outcome?.code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
+      expect(outcome?.message).toMatch(/\b1 key\b/)
+    },
+  )
+
+  // Scenario: a client is connected, a standard name is overwritten, and a text event arrives on that connection. The event is
+  // handed to the server's side of the connection directly, since the client library of the test calls the overwritten
+  // names too. Expected: the connection is closed without the process ending, and the event is not delivered.
+  it.each(['hasOwnProperty', 'toString'])(
+    'closes an open connection that receives an event with %s overwritten',
+    async (name) => {
+      const calls: unknown[] = []
+      const socket = ioClient(`http://127.0.0.1:${port}`, {
+        transports: ['websocket'],
+        reconnection: false,
+      })
+      client = socket
+      await new Promise<void>((resolve, reject) => {
+        socket.once('connect', () => resolve())
+        socket.once('connect_error', reject)
+      })
+      for (let waited = 0; connected.length === 0; waited += 10) {
+        if (waited >= 3000) throw new Error('the server never reported the connection')
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      const serverSide = connected[0] as Socket
+      serverSide.on('probe', () => calls.push('received'))
+      const engineSocket = serverSide.conn as unknown as {
+        onPacket: (packet: { type: string; data: string }) => void
+      }
+
+      await whileOverwritten(name, 1, async () => {
+        engineSocket.onPacket({ type: 'message', data: '2["probe","a text event"]' })
+        await settle()
+      })
+
+      expect(calls).toStrictEqual([])
+      expect(serverSide.connected).toBe(false)
+    },
+  )
+
   // Scenario: a WebSocket upgrade with the key planted. Expected: refused, so the client does not connect and nothing
   // is read off the planted key.
   it.each(ANY_NAME)('refuses a WebSocket upgrade with %s planted', async (name) => {
@@ -475,6 +580,7 @@ describe('the WebSocket server, with any key planted outside the standard set', 
       const socket = ioClient(`http://127.0.0.1:${port}`, {
         transports: ['websocket'],
         reconnection: false,
+        parser: clientParser(),
       })
       client = socket
       return new Promise<string>((resolve) => {
@@ -495,6 +601,7 @@ describe('the WebSocket server, with any key planted outside the standard set', 
       const socket = ioClient(`http://127.0.0.1:${port}`, {
         transports: ['websocket'],
         reconnection: false,
+        parser: clientParser(),
       })
       client = socket
       await new Promise<void>((resolve, reject) => {

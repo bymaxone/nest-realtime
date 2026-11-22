@@ -27,6 +27,7 @@ import {
   plantedKeyCount,
   plantedKeyMessage,
   serverOptionsWithOwnNames,
+  shadowDecoder,
 } from './server-option-names'
 
 /** The names `cors` reads that its defaults name: the copy has them as its own, so nothing planted can answer. */
@@ -246,28 +247,77 @@ describe('the keys the WebSocket server accepts on Object.prototype', () => {
     }
   })
 
-  // Scenario: nothing planted, then keys planted one at a time. Expected: none counts, then each key counts once, a
-  // standard name that is overwritten does not count, and a key taken away stops counting.
+  // Scenario: nothing planted, then keys planted one at a time. Expected: none counts, then each key counts once, and a key
+  // taken away stops counting.
   it('count the keys outside the standard set', () => {
     const root = Object.prototype as unknown as Record<string, unknown>
-    const before = Object.getOwnPropertyDescriptor(Object.prototype, 'toString')
 
     expect(plantedKeyCount()).toBe(0)
     Object.defineProperty(Object.prototype, 'zzOne', { value: 1, configurable: true })
     Object.defineProperty(Object.prototype, 'zzTwo', { value: 2, configurable: true })
-    Object.defineProperty(Object.prototype, 'toString', {
-      value: 3,
-      configurable: true,
-      writable: true,
-    })
     try {
       expect(plantedKeyCount()).toBe(2)
     } finally {
       delete root.zzOne
       delete root.zzTwo
-      Object.defineProperty(Object.prototype, 'toString', before as PropertyDescriptor)
     }
     expect(plantedKeyCount()).toBe(0)
+  })
+
+  /** Runs `run` with the descriptor of `name` on `Object.prototype` replaced, and puts the original back. */
+  const withDescriptor = <T>(
+    name: string,
+    descriptor: PropertyDescriptor | undefined,
+    run: () => T,
+  ): T => {
+    const before = Object.getOwnPropertyDescriptor(Object.prototype, name)
+    if (descriptor === undefined)
+      delete (Object.prototype as unknown as Record<string, unknown>)[name]
+    else Object.defineProperty(Object.prototype, name, descriptor)
+    try {
+      return run()
+    } finally {
+      Object.defineProperty(Object.prototype, name, before as PropertyDescriptor)
+    }
+  }
+
+  // Scenario: a standard name given another value, which engine.io reads through (`hasOwnProperty = 1` ended the process on the
+  // next request). Expected: it counts as planted, once, and stops counting when the original is back.
+  it.each(['hasOwnProperty', 'toString', 'constructor', 'valueOf', 'isPrototypeOf'])(
+    'count a standard name that was overwritten: %s',
+    (name) => {
+      const before = Object.getOwnPropertyDescriptor(Object.prototype, name) as PropertyDescriptor
+
+      expect(withDescriptor(name, { ...before, value: 1 }, plantedKeyCount)).toBe(1)
+      expect(plantedKeyCount()).toBe(0)
+    },
+  )
+
+  // Scenario: a standard name whose descriptor changed without a new value: made read-only, hidden from enumeration, made
+  // an accessor, or removed. Expected: each counts.
+  it.each([
+    ['made read-only', (d: PropertyDescriptor) => ({ ...d, writable: false })],
+    ['made enumerable', (d: PropertyDescriptor) => ({ ...d, enumerable: true })],
+    ['made an accessor', () => ({ get: () => 1, configurable: true })],
+    ['removed', () => undefined],
+  ])('count a standard name that was %s', (_what, change) => {
+    const before = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'propertyIsEnumerable',
+    ) as PropertyDescriptor
+
+    expect(withDescriptor('propertyIsEnumerable', change(before), plantedKeyCount)).toBe(1)
+    expect(plantedKeyCount()).toBe(0)
+  })
+
+  // Scenario: a standard name set again to the same function. Expected: not counted, since nothing differs.
+  it('does not count a standard name set to what it already was', () => {
+    const before = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'toString',
+    ) as PropertyDescriptor
+
+    expect(withDescriptor('toString', { ...before }, plantedKeyCount)).toBe(0)
   })
 
   // Scenario: the refusal's text. Expected: it says how many, in the singular and the plural, and nothing else.
@@ -386,5 +436,59 @@ describe('corsWithOwnNames and serverOptionsWithOwnNames', () => {
 
   it.each(['cookie', 'perMessageDeflate'])('leaves %s unset as it is', (key) => {
     expect(serverOptionsWithOwnNames({})[key]).toBeUndefined()
+  })
+})
+
+describe('what the packet guard relies on in engine.io', () => {
+  const engineSource = (file: string): string =>
+    readFileSync(join(engineIoDir, 'build', file), 'utf8')
+
+  // Scenario: the installed engine.io. Expected: it keeps the three things the guard uses, so that an upgrade within the
+  // supported range that changes one fails here and not in a deployment: a `middlewares` array that every request and
+  // upgrade is run through, a `packet` event emitted before the packet type is switched on, and a packet type `noop` that
+  // no case handles, while the `message` case is the one that passes `data` on.
+  it('keeps the middlewares array, the packet event before the switch, and an unhandled noop', () => {
+    const server = engineSource('server.js')
+    const socket = engineSource('socket.js')
+    const onPacket = socket.slice(socket.indexOf('onPacket(packet) {'))
+    const handler = onPacket.slice(0, onPacket.indexOf('\n    }\n'))
+
+    expect(server).toContain('this.middlewares = [];')
+    expect(server).toContain('this.middlewares[i](req, res,')
+    expect(handler.indexOf('this.emit("packet", packet);')).toBeGreaterThan(-1)
+    expect(handler.indexOf('this.emit("packet", packet);')).toBeLessThan(
+      handler.indexOf('switch (packet.type) {'),
+    )
+    expect(handler).not.toContain('case "noop"')
+    expect(handler).toMatch(/case "message":\s+this\.emit\("data", packet\.data\)/)
+  })
+})
+
+describe('shadowDecoder', () => {
+  // Scenario: a server whose parser has a Decoder class. Expected: the server gets a subclass whose instances hold the two
+  // names as their own, and the class the parser module exports, with its prototype, is not touched.
+  it('replaces the decoder with a subclass and leaves the original alone', () => {
+    class Decoder {}
+    const parser = { Decoder, Encoder: class {} }
+    const server: { _parser?: typeof parser } = { _parser: parser }
+
+    shadowDecoder(server)
+
+    const Replaced = server._parser?.Decoder as new () => object
+    expect(Replaced).not.toBe(Decoder)
+    expect(Object.getPrototypeOf(Replaced)).toBe(Decoder)
+    expect(server._parser?.Encoder).toBe(parser.Encoder)
+    expect(new Replaced()).toBeInstanceOf(Decoder)
+    expect(Object.hasOwn(new Replaced(), 'reconstructor')).toBe(true)
+    expect(Object.hasOwn(new Replaced(), '_callbacks')).toBe(true)
+    expect(Object.getOwnPropertyNames(Decoder.prototype)).toStrictEqual(['constructor'])
+  })
+
+  // Scenario: a server with no parser, or a parser with no Decoder. Expected: nothing is changed and nothing throws.
+  it.each([{}, { _parser: {} }])('leaves %p as it is', (server) => {
+    const before = { ...server }
+
+    expect(() => shadowDecoder(server)).not.toThrow()
+    expect(server).toStrictEqual(before)
   })
 })

@@ -181,31 +181,32 @@ export function shadowSocket(socket: object): void {
 }
 
 /**
- * Gives the decoder class of the server an own `undefined` for {@link DECODER_LAZY_NAMES} on its prototype, which every
- * decoder the server makes inherits before `Object.prototype`; one that sets the name assigns its own. The server makes a
- * decoder for each client, so this is the only place the library can reach before the first packet.
+ * Replaces the decoder class of the server with a subclass whose instances hold an own `undefined` for
+ * {@link DECODER_LAZY_NAMES}, so that a key planted later does not answer them; one that sets the name assigns its own.
+ * The server makes a decoder for each client from its `_parser`, which is the only place the library can reach before the
+ * first packet; the parser module and the class it exports are left as they are.
  *
  * @param server - The Socket.IO server, after it is created.
  */
 export function shadowDecoder(server: object): void {
-  const parser = (server as { _parser?: { Decoder?: { prototype: object } } })._parser
-  if (parser?.Decoder === undefined) return
-  const prototype = parser.Decoder.prototype
-  for (const name of DECODER_LAZY_NAMES) {
-    if (apply(hasOwn, prototype, [name]) as boolean) continue
-    Object.defineProperty(prototype, name, {
-      value: undefined,
-      configurable: true,
-      enumerable: false,
-      writable: true,
-    })
+  const holder = server as { _parser?: { Decoder?: new () => object } }
+  const parser = holder._parser
+  const Base = parser?.Decoder
+  if (parser === undefined || Base === undefined) return
+  class ShadowedDecoder extends Base {
+    constructor() {
+      super()
+      shadow(this, DECODER_LAZY_NAMES)
+    }
   }
+  holder._parser = { ...parser, Decoder: ShadowedDecoder }
 }
 
 /**
- * The names `Object.prototype` holds in every runtime this library supports. A key outside this set was put there by
- * something else, and a package that copies an object, or reads a name off one it made, can read it as its own state: the
- * WebSocket server refuses to run while one is there, rather than list the names the packages read.
+ * The names `Object.prototype` holds in every runtime this library supports. A key outside this set, or one of these that is
+ * not what it was when the library loaded, was put there by something else, and a package that copies an object, or reads
+ * a name off one it made, can read it as its own state: the WebSocket server refuses to run while one is there, rather
+ * than list the names the packages read.
  */
 export const STANDARD_OBJECT_PROTOTYPE_NAMES = [
   '__defineGetter__',
@@ -224,12 +225,41 @@ export const STANDARD_OBJECT_PROTOTYPE_NAMES = [
 
 const standard = new Set<string>(STANDARD_OBJECT_PROTOTYPE_NAMES)
 const ownNames = Object.getOwnPropertyNames
+const describe = Object.getOwnPropertyDescriptor
 
-/** How many string keys outside the standard set `Object.prototype` holds now. */
+/** The descriptor each standard name had when the library was loaded: a standard name is only the same while it still has it. */
+const standardAtLoad = new Map<string, PropertyDescriptor | undefined>(
+  STANDARD_OBJECT_PROTOTYPE_NAMES.map((name) => [name, describe(Object.prototype, name)]),
+)
+
+/** Whether `now` is not the descriptor `before` was: another value, accessor, or attribute, or one that appeared or went. */
+function changed(
+  before: PropertyDescriptor | undefined,
+  now: PropertyDescriptor | undefined,
+): boolean {
+  if (before === undefined || now === undefined) return before !== now
+  return (
+    !Object.is(before.value, now.value) ||
+    before.get !== now.get ||
+    before.set !== now.set ||
+    before.writable !== now.writable ||
+    before.enumerable !== now.enumerable ||
+    before.configurable !== now.configurable
+  )
+}
+
+/**
+ * How many things `Object.prototype` holds now that it did not hold when the library was loaded: a string key outside the
+ * standard set, and a standard name that was overwritten, made an accessor, changed in an attribute, or removed. Writing
+ * `hasOwnProperty = 1` is as much a planted key as a new name, since engine.io calls it.
+ */
 export function plantedKeyCount(): number {
   let count = 0
   for (const name of ownNames(Object.prototype)) {
     if (!standard.has(name)) count += 1
+  }
+  for (const [name, before] of standardAtLoad) {
+    if (changed(before, describe(Object.prototype, name))) count += 1
   }
   return count
 }
