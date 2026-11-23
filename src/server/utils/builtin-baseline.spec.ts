@@ -84,6 +84,38 @@ describe('the built-ins the library calls', () => {
     expect(() => assertBuiltinsIntact()).not.toThrow()
   })
 
+  // Scenario: a slot that holds a function becomes an accessor whose getter is that same function, and an accessor slot becomes
+  // a data property holding its getter: the identity is the same, the slot is not, and reading the first runs the function.
+  // Expected: each swap is counted once, and all are back afterwards.
+  it('counts a slot whose kind changed while the function it holds did not', () => {
+    const counts: number[] = []
+    const swapped: string[] = []
+    for (let i = 0; i < BUILTIN_SLOTS.length; i += 1) {
+      const slot = BUILTIN_SLOTS[i] as (typeof BUILTIN_SLOTS)[number]
+      const original = describe_(slot[0], slot[1])
+      if (original === undefined) continue
+      const isData = Object.prototype.hasOwnProperty.call(original, 'value')
+      const held = isData ? original.value : original.get
+      if (typeof held !== 'function') continue
+      try {
+        define(
+          slot[0],
+          slot[1],
+          isData
+            ? { get: held as () => unknown, configurable: true }
+            : { value: held, configurable: true, writable: true },
+        )
+        counts[counts.length] = replacedBuiltinCount()
+      } finally {
+        define(slot[0], slot[1], original)
+      }
+      swapped[swapped.length] = labelOf(slot)
+    }
+    expect(swapped.length).toBeGreaterThan(80)
+    expect(counts).toStrictEqual(counts.map(() => 1))
+    expect(replacedBuiltinCount()).toBe(0)
+  })
+
   // Scenario: a key in the list is misspelled or names nothing, so the slot records an absent property that no replacement of
   // the real built-in can change. Expected: every listed slot holds a function, or the getter of an accessor, at load, but
   // for the eight that hold something else on purpose: the two namespace objects, and the symbol methods a string and a number

@@ -25,6 +25,16 @@ function held(target: object, key: PropertyKey): unknown {
 }
 
 /**
+ * Whether a slot is a data property: 1, an accessor: 2, or not there: 0. A data property holding a function and an accessor
+ * whose getter is that function answer the same from `held`, and are not the same slot: reading the second runs the function.
+ */
+function kindOf(target: object, key: PropertyKey): number {
+  const descriptor = describe(target, key)
+  if (descriptor === undefined) return 0
+  return (apply(hasOwn, descriptor, ['value']) as boolean) ? 1 : 2
+}
+
+/**
  * Every built-in the code of the options, their validation and the admission of a connection calls by name, by syntax
  * (`for...of`, spread, destructuring) or through a built-in class, apart from the iterators. A test scans those files for a
  * call that is in none of this list, so a new one cannot be added without being listed here or exempted, with the reason,
@@ -142,17 +152,23 @@ function iteratorSlots(): BuiltinSlot[] {
  * and recording throw: that is caught, nothing is recorded, and every use is refused with a count of one, rather than the
  * import failing.
  */
-function readBaseline(): { listed: BuiltinSlot[]; recorded: unknown[] } | undefined {
+function readBaseline():
+  { listed: BuiltinSlot[]; recorded: unknown[]; kinds: number[] } | undefined {
   try {
     const iterators = iteratorSlots()
     const listed = NAMED.concat(iterators)
     const recorded = listed.map((slot) => held(slot[0], slot[1]))
+    const kinds = listed.map((slot) => kindOf(slot[0], slot[1]))
     // `concat` and `map` are the process's own, and a process polluted before the import can make them answer what it likes:
     // a list or a record of the wrong size is not a baseline.
-    if (listed.length !== NAMED.length + iterators.length || recorded.length !== listed.length) {
+    if (
+      listed.length !== NAMED.length + iterators.length ||
+      recorded.length !== listed.length ||
+      kinds.length !== listed.length
+    ) {
       return undefined
     }
-    return { listed, recorded }
+    return { listed, recorded, kinds }
   } catch {
     return undefined
   }
@@ -172,7 +188,11 @@ export function replacedBuiltinCount(): number {
   let count = 0
   for (let i = 0; i < baseline.listed.length; i += 1) {
     const slot = baseline.listed[i] as BuiltinSlot
-    if (held(slot[0], slot[1]) !== baseline.recorded[i]) count += 1
+    if (
+      held(slot[0], slot[1]) !== baseline.recorded[i] ||
+      kindOf(slot[0], slot[1]) !== baseline.kinds[i]
+    )
+      count += 1
   }
   return count
 }
