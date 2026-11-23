@@ -578,6 +578,8 @@ describe('the list of built-ins', () => {
     unref: 'a method of a timer',
     iteratorSlots: 'a function of this library',
     now: 'Date.now, which a host replaces on purpose to control time',
+    getTime:
+      'Date.prototype.getTime, which only stamps a time and is replaced with the clock on purpose',
     then: 'Promise.prototype.then, which instrumentation and zone libraries patch on purpose',
     catch: 'Promise.prototype.catch, patched like then',
     resolve: 'Promise.resolve, patched like then',
@@ -586,16 +588,37 @@ describe('the list of built-ins', () => {
 
   const directories = ['config', 'composition', 'utils'].map((name) => join(__dirname, '..', name))
 
+  /**
+   * The files that route by key: the replay ring, the registries of connections and of rooms, and the transport that reads
+   * them. Their own methods have their own names, so of what they call only the names a built-in has are held to the list.
+   */
+  const keyed = [
+    join(__dirname, '..', 'transports', 'sse', 'event-replay-buffer.ts'),
+    join(__dirname, '..', 'transports', 'sse', 'sse.transport.ts'),
+    join(__dirname, '..', 'services', 'connection-registry.service.ts'),
+    join(__dirname, '..', 'services', 'room-registry.service.ts'),
+  ]
+
+  /** A source with its comments taken out. */
+  function bare(path: string): string {
+    return readFileSync(path, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '')
+  }
+
   /** The source of every file of the options, their validation and admission, with its comments taken out. */
   function sources(): string[] {
     return directories.flatMap((directory) =>
       readdirSync(directory)
         .filter((name) => name.endsWith('.ts') && !name.endsWith('.spec.ts'))
-        .map((name) =>
-          readFileSync(join(directory, name), 'utf8')
-            .replace(/\/\*[\s\S]*?\*\//g, '')
-            .replace(/\/\/[^\n]*/g, ''),
-        ),
+        .map((name) => bare(join(directory, name))),
+    )
+  }
+
+  /** Whether some built-in prototype has a method of this name. */
+  function builtinHas(name: string): boolean {
+    return [Object, Array, Map, Set, String, Number, Function, RegExp, Date, Promise].some(
+      (builtin) => name in builtin.prototype,
     )
   }
 
@@ -614,6 +637,11 @@ describe('the list of built-ins', () => {
     for (const source of sources()) {
       for (const match of source.matchAll(/\.([A-Za-z_]+)\(/g)) called.add(match[1] as string)
     }
+    for (const path of keyed) {
+      for (const match of bare(path).matchAll(/\.([A-Za-z_]+)\(/g)) {
+        if (builtinHas(match[1] as string)) called.add(match[1] as string)
+      }
+    }
 
     const missing = [...called].filter((name) => !keys.has(name) && !(name in EXEMPT)).sort()
 
@@ -626,6 +654,13 @@ describe('the list of built-ins', () => {
     const read = new Set<string>()
     for (const source of sources()) {
       for (const match of source.matchAll(
+        /\b(Object|Array|Number|Math|JSON|Reflect)\.([A-Za-z_]+)\b/g,
+      )) {
+        read.add(`${match[1]}.${match[2]}`)
+      }
+    }
+    for (const path of keyed) {
+      for (const match of bare(path).matchAll(
         /\b(Object|Array|Number|Math|JSON|Reflect)\.([A-Za-z_]+)\b/g,
       )) {
         read.add(`${match[1]}.${match[2]}`)

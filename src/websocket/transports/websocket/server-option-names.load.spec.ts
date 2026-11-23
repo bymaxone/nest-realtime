@@ -185,7 +185,7 @@ describe('the count, with the built-ins of the process replaced after the librar
 
   // Scenario: each built-in the check could have used is replaced by one that answers as if nothing changed, and a standard
   // name is then overwritten. Expected: the overwrite is still counted, so is a key outside the standard names, and so is each
-  // replaced built-in the library's other code calls (13 of the 15 are in that list).
+  // replaced built-in the library's other code calls (14 of the 15 are in that list).
   it('still counts an overwrite and a new key', () => {
     // Index loops and no destructuring throughout: the iterator protocol is one of the things replaced.
     const saved: (PropertyDescriptor | undefined)[] = []
@@ -220,7 +220,7 @@ describe('the count, with the built-ins of the process replaced after the librar
       Reflect.deleteProperty(Object.prototype, 'zzNew')
     }
 
-    expect(count).toBe(15)
+    expect(count).toBe(16)
   })
 })
 

@@ -50,6 +50,7 @@ import { resolveClientAddress } from '../../utils/client-address'
 import { AuthenticationUnavailableError } from '../../services/authentication-gate.service'
 import { ConnectionLimitError } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
+import { assertBuiltinsIntact } from '../../utils/builtin-baseline'
 import { runHook } from '../../utils/run-hook'
 import { SseTransport } from './sse.transport'
 import { probeOf } from './outbound-backlog'
@@ -292,6 +293,9 @@ export class SseSubscriptionHandler {
     let queueEvents: OfflineQueuedEvent[]
     try {
       queueEvents = await this.readAppended(req, authenticated)
+      // The replay ring and the queue reconciliation are read by key and by id next: a built-in they rely on that was replaced
+      // while this request waited would hand this connection another user's events, so nothing is read before this check.
+      assertBuiltinsIntact()
     } catch (err) {
       authenticated.ticket.release()
       throw err
