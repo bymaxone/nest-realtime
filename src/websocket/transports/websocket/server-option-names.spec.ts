@@ -21,7 +21,9 @@ import {
   COOKIE_OWN_NAMES,
   CORS_OWN_NAMES,
   DEFLATE_OWN_NAMES,
+  SERVER_INSTANCE_NAMES,
   SERVER_OWN_NAMES,
+  SOCKET_LAZY_NAMES,
   STANDARD_OBJECT_PROTOTYPE_NAMES,
   corsWithOwnNames,
   placeFirst,
@@ -29,6 +31,8 @@ import {
   plantedKeyMessage,
   serverOptionsWithOwnNames,
   shadowDecoder,
+  shadowServerInstance,
+  shadowSocket,
 } from './server-option-names'
 
 /** The names `cors` reads that its defaults name: the copy has them as its own, so nothing planted can answer. */
@@ -462,6 +466,21 @@ describe('what the packet guard relies on in engine.io', () => {
     )
     expect(handler).not.toContain('case "noop"')
     expect(handler).toMatch(/case "message":\s+this\.emit\("data", packet\.data\)/)
+  })
+})
+
+describe('the own keys the shadows give', () => {
+  // Scenario: an empty object is given its own keys. Expected: exactly the names, and no other (a loop that read one past
+  // the list would define a key named undefined).
+  it.each([
+    ['a server', shadowServerInstance, SERVER_INSTANCE_NAMES],
+    ['a socket', shadowSocket, SOCKET_LAZY_NAMES],
+  ])('gives %s exactly its names', (_what, shadow, names) => {
+    const target = {}
+
+    shadow(target)
+
+    expect(Object.getOwnPropertyNames(target).sort()).toStrictEqual([...names].sort())
   })
 })
 

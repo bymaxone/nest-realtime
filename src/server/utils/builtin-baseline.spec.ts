@@ -37,6 +37,10 @@ const HOLDERS: [object, string][] = [
   [Object.getPrototypeOf([][Symbol.iterator]()) as object, 'ArrayIterator.prototype'],
   [Object.getPrototypeOf(''[Symbol.iterator]()) as object, 'StringIterator.prototype'],
   [Object.getPrototypeOf(new Set()[Symbol.iterator]()) as object, 'SetIterator.prototype'],
+  [Object.getPrototypeOf(new Map()[Symbol.iterator]()) as object, 'MapIterator.prototype'],
+  [Number.prototype, 'Number.prototype'],
+  [Date.prototype, 'Date.prototype'],
+  [Map.prototype, 'Map.prototype'],
 ]
 
 /** The label of a slot, as `Holder.key`. */
@@ -52,10 +56,10 @@ function labelOf(slot: (typeof BUILTIN_SLOTS)[number]): string {
  */
 function whileReplaced(indexes: number | readonly number[], run: () => void): void {
   const wanted = typeof indexes === 'number' ? [indexes] : indexes
-  const saved: PropertyDescriptor[] = []
+  const saved: (PropertyDescriptor | undefined)[] = []
   for (let n = 0; n < wanted.length; n += 1) {
     const slot = BUILTIN_SLOTS[wanted[n] as number] as (typeof BUILTIN_SLOTS)[number]
-    saved[n] = describe_(slot[0], slot[1]) as PropertyDescriptor
+    saved[n] = describe_(slot[0], slot[1])
   }
   try {
     for (let n = 0; n < wanted.length; n += 1) {
@@ -66,7 +70,9 @@ function whileReplaced(indexes: number | readonly number[], run: () => void): vo
   } finally {
     for (let n = 0; n < wanted.length; n += 1) {
       const slot = BUILTIN_SLOTS[wanted[n] as number] as (typeof BUILTIN_SLOTS)[number]
-      define(slot[0], slot[1], saved[n] as PropertyDescriptor)
+      // A slot that was not there is removed again, not given an undefined descriptor.
+      if (saved[n] === undefined) Reflect.deleteProperty(slot[0], slot[1])
+      else define(slot[0], slot[1], saved[n] as PropertyDescriptor)
     }
   }
 }
@@ -200,6 +206,80 @@ describe('the additions the audits asked for', () => {
   })
 })
 
+describe('the symbol-keyed methods and the flags of a RegExp', () => {
+  const find = (label: string): number => BUILTIN_SLOTS.findIndex((slot) => labelOf(slot) === label)
+
+  // Scenario: `split` with a string asks the string for `Symbol.split`, and `String.prototype` answers. Expected: a function
+  // planted there is counted, as is one planted for each other symbol the string and number coercions and a regular
+  // expression dispatch through; none of them is there to start with.
+  it.each([
+    'String.prototype.[Symbol.match]',
+    'String.prototype.[Symbol.matchAll]',
+    'String.prototype.[Symbol.replace]',
+    'String.prototype.[Symbol.search]',
+    'String.prototype.[Symbol.split]',
+    'Number.prototype.[Symbol.toPrimitive]',
+  ])('counts %s planted', (label) => {
+    expect(find(label)).toBeGreaterThanOrEqual(0)
+    let count = -1
+    whileReplaced(find(label), () => {
+      count = replacedBuiltinCount()
+    })
+
+    expect(count).toBe(1)
+  })
+
+  // Scenario: the `next` of the iterator of arrays, strings, sets and maps, which `for...of`, spread and destructuring call.
+  // Expected: each is a slot, and a replaced one is counted.
+  it.each(['ArrayIterator', 'StringIterator', 'SetIterator', 'MapIterator'])(
+    'counts a replaced %s.prototype.next',
+    (holder) => {
+      const index = find(`${holder}.prototype.next`)
+      let count = -1
+      whileReplaced(index, () => {
+        count = replacedBuiltinCount()
+      })
+
+      expect([index >= 0, count]).toStrictEqual([true, 1])
+    },
+  )
+
+  // Scenario: a regular expression's own method for a symbol is replaced, which makes `replace` strip nothing. Expected: counted.
+  it('counts a replaced RegExp.prototype[Symbol.replace]', () => {
+    expect(find('RegExp.prototype.[Symbol.replace]')).toBeGreaterThanOrEqual(0)
+    let count = -1
+    whileReplaced(find('RegExp.prototype.[Symbol.replace]'), () => {
+      count = replacedBuiltinCount()
+    })
+
+    expect(count).toBe(1)
+  })
+
+  // Scenario: a flag of a RegExp is an accessor, and `replace` reads `flags`. Expected: a replaced accessor, by another accessor
+  // or by a value, is counted: the slot holds the getter, not nothing.
+  it.each(['flags', 'global', 'sticky', 'source'])(
+    'counts the flag accessor %s replaced by another accessor',
+    (name) => {
+      const index = find(`RegExp.prototype.${name}`)
+      const original = describe_(RegExp.prototype, name) as PropertyDescriptor
+      let count = -1
+      define(RegExp.prototype, name, {
+        __proto__: null,
+        get: () => original.get?.call(RegExp.prototype),
+        configurable: true,
+      } as PropertyDescriptor)
+      try {
+        count = replacedBuiltinCount()
+      } finally {
+        define(RegExp.prototype, name, original)
+      }
+
+      expect(index).toBeGreaterThanOrEqual(0)
+      expect(count).toBe(1)
+    },
+  )
+})
+
 describe('what the library only uses to serialize', () => {
   // Scenario: a host's test suite spies on `JSON.stringify`, or a patch replaces it. Expected: not counted, and the
   // check does not refuse: it serializes, it does not decide who is admitted, so the library takes its own copy at load.
@@ -220,6 +300,27 @@ describe('what the library only uses to serialize', () => {
     }
 
     expect([count, code]).toStrictEqual([0, undefined])
+  })
+})
+
+describe('a built-in replaced by an accessor that has no getter', () => {
+  // Scenario: a method is replaced by a property with a setter and no getter. Expected: counted: there is nothing to call, and
+  // nothing a recorded value can equal.
+  it('counts a setter-only accessor', () => {
+    const saved = describe_(String.prototype, 'trim') as PropertyDescriptor
+    let count = -1
+    define(String.prototype, 'trim', {
+      __proto__: null,
+      set: () => undefined,
+      configurable: true,
+    } as PropertyDescriptor)
+    try {
+      count = replacedBuiltinCount()
+    } finally {
+      define(String.prototype, 'trim', saved)
+    }
+
+    expect(count).toBe(1)
   })
 })
 
@@ -480,6 +581,7 @@ describe('the list of built-ins', () => {
       'Number.MAX_SAFE_INTEGER',
       'Number.NEGATIVE_INFINITY',
       'Array.prototype',
+      'Number.prototype',
       'Object.prototype',
     ])
 

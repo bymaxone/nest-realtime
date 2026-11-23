@@ -12,17 +12,16 @@ const describe = Object.getOwnPropertyDescriptor
 const hasOwn = Object.prototype.hasOwnProperty
 const apply = Reflect.apply
 
-/** What a slot holds when it is not a data property: nothing a recorded value can equal, so such a slot counts as replaced. */
-const NOT_DATA = {}
-
 /**
- * What a slot holds. A descriptor is an ordinary object, so a field it does not hold itself is answered by the root
- * prototype: `value` is read only when the descriptor holds it, and an accessor, which holds none, is {@link NOT_DATA}.
+ * What a slot holds: its value, or the getter of an accessor, which is what a flag of a RegExp is. A descriptor is an
+ * ordinary object, so a field it does not hold itself is answered by the root prototype: `value` is read only when the
+ * descriptor holds it, and a descriptor with no value is an accessor's, which always holds its `get`, even when it is
+ * `undefined`. A slot that is not there is `undefined`, which is what a method that must be absent holds.
  */
 function held(target: object, key: PropertyKey): unknown {
   const descriptor = describe(target, key)
   if (descriptor === undefined) return undefined
-  return (apply(hasOwn, descriptor, ['value']) as boolean) ? descriptor.value : NOT_DATA
+  return (apply(hasOwn, descriptor, ['value']) as boolean) ? descriptor.value : descriptor.get
 }
 
 /**
@@ -85,6 +84,31 @@ const NAMED: readonly BuiltinSlot[] = [
   [Function.prototype, 'call'],
   [RegExp.prototype, 'exec'],
   [RegExp.prototype, 'test'],
+  // What `split`, `replace`, `match`, `search` and the coercions ask a value for by symbol, and the flags `replace` reads. A
+  // string primitive answers from `String.prototype`, a number from `Number.prototype`: those must have none.
+  [RegExp.prototype, Symbol.match],
+  [RegExp.prototype, Symbol.matchAll],
+  [RegExp.prototype, Symbol.replace],
+  [RegExp.prototype, Symbol.search],
+  [RegExp.prototype, Symbol.split],
+  [String.prototype, Symbol.match],
+  [String.prototype, Symbol.matchAll],
+  [String.prototype, Symbol.replace],
+  [String.prototype, Symbol.search],
+  [String.prototype, Symbol.split],
+  [Number.prototype, Symbol.toPrimitive],
+  [Date.prototype, Symbol.toPrimitive],
+  [Map.prototype, Symbol.iterator],
+  [RegExp.prototype, 'flags'],
+  [RegExp.prototype, 'global'],
+  [RegExp.prototype, 'hasIndices'],
+  [RegExp.prototype, 'ignoreCase'],
+  [RegExp.prototype, 'multiline'],
+  [RegExp.prototype, 'dotAll'],
+  [RegExp.prototype, 'unicode'],
+  [RegExp.prototype, 'unicodeSets'],
+  [RegExp.prototype, 'sticky'],
+  [RegExp.prototype, 'source'],
   [globalThis, 'Object'],
   [globalThis, 'Reflect'],
   [globalThis, 'Array'],
@@ -104,48 +128,44 @@ function iteratorSlots(): BuiltinSlot[] {
   const arrayIterator = Object.getPrototypeOf([][Symbol.iterator]()) as object
   const stringIterator = Object.getPrototypeOf(''[Symbol.iterator]()) as object
   const setIterator = Object.getPrototypeOf(new Set()[Symbol.iterator]()) as object
+  const mapIterator = Object.getPrototypeOf(new Map()[Symbol.iterator]()) as object
   return [
     [arrayIterator, 'next'],
     [stringIterator, 'next'],
     [setIterator, 'next'],
+    [mapIterator, 'next'],
   ]
 }
 
 /**
- * What each slot held when the library loaded. A process polluted before the import can make the work of listing and
- * recording throw: that is caught, the list is empty, and every use is refused with a count of one, rather than the
+ * The slots, and what each held when the library loaded. A process polluted before the import can make the work of listing
+ * and recording throw: that is caught, nothing is recorded, and every use is refused with a count of one, rather than the
  * import failing.
  */
-let broken = false
-let listed: BuiltinSlot[] = []
-const recorded: unknown[] = []
-try {
-  const iterators = iteratorSlots()
-  for (let i = 0; i < NAMED.length; i += 1) listed[i] = NAMED[i] as BuiltinSlot
-  for (let i = 0; i < iterators.length; i += 1)
-    listed[NAMED.length + i] = iterators[i] as BuiltinSlot
-  for (let i = 0; i < listed.length; i += 1) {
-    const slot = listed[i] as BuiltinSlot
-    recorded[i] = held(slot[0], slot[1])
+function readBaseline(): { listed: BuiltinSlot[]; recorded: unknown[] } | undefined {
+  try {
+    const listed = NAMED.concat(iteratorSlots())
+    return { listed, recorded: listed.map((slot) => held(slot[0], slot[1])) }
+  } catch {
+    return undefined
   }
-} catch {
-  broken = true
-  listed = []
 }
 
+const baseline = readBaseline()
+
 /** The built-ins the library calls, each with where it is held; empty when the process could not be read at load. */
-export const BUILTIN_SLOTS: readonly BuiltinSlot[] = listed
+export const BUILTIN_SLOTS: readonly BuiltinSlot[] = baseline?.listed ?? []
 
 /**
  * How many of the built-ins the library calls are not what they were when it loaded. A replaced one is counted, not
  * named: a host that can replace one has no need of the name, and the refusal must not carry what it replaced it with.
  */
 export function replacedBuiltinCount(): number {
-  if (broken) return 1
+  if (baseline === undefined) return 1
   let count = 0
-  for (let i = 0; i < BUILTIN_SLOTS.length; i += 1) {
-    const slot = BUILTIN_SLOTS[i] as BuiltinSlot
-    if (held(slot[0], slot[1]) !== recorded[i]) count += 1
+  for (let i = 0; i < baseline.listed.length; i += 1) {
+    const slot = baseline.listed[i] as BuiltinSlot
+    if (held(slot[0], slot[1]) !== baseline.recorded[i]) count += 1
   }
   return count
 }

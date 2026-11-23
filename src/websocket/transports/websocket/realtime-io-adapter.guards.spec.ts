@@ -263,7 +263,7 @@ describe('RealtimeIoAdapter guards', () => {
     const passed: boolean[] = []
     for (let n = 0; n < BUILTIN_SLOTS.length; n += 1) {
       const slot = BUILTIN_SLOTS[n] as (typeof BUILTIN_SLOTS)[number]
-      const saved = Object.getOwnPropertyDescriptor(slot[0], slot[1]) as PropertyDescriptor
+      const saved = Object.getOwnPropertyDescriptor(slot[0], slot[1])
       define(slot[0], slot[1], { value: () => undefined, configurable: true, writable: true })
       try {
         let body = ''
@@ -284,7 +284,9 @@ describe('RealtimeIoAdapter guards', () => {
         bodies[n] = body
         passed[n] = nextCalled
       } finally {
-        define(slot[0], slot[1], saved)
+        // A slot that was not there is removed again, not given an undefined descriptor.
+        if (saved === undefined) Reflect.deleteProperty(slot[0], slot[1])
+        else define(slot[0], slot[1], saved)
       }
     }
 

@@ -270,8 +270,9 @@ describe('websocket.cors over a real server', () => {
   })
 
   // Scenario: the flag accessors of RegExp.prototype replaced before the module boots. The generic `flags` accessor
-  // reads them, so a sticky RegExp could be made to look unflagged and be copied unanchored. Expected: the accessors
-  // the library took when it loaded decide, so a sticky RegExp is refused whatever the prototype says now.
+  // reads them, so a sticky RegExp could be made to look unflagged and be copied unanchored. Expected: it is refused
+  // whatever the prototype says now: the baseline of built-ins sees the replaced accessor first and refuses with the
+  // count-only code, before the origin is looked at.
   it('refuses a sticky RegExp even when RegExp.prototype.sticky now says it is not', async () => {
     const saved = Object.getOwnPropertyDescriptor(RegExp.prototype, 'sticky') as PropertyDescriptor
     Object.defineProperty(RegExp.prototype, 'sticky', { get: () => false, configurable: true })
@@ -284,7 +285,7 @@ describe('websocket.cors over a real server', () => {
       Object.defineProperty(RegExp.prototype, 'sticky', saved)
     }
     app = undefined as never
-    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_INVALID_OPTIONS')
+    expect((caught as { code?: string } | undefined)?.code).toBe('REALTIME_TRANSPORT_UNAVAILABLE')
   })
 
   // Scenario: an origin list the host can change after validation, or that reads differently by iterator and by

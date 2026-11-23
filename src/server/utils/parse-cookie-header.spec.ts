@@ -52,3 +52,27 @@ describe('parseCookieHeader', () => {
     expect(parseCookieHeader(undefined as unknown as string)).toEqual({})
   })
 })
+
+describe('parseCookieHeader, with a symbol-keyed method planted on String.prototype', () => {
+  // Scenario: `split` with a string separator asks the separator for `Symbol.split`, and a string primitive answers from
+  // `String.prototype`. A function planted there decides what the header is split into: here, a session cookie that was
+  // never sent. Expected: the header is refused, not parsed, so no forged cookie reaches authentication.
+  it('refuses to parse while Symbol.split is planted', () => {
+    Object.defineProperty(String.prototype, Symbol.split, {
+      value: () => ['session=FORGED'],
+      configurable: true,
+      writable: true,
+    })
+    let parsed: unknown
+    let code: unknown
+    try {
+      parsed = parseCookieHeader('theme=dark')
+    } catch (error) {
+      code = (error as { code?: unknown }).code
+    } finally {
+      Reflect.deleteProperty(String.prototype, Symbol.split)
+    }
+
+    expect([parsed, code]).toStrictEqual([undefined, 'REALTIME_TRANSPORT_UNAVAILABLE'])
+  })
+})

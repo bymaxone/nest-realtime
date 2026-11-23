@@ -347,7 +347,25 @@ describe('a process whose vm options were planted before the library loaded', ()
       loaded = require('./server-option-names') as Names
     })
 
+    // Short-circuits: more planted keys do not change a count that is one because nothing could be compared with.
+    for (const name of ['zzFirstPlanted', 'zzSecondPlanted']) {
+      Object.defineProperty(Object.prototype, name, {
+        value: 1,
+        configurable: true,
+        enumerable: true,
+        writable: true,
+      })
+    }
+    let withPlanted = -1
+    try {
+      withPlanted = loaded?.plantedKeyCount() ?? -1
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'zzFirstPlanted')
+      Reflect.deleteProperty(Object.prototype, 'zzSecondPlanted')
+    }
+
     expect(loaded?.plantedKeyCount()).toBe(1)
+    expect(withPlanted).toBe(1)
     expect(loaded?.plantedKeyMessage(loaded.plantedKeyCount())).not.toContain(SECRET)
   })
 })

@@ -106,6 +106,25 @@ describe('SseTransport, with a built-in replaced after admission', () => {
   })
 })
 
+describe('SseTransport, registering a connection', () => {
+  // Scenario: a connection is registered with a list of rooms. Expected: it is in its user room, its tenant room and exactly
+  // the rooms it was admitted to, and in no other (a loop that read one past the list would join a room named undefined).
+  it('joins exactly the rooms it was admitted to', async () => {
+    const { transport, rooms } = build()
+
+    await transport.registerConnection({
+      connectionId: 'c1',
+      auth: { userId: 'u1', tenantId: 't1', rooms: Object.freeze(['workspace:w1']) },
+      subject: new Subject<MessageEvent>(),
+      close$: new Subject<void>(),
+      ip: '127.0.0.1',
+      userAgent: undefined,
+    })
+
+    expect([...rooms.roomsOf('c1')].sort()).toStrictEqual(['tenant:t1', 'user:u1', 'workspace:w1'])
+  })
+})
+
 describe('SseTransport, with a built-in replaced while a message is sent', () => {
   // Scenario: each entry that sends, joins, leaves or disconnects is called while a built-in is replaced. Expected: each
   // refuses with the count-only code, and nothing is delivered.
