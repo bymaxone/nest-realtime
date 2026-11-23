@@ -84,6 +84,30 @@ describe('the built-ins the library calls', () => {
     expect(() => assertBuiltinsIntact()).not.toThrow()
   })
 
+  // Scenario: a key in the list is misspelled or names nothing, so the slot records an absent property that no replacement of
+  // the real built-in can change. Expected: every listed slot holds a function, or the getter of an accessor, at load, but
+  // for the eight that hold something else on purpose: the two namespace objects, and the symbol methods a string and a number
+  // must not have.
+  it('lists only slots that hold a function or the getter of an accessor, bar the eight that do not', () => {
+    const empty: string[] = []
+    for (let i = 0; i < BUILTIN_SLOTS.length; i += 1) {
+      const slot = BUILTIN_SLOTS[i] as (typeof BUILTIN_SLOTS)[number]
+      const descriptor = describe_(slot[0], slot[1])
+      const held = descriptor === undefined ? undefined : (descriptor.value ?? descriptor.get)
+      if (typeof held !== 'function') empty[empty.length] = labelOf(slot)
+    }
+    expect(empty).toStrictEqual([
+      'String.prototype.[Symbol.match]',
+      'String.prototype.[Symbol.matchAll]',
+      'String.prototype.[Symbol.replace]',
+      'String.prototype.[Symbol.search]',
+      'String.prototype.[Symbol.split]',
+      'Number.prototype.[Symbol.toPrimitive]',
+      'globalThis.Reflect',
+      'globalThis.Math',
+    ])
+  })
+
   // Scenario: each built-in of the list is replaced in turn, after the import. Expected: it is counted once and the refusal
   // has the code and the count, never the name of what was replaced; and all are back afterwards.
   it('counts each one that is replaced, and refuses with a count and nothing else', () => {
