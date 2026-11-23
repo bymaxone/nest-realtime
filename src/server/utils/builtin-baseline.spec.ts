@@ -442,9 +442,16 @@ describe('the list of built-ins', () => {
     )
   }
 
+  /**
+   * A scan reads the sources, so it runs on plain ones. Under the mutation runner the files are its instrumented copies, which
+   * hold every variant of every mutant (a `.startsWith` beside the `.endsWith` it is mutated into): those are not the code.
+   */
+  const instrumented = sources().some((source) => source.includes('stryMutAct_'))
+  const scanned = instrumented ? it.skip : it
+
   // Scenario: every method called by name in those files. Expected: its name is the key of a built-in in the list, or is
   // exempt with a reason. A call added later that is in neither fails here, and has to be listed or explained.
-  it('holds every built-in the options, validation and admission code calls by name', () => {
+  scanned('holds every built-in the options, validation and admission code calls by name', () => {
     const keys = new Set(BUILTIN_SLOTS.map((slot) => String(slot[1])))
     const called = new Set<string>()
     for (const source of sources()) {
@@ -457,7 +464,7 @@ describe('the list of built-ins', () => {
   })
 
   // Scenario: every static of a built-in object read in those files. Expected: it is in the list, or is exempt.
-  it('holds every static of a built-in the code reads', () => {
+  scanned('holds every static of a built-in the code reads', () => {
     const labels = new Set(BUILTIN_SLOTS.map((slot) => labelOf(slot)))
     const read = new Set<string>()
     for (const source of sources()) {
