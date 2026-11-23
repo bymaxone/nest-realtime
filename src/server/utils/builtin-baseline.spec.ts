@@ -706,3 +706,41 @@ describe('a process whose Array.prototype methods were replaced before the libra
     },
   )
 })
+
+describe('a process whose map empties only one of the two records taken at load', () => {
+  type Baseline = typeof BuiltinBaseline
+
+  /** Loads the module afresh with `map` answering an empty array for the one callback that reads `reader`, and puts it back. */
+  function loadedWithOneRecordEmptied(reader: 'held' | 'kindOf'): Baseline | undefined {
+    const saved = describe_(Array.prototype, 'map') as PropertyDescriptor
+    const original = saved.value as (
+      this: unknown[],
+      callback: (item: unknown) => unknown,
+    ) => unknown[]
+    let loaded: Baseline | undefined
+    define(Array.prototype, 'map', {
+      value: function (this: unknown[], callback: (item: unknown) => unknown): unknown[] {
+        return String(callback).includes(`${reader}(`) ? [] : original.call(this, callback)
+      },
+      configurable: true,
+      writable: true,
+    })
+    try {
+      jest.isolateModules(() => {
+        loaded = require('./builtin-baseline') as Baseline
+      })
+    } finally {
+      define(Array.prototype, 'map', saved)
+    }
+    return loaded
+  }
+
+  // Scenario: the record of what each slot holds, or the record of each slot's kind, comes back empty while the other is whole.
+  // Expected: either one alone is not a baseline: every use is refused with a count of one.
+  it.each(['held', 'kindOf'] as const)(
+    'refuses every use when only the %s record is empty',
+    (reader) => {
+      expect(loadedWithOneRecordEmptied(reader)?.replacedBuiltinCount()).toBe(1)
+    },
+  )
+})
