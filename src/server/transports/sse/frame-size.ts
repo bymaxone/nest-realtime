@@ -3,6 +3,7 @@
  * @layer transport
  */
 import type { MessageEvent } from '@nestjs/common'
+import { stringify } from '../../utils/captured-builtins'
 
 /** An event this transport built: it always has a name and an id. */
 export type Frame = MessageEvent & { readonly id: string; readonly type: string }
@@ -46,8 +47,7 @@ export function frameBytes(message: FrameFields): number {
     if (type) size += EVENT_FIELD + fieldBytes(type)
     if (data !== undefined && data !== null) {
       size +=
-        DATA_FIELD +
-        Buffer.byteLength(typeof data === 'string' ? data : (JSON.stringify(data) ?? ''))
+        DATA_FIELD + Buffer.byteLength(typeof data === 'string' ? data : (stringify(data) ?? ''))
     }
     sizes.set(message, size)
   }

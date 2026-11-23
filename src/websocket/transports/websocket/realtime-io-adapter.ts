@@ -18,6 +18,7 @@ import {
 import type { BymaxRealtimeModuleOptions, QuitableClient } from '@bymax-one/nest-realtime/internal'
 import {
   corsWithOwnNames,
+  placeFirst,
   plantedKeyCount,
   plantedKeyMessage,
   serverOptionsWithOwnNames,
@@ -32,7 +33,7 @@ type Namespace = { on: (event: 'connection', listener: (socket: object) => void)
 /** An engine.io middleware: it is given the request and the response, and calls `next` to let the request go on. */
 type EngineGuard = (request: unknown, response: ServerResponse, next: () => void) => void
 
-/** Refuses a request with a 500 that says how many planted keys there are, when `Object.prototype` holds any. */
+/** Refuses a request with a 500 whose body has the error code and how many planted keys there are, when `Object.prototype` holds any. */
 const stateGuard: EngineGuard = (_request, response, next) => {
   const planted = plantedKeyCount()
   if (planted === 0) {
@@ -41,12 +42,9 @@ const stateGuard: EngineGuard = (_request, response, next) => {
   }
   response.statusCode = 500
   response.setHeader('Content-Type', 'application/json')
-  response.end(
-    JSON.stringify({
-      code: REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
-      message: plantedKeyMessage(planted),
-    }),
-  )
+  // Written as text, not with `JSON.stringify`: a `toJSON` planted on `Object.prototype` is looked up on every object it
+  // serializes, and the code and the count are all this body has.
+  response.end(`{"code":"${REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE}","count":${planted}}`)
 }
 
 /** The part of an engine.io socket this adapter uses to stop a packet from reaching the decoder. */
@@ -66,6 +64,41 @@ const guardPackets = (connection: EngineSocket): void => {
     packet.type = 'noop'
     connection.close(true)
   })
+}
+
+/** The part of a Socket.IO server this adapter guards. */
+type GuardedServer = {
+  adapter: (a: unknown) => void
+  close: () => Promise<void>
+  engine?: {
+    middlewares: EngineGuard[]
+    on: (event: 'connection', listener: (connection: EngineSocket) => void) => void
+  }
+  of: (name: string) => Namespace
+  on: (event: 'new_namespace', listener: (namespace: Namespace) => void) => void
+}
+
+/**
+ * Gives a server the own keys and the guards the library installs on one it creates. Per request and per packet, after
+ * boot: a key planted since then is refused before anything reads the request, as the first of the engine's middlewares,
+ * and before the decoder of Socket.IO runs on a packet of an open connection. A server whose guard did not end up first
+ * is closed and refused, since it would answer requests unguarded.
+ */
+function installGuards(server: GuardedServer): void {
+  shadowServerInstance(server)
+  shadowDecoder(server)
+  if (server.engine !== undefined && !placeFirst(server.engine.middlewares, stateGuard)) {
+    server.close().catch(() => undefined)
+    throw realtimeError(
+      REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+      'the request guard could not be installed first',
+      { who: 'RealtimeIoAdapter' },
+    )
+  }
+  server.engine?.on('connection', guardPackets)
+  // Each socket of each namespace, the main one and every one made later, is given its own lazy state as it connects.
+  server.of('/').on('connection', shadowSocket)
+  server.on('new_namespace', (namespace) => namespace.on('connection', shadowSocket))
 }
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
@@ -163,25 +196,8 @@ export class RealtimeIoAdapter extends IoAdapter {
       maxHttpBufferSize: wsOpts.maxHttpBufferSize ?? 1_000_000,
     }) as unknown as ServerOptions
 
-    const server = super.createIOServer(port, mergedOpts) as {
-      adapter: (a: unknown) => void
-      close: () => Promise<void>
-      engine?: {
-        middlewares: EngineGuard[]
-        on: (event: 'connection', listener: (connection: EngineSocket) => void) => void
-      }
-      of: (name: string) => Namespace
-      on: (event: 'new_namespace', listener: (namespace: Namespace) => void) => void
-    }
-    shadowServerInstance(server)
-    shadowDecoder(server)
-    // Per request and per packet, after boot: a key planted since then is refused before anything reads the request, as
-    // the first of the engine's middlewares, and before the decoder of Socket.IO runs on a packet of an open connection.
-    server.engine?.middlewares.unshift(stateGuard)
-    server.engine?.on('connection', guardPackets)
-    // Each socket of each namespace, the main one and every one made later, is given its own lazy state as it connects.
-    server.of('/').on('connection', shadowSocket)
-    server.on('new_namespace', (namespace) => namespace.on('connection', shadowSocket))
+    const server = super.createIOServer(port, mergedOpts) as GuardedServer
+    installGuards(server)
 
     if (wsOpts.redisAdapter?.pubClient) {
       try {

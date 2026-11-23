@@ -71,4 +71,31 @@ describe('unavailableError', () => {
     expect(error.message).not.toContain('ECONNREFUSED')
     expect((error.cause as Error).message).toContain('ECONNREFUSED')
   })
+
+  // Scenario: a data property named like a field of a descriptor is planted on the root prototype, and the error is built.
+  // Expected: it is built, with the message and the cause as it was told them: the descriptors have no prototype, so nothing
+  // planted turns one into an accessor or throws.
+  it.each(['get', 'set'])('is built with %s planted on Object.prototype', (name) => {
+    Object.defineProperty(Object.prototype, name, {
+      value: 1,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    })
+    let error: ReturnType<typeof unavailableError> | undefined
+    let thrown: unknown
+    try {
+      error = unavailableError(REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE, 'SseTransport', 'x', 'why')
+    } catch (caught) {
+      thrown = caught
+    } finally {
+      Reflect.deleteProperty(Object.prototype, name)
+    }
+
+    expect(thrown).toBeUndefined()
+    expect([error?.message, error?.cause]).toStrictEqual([
+      '[SseTransport] REALTIME_PUBSUB_UNAVAILABLE: x',
+      'why',
+    ])
+  })
 })

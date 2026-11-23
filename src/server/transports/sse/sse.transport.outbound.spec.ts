@@ -175,12 +175,14 @@ describe('SseTransport: a client that does not read', () => {
 
   it('counts an event once however many connections receive it', async () => {
     const { transport } = build({ sse: { maxQueuedBytes: 1_000_000 } })
-    const spy = jest.spyOn(JSON, 'stringify')
+    // `toJSON` is called once for each time the payload is serialized, so its calls count the serializations without
+    // replacing `JSON.stringify`, which the library refuses to run beside.
+    const payload = { toJSON: jest.fn(() => ({ a: 1 })) }
     for (let i = 0; i < 5; i++) await register(transport, `c${i}`, stuck())
 
-    await transport.broadcast('e', { a: 1 })
+    await transport.broadcast('e', payload)
 
-    expect(spy.mock.calls.filter(([value]) => JSON.stringify(value) === '{"a":1}')).toHaveLength(1)
+    expect(payload.toJSON).toHaveBeenCalledTimes(1)
   })
 
   describe('checkStall', () => {

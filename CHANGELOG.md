@@ -7,6 +7,28 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.36] - 2026-11-22
+
+### Fixed
+
+- **The WebSocket guard's 500 body is not shaped by a planted `toJSON`.** The body was built with `JSON.stringify`, which looks `toJSON` up on every object it serializes, so a function planted on `Object.prototype` under that name became the body. It is now written as text, `{"code":"REALTIME_TRANSPORT_UNAVAILABLE","count":N}`: the code and the number of keys, with no `message` key.
+- **A wrong-typed value planted under a name `vm` reads as an option no longer makes the library fail to load.** The realm the guard compares the standard names with is made with `vm`, which reads its options with inheritance and puts the planted value in its error. The error is now caught and dropped; the library loads, and the WebSocket server refuses to run on every use with a count of one and nothing planted in the message. A process that replaced `globalThis.Object` before the import is still not covered.
+
+- **Replacing a built-in after the import no longer blinds the guard's installation.** The helpers that give a server its own keys and put the request guard first now call the clean realm's functions and walk arrays by index, and the descriptor they define has no prototype. A server whose guard did not end up first in the engine's middleware list is closed and refused with `REALTIME_TRANSPORT_UNAVAILABLE`, not handed out unguarded. Not covered: the methods of the objects the host and Node hand over, which are theirs.
+
+- **The methods a value is asked for by symbol are held to what they were.** A string primitive answers `split`, `replace`, `match` and `search` from `String.prototype`, a regular expression from its own symbol-keyed methods and its flags, and a number or a date its coercion from `Symbol.toPrimitive`; a function planted or replaced there decided what a cookie header was split into, which is a forged session cookie. They are in the baseline of built-ins now, as are the flags of a regular expression (by their getters), and `parseCookieHeader` checks first.
+- **A symbol key planted on `Object.prototype` is counted.** The guard counted string keys only, so a planted `Symbol.iterator`, which `Array.from` and the iteration of a plain object would use, went unseen. Every own symbol of the root prototype is counted now, apart from the registered `$$jest-protect-from-deletion` that Jest puts there, while it is not enumerable: counting it would refuse every host test suite that runs under Jest.
+- **A built-in the library calls that was replaced after it loaded is refused, not trusted.** The built-ins that the options, their validation and the admission of a connection call are recorded when the library loads and compared by identity. `validateOptions`, the admission of a connection (its identity, tenant and rooms) and the checks of `joinRoom` and `leaveRoom` refuse first with `REALTIME_TRANSPORT_UNAVAILABLE` and a count. A replaced `startsWith` used to let a room of another tenant through the reserved-prefix check. The refusal says how many changes there are and never what was replaced. `Promise` methods and `Date` are not listed: instrumentation patches them on purpose. `JSON.stringify` is not listed either: it serializes and decides nothing about admission, so the library takes its own copy at load and a test suite that spies on it is not refused.
+
+### Documentation
+
+- A host that builds only the SSE endpoint is not refused when a `cors` key is planted before `NestFactory.create`: Nest answers every route, the endpoint included, with that block, which the library neither adds nor can stop. The README says so.
+- A process whose `hasOwnProperty` or `toString` was replaced before the library loaded is refused by the options path of the modules with `REALTIME_INVALID_OPTIONS`, not by the WebSocket server's count-only `REALTIME_TRANSPORT_UNAVAILABLE`; both fail closed. The README says so.
+
+### Apply to a derived backend
+
+A client that reads the `message` key of the guard's 500 body reads `count` instead: the body is `{"code":"REALTIME_TRANSPORT_UNAVAILABLE","count":N}`. A program that replaces one of the built-ins above after importing the library, with a polyfill or a patch, makes the library refuse until it is put back: do it before the import. The boot error of the WebSocket server counts changes (`N changes to Object.prototype or to a built-in the library calls found`), not keys.
+
 ## [1.2.35] - 2026-11-22
 
 ### Security
@@ -1452,7 +1474,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.35...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.36...HEAD
+[1.2.36]: https://github.com/bymaxone/nest-realtime/compare/v1.2.35...v1.2.36
 [1.2.35]: https://github.com/bymaxone/nest-realtime/compare/v1.2.34...v1.2.35
 [1.2.34]: https://github.com/bymaxone/nest-realtime/compare/v1.2.33...v1.2.34
 [1.2.33]: https://github.com/bymaxone/nest-realtime/compare/v1.2.32...v1.2.33

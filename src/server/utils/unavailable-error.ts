@@ -38,9 +38,23 @@ export function unavailableError(
   // filter, a logger or an ack that stringifies the instance sends the code and the generic body
   // and not the text of a driver or a broker; `err.cause` still holds it.
   const error = Object.assign(new ServiceUnavailableException(), { code })
+  // The descriptors have no prototype: `defineProperties` reads their fields with inheritance, so a `get` or `set` planted
+  // on the root prototype would otherwise turn one into an accessor, or throw.
   Object.defineProperties(error, {
-    message: { value: message, enumerable: false, writable: true, configurable: true },
-    cause: { value: cause, enumerable: false, writable: true, configurable: true },
+    message: {
+      __proto__: null,
+      value: message,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    } as PropertyDescriptor,
+    cause: {
+      __proto__: null,
+      value: cause,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    } as PropertyDescriptor,
   })
   return error
 }

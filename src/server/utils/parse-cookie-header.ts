@@ -2,6 +2,7 @@
  * @fileoverview Parser turning a raw HTTP `Cookie` header into a plain object.
  * @layer utils
  */
+import { assertBuiltinsIntact } from './builtin-baseline'
 
 /**
  * Parse an HTTP `Cookie` header into a plain object.
@@ -18,6 +19,7 @@
  * ```
  */
 export function parseCookieHeader(cookieHeader: string): Record<string, string> {
+  assertBuiltinsIntact()
   const out = Object.create(null) as Record<string, string>
   if (!cookieHeader) return out
   for (const pair of cookieHeader.split(';')) {

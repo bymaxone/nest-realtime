@@ -341,6 +341,70 @@ setTimeout(() => {
 }, 50)
 `
 
+/**
+ * The pre-load probe, identical in both formats. `vm` reads its options with inheritance, so a wrong-typed value planted
+ * under one of their names makes it throw, with the planted value in the message. The library builds a realm with `vm`
+ * when the WebSocket entry loads: the import must not throw, and the server must refuse to run with the count-only error
+ * and none of what was planted in it. The peers load first, as they do in a consumer that plants after its framework and
+ * before the library. It runs as its own process because the planted key would break the rest of the probes.
+ */
+const preloadProbeBody = `
+;(async () => {
+const SECRET = 'SECRET-planted-value'
+const fail = (message) => {
+  console.error('  ✗ ' + FORMAT + ': ' + message)
+  process.exit(1)
+}
+Object.prototype.microtaskMode = SECRET
+let ws
+try {
+  ws = await loadWebSocketEntry()
+} catch (error) {
+  fail('the import threw with a key planted under a vm option: ' + error.code + ' ' + String(error.message).slice(0, 80))
+}
+const refusal = () => {
+  try {
+    new ws.RealtimeIoAdapter({ get: () => ({}) }).createIOServer(0, {})
+  } catch (error) {
+    return error
+  }
+  return undefined
+}
+for (const phase of ['while the key is planted', 'after it is removed']) {
+  const error = refusal()
+  if (error === undefined) fail('the server was created ' + phase)
+  if (error.code !== 'REALTIME_TRANSPORT_UNAVAILABLE') fail('the refusal ' + phase + ' had the code ' + error.code)
+  if (!/\\b1 change\\b/.test(error.message)) fail('the refusal ' + phase + ' did not count one change: ' + error.message)
+  if (error.message.includes(SECRET)) fail('the refusal ' + phase + ' holds the planted value')
+  delete Object.prototype.microtaskMode
+}
+console.log('  ✓ ' + FORMAT + ': a key planted under a vm option before the library loads is refused with a count and nothing of it')
+})().catch((error) => {
+  console.error('  ✗ ' + FORMAT + ' preload probe crashed: ' + (error && error.stack ? error.stack : error))
+  process.exit(1)
+})
+`
+
+const esmPreloadProbe = `import 'reflect-metadata'
+import '@nestjs/common'
+import '@nestjs/core'
+import '@nestjs/websockets'
+import '@nestjs/platform-socket.io'
+import 'socket.io'
+const FORMAT = 'ESM'
+const loadWebSocketEntry = () => import('${packageName}/websocket')
+${preloadProbeBody}`
+
+const cjsPreloadProbe = `require('reflect-metadata')
+require('@nestjs/common')
+require('@nestjs/core')
+require('@nestjs/websockets')
+require('@nestjs/platform-socket.io')
+require('socket.io')
+const FORMAT = 'CJS'
+const loadWebSocketEntry = async () => require('${packageName}/websocket')
+${preloadProbeBody}`
+
 const esmRejectionProbe = `import vm from 'node:vm'
 import { resolveAuthTenant } from '${packageName}/internal'
 const FORMAT = 'ESM'
@@ -417,6 +481,8 @@ try {
   )
   writeFileSync(join(consumerDir, 'probe.mjs'), esmProbe)
   writeFileSync(join(consumerDir, 'probe.cjs'), cjsProbe)
+  writeFileSync(join(consumerDir, 'preload.mjs'), esmPreloadProbe)
+  writeFileSync(join(consumerDir, 'preload.cjs'), cjsPreloadProbe)
   writeFileSync(join(consumerDir, 'rejections.mjs'), esmRejectionProbe)
   writeFileSync(join(consumerDir, 'rejections.cjs'), cjsRejectionProbe)
 
@@ -463,6 +529,8 @@ try {
     'probe.mjs',
     'probe.cjs',
     'probe-rebundled.cjs',
+    'preload.mjs',
+    'preload.cjs',
     'rejections.mjs',
     'rejections.cjs',
   ]) {

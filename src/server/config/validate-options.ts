@@ -5,6 +5,7 @@
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { HEARTBEAT_MAX_MS, HEARTBEAT_MIN_MS } from '../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { assertBuiltinsIntact } from '../utils/builtin-baseline'
 import { describeReceived } from '../utils/describe-received'
 import { readHostKey } from '../utils/read-host-key'
 import { realtimeError } from '../utils/realtime-error'
@@ -24,6 +25,7 @@ const VALID_TRANSPORTS = new Set<string>(['sse', 'websocket', 'both'])
  * as authenticated. The check is therefore a hard failure, not a warning.
  */
 export function validateOptions(raw: BymaxRealtimeModuleOptions): void {
+  assertBuiltinsIntact()
   guardHostReads('the options', () => validateReadOptions(raw))
 }
 

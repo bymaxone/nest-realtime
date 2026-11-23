@@ -40,6 +40,7 @@ import { composeRoomId } from '../../utils/compose-room-id'
 import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { ConnectionAdmission, UNBOUNDED_TICKET } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
+import { assertBuiltinsIntact } from '../../utils/builtin-baseline'
 import { logEvent } from '../../utils/log-event'
 import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
@@ -198,6 +199,7 @@ export class SseTransport implements ITransport {
    * handler can carry a consistent connection record reference.
    */
   async registerConnection(params: RegisterSseConnectionParams): Promise<void> {
+    assertBuiltinsIntact()
     const record: ConnectionRecord = {
       connectionId: params.connectionId,
       userId: params.auth.userId,
@@ -219,12 +221,27 @@ export class SseTransport implements ITransport {
     this.connections.register(record)
     this.replayBuffer.open(params.auth.userId)
     this.track(params)
-    this.rooms.join(params.connectionId, composeRoomId('USER', params.auth.userId))
+    this.recordJoin(params.connectionId, composeRoomId('USER', params.auth.userId))
     if (params.auth.tenantId !== undefined) {
-      this.rooms.join(params.connectionId, composeRoomId('TENANT', params.auth.tenantId))
+      this.recordJoin(params.connectionId, composeRoomId('TENANT', params.auth.tenantId))
     }
-    for (const room of params.auth.rooms ?? []) this.rooms.join(params.connectionId, room)
+    // The admitted copy, walked by index: the handler awaited between admission and here, and the check runs before each join.
+    const named = params.auth.rooms ?? []
+    for (let i = 0; i < named.length; i += 1)
+      this.recordJoin(params.connectionId, named[i] as string)
     await this.evictBeyondLimit(params.auth.userId)
+  }
+
+  /** Join one room in the registry, after checking that the built-ins the library calls are what they were. */
+  private recordJoin(connectionId: string, room: string): void {
+    assertBuiltinsIntact()
+    this.rooms.join(connectionId, room)
+  }
+
+  /** Deliver a message to each of a snapshot of connections, walked by index so no iterator is asked for. */
+  private deliverToAll(connections: readonly ConnectionRecord[], message: Frame): void {
+    for (let i = 0; i < connections.length; i += 1)
+      this.deliver(connections[i] as ConnectionRecord, message)
   }
 
   /**
@@ -325,6 +342,7 @@ export class SseTransport implements ITransport {
    * carries the queue failure as its cause and is not also reported to the hook.
    */
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
+    assertBuiltinsIntact()
     const id = this.idGen.next()
     this.emitToUserLocal(userId, event, data, id)
     const queue = this.offlineQueue
@@ -382,12 +400,14 @@ export class SseTransport implements ITransport {
   }
 
   async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
+    assertBuiltinsIntact()
     const id = this.idGen.next()
     this.emitToTenantLocal(tenantId, event, data, id)
     await this.publish({ op: 'emitToTenant', args: { tenantId, event, data, id } })
   }
 
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
+    assertBuiltinsIntact()
     requireRoomName('emitToRoom', roomId)
     const id = this.idGen.next()
     this.emitToRoomLocal(roomId, event, data, id)
@@ -395,6 +415,7 @@ export class SseTransport implements ITransport {
   }
 
   async broadcast(event: string, data: unknown): Promise<void> {
+    assertBuiltinsIntact()
     const id = this.idGen.next()
     this.broadcastLocal(event, data, id)
     await this.publish({ op: 'broadcast', args: { event, data, id } })
@@ -402,13 +423,15 @@ export class SseTransport implements ITransport {
 
   /** Join a connection this instance holds to a room; any other id is left alone. */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
+    assertBuiltinsIntact()
     refuseReservedRoom('joinRoom', roomId)
     if (this.connections.get(connectionId)?.transport === 'sse')
-      this.rooms.join(connectionId, roomId)
+      this.recordJoin(connectionId, roomId)
   }
 
   /** Remove a connection this instance holds from a room; any other id is left alone. */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
+    assertBuiltinsIntact()
     refuseReservedRoom('leaveRoom', roomId)
     if (this.connections.get(connectionId)?.transport === 'sse')
       this.rooms.leave(connectionId, roomId)
@@ -423,6 +446,7 @@ export class SseTransport implements ITransport {
    * the connection, so the caller must not read the resolution as a revocation.
    */
   async disconnect(connectionId: string, reason?: string): Promise<void> {
+    assertBuiltinsIntact()
     const record = this.connections.get(connectionId)
     if (record) {
       // A connection held here as a WebSocket is the WebSocket transport's to close:
@@ -453,10 +477,11 @@ export class SseTransport implements ITransport {
    * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
    */
   emitToUserLocal(userId: string, event: string, data: unknown, id: string): void {
+    assertBuiltinsIntact()
     const message = this.buildMessage(id, event, data)
     this.tally?.emitted('sse')
     this.replayBuffer.append(userId, message)
-    for (const conn of this.connections.byUser(userId, 'sse')) this.deliver(conn, message)
+    this.deliverToAll(this.connections.byUser(userId, 'sse'), message)
   }
 
   /**
@@ -468,9 +493,10 @@ export class SseTransport implements ITransport {
    * buffer or offline queue — only emitToUser populates per-user replay/offline state.
    */
   emitToTenantLocal(tenantId: string, event: string, data: unknown, id: string): void {
+    assertBuiltinsIntact()
     const message = this.buildMessage(id, event, data)
     this.tally?.emitted('sse')
-    for (const conn of this.connections.byTenant(tenantId, 'sse')) this.deliver(conn, message)
+    this.deliverToAll(this.connections.byTenant(tenantId, 'sse'), message)
   }
 
   /**
@@ -482,10 +508,13 @@ export class SseTransport implements ITransport {
    * buffer or offline queue — only emitToUser populates per-user replay/offline state.
    */
   emitToRoomLocal(roomId: string, event: string, data: unknown, id: string): void {
+    assertBuiltinsIntact()
     const message = this.buildMessage(id, event, data)
     this.tally?.emitted('sse')
-    for (const connectionId of this.rooms.members(roomId)) {
-      const conn = this.connections.get(connectionId)
+    const members = this.rooms.members(roomId)
+    // Stryker disable next-line EqualityOperator: equivalent — past the last member the element is `undefined`, which no connection is registered under, so the lookup finds none and nothing is delivered
+    for (let i = 0; i < members.length; i += 1) {
+      const conn = this.connections.get(members[i] as string)
       if (conn && conn.transport === 'sse') this.deliver(conn, message)
     }
   }
@@ -499,9 +528,10 @@ export class SseTransport implements ITransport {
    * buffer or offline queue — only emitToUser populates per-user replay/offline state.
    */
   broadcastLocal(event: string, data: unknown, id: string): void {
+    assertBuiltinsIntact()
     const message = this.buildMessage(id, event, data)
     this.tally?.emitted('sse')
-    for (const conn of this.connections.allByTransport('sse')) this.deliver(conn, message)
+    this.deliverToAll(this.connections.allByTransport('sse'), message)
   }
 
   /**
@@ -511,6 +541,7 @@ export class SseTransport implements ITransport {
    * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
    */
   async disconnectLocal(connectionId: string, reason?: string): Promise<void> {
+    assertBuiltinsIntact()
     const record = this.connections.get(connectionId)
     if (!record || record.transport !== 'sse') return
     // The record goes first, so that the stream's own finalize, which calls unregisterConnection,
