@@ -616,3 +616,37 @@ describe('a process whose hasOwnProperty was replaced before the library loaded'
     expect(loaded?.replacedBuiltinCount()).toBe(1)
   })
 })
+
+describe('a process whose Array.prototype methods were replaced before the library loaded', () => {
+  type Baseline = typeof BuiltinBaseline
+
+  /** Loads the module afresh with one method of arrays replaced by a function that answers an empty array, and puts it back. */
+  function loadedWithEmptying(method: 'concat' | 'map'): Baseline | undefined {
+    const saved = describe_(Array.prototype, method) as PropertyDescriptor
+    let loaded: Baseline | undefined
+    define(Array.prototype, method, { value: () => [], configurable: true, writable: true })
+    try {
+      jest.isolateModules(() => {
+        loaded = require('./builtin-baseline') as Baseline
+      })
+    } finally {
+      define(Array.prototype, method, saved)
+    }
+    return loaded
+  }
+
+  // Scenario: `concat` or `map` answers an empty array while the library loads, so the list or what it recorded is empty and
+  // the load succeeds. Expected: that is not a baseline: every use is refused with a count of one, not counted as nothing
+  // having changed.
+  it.each(['concat', 'map'] as const)(
+    'refuses every use when %s answered an empty array at load',
+    (method) => {
+      const loaded = loadedWithEmptying(method)
+
+      expect(loaded?.replacedBuiltinCount()).toBe(1)
+      expect(() => loaded?.assertBuiltinsIntact()).toThrow(
+        'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls was replaced after it was loaded',
+      )
+    },
+  )
+})

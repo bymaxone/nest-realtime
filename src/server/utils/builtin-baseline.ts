@@ -144,8 +144,15 @@ function iteratorSlots(): BuiltinSlot[] {
  */
 function readBaseline(): { listed: BuiltinSlot[]; recorded: unknown[] } | undefined {
   try {
-    const listed = NAMED.concat(iteratorSlots())
-    return { listed, recorded: listed.map((slot) => held(slot[0], slot[1])) }
+    const iterators = iteratorSlots()
+    const listed = NAMED.concat(iterators)
+    const recorded = listed.map((slot) => held(slot[0], slot[1]))
+    // `concat` and `map` are the process's own, and a process polluted before the import can make them answer what it likes:
+    // a list or a record of the wrong size is not a baseline.
+    if (listed.length !== NAMED.length + iterators.length || recorded.length !== listed.length) {
+      return undefined
+    }
+    return { listed, recorded }
   } catch {
     return undefined
   }
