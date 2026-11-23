@@ -144,7 +144,9 @@ export const SOCKET_LAZY_NAMES = ['_anyListeners', '_anyOutgoingListeners'] as c
 
 type Clean = {
   names: (target: object) => string[]
-  describe: (target: object, name: string) => PropertyDescriptor | undefined
+  describe: (target: object, name: PropertyKey) => PropertyDescriptor | undefined
+  symbols: (target: object) => symbol[]
+  exempt: symbol
   is: (a: unknown, b: unknown) => boolean
   hasOwn: typeof Object.prototype.hasOwnProperty
   apply: typeof Reflect.apply
@@ -165,6 +167,8 @@ function makeClean(): Clean | undefined {
     return runInNewContext(`({
   names: Object.getOwnPropertyNames,
   describe: Object.getOwnPropertyDescriptor,
+  symbols: Object.getOwnPropertySymbols,
+  exempt: Symbol.for('$$jest-protect-from-deletion'),
   is: Object.is,
   hasOwn: Object.prototype.hasOwnProperty,
   apply: Reflect.apply,
@@ -195,6 +199,8 @@ const unverifiable = made === undefined
 const clean: Clean = made ?? {
   names: Object.getOwnPropertyNames,
   describe: Object.getOwnPropertyDescriptor,
+  symbols: Object.getOwnPropertySymbols,
+  exempt: Symbol(),
   is: Object.is,
   hasOwn: Object.prototype.hasOwnProperty,
   apply: Reflect.apply,
@@ -372,7 +378,8 @@ function isStandard(name: string): boolean {
 /**
  * How many things `Object.prototype` holds now that it did not hold when the library was loaded: a string key outside the
  * standard set, a standard name that was not the built-in of a clean runtime when the library loaded, and a standard name
- * that was overwritten, made an accessor, changed in an attribute, or removed. Writing `hasOwnProperty = 1` is as much a
+ * that was overwritten, made an accessor, changed in an attribute, or removed, and a symbol key of any kind, apart from the
+ * registered `$$jest-protect-from-deletion` that Jest puts there, while it is not enumerable. Writing `hasOwnProperty = 1` is as much a
  * planted key as a new name, since engine.io calls it. When the clean realm could not be made it is one, as there is nothing
  * to compare with. A built-in the options, their validation and the admission of a connection call that is not what it was
  * when the library loaded counts as one change each. It calls only what the clean realm provides, in index loops, so
@@ -389,6 +396,12 @@ export function plantedKeyCount(): number {
     if (changed(baseline[i], clean.describe(root, STANDARD_OBJECT_PROTOTYPE_NAMES[i] as string))) {
       count += 1
     }
+  }
+  const symbols = clean.symbols(root)
+  for (let i = 0; i < symbols.length; i += 1) {
+    const key = symbols[i] as symbol
+    if (key === clean.exempt && clean.describe(root, key)?.enumerable === false) continue
+    count += 1
   }
   return count
 }

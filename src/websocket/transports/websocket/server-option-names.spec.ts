@@ -506,3 +506,60 @@ describe('placeFirst', () => {
     expect(placeFirst(ignoring, 'x')).toBe(false)
   })
 })
+
+describe('a symbol key planted on Object.prototype', () => {
+  const JEST_KEY = '$$jest-protect-from-deletion'
+
+  /** Plants `key` on the root prototype with the given enumerability, counts, and puts everything back. */
+  function countWith(key: symbol, enumerable: boolean): number {
+    Object.defineProperty(Object.prototype, key, {
+      value: true,
+      configurable: true,
+      enumerable,
+      writable: true,
+    })
+    try {
+      return plantedKeyCount()
+    } finally {
+      Reflect.deleteProperty(Object.prototype, key)
+    }
+  }
+
+  // Scenario: Jest itself puts a registered symbol on the root prototype of every test, not enumerable. Expected: it is the
+  // one symbol that is not counted, or every host's Jest suite would be refused.
+  it('does not count the registered symbol Jest puts there, while it is not enumerable', () => {
+    const present = Object.getOwnPropertySymbols(Object.prototype).includes(Symbol.for(JEST_KEY))
+
+    expect([present, plantedKeyCount()]).toStrictEqual([true, 0])
+  })
+
+  // Scenario: another symbol is planted, whatever its enumerability. Expected: counted.
+  it.each([
+    ['a registered symbol under another key', Symbol.for('zz-other-registered-key'), false],
+    ['an unregistered symbol with the description Jest uses', Symbol(JEST_KEY), false],
+    ['a registered symbol under another key, enumerable', Symbol.for('zz-other-enumerable'), true],
+  ])('counts %s', (_name, key, enumerable) => {
+    expect(countWith(key, enumerable)).toBe(1)
+  })
+
+  // Scenario: the registered Jest symbol, but enumerable. Expected: counted: the exemption is for it as it is, not for its name.
+  it('counts the registered symbol Jest uses once it is enumerable', () => {
+    const key = Symbol.for(JEST_KEY)
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, key) as PropertyDescriptor
+    Object.defineProperty(Object.prototype, key, { ...original, enumerable: true })
+    let count = -1
+    try {
+      count = plantedKeyCount()
+    } finally {
+      Object.defineProperty(Object.prototype, key, original)
+    }
+
+    expect(count).toBe(1)
+  })
+
+  // Scenario: Symbol.iterator is planted, which `Array.from` and iteration over a plain object would use. Expected: counted.
+  it('counts a planted Symbol.iterator', () => {
+    expect(countWith(Symbol.iterator, true)).toBe(1)
+    expect(countWith(Symbol.iterator, false)).toBe(1)
+  })
+})
