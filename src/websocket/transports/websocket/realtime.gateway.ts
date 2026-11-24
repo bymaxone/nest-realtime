@@ -19,6 +19,7 @@ import {
   admitRooms,
   assertIdentityIsNotBlank,
   resolveAuthTenant,
+  returnable,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   AdmissionTicket,
@@ -343,7 +344,15 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     const ticket = this.tickets.get(socket)
     this.authenticated.delete(socket)
     this.tickets.delete(socket)
-    if (auth) return { auth, ticket }
+    if (auth) {
+      // The place the middleware took is given back when the answer is refused: no caller is left to release it.
+      try {
+        return returnable({ auth, ticket })
+      } catch (err) {
+        ticket?.release()
+        throw err
+      }
+    }
     if (this.transport.shuttingDown) {
       this.tally?.refused('unavailable')
       socket.disconnect(true)
@@ -360,7 +369,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       }
       const resolved = resolveAuthTenant(this.options, fresh)
       assertIdentityIsNotBlank(resolved)
-      return { auth: admitRooms(resolved), ticket: held }
+      return returnable({ auth: admitRooms(resolved), ticket: held })
     } catch (err) {
       held.release()
       throw err

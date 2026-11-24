@@ -309,15 +309,14 @@ export class SseSubscriptionHandler {
       authenticated.ticket.release()
       throw err
     }
-    // The last statement before the return: an async function resolves its promise with the stream, which asks it for a
-    // `then`, and what a host planted while the stream was built answers for it.
+    // The last statement before the return: an async function resolves its promise with the stream, which asks it, and
+    // what it inherits from, for a `then`; one a host planted while the stream was built, or before, answers for it.
     try {
-      assertBuiltinsIntact()
+      return returnable(stream)
     } catch (err) {
       authenticated.ticket.release()
       throw err
     }
-    return stream
   }
 
   /** Refuse a new stream with a 503 once shutdown has begun. */

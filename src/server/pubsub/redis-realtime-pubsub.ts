@@ -14,7 +14,7 @@ import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
 import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
-import { absorbed, firstOf, shielded, unboxed } from '../utils/within-deadline'
+import { absorbed, firstOf, shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 
 /** The shortest time between two reports of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
@@ -148,19 +148,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       throw this.cannotPublish(`the Redis client is ${status}`)
     }
     const sent = this.#pub.publish(this.channel, JSON.stringify(message))
-    let timer: NodeJS.Timeout | undefined
-    const expired = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(
-        () => reject(this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`)),
-        PUBLISH_WAIT_MS,
-      )
-      timer.unref()
+    await withinDeadline(sent, PUBLISH_WAIT_MS, {
+      timeoutError: () =>
+        this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`),
     })
-    try {
-      await Promise.race([sent, expired])
-    } finally {
-      clearTimeout(timer)
-    }
   }
 
   /**

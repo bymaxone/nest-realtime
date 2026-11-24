@@ -3,6 +3,7 @@
  * with such a value by asking it for a `then`: a host that plants one answers for the stream or the gap.
  * @layer transport
  */
+import { Observable } from 'rxjs'
 import { plantSelfErasingThen, withSelfErasingThen } from '../../../../test/support/forged-promise'
 import {
   build,
@@ -68,6 +69,29 @@ describe('SseSubscriptionHandler: what the handshake returns is checked last', (
     }
 
     expect(getReplayEvents).toHaveBeenCalledTimes(1)
+    expect(stream).toBeUndefined()
+    expect(failure).toMatchObject(REFUSED)
+  })
+
+  // Scenario: a `then` that erases itself is planted on Observable.prototype after the guard authenticated and before
+  // the route runs, so it answers for the stream the route returns. Expected: the route refuses; the stream it returns
+  // is the one it built, or none.
+  it('the route refuses a then planted on the stream it returns', async () => {
+    const handler = build(mkTransport({ emitConnectionEvent: false }), mkHeartbeat(), mkOptions())
+    const req = mkReq()
+    const res = mkRes()
+    await handler.authenticateBeforeCommit(req, res)
+    let stream: unknown
+    let failure: unknown
+
+    await withSelfErasingThen(Observable.prototype, FORGED, async () => {
+      try {
+        stream = await handler.handle(req, res)
+      } catch (error) {
+        failure = error
+      }
+    })
+
     expect(stream).toBeUndefined()
     expect(failure).toMatchObject(REFUSED)
   })

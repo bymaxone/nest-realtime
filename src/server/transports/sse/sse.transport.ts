@@ -46,6 +46,7 @@ import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
 import { refuseReservedRoom, requireRoomName } from '../../utils/reserved-room'
 import { unavailableError } from '../../utils/unavailable-error'
+import { awaitable } from '../../utils/within-deadline'
 import { InMemoryPubSub } from '../../pubsub/in-memory-pubsub'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
@@ -455,11 +456,13 @@ export class SseTransport implements ITransport {
       return
     }
     try {
-      await this.pubsub.publish({
-        op: 'disconnect',
-        args: { connectionId, reason },
-        origin: this.instanceId,
-      })
+      await awaitable(
+        this.pubsub.publish({
+          op: 'disconnect',
+          args: { connectionId, reason },
+          origin: this.instanceId,
+        }),
+      )
     } catch (error) {
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
@@ -635,7 +638,7 @@ export class SseTransport implements ITransport {
     message: Omit<RealtimePubSubMessage, 'origin'>,
   ): Promise<Failure | undefined> {
     try {
-      await this.pubsub.publish({ ...message, origin: this.instanceId })
+      await awaitable(this.pubsub.publish({ ...message, origin: this.instanceId }))
       return undefined
     } catch (error) {
       return { error }

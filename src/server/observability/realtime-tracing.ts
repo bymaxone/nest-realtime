@@ -4,6 +4,7 @@
  */
 import { Injectable } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
+import { returnable } from '../utils/builtin-baseline'
 
 /** The span names the library starts. */
 export type RealtimeSpanName = 'realtime.handshake' | 'realtime.reauthenticate'
@@ -79,7 +80,8 @@ export class RealtimeTracing implements OnModuleInit {
       throw error
     }
     attempt(() => span.end())
-    return result
+    // The tracer's `end` ran just now and is host code: what it planted answers for the result the engine resolves with.
+    return returnable(result)
   }
 
   /**

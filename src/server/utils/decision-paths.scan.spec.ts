@@ -1,5 +1,5 @@
 /**
- * @fileoverview Every file under `src/server` waits on a host value only through the helpers, bar the sites listed here
+ * @fileoverview Every server-side file (`src/server`, `src/websocket`, `src/internal`, `src/observability`) waits on a host value only through the helpers, bar the sites listed here
  * with the reason nobody decides on them.
  * @layer utils
  *
@@ -8,7 +8,7 @@
  * a slot a host can replace. A file added later is covered the moment it exists: a site it adds that is not listed
  * fails here, and the listing is the place to say why it is safe.
  */
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 interface Source {
@@ -16,7 +16,9 @@ interface Source {
   readonly source: string
 }
 
-const root = join(__dirname, '..')
+const src = join(__dirname, '..', '..')
+// The browser entries (`react`, `shared`) run where no host supplies a store, a bus or a tracer, so they are not scanned.
+const ROOTS = ['server', 'websocket', 'internal', 'observability'] as const
 
 const bare = (source: string): string =>
   source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
@@ -54,13 +56,70 @@ function sitesIn({ source }: Source): string[] {
   return [...found, ...awaited, ...returned].sort()
 }
 
-/** Every source under `src/server` that ships: not a spec and not a declaration. */
+// Code a host supplies, or that a host's tracer or hook runs inside: after it, the engine's read of `then` on a returned
+// object is the first thing that can see what it planted.
+const HOST_RUN =
+  /\battempt\(|\.end\(|\brunHook\(|reportDeliveryFailure\(|\bthis\.hooks\b|\bhooks\??\.\w+\(|\bthis\.tracing\b|\bonExpire\b/
+
+// What an async function may return without being checked: nothing, a primitive literal, or the result of the helper that
+// asserts the built-ins and refuses a value with a `then` anywhere on its chain.
+const CHECKED_RETURN =
+  /^(?:returnable\(|unboxed\(|[\w.]+ \? undefined : unboxed\(|undefined\b|null\b|true\b|false\b|void\b|\d|['"`])/
+
+/** The body that starts at `open`, without a nested function's own body. */
+function bodyFrom(text: string, open: number): string {
+  let depth = 1
+  let end = open
+  while (end < text.length && depth > 0) {
+    depth += (text[end] === '{' ? 1 : 0) - (text[end] === '}' ? 1 : 0)
+    end += 1
+  }
+  return text.slice(open, end - 1)
+}
+
+const withoutNested = (body: string): string => {
+  let out = body
+  for (
+    let m = /(?:=>|\bfunction\b[^{]*)\s*\{/.exec(out);
+    m;
+    m = /(?:=>|\bfunction\b[^{]*)\s*\{/.exec(out)
+  ) {
+    const open = m.index + m[0].length
+    out = out.slice(0, m.index) + out.slice(open + bodyFrom(out, open).length + 1)
+  }
+  return out
+}
+
+/**
+ * Every `return` of an async function, other than the checked forms, in a function that ran host code before it. Such a
+ * return resolves the function's promise with an object, which asks it for a `then` after the host code has run.
+ */
+function uncheckedReturns({ source }: Source): string[] {
+  const text = bare(source)
+  const found: string[] = []
+  for (const m of text.matchAll(/\basync\b[^{;]*?\{/g)) {
+    const body = withoutNested(bodyFrom(text, m.index + m[0].length))
+    if (!HOST_RUN.test(body)) continue
+    for (const line of body.split('\n')) {
+      const ret = /^\s*return\s+(.+)$/.exec(line)
+      if (ret && !CHECKED_RETURN.test(ret[1] ?? '')) found.push(`return ${(ret[1] ?? '').trim()}`)
+    }
+  }
+  return found.sort()
+}
+
+/** Every source under the server-side roots that ships: not a spec and not a declaration, as a path under `src`. */
 function shippedSources(): Source[] {
-  return (readdirSync(root, { recursive: true }) as string[])
-    .map(String)
+  return ROOTS.flatMap((dir) =>
+    existsSync(join(src, dir))
+      ? (readdirSync(join(src, dir), { recursive: true }) as string[]).map(
+          (file) => `${dir}/${String(file)}`,
+        )
+      : [],
+  )
     .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts') && !file.endsWith('.d.ts'))
     .sort()
-    .map((path) => ({ path, source: readFileSync(join(root, path), 'utf8') }))
+    .map((path) => ({ path, source: readFileSync(join(src, path), 'utf8') }))
 }
 
 type Site = readonly [site: string, reason: string]
@@ -70,7 +129,7 @@ type Site = readonly [site: string, reason: string]
 const OWN_AWAIT =
   "awaits the library's own async method, whose own returns are checked where it returns"
 const EXEMPT: Record<string, readonly Site[]> = {
-  'utils/within-deadline.ts': [
+  'server/utils/within-deadline.ts': [
     [
       "['then']",
       'names the slot for an own-property check on a host result; the property is not read, so no `then` runs',
@@ -82,13 +141,13 @@ const EXEMPT: Record<string, readonly Site[]> = {
     ['await call', 'a promise this module made, whose constructor is its own'],
     ['await call', 'a promise this module made, whose constructor is its own'],
   ],
-  'utils/builtin-baseline.ts': [
+  'server/utils/builtin-baseline.ts': [
     [
       "['then']",
       'names the key for an own-property check through the captured function; the property is not read, so no `then` runs',
     ],
   ],
-  'utils/assert-identity.ts': [
+  'server/utils/assert-identity.ts': [
     [
       '.catch(',
       'the last way to a handler for a discarded promise that is not one by brand; it reads no answer',
@@ -99,8 +158,8 @@ const EXEMPT: Record<string, readonly Site[]> = {
     ],
     ['then.call', 'the intrinsic `then` called on a discarded promise; it reads no answer'],
   ],
-  'services/authentication-gate.service.ts': [],
-  'services/reauthentication.service.ts': [
+  'server/services/authentication-gate.service.ts': [],
+  'server/services/reauthentication.service.ts': [
     ['.catch(', 'the interval tick logs a cycle that threw; no answer is read'],
     [
       'Promise.all',
@@ -126,33 +185,33 @@ const EXEMPT: Record<string, readonly Site[]> = {
     ['await this.bounded', "the library's bounded wait, which reads through the helpers"],
     ['await this.realtime.disconnect', "the library's own disconnect; no answer is read"],
   ],
-  'offline-queue/offline-queue-delivery.service.ts': [
+  'server/offline-queue/offline-queue-delivery.service.ts': [
     [
       'await this.storage.acknowledge',
       'a host store call whose answer is never read: acknowledging is not a decision',
     ],
   ],
-  'offline-queue/redis-offline-queue.ts': [
+  'server/offline-queue/redis-offline-queue.ts': [
     [
       'await pipeline.exec',
       "a Redis pipeline the library built: the reply is the store's own, parsed by the library and bounded by the reader",
     ],
     [
       'await this.#client.zrangebylex',
-      "the store's Redis client; the reader bounds it with `withinDeadline`",
+      "the store's Redis client, called from `retrieveSince`: the delivery service bounds that whole call with `withinDeadline` and checks the built-ins before it; the reply is parsed here, not decided on",
     ],
     [
       'await this.#client.zrangebylex',
-      "the store's Redis client; the reader bounds it with `withinDeadline`",
+      'the members `acknowledge` removes: no answer is decided on, and nothing here bounds the call',
     ],
     ['await this.#client.zrem', 'trimming the store; no answer is read'],
   ],
-  'config/guard-host-reads.ts': [
+  'server/config/guard-host-reads.ts': [
     ['Promise.resolve', 'boot-time read of a host factory, outside the guard'],
     ['then.call', 'boot-time read of a host factory, outside the guard'],
     ['newPromise', "adapts the host factory's callback at boot, outside the guard"],
   ],
-  'composition/realtime-module.factory.ts': [
+  'server/composition/realtime-module.factory.ts': [
     [
       'await awaitHostResult',
       'boot-time read of a host factory; the options it returns are validated after it, against the baseline',
@@ -162,17 +221,17 @@ const EXEMPT: Record<string, readonly Site[]> = {
       'boot-time read of a host factory; the options it returns are validated after it, against the baseline',
     ],
   ],
-  'observability/realtime-tracing.ts': [
+  'server/observability/realtime-tracing.ts': [
     ['.catch(', 'swallows what a tracer rejects with; no answer is read'],
     ['Promise.resolve', 'wraps a tracer call whose answer is dropped'],
     ['await import', 'loads the optional tracing package; the module is not a decision'],
     ['await run', 'runs the operation the span wraps; the span does not read its answer'],
   ],
-  'pubsub/in-memory-pubsub.ts': [
+  'server/pubsub/in-memory-pubsub.ts': [
     ['Promise.resolve', 'defers delivery one microtask; carries no value'],
     ['await Promise.resolve', 'defers delivery one microtask; carries no value'],
   ],
-  'pubsub/realtime-pubsub-subscriber.ts': [
+  'server/pubsub/realtime-pubsub-subscriber.ts': [
     ['.catch(', 'logs a remote disconnect that failed; the connection is already being closed'],
     ['Promise.resolve', "wraps a synchronous handler's possible rejection; the answer is dropped"],
     [
@@ -181,15 +240,7 @@ const EXEMPT: Record<string, readonly Site[]> = {
     ],
     ['await this.unsubscribe', OWN_AWAIT],
   ],
-  'pubsub/redis-realtime-pubsub.ts': [
-    [
-      'Promise.race',
-      'the publish deadline: a late or lost publish is counted by its own path, not decided by it',
-    ],
-    [
-      'newPromise',
-      'the publish deadline timer: rejects with a fresh error, raced only by the publish wait',
-    ],
+  'server/pubsub/redis-realtime-pubsub.ts': [
     ['.catch(', 'a connect started in the background; its failure is retried, not read'],
     ['newPromise', 'waits for a connecting publisher to settle before the quit; carries no value'],
     [
@@ -202,7 +253,6 @@ const EXEMPT: Record<string, readonly Site[]> = {
       '.then(',
       'a confirmation after boot marks the bus up or refused: availability state, not identity or admission',
     ],
-    ['await Promise.race', 'the publish deadline above'],
     ['await this.ensureSubscriber', OWN_AWAIT],
     ['await this.publisherSettled', OWN_AWAIT],
     ['await quitWithin', 'closes a client on shutdown; the answer is not read'],
@@ -211,30 +261,30 @@ const EXEMPT: Record<string, readonly Site[]> = {
       'the subscribe confirmation, awaited after it was shielded and absorbed by the negotiation',
     ],
   ],
-  'utils/quit-within.ts': [
+  'server/utils/quit-within.ts': [
     ['newPromise', 'the shutdown bound for a client close; the answer is not read'],
     ['.then(', 'closes a client on shutdown; the answer is not read'],
     ['Promise.race', 'closes a client on shutdown; the answer is not read'],
     ['await Promise.race', 'closes a client on shutdown; the answer is not read'],
   ],
-  'utils/report-delivery-failure.ts': [
+  'server/utils/report-delivery-failure.ts': [
     ['.catch(', 'logs a hook that failed; the hook runs after the decision'],
     ['.then(', "calls the host's onDeliveryFailure hook after the decision"],
     ['Promise.resolve', 'starts the hook call off the current turn; carries no value'],
   ],
-  'utils/run-hook.ts': [
+  'server/utils/run-hook.ts': [
     ['newPromise', 'the hook timeout; a hook failure is logged, never decided on'],
     ['Promise.race', 'runs a hook whose failure is logged, never decided on'],
     ['await invoke', 'a lifecycle hook whose failure is logged, never decided on'],
     ['await run', 'a lifecycle hook whose failure is logged, never decided on'],
     ['await Promise.race', 'a lifecycle hook whose failure is logged, never decided on'],
   ],
-  'utils/semaphore.ts': [
+  'server/utils/semaphore.ts': [
     ['newPromise', 'a waiter for a free slot; carries no value'],
     ['await new Promise<void>', 'a waiter for a free slot; carries no value'],
     ['await task', 'a task the library queued; its own answer is read by its own caller'],
   ],
-  'transports/sse/sse-subscription.handler.ts': [
+  'server/transports/sse/sse-subscription.handler.ts': [
     ['.then(', 'logs a failed lifecycle hook; the hook runs after the decision'],
     [
       'await this.transport.authenticate',
@@ -242,7 +292,7 @@ const EXEMPT: Record<string, readonly Site[]> = {
     ],
     ['await registering', 'the registration promise, shielded and absorbed where it was made'],
   ],
-  'transports/sse/sse.transport.ts': [
+  'server/transports/sse/sse.transport.ts': [
     ['Promise.all', 'shutdown: waits for every connection to be cut'],
     [
       'Promise.all',
@@ -262,20 +312,91 @@ const EXEMPT: Record<string, readonly Site[]> = {
     ['await this.publish', OWN_AWAIT],
     ['await this.disconnectLocal', OWN_AWAIT],
     ['await this.disconnectLocal', OWN_AWAIT],
-    [
-      'await this.pubsub.publish',
-      'a host bus call whose answer is never read: publishing is not a decision',
-    ],
-    [
-      'await this.pubsub.publish',
-      'a host bus call whose answer is never read: publishing is not a decision',
-    ],
     ['await this.tryPublish', OWN_AWAIT],
   ],
-  'services/realtime.service.ts': [
+  'websocket/transports/composite/composite.transport.ts': [
+    [
+      'Promise.allSettled',
+      'fanOut: the failures it collects only choose between throwing to the emitter and logging; no identity, admission or replay is read. Tracked, not fixed here',
+    ],
+    [
+      'Promise.allSettled',
+      'settleBoth: reports a room change or a revocation that failed on a library transport; a replaced `Promise.allSettled` could report a failed one as done. Tracked, not fixed here',
+    ],
+    ['await Promise.allSettled', 'fanOut above'],
+    ['await Promise.allSettled', 'settleBoth above'],
+    ['await this.fanOut', OWN_AWAIT],
+    ['await this.fanOut', OWN_AWAIT],
+    ['await this.fanOut', OWN_AWAIT],
+    ['await this.fanOut', OWN_AWAIT],
+    ['await this.settleBoth', OWN_AWAIT],
+    ['await this.settleBoth', OWN_AWAIT],
+    ['await this.settleBoth', OWN_AWAIT],
+  ],
+  'websocket/transports/websocket/realtime-io-adapter.ts': [
+    ['.catch(', 'closes a server whose boot failed; the boot error is what is thrown'],
+    [
+      '.catch(',
+      'closes a server whose adapter could not be installed; the error is what is thrown',
+    ],
+    [
+      '.catch(',
+      'logs a rejection of a subscriber command the Socket.IO adapter discards; it admits nothing',
+    ],
+    ['Promise.allSettled', 'disposal: waits for the subscribers to quit; no answer is read'],
+    [
+      'Promise.resolve',
+      'wraps the discarded command promise so its rejection is logged; it reads no answer',
+    ],
+    ['await Promise.allSettled', 'disposal above'],
+    ['await super.dispose', "the framework's own shutdown; no answer is read"],
+  ],
+  'websocket/transports/websocket/realtime.gateway.ts': [
+    [
+      'await (this.tracing',
+      "the handshake inside its span: the outcome is read from the variable the handshake sets, never from the span's return",
+    ],
+    ['await registering', "the library's own registration promise; it resolves with nothing"],
+    ['await this.handshake', OWN_AWAIT],
+    ['await this.takeHandshake', OWN_AWAIT],
+    [
+      'await this.transport.authenticate',
+      "the transport's own method, which reads the host through the helpers and checks what it returns",
+    ],
+    [
+      'await this.transport.authenticate',
+      "the transport's own method, which reads the host through the helpers and checks what it returns",
+    ],
+    ['await this.transport.unregisterSocket', OWN_AWAIT],
+  ],
+  'websocket/transports/websocket/websocket.transport.ts': [
+    [
+      'await runHook',
+      'a lifecycle hook whose failure closes the connection it already admitted; no identity is read',
+    ],
+    [
+      'await socket.join',
+      'Socket.IO adds the socket to a room after the built-ins are checked; no answer is read',
+    ],
+    [
+      'await socket.leave',
+      'Socket.IO removes the socket from a room; the built-ins are checked after it and before the library records the leave',
+    ],
+    ['await this.disconnect', OWN_AWAIT],
+    ['await this.evictBeyondLimit', OWN_AWAIT],
+    ['await this.joinRooms', OWN_AWAIT],
+    ['await this.joinSocket', OWN_AWAIT],
+    ['await this.joinSocket', OWN_AWAIT],
+    ['await this.joinSocket', OWN_AWAIT],
+    ['await this.joinSocket', OWN_AWAIT],
+    ['await this.joinSocket', OWN_AWAIT],
+    ['await this.runOnConnect', OWN_AWAIT],
+    ['await this.unregisterSocket', OWN_AWAIT],
+  ],
+  'server/services/realtime.service.ts': [
     ['await this.transport.disconnect', "the library's own transport; no answer is read"],
   ],
-  'factories/sse-controller.factory.ts': [
+  'server/factories/sse-controller.factory.ts': [
     [
       'await this.handler.authenticateBeforeCommit',
       "the handler's own method, which reads the gate and checks what it returns",
@@ -283,7 +404,7 @@ const EXEMPT: Record<string, readonly Site[]> = {
   ],
 }
 
-describe('every file under src/server that ships', () => {
+describe('every server-side file that ships', () => {
   // Scenario: forms a scan that matched only `Promise.race` and `.then(` would miss. Expected: each is found.
   it.each([
     ["Promise['race'](x)", ["Promise['race']"]],
@@ -315,11 +436,35 @@ describe('every file under src/server that ships', () => {
     expect(sitesIn({ path: 'x.ts', source })).toEqual(expected)
   })
 
+  // Scenario: the shapes that decide the rule. Expected: an object returned after host code ran is found; a checked return,
+  // a primitive, and a function that ran no host code are not.
+  it.each([
+    ['async f() {\n  span.end()\n  return result\n}', ['return result']],
+    ['async f() {\n  attempt(() => 1)\n  return { a: 1 }\n}', ['return { a: 1 }']],
+    ['async f() {\n  span.end()\n  return returnable(result)\n}', []],
+    ['async f() {\n  span.end()\n  return unboxed(box)\n}', []],
+    ['async f() {\n  span.end()\n  return undefined\n}', []],
+    ['async f() {\n  span.end()\n  return quiet ? undefined : unboxed(box)\n}', []],
+    ['async f() {\n  return result\n}', []],
+    ['async f() {\n  run(() => {\n    return x\n  })\n  span.end()\n  return 1\n}', []],
+  ])('finds the unchecked returns of %s', (source, expected) => {
+    expect(uncheckedReturns({ path: 'x.ts', source })).toEqual(expected)
+  })
+
+  // Scenario: the tree on disk. Expected: no async function that ran host code returns an object without the check.
+  it('no shipped file returns an unchecked object after host code ran', () => {
+    expect(
+      shippedSources().flatMap((source) =>
+        uncheckedReturns(source).map((r) => `${source.path}: ${r}`),
+      ),
+    ).toEqual([])
+  })
+
   // Scenario: a file that is new, with an await of a host call that nothing shielded, and no entry for it. Expected: the
   // file's sites are not the listed ones, so its row would fail; and a file that is not listed at all has none to match.
   it('a new file with a bare host await has sites that are not listed', () => {
     const added: Source = {
-      path: 'transports/new-transport.ts',
+      path: 'server/transports/new-transport.ts',
       source:
         'export async function f(s: Store) {\n  return (await s.load()).id\n}\nasync function g(h: Host) {\n  await h.authenticate()\n}\n',
     }
