@@ -1,5 +1,7 @@
 /**
  * @fileoverview How often a host's thenable is asked for its `then`, and a stubborn native promise for its `constructor`.
+ *
+ * Regression locks: these rows pin the read counts and are not fix rows.
  * @layer utils
  */
 import { absorbed, firstOf, started, unboxed, withinDeadline } from './within-deadline'
