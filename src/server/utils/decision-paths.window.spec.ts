@@ -67,18 +67,21 @@ describe('the order of the gate before it asks the authenticator', () => {
   // made before the last check that precedes the authenticator's call, and nothing is made between that check and the
   // call. A behavioural row cannot tell the orders apart, because the wait that follows checks again; this one fixes it.
   it('makes the controller and reads its signal before the last check', () => {
+    // Whitespace is collapsed because the mutation runner's instrumenter reprints the file, breaking a destructuring over
+    // several lines.
     const source = readFileSync(
       join(__dirname, '..', 'services/authentication-gate.service.ts'),
       'utf8',
-    )
+    ).replace(/\s+/g, ' ')
     const body = source.slice(source.indexOf('async decide('))
     const controller = body.indexOf('new AbortController()')
     const signal = body.indexOf('const { signal } = controller')
     const lastCheck = body.lastIndexOf('assertBuiltinsIntact()', body.indexOf('shielded('))
 
-    expect(controller).toBeGreaterThan(-1)
-    expect(signal).toBeGreaterThan(controller)
-    expect(lastCheck).toBeGreaterThan(signal)
+    const positions = [controller, signal, lastCheck]
+    expect(positions.every((position) => position > -1)).toBe(true)
+    expect(positions).toEqual([...positions].sort((a, b) => a - b))
+    expect(new Set(positions).size).toBe(3)
   })
 })
 
