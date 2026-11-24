@@ -13,6 +13,7 @@ import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
+import { firstOf } from '../utils/within-deadline'
 
 /** The shortest time between two reports of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
@@ -304,16 +305,16 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     unreachableFirst: Promise<{ readonly unreachable: unknown }>,
   ): Promise<void> {
     try {
-      const outcome = await Promise.race([
-        first.then(
-          () => 'subscribed' as const,
-          (err: Error) => {
-            if (err.name === 'ReplyError') throw err
-            return { unreachable: err }
-          },
-        ),
-        unreachableFirst,
-      ])
+      const subscribed = (async () => {
+        try {
+          await first
+          return 'subscribed' as const
+        } catch (err) {
+          if ((err as Error).name === 'ReplyError') throw err
+          return { unreachable: err }
+        }
+      })()
+      const outcome = await firstOf(subscribed, unreachableFirst)
       if (outcome === 'subscribed') {
         this.markUp()
       } else {

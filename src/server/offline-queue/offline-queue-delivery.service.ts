@@ -17,6 +17,7 @@ import type {
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { logEvent } from '../utils/log-event'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
+import { withinDeadline } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 const RETRIEVE_LIMIT = 200
@@ -239,33 +240,22 @@ export class OfflineQueueDeliveryService {
       throw new OfflineQueueTimeoutError()
     }
     try {
-      // A store that is not async returns its events, not a promise: wrapped before it is counted, so
-      // that nothing between the count and the release can throw and leave the place taken.
-      const call = Promise.resolve(storage.retrieveSince(userId, sinceId, limit))
+      // A store that is not async returns its events, not a promise, and the wait takes either. Nothing between the
+      // count and the wait can throw and leave the place taken.
+      const call = storage.retrieveSince(userId, sinceId, limit)
       // The call cannot be cancelled, so it keeps its place until it actually settles, not until it
       // was given up on: a store that never answers fills the limit instead of piling up one more
       // abandoned call for every reconnect.
       this.pending += 1
-      const settled = (): void => void (this.pending -= 1)
-      call.then(settled, settled)
-      return await this.withinDeadline(call)
+      return await withinDeadline(call, this.timeoutMs, {
+        timeoutError: () => new OfflineQueueTimeoutError(),
+        onSettled: () => {
+          this.pending -= 1
+        },
+      })
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) this.countTimeout()
       throw err
-    }
-  }
-
-  /** Settle with `read`, or reject with an OfflineQueueTimeoutError once the deadline has passed. */
-  private async withinDeadline<T>(read: Promise<T>): Promise<T> {
-    let timer: NodeJS.Timeout | undefined
-    const expired = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new OfflineQueueTimeoutError()), this.timeoutMs)
-      timer.unref()
-    })
-    try {
-      return await Promise.race([read, expired])
-    } finally {
-      clearTimeout(timer)
     }
   }
 

@@ -16,6 +16,7 @@ import type {
 } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { logEvent } from '../utils/log-event'
+import { withinDeadline } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 /** How long a window of refusals is summarised in one log line. */
@@ -92,27 +93,21 @@ export class AuthenticationGate {
     }
     this.pending += 1
     const controller = new AbortController()
+    // `await`, not a returned promise: returning one makes the engine call its `then`, which a host can replace.
     const call = (async () =>
-      this.authenticator.authenticate(context, { signal: controller.signal }))()
-    const release = (): void => {
-      this.pending -= 1
-    }
-    call.then(release, release)
-    let timer: NodeJS.Timeout | undefined
-    const timedOut = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
-        // Rejected before the abort is dispatched, so an answer given from an abort listener cannot win.
+      await this.authenticator.authenticate(context, { signal: controller.signal }))()
+    return await withinDeadline(call, this.timeoutMs, {
+      // Counted before the wait is rejected, and the abort is dispatched after it, so an answer given from an abort
+      // listener cannot win.
+      timeoutError: () => {
         this.refuse('timeout')
-        reject(new AuthenticationUnavailableError('timeout'))
-        controller.abort()
-      }, this.timeoutMs)
-      timer.unref()
+        return new AuthenticationUnavailableError('timeout')
+      },
+      onExpire: () => controller.abort(),
+      onSettled: () => {
+        this.pending -= 1
+      },
     })
-    try {
-      return await Promise.race([call, timedOut])
-    } finally {
-      clearTimeout(timer)
-    }
   }
 
   /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */

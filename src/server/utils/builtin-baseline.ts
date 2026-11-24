@@ -112,6 +112,9 @@ const NAMED: readonly BuiltinSlot[] = [
   [String.prototype, Symbol.split],
   [Number.prototype, Symbol.toPrimitive],
   [Date.prototype, Symbol.toPrimitive],
+  // `await` of a native promise asks it for its constructor, and a replaced one sends the wait through `then` instead.
+  // `then` and the statics are not listed: an APM wraps `then` by design, and nothing a decision reads calls them.
+  [Promise.prototype, 'constructor'],
   [Map.prototype, 'delete'],
   [Map.prototype, 'entries'],
   [Map.prototype, 'forEach'],

@@ -25,9 +25,11 @@ import type {
 } from '../interfaces/realtime-module-options.interface'
 import { RealtimeTracing } from '../observability/realtime-tracing'
 import { callHostMethod, hostMethod } from '../utils/read-host-key'
+import { assertBuiltinsIntact } from '../utils/builtin-baseline'
 import { logEvent } from '../utils/log-event'
 import { Semaphore } from '../utils/semaphore'
 import { runHook } from '../utils/run-hook'
+import { withinDeadline } from '../utils/within-deadline'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
 import { RealtimeService } from './realtime.service'
@@ -219,6 +221,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       const rawResult = await this.bounded('revalidate', (signal) =>
         revalidate(conn.connectionId, originalAuth, { signal }),
       )
+      // The answer came through `await`, which asks `Promise.prototype.constructor`: a replaced one is refused, as
+      // a replaced built-in is anywhere a decision is made.
+      assertBuiltinsIntact()
       if (rawResult === true) {
         conn.revalidatedAt = now
         return
@@ -248,21 +253,13 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
     work: (signal: AbortSignal) => Promise<T> | undefined,
   ): Promise<T | undefined> {
     const controller = new AbortController()
-    let timer: NodeJS.Timeout | undefined
-    const timedOut = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
-        // Rejected before the abort is dispatched: a call that answers from its abort listener
-        // settles after the timeout, so its answer cannot win the race.
-        reject(new Error(`${what} did not settle within ${this.policy.revalidateTimeoutMs} ms`))
-        controller.abort()
-      }, this.policy.revalidateTimeoutMs)
-      timer.unref()
+    // The wait is rejected before the abort is dispatched: a call that answers from its abort listener
+    // settles after the timeout, so its answer cannot win.
+    return await withinDeadline(work(controller.signal), this.policy.revalidateTimeoutMs, {
+      timeoutError: () =>
+        new Error(`${what} did not settle within ${this.policy.revalidateTimeoutMs} ms`),
+      onExpire: () => controller.abort(),
     })
-    try {
-      return await Promise.race([work(controller.signal), timedOut])
-    } finally {
-      clearTimeout(timer)
-    }
   }
 
   /**
