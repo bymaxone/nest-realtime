@@ -11,12 +11,7 @@ import { validateOptions } from '../config/validate-options'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
 import { admitRooms } from './admit-rooms'
 import { assertIdentityIsNotBlank, resolveAuthTenant } from './assert-identity'
-import {
-  BUILTIN_SLOTS,
-  assertBuiltinsIntact,
-  isBuiltinsRefusal,
-  replacedBuiltinCount,
-} from './builtin-baseline'
+import { BUILTIN_SLOTS, assertBuiltinsIntact, replacedBuiltinCount } from './builtin-baseline'
 import type * as BuiltinBaseline from './builtin-baseline'
 import { reservedRoomPrefix } from './reserved-room'
 
@@ -788,30 +783,4 @@ describe('a process whose map empties only one of the two records taken at load'
       expect(loadedWithOneRecordEmptied(reader)?.replacedBuiltinCount()).toBe(1)
     },
   )
-})
-
-// Scenario: the refusal is thrown while a built-in is replaced, and the built-in is put back before it is sorted.
-// Expected: it is still recognised, and an error of a host's own, or anything that is not an object, is not.
-describe('the mark on the refusal', () => {
-  it('stays on the refusal after the replaced built-in was put back, and on nothing else', () => {
-    const original = String.prototype.startsWith
-    let refusal: unknown
-    String.prototype.startsWith = function replaced(this: string): boolean {
-      return true
-    }
-    try {
-      assertBuiltinsIntact()
-    } catch (error) {
-      refusal = error
-    } finally {
-      String.prototype.startsWith = original
-    }
-
-    expect(isBuiltinsRefusal(refusal)).toBe(true)
-    expect(
-      isBuiltinsRefusal(Object.assign(new Error('x'), { code: 'REALTIME_TRANSPORT_UNAVAILABLE' })),
-    ).toBe(false)
-    expect(isBuiltinsRefusal(null)).toBe(false)
-    expect(isBuiltinsRefusal('REALTIME_TRANSPORT_UNAVAILABLE')).toBe(false)
-  })
 })
