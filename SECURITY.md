@@ -86,7 +86,7 @@ The room registry enforces that a `disconnect()` can only target connections sto
 **The consumer owns CORS.** The library exposes:
 
 - `SseOptions` — no `cors` field; the SSE endpoint is a standard HTTP `GET` and cross-origin access is controlled at the NestJS application level via `app.enableCors()`.
-- `WebSocketOptions.cors` — a `CorsConfig` object passed directly to the Socket.IO server. Restrict `origin` to your known frontend origins; avoid `origin: '*'` in production when using `credentials: true`.
+- `WebSocketOptions.cors` — a `CorsConfig` object passed directly to the Socket.IO server. Restrict `origin` to your known frontend origins; avoid `origin: '*'` in production when using `credentials: true`. It sets CORS response headers only: **it does not refuse a WebSocket upgrade**, because a browser does not apply CORS to one (see below).
 
 ```typescript
 websocket: {
@@ -96,6 +96,15 @@ websocket: {
   },
 }
 ```
+
+### WebSocket origin is the host's check
+
+A client that sends `Origin: https://evil.example` and a valid cookie connects over the WebSocket transport even when `websocket.cors.origin` lists only your frontend; the CORS headers decide what a browser lets a page read, and the upgrade is not subject to them. This is cross-site WebSocket hijacking when the session cookie is sent cross-site. The library does not check `Origin`; the host must:
+
+- refuse an unlisted origin in its `IConnectionAuthenticator` (`ctx.headers.origin` on the handshake), returning `null`;
+- set the session cookie `SameSite=Lax` or `Strict`;
+- prefer a short-lived ticket to an ambient cookie for the handshake;
+- optionally serve `transports: ['websocket']` and refuse the long-polling handshake at the proxy; the authenticator check already covers both transports.
 
 ### Secrets via Environment Variables
 
