@@ -103,8 +103,8 @@ A client that sends `Origin: https://evil.example` and a valid cookie connects o
 
 - refuse an unlisted origin in its `IConnectionAuthenticator` (`ctx.headers.origin` on the handshake), returning `null`;
 - set the session cookie `SameSite=Lax` or `Strict`;
-- prefer a short-lived ticket to an ambient cookie for the handshake;
-- optionally serve `transports: ['websocket']` and refuse the long-polling handshake at the proxy; the authenticator check already covers both transports.
+- prefer a short-lived ticket in the handshake to an ambient cookie;
+- serve `transports: ['websocket']` and refuse the long-polling handshake at the proxy if the authenticator is to require an `Origin`: the authenticator reads the headers of the first request only, and a browser sends `Origin` on every WebSocket handshake but not on a same-origin long-polling `GET`.
 
 ### Secrets via Environment Variables
 

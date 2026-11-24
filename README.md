@@ -623,10 +623,10 @@ A complete `@bymax-one/nest-auth` bridge is in [docs/examples/nest-auth-bridge.m
 
 What the host does about it:
 
-- Refuse an origin you do not list in your `IConnectionAuthenticator`. `ctx.headers.origin` carries it on the WebSocket handshake; return `null` and the connection is refused with `REALTIME_AUTH_FAILED`. An absent `Origin` comes from a client that is not a browser, so decide what your deployment does with it.
+- Refuse an origin you do not list in your `IConnectionAuthenticator`. `ctx.headers.origin` carries it on the WebSocket handshake; return `null` and the connection is refused with `REALTIME_AUTH_FAILED`. The authenticator runs once per connection and sees the headers of the first request: on a connection that starts on long polling and then upgrades, that is the polling `GET`, and the `Origin` of the upgrade is never read (measured: a client whose polling request carried no `Origin` and whose upgrade carried `https://evil.example` reached the authenticator with no `Origin`). A browser always sends `Origin` on a WebSocket handshake, so an absent one there means a client that is not a browser; on a same-origin long-polling `GET` a browser sends none. A host that refuses an absent `Origin` therefore needs `transports: ['websocket']` on the client and a refusal of `transport=polling` at the proxy, or it refuses its own same-origin users; a host that allows an absent `Origin` has no origin check on a connection that starts on polling.
 - Set the session cookie `SameSite=Lax` or `SameSite=Strict`, so a browser does not send it with a cross-site WebSocket.
-- Authenticate with a short-lived ticket in the handshake, not an ambient cookie, where a cookie cannot be avoided otherwise.
-- Optionally serve `transports: ['websocket']` on the client and refuse the long-polling handshake (`transport=polling`) at your proxy. The authenticator check already covers both transports; this removes the one path a browser can still reach with a credentialed request.
+- Prefer a short-lived ticket in the handshake to an ambient cookie.
+- Serve `transports: ['websocket']` on the client and refuse the long-polling handshake (`transport=polling`) at your proxy if the authenticator is to require an `Origin`: only the websocket handshake guarantees a browser sent one.
 
 ### Re-Authentication
 
