@@ -44,7 +44,7 @@ describe('a process with a then on a root prototype before the library loaded', 
 
     expect(count).toBe(1)
     expect((refusal as Error).message).toBe(
-      'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls was replaced after it was loaded',
+      'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls is not as the library expects',
     )
   })
 })

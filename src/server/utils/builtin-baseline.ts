@@ -242,8 +242,9 @@ const REFUSAL = Symbol('builtins-refusal')
 const defineProperty = Object.defineProperty
 
 /**
- * Refuses, before the code that follows runs, when a built-in it calls was replaced after the library loaded: a replaced
- * `startsWith` or iterator makes a check pass or a loop end where it should not.
+ * Refuses, before the code that follows runs, when a built-in it calls was replaced after the library loaded, or a root
+ * prototype already held a `then` when it loaded: a replaced `startsWith` or iterator makes a check pass or a loop end
+ * where it should not.
  *
  * @throws Error carrying `REALTIME_TRANSPORT_UNAVAILABLE`, with the count and nothing else.
  */
@@ -251,7 +252,7 @@ export function assertBuiltinsIntact(): void {
   const replaced = replacedBuiltinCount()
   if (replaced === 0) return
   throw refusal(
-    `${replaced} built-in${replaced === 1 ? '' : 's'} the library calls ${replaced === 1 ? 'was' : 'were'} replaced after it was loaded`,
+    `${replaced} built-in${replaced === 1 ? '' : 's'} the library calls ${replaced === 1 ? 'is' : 'are'} not as the library expects`,
   )
 }
 
