@@ -50,7 +50,8 @@ import { resolveClientAddress } from '../../utils/client-address'
 import { AuthenticationUnavailableError } from '../../services/authentication-gate.service'
 import { ConnectionLimitError } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
-import { assertBuiltinsIntact } from '../../utils/builtin-baseline'
+import { assertBuiltinsIntact, isBuiltinsRefusal, returnable } from '../../utils/builtin-baseline'
+import { absorbed, shielded } from '../../utils/within-deadline'
 import { runHook } from '../../utils/run-hook'
 import { SseTransport } from './sse.transport'
 import { probeOf } from './outbound-backlog'
@@ -286,13 +287,13 @@ export class SseSubscriptionHandler {
     this.authenticated.delete(req)
     let authenticated: AuthenticatedRequest
     try {
-      authenticated = done ?? (await this.authenticateRequest(req, res))
+      authenticated = done ?? (await shielded(this.authenticateRequest(req, res)))
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
     let queueEvents: OfflineQueuedEvent[]
     try {
-      queueEvents = await this.readAppended(req, authenticated)
+      queueEvents = await shielded(this.readAppended(req, authenticated))
       // The replay ring and the queue reconciliation are read by key and by id next: a built-in they rely on that was replaced
       // while this request waited would hand this connection another user's events, so nothing is read before this check.
       assertBuiltinsIntact()
@@ -308,7 +309,14 @@ export class SseSubscriptionHandler {
       authenticated.ticket.release()
       throw err
     }
-    return stream
+    // The last statement before the return: an async function resolves its promise with the stream, which asks it, and
+    // what it inherits from, for a `then`; one a host planted while the stream was built, or before, answers for it.
+    try {
+      return returnable(stream)
+    } catch (err) {
+      authenticated.ticket.release()
+      throw err
+    }
   }
 
   /** Refuse a new stream with a 503 once shutdown has begun. */
@@ -373,7 +381,7 @@ export class SseSubscriptionHandler {
    */
   async authenticateBeforeCommit(req: SseRequest, res?: SseResponse): Promise<void> {
     try {
-      this.authenticated.set(req, await this.authenticateRequest(req, res))
+      this.authenticated.set(req, await shielded(this.authenticateRequest(req, res)))
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
@@ -406,7 +414,7 @@ export class SseSubscriptionHandler {
 
   /** Admit and authenticate a handshake, inside the `realtime.handshake` span when tracing is wired. */
   private authenticateRequest(req: SseRequest, res?: SseResponse): Promise<AuthenticatedRequest> {
-    const run = (): Promise<AuthenticatedRequest> => this.admitAndAuthenticate(req, res)
+    const run = (): Promise<AuthenticatedRequest> => shielded(this.admitAndAuthenticate(req, res))
     return this.tracing
       ? this.tracing.span('realtime.handshake', { 'bymax.realtime.transport': 'sse' }, run)
       : run()
@@ -433,12 +441,9 @@ export class SseSubscriptionHandler {
       const auth = await this.transport.authenticate(context)
       if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
       const resolved = this.resolveAndValidateIdentity(auth)
-      return {
-        context,
-        auth: resolved,
-        ticket,
-        queueRead: await this.readQueue(req, resolved.userId),
-      }
+      const queueRead = await shielded(this.readQueue(req, resolved.userId))
+      // The last statement before the return, which resolves the function's promise with an object and so reads its `then`.
+      return returnable({ context, auth: resolved, ticket, queueRead })
     } catch (err) {
       ticket.release()
       throw err
@@ -459,9 +464,13 @@ export class SseSubscriptionHandler {
   private async readQueue(req: SseRequest, userId: string): Promise<OfflineQueueRead> {
     const lastEventId = lastEventIdOf(req)
     // Stryker disable next-line BooleanLiteral: equivalent — with no Last-Event-ID or no queue there is no second read either, so this flag is never read
-    if (!lastEventId || !this.offlineDelivery) return { events: [], degraded: false }
+    if (!lastEventId || !this.offlineDelivery) {
+      // The last statement before an object return, as below: the function's promise is resolved with it.
+      return returnable({ events: [], degraded: false })
+    }
     try {
-      return await this.offlineDelivery.retrieveGap(userId, lastEventId)
+      const gap = await shielded(this.offlineDelivery.retrieveGap(userId, lastEventId))
+      return returnable(gap)
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
       throw this.serverError(err, 'SSE handshake failed')
@@ -487,15 +496,20 @@ export class SseSubscriptionHandler {
   ): Promise<OfflineQueuedEvent[]> {
     const lastEventId = lastEventIdOf(req)
     const { queueRead } = authenticated
-    if (!lastEventId || !this.offlineDelivery) return queueRead.events
+    if (!lastEventId || !this.offlineDelivery) {
+      // The last statement before an array return: the function's promise is resolved with it, which reads a `then`
+      // that a host planted on `Array.prototype` before this call would answer for.
+      return returnable(queueRead.events)
+    }
     try {
-      const appended = await this.offlineDelivery.retrieveAppended(
-        authenticated.auth.userId,
-        lastEventId,
-        queueRead,
+      const appended = await shielded(
+        this.offlineDelivery.retrieveAppended(authenticated.auth.userId, lastEventId, queueRead),
       )
-      return [...queueRead.events, ...appended]
+      const gap = [...queueRead.events, ...appended]
+      return returnable(gap)
     } catch (err) {
+      // The baseline's refusal is the answer as it is: wrapping it as a 500 would hide the count-only code.
+      if (isBuiltinsRefusal(err)) throw err
       if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
       throw this.serverError(err, 'SSE handshake failed')
     }
@@ -582,28 +596,37 @@ export class SseSubscriptionHandler {
       subscriber.error(this.toClientError(err, 'SSE registration refused'))
       return
     }
-    const registering = this.transport.registerConnection({
-      connectionId,
-      auth: resolvedAuth,
-      subject,
-      close$,
-      ip,
-      userAgent,
-      outbound: probeOf(p.res),
-    })
+    const registering = shielded(
+      this.transport.registerConnection({
+        connectionId,
+        auth: resolvedAuth,
+        subject,
+        close$,
+        ip,
+        userAgent,
+        outbound: probeOf(p.res),
+      }),
+    )
     // The registry holds the connection from the call on, so the place would be counted twice for as
     // long as the rest of the registration takes.
     p.ticket.release()
-    registering
-      .then(() => this.onRegistered(p, subscriber))
-      .catch((err: unknown) => {
+    // A refusal below leaves `registering` unread; its rejection is absorbed here, whatever happens to the wait.
+    void absorbed(registering)
+    void (async () => {
+      try {
+        // Immediately before the await whose end decides whether the connection is completed.
+        assertBuiltinsIntact()
+        await registering
+        this.onRegistered(p, subscriber)
+      } catch (err: unknown) {
         this.fireHook(() =>
           callHostMethod(this.hooks, 'onError', [
             { connectionId, error: err as Error, transport: 'sse' },
           ]),
         )
         subscriber.error(this.serverError(err, 'SSE registration failed'))
-      })
+      }
+    })()
   }
 
   /**

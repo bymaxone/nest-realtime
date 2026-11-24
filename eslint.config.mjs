@@ -12,6 +12,10 @@ import prettierRecommended from 'eslint-plugin-prettier/recommended'
 // A specifier assembled at run time is invisible to any lint rule, so this covers literals only.
 const AUTH_IMPORT_MESSAGE =
   'This library never imports an auth package: the consumer plugs IConnectionAuthenticator.'
+// `for await` asks its operand for `Symbol.asyncIterator` and then for `next`, on whatever the host handed over, and those
+// are looked up on prototypes a host can replace; a decision reads with an explicit, shielded await instead.
+const FOR_AWAIT_MESSAGE =
+  'for await reads Symbol.asyncIterator and next from a host value: await each step explicitly.'
 const AUTH_SOURCE = String.raw`/^(@nestjs\/jwt|@bymax-one\/nest-auth)(\/|$)|(^|\/)passport(-[^\/]*)?(\/|$)/`
 
 export default [
@@ -41,6 +45,7 @@ export default [
         'error',
         { selector: `Literal[value=${AUTH_SOURCE}]`, message: AUTH_IMPORT_MESSAGE },
         { selector: `TemplateElement[value.cooked=${AUTH_SOURCE}]`, message: AUTH_IMPORT_MESSAGE },
+        { selector: 'ForOfStatement[await=true]', message: FOR_AWAIT_MESSAGE },
       ],
       ...(security.configs?.recommended?.rules ?? {}),
       '@typescript-eslint/no-explicit-any': 'error',

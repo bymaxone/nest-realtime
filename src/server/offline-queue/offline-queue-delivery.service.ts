@@ -17,6 +17,8 @@ import type {
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { logEvent } from '../utils/log-event'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
+import { assertBuiltinsIntact, isBuiltinsRefusal, returnable } from '../utils/builtin-baseline'
+import { shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 const RETRIEVE_LIMIT = 200
@@ -116,8 +118,10 @@ export class OfflineQueueDeliveryService {
     lastEventId: string,
     ringBufferIds: Set<string>,
   ): Promise<OfflineQueuedEvent[]> {
-    const { events } = await this.retrieveGap(userId, lastEventId)
-    return events.filter((e) => !ringBufferIds.has(e.id))
+    const { events } = await shielded(this.retrieveGap(userId, lastEventId))
+    const fresh = events.filter((e) => !ringBufferIds.has(e.id))
+    // Returning an array from an async function reads `then` on it, so the check is the last thing before the return.
+    return returnable(fresh)
   }
 
   /**
@@ -132,13 +136,20 @@ export class OfflineQueueDeliveryService {
    */
   async retrieveGap(userId: string, lastEventId: string): Promise<OfflineQueueRead> {
     const storage = this.storage
-    if (!storage) return { events: [], degraded: false }
+    // Returning an object from an async function reads `then` on it, so the check is the last thing before each return.
+    if (!storage) {
+      return returnable({ events: [], degraded: false })
+    }
 
+    // Outside the try: a refusal is not the store failing, and must not be served as an empty gap.
+    assertBuiltinsIntact()
     let events: OfflineQueuedEvent[]
     try {
-      events = await this.read(storage, userId, lastEventId, RETRIEVE_LIMIT)
+      events = await shielded(this.read(storage, userId, lastEventId, RETRIEVE_LIMIT))
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) throw err
+      // A refusal raised while the store was being read is not the store failing either.
+      if (isBuiltinsRefusal(err)) throw err
       reportDeliveryFailure(
         this.logger,
         this.hooks,
@@ -149,7 +160,7 @@ export class OfflineQueueDeliveryService {
         },
         'Offline queue retrieve failed',
       )
-      return { events: [], degraded: true }
+      return returnable({ events: [], degraded: true })
     }
 
     if (events.length === RETRIEVE_LIMIT) {
@@ -162,7 +173,7 @@ export class OfflineQueueDeliveryService {
       )
     }
 
-    return { events, degraded: false }
+    return returnable({ events, degraded: false })
   }
 
   /**
@@ -223,8 +234,15 @@ export class OfflineQueueDeliveryService {
   ): Promise<OfflineQueuedEvent[]> {
     const storage = this.storage
     const room = RETRIEVE_LIMIT - read.events.length
-    if (!storage || read.degraded || room <= 0) return []
-    return this.read(storage, userId, read.events.at(-1)?.id ?? lastEventId, room)
+    // Returning an array, or a promise, from an async function reads `then` on it, so what is read is awaited here and
+    // the check is the last thing before each return.
+    if (!storage || read.degraded || room <= 0) {
+      return returnable([])
+    }
+    const appended = await shielded(
+      this.read(storage, userId, read.events.at(-1)?.id ?? lastEventId, room),
+    )
+    return returnable(appended)
   }
 
   /** One bounded call to the storage: refused at once when the reads waiting are all taken. */
@@ -239,33 +257,26 @@ export class OfflineQueueDeliveryService {
       throw new OfflineQueueTimeoutError()
     }
     try {
-      // A store that is not async returns its events, not a promise: wrapped before it is counted, so
-      // that nothing between the count and the release can throw and leave the place taken.
-      const call = Promise.resolve(storage.retrieveSince(userId, sinceId, limit))
+      // Before the store is called: its own promise resolves with the events it answers, and a planted `then` would
+      // answer for it.
+      assertBuiltinsIntact()
+      // A store that is not async returns its events, not a promise, and the wait takes either. Nothing between the
+      // count and the wait can throw and leave the place taken.
+      const call = storage.retrieveSince(userId, sinceId, limit)
       // The call cannot be cancelled, so it keeps its place until it actually settles, not until it
       // was given up on: a store that never answers fills the limit instead of piling up one more
       // abandoned call for every reconnect.
       this.pending += 1
-      const settled = (): void => void (this.pending -= 1)
-      call.then(settled, settled)
-      return await this.withinDeadline(call)
+      const decided = await withinDeadline(call, this.timeoutMs, {
+        timeoutError: () => new OfflineQueueTimeoutError(),
+        onSettled: () => {
+          this.pending -= 1
+        },
+      })
+      return unboxed(decided)
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) this.countTimeout()
       throw err
-    }
-  }
-
-  /** Settle with `read`, or reject with an OfflineQueueTimeoutError once the deadline has passed. */
-  private async withinDeadline<T>(read: Promise<T>): Promise<T> {
-    let timer: NodeJS.Timeout | undefined
-    const expired = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new OfflineQueueTimeoutError()), this.timeoutMs)
-      timer.unref()
-    })
-    try {
-      return await Promise.race([read, expired])
-    } finally {
-      clearTimeout(timer)
     }
   }
 

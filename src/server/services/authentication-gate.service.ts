@@ -16,6 +16,14 @@ import type {
 } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { logEvent } from '../utils/log-event'
+import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
+import {
+  awaitable,
+  isPlainResult,
+  shielded,
+  unboxed,
+  withinDeadline,
+} from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 /** How long a window of refusals is summarised in one log line. */
@@ -85,34 +93,55 @@ export class AuthenticationGate {
    * @throws AuthenticationUnavailableError when too many are waiting, or this one did not settle in
    *   time. Whatever the authenticator itself throws is thrown as it is.
    */
-  async authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
+  authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
+    // Every caller awaits this promise, and an await of a promise that has no constructor of its own reads the shared
+    // slot, which a host call that ran inside the wait can have replaced and put back.
+    return shielded(this.decide(context))
+  }
+
+  private async decide(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
     if (this.pending >= this.maxPending) {
+      assertBuiltinsIntact()
       this.refuse('saturated')
       throw new AuthenticationUnavailableError('saturated')
     }
-    this.pending += 1
+    // Made, and its signal read, before the check and not after it: a replaceable constructor or getter that runs between
+    // the check and the await below could swap `Promise.prototype.constructor`, plant a `then`, and put both back before
+    // the check that follows the wait.
     const controller = new AbortController()
-    const call = (async () =>
-      this.authenticator.authenticate(context, { signal: controller.signal }))()
-    const release = (): void => {
-      this.pending -= 1
-    }
-    call.then(release, release)
-    let timer: NodeJS.Timeout | undefined
-    const timedOut = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
-        // Rejected before the abort is dispatched, so an answer given from an abort listener cannot win.
+    const { signal } = controller
+    // Before the authenticator is called: its own promise resolves with the identity it answers, and a `then` planted
+    // on the root prototypes would answer for it. Nothing a host can replace runs between this and that promise's await.
+    assertBuiltinsIntact()
+    this.pending += 1
+    // `await`, not a returned promise: returning one makes the engine call its `then`, which a host can replace. The
+    // promise carries its own `constructor`, so that the wait that absorbs its rejection never reads the shared slot.
+    const call = shielded(
+      (async () => {
+        const result: PromiseLike<AuthenticationResult | null> | AuthenticationResult | null =
+          this.authenticator.authenticate(context, { signal })
+        // Not awaited when it has no `then` to ask for, and shielded when it is a promise: an await of the host's own
+        // promise would read the shared constructor and `then` after the host call, which can have put in them a getter
+        // that restores itself as it is read and leaves nothing for the check below to see.
+        const answer = isPlainResult(result) ? result : await awaitable(result)
+        // The last thing before the return: resolving this promise with an object asks it, and everything it inherits from,
+        // for a `then`.
+        return returnable(answer)
+      })(),
+    )
+    const decided = await withinDeadline(call, this.timeoutMs, {
+      // Counted before the wait is rejected, and the abort is dispatched after it, so an answer given from an abort
+      // listener cannot win.
+      timeoutError: () => {
         this.refuse('timeout')
-        reject(new AuthenticationUnavailableError('timeout'))
-        controller.abort()
-      }, this.timeoutMs)
-      timer.unref()
+        return new AuthenticationUnavailableError('timeout')
+      },
+      onExpire: () => controller.abort(),
+      onSettled: () => {
+        this.pending -= 1
+      },
     })
-    try {
-      return await Promise.race([call, timedOut])
-    } finally {
-      clearTimeout(timer)
-    }
+    return unboxed(decided)
   }
 
   /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */

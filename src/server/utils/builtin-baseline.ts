@@ -2,6 +2,7 @@
  * @fileoverview The built-ins the option, validation and admission paths call, recorded when the library loads and compared by identity.
  * @layer utils
  */
+import { types } from 'node:util'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { realtimeError } from './realtime-error'
 
@@ -11,6 +12,8 @@ export type BuiltinSlot = readonly [target: object, key: PropertyKey]
 const describe = Object.getOwnPropertyDescriptor
 const hasOwn = Object.prototype.hasOwnProperty
 const apply = Reflect.apply
+const getProto = Object.getPrototypeOf
+const isProxy = types.isProxy
 
 /**
  * What a slot holds: its value, or the getter of an accessor, which is what a flag of a RegExp is. A descriptor is an
@@ -56,6 +59,7 @@ const NAMED: readonly BuiltinSlot[] = [
   [Object, 'values'],
   [Array, 'from'],
   [Array, 'isArray'],
+  [Date, 'now'],
   [Array.prototype, 'concat'],
   [Array.prototype, 'every'],
   [Array.prototype, 'filter'],
@@ -112,6 +116,12 @@ const NAMED: readonly BuiltinSlot[] = [
   [String.prototype, Symbol.split],
   [Number.prototype, Symbol.toPrimitive],
   [Date.prototype, Symbol.toPrimitive],
+  // `await` of a native promise asks it for its constructor, and a replaced one sends the wait through `then` instead.
+  // `then` and the statics are not listed: an APM wraps `then` by design, and nothing a decision reads calls them.
+  [Object.getPrototypeOf((async () => undefined)()) as object, 'constructor'],
+  // `then` asks the promise's constructor for its species, and what it answers builds the promise `then` hands back: a
+  // replaced getter makes a dependency's own `then` give a host's promise to the await that follows.
+  [Promise, Symbol.species],
   [Map.prototype, 'delete'],
   [Map.prototype, 'entries'],
   [Map.prototype, 'forEach'],
@@ -146,6 +156,17 @@ const NAMED: readonly BuiltinSlot[] = [
   [globalThis, 'Function'],
 ]
 
+/**
+ * Slots that must hold nothing: a `then` on the root prototypes is read by every promise resolved with an object that has
+ * none of its own, and a self-erasing one answers once and leaves no trace. Unlike the slots above these are not compared
+ * with what the library found at load: a `then` that was already there then is refused too.
+ */
+const ABSENT: readonly BuiltinSlot[] = [
+  [Object.prototype, 'then'],
+  [Array.prototype, 'then'],
+  [Function.prototype, 'then'],
+]
+
 /** The prototypes behind `for...of`, spread and destructuring, which no name in the source calls. */
 function iteratorSlots(): BuiltinSlot[] {
   const arrayIterator = Object.getPrototypeOf([][Symbol.iterator]()) as object
@@ -169,13 +190,17 @@ function readBaseline():
   { listed: BuiltinSlot[]; recorded: unknown[]; kinds: number[] } | undefined {
   try {
     const iterators = iteratorSlots()
-    const listed = NAMED.concat(iterators)
-    const recorded = listed.map((slot) => held(slot[0], slot[1]))
-    const kinds = listed.map((slot) => kindOf(slot[0], slot[1]))
+    const listed = NAMED.concat(iterators, ABSENT)
+    const recorded = listed.map((slot, i) =>
+      i < NAMED.length + iterators.length ? held(slot[0], slot[1]) : undefined,
+    )
+    const kinds = listed.map((slot, i) =>
+      i < NAMED.length + iterators.length ? kindOf(slot[0], slot[1]) : 0,
+    )
     // `concat` and `map` are the process's own, and a process polluted before the import can make them answer what it likes:
     // a list or a record of the wrong size is not a baseline.
     if (
-      listed.length !== NAMED.length + iterators.length ||
+      listed.length !== NAMED.length + iterators.length + ABSENT.length ||
       recorded.length !== listed.length ||
       kinds.length !== listed.length
     ) {
@@ -210,6 +235,12 @@ export function replacedBuiltinCount(): number {
   return count
 }
 
+/** Marks the error this module throws, so that a `catch` that sorts failures can tell it from a store's own. */
+const REFUSAL = Symbol('builtins-refusal')
+
+/** Taken at load: the refusal is raised while `Object` may be the thing that was replaced. */
+const defineProperty = Object.defineProperty
+
 /**
  * Refuses, before the code that follows runs, when a built-in it calls was replaced after the library loaded: a replaced
  * `startsWith` or iterator makes a check pass or a loop end where it should not.
@@ -219,8 +250,77 @@ export function replacedBuiltinCount(): number {
 export function assertBuiltinsIntact(): void {
   const replaced = replacedBuiltinCount()
   if (replaced === 0) return
-  throw realtimeError(
-    REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+  throw refusal(
     `${replaced} built-in${replaced === 1 ? '' : 's'} the library calls ${replaced === 1 ? 'was' : 'were'} replaced after it was loaded`,
   )
+}
+
+/** The error both checks throw, marked so that {@link isBuiltinsRefusal} can tell it from a store's own failure. */
+function refusal(message: string): Error {
+  const error = realtimeError(REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE, message)
+  defineProperty(error, REFUSAL, { __proto__: null, value: true } as PropertyDescriptor)
+  return error
+}
+
+/** No honest prototype chain is this long; a walk that reaches it stops instead of following a chain a host made endless. */
+const CHAIN_DEPTH_CAP = 64
+
+/**
+ * The value an async function is about to return, after the baseline was checked and its whole prototype chain was
+ * walked: returning an object from an async function makes the engine ask it for a `then`, and it asks the object's own
+ * chain, which is a class, a `Buffer`, a typed array or a stream as often as a plain record. A `then` on any object of the
+ * chain would answer for the value; it is refused, and no `then` is read, so none runs. It is the last thing evaluated
+ * before the `return`, with nothing in between a host can run: a Proxy is refused before any of its traps is asked a
+ * question, since a trap is host code. It is not a defence against a `then` that is put in
+ * place after it returns. The walk uses the functions taken at load, not the ones on `Object`.
+ *
+ * @param value - What the function returns; a primitive is returned as it is.
+ * @returns The same value.
+ * @throws Error carrying `REALTIME_TRANSPORT_UNAVAILABLE` when a built-in was replaced or an object of the chain holds a
+ *   `then` or is a Proxy.
+ */
+export function returnable<T>(value: T): T {
+  assertBuiltinsIntact()
+  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return value
+  let depth = 0
+  for (let node: unknown = value; node !== null; node = getProto(node as object)) {
+    depth += 1
+    if (depth > CHAIN_DEPTH_CAP)
+      throw refusal('an object a decision returns has a prototype chain that is too deep')
+    if (isProxy(node))
+      throw refusal('an object a decision returns, or one it inherits from, is a Proxy')
+    if (apply(hasOwn, node, ['then']) as boolean) {
+      throw refusal('an object a decision returns, or one it inherits from, holds a then')
+    }
+  }
+  return value
+}
+
+/**
+ * Whether `error` is the refusal {@link assertBuiltinsIntact} throws. The mark is a symbol private to this module, so
+ * a failure of a host's own cannot carry it, and it stays true after the replaced built-in was put back.
+ */
+export function isBuiltinsRefusal(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Record<symbol, unknown>)[REFUSAL] === true
+  )
+}
+
+/**
+ * Refuses a Proxy a host call returned, before anything asks it a question: awaiting one reads `then` through a trap,
+ * which is host code. A value that is not an object is returned as it is.
+ *
+ * @throws Error carrying `REALTIME_TRANSPORT_UNAVAILABLE` when the value is a Proxy.
+ */
+export function unproxied<T>(value: T): T {
+  if (
+    (typeof value === 'object' || typeof value === 'function') &&
+    value !== null &&
+    isProxy(value)
+  ) {
+    throw refusal('a host call returned a Proxy')
+  }
+  return value
 }

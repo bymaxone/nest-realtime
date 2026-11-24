@@ -13,6 +13,8 @@ import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
+import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
+import { absorbed, firstOf, shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 
 /** The shortest time between two reports of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
@@ -146,19 +148,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       throw this.cannotPublish(`the Redis client is ${status}`)
     }
     const sent = this.#pub.publish(this.channel, JSON.stringify(message))
-    let timer: NodeJS.Timeout | undefined
-    const expired = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(
-        () => reject(this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`)),
-        PUBLISH_WAIT_MS,
-      )
-      timer.unref()
+    await withinDeadline(sent, PUBLISH_WAIT_MS, {
+      timeoutError: () =>
+        this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`),
     })
-    try {
-      await Promise.race([sent, expired])
-    } finally {
-      clearTimeout(timer)
-    }
   }
 
   /**
@@ -215,7 +208,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     this.handlers.add(handler)
     let sub: Redis
     try {
-      sub = await this.ensureSubscriber()
+      sub = await shielded(this.ensureSubscriber())
     } catch (err) {
       // Atomically undo the handler registration and clear the failed init promise
       // so the next subscribe() retries with a fresh client.
@@ -224,7 +217,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       throw err
     }
     // Only now: the subscriber is attached, so it recovers from a reconnect while this waits.
-    await this.publisherSettled()
+    await shielded(this.publisherSettled())
     return async () => {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {
@@ -288,7 +281,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     sub.on('ready', () => {
       if (attached) this.confirm(sub)
     })
-    await this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst)
+    await shielded(this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst))
     attached = true
     return sub
   }
@@ -303,17 +296,24 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     first: Promise<unknown>,
     unreachableFirst: Promise<{ readonly unreachable: unknown }>,
   ): Promise<void> {
+    // A refusal below leaves `first` unread, and closing the connection then rejects it.
+    void absorbed(first)
     try {
-      const outcome = await Promise.race([
-        first.then(
-          () => 'subscribed' as const,
-          (err: Error) => {
-            if (err.name === 'ReplyError') throw err
-            return { unreachable: err }
-          },
-        ),
-        unreachableFirst,
-      ])
+      const subscribed = shielded(
+        (async () => {
+          // Outside the `try`: a refusal is not the connection failing.
+          assertBuiltinsIntact()
+          try {
+            await first
+            return 'subscribed' as const
+          } catch (err) {
+            if ((err as Error).name === 'ReplyError') throw err
+            // The last statement before an object return, which asks the object for a `then`.
+            return returnable({ unreachable: err })
+          }
+        })(),
+      )
+      const outcome = unboxed(await firstOf(subscribed, unreachableFirst))
       if (outcome === 'subscribed') {
         this.markUp()
       } else {

@@ -32,6 +32,8 @@ const HOLDERS: [object, string][] = [
   [Set.prototype, 'Set.prototype'],
   [Reflect, 'Reflect'],
   [Function.prototype, 'Function.prototype'],
+  [Object.prototype, 'Object.prototype'],
+  [Array.prototype, 'Array.prototype'],
   [RegExp.prototype, 'RegExp.prototype'],
   [globalThis, 'globalThis'],
   [Object.getPrototypeOf([][Symbol.iterator]()) as object, 'ArrayIterator.prototype'],
@@ -118,9 +120,9 @@ describe('the built-ins the library calls', () => {
 
   // Scenario: a key in the list is misspelled or names nothing, so the slot records an absent property that no replacement of
   // the real built-in can change. Expected: every listed slot holds a function, or the getter of an accessor, at load, but
-  // for the eight that hold something else on purpose: the two namespace objects, and the symbol methods a string and a number
-  // must not have.
-  it('lists only slots that hold a function or the getter of an accessor, bar the eight that do not', () => {
+  // for the eleven that hold something else on purpose: the two namespace objects, the symbol methods a string and a number
+  // must not have, and the `then` of the three root prototypes, which must be absent.
+  it('lists only slots that hold a function or the getter of an accessor, bar the eleven that do not', () => {
     const empty: string[] = []
     for (let i = 0; i < BUILTIN_SLOTS.length; i += 1) {
       const slot = BUILTIN_SLOTS[i] as (typeof BUILTIN_SLOTS)[number]
@@ -137,6 +139,9 @@ describe('the built-ins the library calls', () => {
       'Number.prototype.[Symbol.toPrimitive]',
       'globalThis.Reflect',
       'globalThis.Math',
+      'Object.prototype.then',
+      'Array.prototype.then',
+      'Function.prototype.then',
     ])
   })
 
@@ -581,6 +586,8 @@ describe('the list of built-ins', () => {
     getTime:
       'Date.prototype.getTime, which only stamps a time and is replaced with the clock on purpose',
     then: 'Promise.prototype.then, which instrumentation and zone libraries patch on purpose',
+    isPromise:
+      'util.types.isPromise: it only chooses how a promise the library is discarding gets its handler, and decides nothing',
     catch: 'Promise.prototype.catch, patched like then',
     resolve: 'Promise.resolve, patched like then',
     race: 'Promise.race, patched like then',

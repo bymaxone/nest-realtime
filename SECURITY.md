@@ -45,6 +45,10 @@ interface IConnectionAuthenticator {
 - **Consumer's responsibility:** implement `IConnectionAuthenticator` securely; validate credentials correctly; return `null` for invalid/expired credentials.
 - **Out of scope:** vulnerabilities in _bridge implementations_ (e.g. the `@bymax-one/nest-auth` bridge for NestJS JWT) are the responsibility of those packages, not this library. Report such issues to the corresponding project.
 
+### Threat model: same-process code
+
+Code that runs in the same process as this library is trusted, as it is in Node itself: it can already read your credentials, replace any module and call every API directly. The guards that refuse a replaced built-in, a planted `then` or a returned `Proxy` are best-effort checks that catch an accident, such as a polyfill or a patch applied after the import. They are not a security boundary against hostile code in the process. Limits: a thenable that is neither a native promise nor a `Proxy`, such as a host's own class with a `then`, is awaited as it is, and a test that fakes the global `Date` (fake timers) or spies on `Date.now` is either not seen by the re-authentication clock or refused by the guard.
+
 ### EventSource Auth Pattern
 
 The browser `EventSource` API cannot send custom request headers. **Do not** attempt to pass a bearer token via `Authorization` on an SSE connection — browsers will ignore it. Use one of:

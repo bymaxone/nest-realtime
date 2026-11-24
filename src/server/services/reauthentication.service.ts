@@ -25,12 +25,21 @@ import type {
 } from '../interfaces/realtime-module-options.interface'
 import { RealtimeTracing } from '../observability/realtime-tracing'
 import { callHostMethod, hostMethod } from '../utils/read-host-key'
+import { assertBuiltinsIntact } from '../utils/builtin-baseline'
+import { realtimeError } from '../utils/realtime-error'
 import { logEvent } from '../utils/log-event'
 import { Semaphore } from '../utils/semaphore'
 import { runHook } from '../utils/run-hook'
+import { shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
 import { RealtimeService } from './realtime.service'
+
+/** The clock the cache window is read from, taken at load: a replaced `Date.now` is refused by the baseline. */
+const clockNow = Date.now
+
+/** The `Date` the clock was taken from; fake timers replace the global binding, not this object's `now`. */
+const clockOwner = Date
 
 /** Resolved re-auth policy with all fields required. */
 interface RequiredPolicy {
@@ -79,6 +88,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   private readonly inFlight = new Set<string>()
   /** The cap on revalidations in flight, shared by every cycle. */
   private readonly slots: Semaphore
+
+  /** The clock a cycle reads; the one taken at load, so a test of the cache window can stand its own in. */
+  private readonly clock: () => number = clockNow
 
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
@@ -163,7 +175,13 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    * Exposed as public for test access.
    */
   async runCycle(): Promise<void> {
-    const now = Date.now()
+    if (clockOwner.now !== clockNow) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        'Date.now was replaced after the library loaded',
+      )
+    }
+    const now = this.clock()
     // Both transports, not SSE alone. A revocation policy that runs on one of them
     // is not a revocation policy: a WebSocket admitted under credentials that were
     // valid at handshake would keep delivering for the life of the socket, which is
@@ -223,7 +241,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         conn.revalidatedAt = now
         return
       }
-      await this.revoke(conn)
+      await shielded(this.revoke(conn))
     } catch (err) {
       logEvent(
         this.logger,
@@ -233,7 +251,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         { connectionId: conn.connectionId },
         err,
       )
-      await this.revoke(conn)
+      await shielded(this.revoke(conn))
     }
   }
 
@@ -243,26 +261,32 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    * The same bound holds for the call to `revalidate` and for the revocation after it, because both
    * run in a slot that every connection shares.
    */
-  private async bounded<T>(
+  private bounded<T>(
     what: string,
     work: (signal: AbortSignal) => Promise<T> | undefined,
+    outcomeUnread = false,
+  ): Promise<T | undefined> {
+    // Both callers await this promise: it carries its own constructor, so that await never reads the shared slot.
+    return shielded(this.bound(what, work, outcomeUnread))
+  }
+
+  private async bound<T>(
+    what: string,
+    work: (signal: AbortSignal) => Promise<T> | undefined,
+    outcomeUnread: boolean,
   ): Promise<T | undefined> {
     const controller = new AbortController()
-    let timer: NodeJS.Timeout | undefined
-    const timedOut = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
-        // Rejected before the abort is dispatched: a call that answers from its abort listener
-        // settles after the timeout, so its answer cannot win the race.
-        reject(new Error(`${what} did not settle within ${this.policy.revalidateTimeoutMs} ms`))
-        controller.abort()
-      }, this.policy.revalidateTimeoutMs)
-      timer.unref()
+    // Before the call: its own promise resolves with what it answers, and a planted `then` would answer for it.
+    if (!outcomeUnread) assertBuiltinsIntact()
+    // The wait is rejected before the abort is dispatched: a call that answers from its abort listener
+    // settles after the timeout, so its answer cannot win.
+    const decided = await withinDeadline(work(controller.signal), this.policy.revalidateTimeoutMs, {
+      timeoutError: () =>
+        new Error(`${what} did not settle within ${this.policy.revalidateTimeoutMs} ms`),
+      onExpire: () => controller.abort(),
+      outcomeUnread,
     })
-    try {
-      return await Promise.race([work(controller.signal), timedOut])
-    } finally {
-      clearTimeout(timer)
-    }
+    return outcomeUnread ? undefined : unboxed(decided)
   }
 
   /**
@@ -272,7 +296,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    */
   private async revoke(conn: ConnectionRecord): Promise<void> {
     try {
-      await this.bounded('revocation', () => this.handleFailure(conn))
+      // Nobody reads what the revocation answers, so the wait itself does not check the built-ins. The disconnect it
+      // calls still refuses when one is replaced; the connection then stays, and the next cycle tries again.
+      await this.bounded('revocation', () => this.handleFailure(conn), true)
     } catch (err) {
       logEvent(
         this.logger,

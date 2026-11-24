@@ -9,6 +9,7 @@ import {
   ConnectionAdmission,
   ConnectionLimitError,
   DEFAULT_MAX_CONNECTIONS,
+  UNBOUNDED_TICKET,
 } from './connection-admission.service'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
@@ -254,5 +255,13 @@ describe('ConnectionAdmission', () => {
 
       expect(() => admission.admit()).not.toThrow()
     })
+  })
+})
+
+describe('UNBOUNDED_TICKET', () => {
+  // Scenario: the ticket of a transport with no admission is one object shared by every handshake, and a handler could
+  // reach it. Expected: it is frozen, so what one handshake does to it cannot change what the next one gets.
+  it('is frozen, so that no handshake can change what the next one is given', () => {
+    expect(Object.isFrozen(UNBOUNDED_TICKET)).toBe(true)
   })
 })

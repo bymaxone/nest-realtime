@@ -2,12 +2,14 @@
  * @fileoverview Tenant resolution and rejection of blank identity traits.
  * @layer utils
  */
+import { types } from 'node:util'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { AuthenticationResult } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { assertBuiltinsIntact } from './builtin-baseline'
 import { readHostKey } from './read-host-key'
 import { realtimeError } from './realtime-error'
+import { absorbed, shielded } from './within-deadline'
 
 /**
  * True when a trait carries no identity.
@@ -66,13 +68,25 @@ export function resolveAuthTenant(
  * subclass that overrides `catch` and a promise with a `then` of its own are handled, and any other value is
  * refused before a property of it is read. A proxy over a promise is not one by brand, so a value that is an
  * `instanceof Promise` is then given its own `catch`; a thenable that is not a promise is never asked for its
- * `then`. A promise whose `constructor` or species cannot be read cannot be given a handler by either path.
+ * `then`. A promise whose species cannot be read is given the intrinsic constructor and awaited; one whose `constructor`
+ * cannot be read or replaced cannot be given a handler by any path.
  */
 function absorbRejection(value: unknown): void {
   try {
     Promise.prototype.then.call(value, undefined, () => undefined)
   } catch {
-    // Not a promise by brand, or a promise whose species cannot be read: its own `catch` is the last way to a handler.
+    // A promise whose species cannot be read: `then` reads the species and fails before it attaches anything, and an await
+    // of it goes through `then` too unless its constructor is the intrinsic one. This promise is being discarded, so it is
+    // given that constructor, and the await then attaches its handlers directly.
+    if (types.isPromise(value)) {
+      try {
+        void absorbed(shielded(value))
+      } catch {
+        // One whose `constructor` cannot be replaced: no handler can be attached by any path.
+      }
+      return
+    }
+    // Not a promise by brand: its own `catch` is the last way to a handler.
     try {
       if (value instanceof Promise) value.catch(() => undefined)
     } catch {

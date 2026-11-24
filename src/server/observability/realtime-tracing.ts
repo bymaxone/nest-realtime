@@ -4,6 +4,7 @@
  */
 import { Injectable } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
+import { returnable } from '../utils/builtin-baseline'
 
 /** The span names the library starts. */
 export type RealtimeSpanName = 'realtime.handshake' | 'realtime.reauthenticate'
@@ -79,7 +80,8 @@ export class RealtimeTracing implements OnModuleInit {
       throw error
     }
     attempt(() => span.end())
-    return result
+    // The tracer's `end` ran just now and is host code: what it planted answers for the result the engine resolves with.
+    return returnable(result)
   }
 
   /**
@@ -108,6 +110,9 @@ export class RealtimeTracing implements OnModuleInit {
         if (!latch.claimed) {
           latch.claimed = true
           latch.started = this.traced(span, run)
+        } else {
+          // A span handed over after the operation was claimed is not one `traced` ends: it is ended here, or it is never.
+          attempt(() => span.end())
         }
         return latch.started
       }),

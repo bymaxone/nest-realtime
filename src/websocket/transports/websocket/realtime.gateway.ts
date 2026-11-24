@@ -19,6 +19,8 @@ import {
   admitRooms,
   assertIdentityIsNotBlank,
   resolveAuthTenant,
+  returnable,
+  shielded,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   AdmissionTicket,
@@ -92,9 +94,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   ): Promise<void> => {
     let outcome: Error | undefined
     const run = async (): Promise<void> => {
-      await this.handshake(socket, (err) => {
-        outcome = err
-      })
+      await shielded(
+        this.handshake(socket, (err) => {
+          outcome = err
+        }),
+      )
       if (outcome) throw outcome
     }
     try {
@@ -123,7 +127,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       // while it is being authenticated never reaches `handleConnection`.
       const held = this.admit(socket)
       ticket = held
-      const auth = await this.transport.authenticate(this.buildAuthContext(socket))
+      const auth = await shielded(this.transport.authenticate(this.buildAuthContext(socket)))
       // Authentication is asynchronous, so shutdown may have begun while this handshake waited.
       if (this.transport.shuttingDown) {
         this.tally?.refused('unavailable')
@@ -271,7 +275,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   async handleConnection(socket: Socket): Promise<void> {
     let ticket: AdmissionTicket | undefined
     try {
-      const handshake = await this.takeHandshake(socket)
+      const handshake = await shielded(this.takeHandshake(socket))
       if (!handshake) return
       ticket = handshake.ticket
       const { auth } = handshake
@@ -282,7 +286,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       // The registry holds the socket from the call on, so the place would be counted twice for as
       // long as the rest of the registration, a consumer's `onConnect` hook included, takes.
       ticket?.release()
-      await registering
+      await shielded(registering)
 
       if (this.options.websocket?.emitConnectionEvent !== false) {
         socket.emit(RESERVED_EVENT_NAMES.CONNECTION_ESTABLISHED, {
@@ -343,7 +347,15 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     const ticket = this.tickets.get(socket)
     this.authenticated.delete(socket)
     this.tickets.delete(socket)
-    if (auth) return { auth, ticket }
+    if (auth) {
+      // The place the middleware took is given back when the answer is refused: no caller is left to release it.
+      try {
+        return returnable({ auth, ticket })
+      } catch (err) {
+        ticket?.release()
+        throw err
+      }
+    }
     if (this.transport.shuttingDown) {
       this.tally?.refused('unavailable')
       socket.disconnect(true)
@@ -351,7 +363,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     }
     const held = this.admit(socket)
     try {
-      const fresh = await this.transport.authenticate(this.buildAuthContext(socket))
+      const fresh = await shielded(this.transport.authenticate(this.buildAuthContext(socket)))
       if (!fresh) {
         this.tally?.refused('unauthorized')
         socket.disconnect(true)
@@ -360,7 +372,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       }
       const resolved = resolveAuthTenant(this.options, fresh)
       assertIdentityIsNotBlank(resolved)
-      return { auth: admitRooms(resolved), ticket: held }
+      return returnable({ auth: admitRooms(resolved), ticket: held })
     } catch (err) {
       held.release()
       throw err
@@ -369,7 +381,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
 
   /** Handle a WebSocket disconnection — unregister the connection. */
   async handleDisconnect(socket: Socket): Promise<void> {
-    await this.transport.unregisterSocket(socket.id, 'CLIENT_DISCONNECT')
+    await shielded(this.transport.unregisterSocket(socket.id, 'CLIENT_DISCONNECT'))
   }
 
   /**

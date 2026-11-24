@@ -182,3 +182,40 @@ describe('a refusal of the SUBSCRIBE', () => {
     expect(pubsub.isSubscribed()).toBe(true)
   })
 })
+
+// Scenario: the built-ins are found replaced before the first SUBSCRIBE is read, and closing the connection then
+// rejects that SUBSCRIBE. Expected: the boot fails with the unavailable error and no rejection goes unhandled.
+describe('a refusal of the built-ins around the first SUBSCRIBE', () => {
+  it('leaves no unhandled rejection when the connection is closed', async () => {
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    const sub = {
+      subscribe: jest.fn(
+        () =>
+          new Promise((_resolve, reject) =>
+            setImmediate(() => reject(new Error('Connection is closed.'))),
+          ),
+      ),
+      on: jest.fn(),
+      disconnect: jest.fn(),
+    }
+    const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
+    const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
+    let failure: unknown
+
+    Object.defineProperty(Function.prototype, 'then', { configurable: true, value: undefined })
+    try {
+      await pubsub.subscribe(jest.fn())
+    } catch (error) {
+      failure = error
+    } finally {
+      Reflect.deleteProperty(Function.prototype, 'then')
+    }
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    process.off('unhandledRejection', unhandled)
+
+    expect(failure).toMatchObject({ code: 'REALTIME_PUBSUB_UNAVAILABLE' })
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+})

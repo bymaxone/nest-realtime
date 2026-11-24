@@ -14,6 +14,7 @@ import type {
 } from '../interfaces/realtime-pubsub.interface'
 import { SseTransport } from '../transports/sse/sse.transport'
 import { logEvent } from '../utils/log-event'
+import { shielded } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 interface EmitUserArgs {
@@ -73,7 +74,7 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
   async onApplicationShutdown(): Promise<void> {
     if (this.unsubscribe) {
       try {
-        await this.unsubscribe()
+        await shielded(this.unsubscribe())
       } catch (err) {
         logEvent(
           this.logger,

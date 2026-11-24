@@ -4,16 +4,32 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import {
+  assertBuiltinsIntact,
+  awaitable,
   describeError,
   logEvent,
   REALTIME_ERROR_CODES,
   SseTransport,
+  shielded,
+  started,
   unavailableError,
   refuseReservedRoom,
   requireRoomName,
+  returnable,
 } from '@bymax-one/nest-realtime/internal'
 import type { ITransport } from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from '../websocket/websocket.transport'
+
+/** The two operations a call is made of, one per transport. */
+type Tasks = [() => Promise<void>, () => Promise<void>]
+
+/** What each of the two settled with, in plain fields. */
+interface Outcomes {
+  firstFailed: boolean
+  secondFailed: boolean
+  firstReason: unknown
+  secondReason: unknown
+}
 
 /**
  * Fan-out transport activated when `transport: 'both'`.
@@ -52,10 +68,12 @@ export class CompositeTransport implements ITransport {
    * @param data - Payload forwarded to all matching connections.
    */
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
-    await this.fanOut(
-      'emitToUser',
-      () => this.sse.emitToUser(userId, event, data),
-      () => this.ws.emitToUser(userId, event, data),
+    await awaitable(
+      this.fanOut(
+        'emitToUser',
+        () => this.sse.emitToUser(userId, event, data),
+        () => this.ws.emitToUser(userId, event, data),
+      ),
     )
   }
 
@@ -67,10 +85,12 @@ export class CompositeTransport implements ITransport {
    * @param data - Payload forwarded to all matching connections.
    */
   async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
-    await this.fanOut(
-      'emitToTenant',
-      () => this.sse.emitToTenant(tenantId, event, data),
-      () => this.ws.emitToTenant(tenantId, event, data),
+    await awaitable(
+      this.fanOut(
+        'emitToTenant',
+        () => this.sse.emitToTenant(tenantId, event, data),
+        () => this.ws.emitToTenant(tenantId, event, data),
+      ),
     )
   }
 
@@ -83,10 +103,12 @@ export class CompositeTransport implements ITransport {
    */
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
     requireRoomName('emitToRoom', roomId)
-    await this.fanOut(
-      'emitToRoom',
-      () => this.sse.emitToRoom(roomId, event, data),
-      () => this.ws.emitToRoom(roomId, event, data),
+    await awaitable(
+      this.fanOut(
+        'emitToRoom',
+        () => this.sse.emitToRoom(roomId, event, data),
+        () => this.ws.emitToRoom(roomId, event, data),
+      ),
     )
   }
 
@@ -97,10 +119,12 @@ export class CompositeTransport implements ITransport {
    * @param data - Payload forwarded to every connected client.
    */
   async broadcast(event: string, data: unknown): Promise<void> {
-    await this.fanOut(
-      'broadcast',
-      () => this.sse.broadcast(event, data),
-      () => this.ws.broadcast(event, data),
+    await awaitable(
+      this.fanOut(
+        'broadcast',
+        () => this.sse.broadcast(event, data),
+        () => this.ws.broadcast(event, data),
+      ),
     )
   }
 
@@ -112,10 +136,12 @@ export class CompositeTransport implements ITransport {
    */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
     refuseReservedRoom('joinRoom', roomId)
-    await this.settleBoth('joinRoom', connectionId, [
-      () => this.sse.joinRoom(connectionId, roomId),
-      () => this.ws.joinRoom(connectionId, roomId),
-    ])
+    await awaitable(
+      this.settleBoth('joinRoom', connectionId, [
+        () => this.sse.joinRoom(connectionId, roomId),
+        () => this.ws.joinRoom(connectionId, roomId),
+      ]),
+    )
   }
 
   /**
@@ -127,10 +153,12 @@ export class CompositeTransport implements ITransport {
    */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
     refuseReservedRoom('leaveRoom', roomId)
-    await this.settleBoth('leaveRoom', connectionId, [
-      () => this.sse.leaveRoom(connectionId, roomId),
-      () => this.ws.leaveRoom(connectionId, roomId),
-    ])
+    await awaitable(
+      this.settleBoth('leaveRoom', connectionId, [
+        () => this.sse.leaveRoom(connectionId, roomId),
+        () => this.ws.leaveRoom(connectionId, roomId),
+      ]),
+    )
   }
 
   /**
@@ -140,10 +168,12 @@ export class CompositeTransport implements ITransport {
    * either one could not: the revocation has not reached the connection.
    */
   async disconnect(connectionId: string, reason?: string): Promise<void> {
-    await this.settleBoth('disconnect', connectionId, [
-      () => this.sse.disconnect(connectionId, reason),
-      () => this.ws.disconnect(connectionId, reason),
-    ])
+    await awaitable(
+      this.settleBoth('disconnect', connectionId, [
+        () => this.sse.disconnect(connectionId, reason),
+        () => this.ws.disconnect(connectionId, reason),
+      ]),
+    )
   }
 
   /**
@@ -152,38 +182,66 @@ export class CompositeTransport implements ITransport {
    * One failure is rethrown as it is; both are reported together under
    * `REALTIME_TRANSPORT_UNAVAILABLE`, with every reason in `cause`.
    */
-  private async settleBoth(
-    op: string,
-    connectionId: string,
-    tasks: Array<() => Promise<void>>,
-  ): Promise<void> {
-    const results = await Promise.allSettled(tasks.map((t) => t()))
-    const reasons = results.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []))
-    if (reasons.length === 0) return
-    if (reasons.length === 1) throw reasons[0]
-    throw this.allFailed(`${op} of ${connectionId}`, reasons)
+  private async settleBoth(op: string, connectionId: string, tasks: Tasks): Promise<void> {
+    const outcome = await shielded(this.outcomes(tasks))
+    if (!outcome.firstFailed && !outcome.secondFailed) return
+    if (outcome.firstFailed !== outcome.secondFailed)
+      throw outcome.firstFailed ? outcome.firstReason : outcome.secondReason
+    throw this.allFailed(`${op} of ${connectionId}`, [outcome.firstReason, outcome.secondReason])
   }
 
   /**
-   * Run two transport tasks in parallel via `Promise.allSettled`.
+   * Run two transport tasks, both started before either is awaited.
    *
    * One task failing is logged as a warning and the call resolves, so one failing transport
    * never blocks delivery on the other. Every task failing rejects.
    */
-  private async fanOut(op: string, ...tasks: Array<() => Promise<void>>): Promise<void> {
-    const results = await Promise.allSettled(tasks.map((t) => t()))
-    const reasons = results.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []))
-    if (reasons.length === tasks.length) throw this.allFailed(op, reasons)
-    for (const reason of reasons) {
-      logEvent(
-        this.logger,
-        'warn',
-        'REALTIME_COMPOSITE_PARTIAL_FAILURE',
-        `Composite ${op} partially failed`,
-        { op },
-        reason,
-      )
+  private async fanOut(op: string, ...tasks: Tasks): Promise<void> {
+    const outcome = await shielded(this.outcomes(tasks))
+    if (outcome.firstFailed && outcome.secondFailed)
+      throw this.allFailed(op, [outcome.firstReason, outcome.secondReason])
+    if (outcome.firstFailed) this.warnPartial(op, outcome.firstReason)
+    if (outcome.secondFailed) this.warnPartial(op, outcome.secondReason)
+  }
+
+  private warnPartial(op: string, reason: unknown): void {
+    logEvent(
+      this.logger,
+      'warn',
+      'REALTIME_COMPOSITE_PARTIAL_FAILURE',
+      `Composite ${op} partially failed`,
+      { op },
+      reason,
+    )
+  }
+
+  /**
+   * What each of two tasks settled with, read into plain fields: no array is built, pushed to or iterated while a host
+   * call can still have replaced `push` or the iterator, and the baseline is asserted last, after every host call, so a
+   * replacement a task planted refuses the call instead of answering for it.
+   */
+  private async outcomes(tasks: Tasks): Promise<Outcomes> {
+    const a = started(tasks[0])
+    const b = started(tasks[1])
+    let firstFailed = false
+    let secondFailed = false
+    let firstReason: unknown
+    let secondReason: unknown
+    try {
+      await a
+    } catch (error) {
+      firstFailed = true
+      firstReason = error
     }
+    try {
+      await b
+    } catch (error) {
+      secondFailed = true
+      secondReason = error
+    }
+    assertBuiltinsIntact()
+    // The last thing before the return: resolving with an object asks it, and what it inherits from, for a `then`.
+    return returnable({ firstFailed, secondFailed, firstReason, secondReason })
   }
 
   /** The rejection for an operation that failed on every transport, with every reason in `cause`. */

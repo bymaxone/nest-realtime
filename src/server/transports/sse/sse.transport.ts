@@ -40,12 +40,13 @@ import { composeRoomId } from '../../utils/compose-room-id'
 import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { ConnectionAdmission, UNBOUNDED_TICKET } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
-import { assertBuiltinsIntact } from '../../utils/builtin-baseline'
+import { assertBuiltinsIntact, returnable } from '../../utils/builtin-baseline'
 import { logEvent } from '../../utils/log-event'
 import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
 import { refuseReservedRoom, requireRoomName } from '../../utils/reserved-room'
 import { unavailableError } from '../../utils/unavailable-error'
+import { awaitable, shielded, started } from '../../utils/within-deadline'
 import { InMemoryPubSub } from '../../pubsub/in-memory-pubsub'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
@@ -159,7 +160,7 @@ export class SseTransport implements ITransport {
 
   /** The same teardown, for a caller that runs only this hook; it finds nothing left to close. */
   async onApplicationShutdown(): Promise<void> {
-    await this.beforeApplicationShutdown()
+    await shielded(this.beforeApplicationShutdown())
   }
 
   /** Whether shutdown has begun, after which a new stream is refused because nothing would end it. */
@@ -229,7 +230,7 @@ export class SseTransport implements ITransport {
     const named = params.auth.rooms ?? []
     for (let i = 0; i < named.length; i += 1)
       this.recordJoin(params.connectionId, named[i] as string)
-    await this.evictBeyondLimit(params.auth.userId)
+    await shielded(this.evictBeyondLimit(params.auth.userId))
   }
 
   /** Join one room in the registry, after checking that the built-ins the library calls are what they were. */
@@ -250,7 +251,7 @@ export class SseTransport implements ITransport {
    */
   async unregisterConnection(connectionId: string, reason?: string): Promise<void> {
     const record = this.release(connectionId)
-    if (record) await this.notifyDisconnect(record, reason)
+    if (record) await shielded(this.notifyDisconnect(record, reason))
   }
 
   /**
@@ -347,12 +348,16 @@ export class SseTransport implements ITransport {
     this.emitToUserLocal(userId, event, data, id)
     const queue = this.offlineQueue
     const offline = queue !== undefined && this.connections.byUser(userId, 'sse').length === 0
-    const [queueFailure, publishFailure] = await Promise.all([
-      offline
-        ? this.tryAppend(queue, userId, { id, event, data, emittedAt: new Date() })
-        : undefined,
+    // Both start before either is awaited, each through `started` so that neither has a `then` or a species of its own
+    // to ask: no Promise static decides which failure the call reports or whether it throws.
+    const append = offline
+      ? started(() => this.tryAppend(queue, userId, { id, event, data, emittedAt: new Date() }))
+      : undefined
+    const publish = started(() =>
       this.tryPublish({ op: 'emitToUser', args: { userId, event, data, id } }),
-    ])
+    )
+    const queueFailure = await append
+    const publishFailure = await publish
     if (
       queueFailure !== undefined &&
       (publishFailure !== undefined || !this.busReachesOtherInstances())
@@ -387,10 +392,10 @@ export class SseTransport implements ITransport {
     event: OfflineQueuedEvent,
   ): Promise<Failure | undefined> {
     try {
-      await queue.append(userId, event)
+      await awaitable(queue.append(userId, event))
       return undefined
     } catch (error) {
-      return { error }
+      return returnable({ error })
     }
   }
 
@@ -403,7 +408,7 @@ export class SseTransport implements ITransport {
     assertBuiltinsIntact()
     const id = this.idGen.next()
     this.emitToTenantLocal(tenantId, event, data, id)
-    await this.publish({ op: 'emitToTenant', args: { tenantId, event, data, id } })
+    await shielded(this.publish({ op: 'emitToTenant', args: { tenantId, event, data, id } }))
   }
 
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
@@ -411,14 +416,14 @@ export class SseTransport implements ITransport {
     requireRoomName('emitToRoom', roomId)
     const id = this.idGen.next()
     this.emitToRoomLocal(roomId, event, data, id)
-    await this.publish({ op: 'emitToRoom', args: { roomId, event, data, id } })
+    await shielded(this.publish({ op: 'emitToRoom', args: { roomId, event, data, id } }))
   }
 
   async broadcast(event: string, data: unknown): Promise<void> {
     assertBuiltinsIntact()
     const id = this.idGen.next()
     this.broadcastLocal(event, data, id)
-    await this.publish({ op: 'broadcast', args: { event, data, id } })
+    await shielded(this.publish({ op: 'broadcast', args: { event, data, id } }))
   }
 
   /** Join a connection this instance holds to a room; any other id is left alone. */
@@ -451,15 +456,17 @@ export class SseTransport implements ITransport {
     if (record) {
       // A connection held here as a WebSocket is the WebSocket transport's to close:
       // `disconnectLocal` leaves it alone.
-      await this.disconnectLocal(connectionId, reason)
+      await shielded(this.disconnectLocal(connectionId, reason))
       return
     }
     try {
-      await this.pubsub.publish({
-        op: 'disconnect',
-        args: { connectionId, reason },
-        origin: this.instanceId,
-      })
+      await awaitable(
+        this.pubsub.publish({
+          op: 'disconnect',
+          args: { connectionId, reason },
+          origin: this.instanceId,
+        }),
+      )
     } catch (error) {
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
@@ -550,7 +557,7 @@ export class SseTransport implements ITransport {
     const released = this.release(connectionId)
     record.close$?.next()
     record.close$?.complete()
-    if (released) await this.notifyDisconnect(released, reason)
+    if (released) await shielded(this.notifyDisconnect(released, reason))
   }
 
   private buildMessage(id: string, event: string, data: unknown): Frame {
@@ -635,16 +642,16 @@ export class SseTransport implements ITransport {
     message: Omit<RealtimePubSubMessage, 'origin'>,
   ): Promise<Failure | undefined> {
     try {
-      await this.pubsub.publish({ ...message, origin: this.instanceId })
+      await awaitable(this.pubsub.publish({ ...message, origin: this.instanceId }))
       return undefined
     } catch (error) {
-      return { error }
+      return returnable({ error })
     }
   }
 
   /** Publish once to the bus. A failure is reported and never fails the live emit path. */
   private async publish(message: Omit<RealtimePubSubMessage, 'origin'>): Promise<void> {
-    const failure = await this.tryPublish(message)
+    const failure = await shielded(this.tryPublish(message))
     if (failure !== undefined) this.reportPublishFailure(message.op, failure)
   }
 
@@ -665,7 +672,9 @@ export class SseTransport implements ITransport {
     while (userConnections.length > max) {
       const oldest = userConnections.reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))
       this.tally?.evicted('per_user_cap')
-      await this.disconnectLocal(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
+      await shielded(
+        this.disconnectLocal(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS),
+      )
       userConnections = this.connections.byUser(userId, 'sse')
     }
   }
