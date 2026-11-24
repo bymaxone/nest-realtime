@@ -619,7 +619,7 @@ A complete `@bymax-one/nest-auth` bridge is in [docs/examples/nest-auth-bridge.m
 
 ### WebSocket origin
 
-`websocket.cors` sets the CORS response headers on Socket.IO's HTTP responses, so a browser decides whether a page may read a long-polling response. It does not refuse a connection, and a WebSocket upgrade is not subject to CORS: a browser sends the `Origin` header with the upgrade and the server answers it whatever the origin is. Measured on this library with `websocket.cors: { origin: ['https://app.example.com'], credentials: true }` and a valid cookie: a client sending `Origin: https://evil.example` connects over `transports: ['websocket']` exactly as one sending the listed origin does, with and without `RealtimeIoAdapter`. A page on any origin can therefore open a WebSocket to your server, and the browser attaches the user's cookies to it when they are sent cross-site.
+`websocket.cors` sets the CORS response headers on Socket.IO's HTTP responses, so a browser decides whether a page may read a long-polling response. It does not refuse a connection, and a WebSocket upgrade is not subject to CORS: a browser sends the `Origin` header with the upgrade and the server answers it whatever the origin is. A page on any origin can therefore open a WebSocket to your server, and the browser attaches the user's cookies to it when they are sent cross-site.
 
 What the host does about it:
 
