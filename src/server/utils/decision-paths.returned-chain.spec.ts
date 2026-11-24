@@ -79,6 +79,34 @@ describe('returnable: the value an async function is about to return', () => {
       restore()
     }
   })
+
+  // Scenario: a Proxy whose `getPrototypeOf` or `getOwnPropertyDescriptor` trap plants a `then` on Object.prototype while
+  // the chain is walked, and one whose prototype is such a Proxy. Expected: refused before any trap runs, so nothing is
+  // planted.
+  it.each([
+    [
+      'a Proxy value',
+      (trap: () => void) => new Proxy({}, { getPrototypeOf: () => (trap(), Object.prototype) }),
+    ],
+    [
+      'a Proxy that is the prototype',
+      (trap: () => void) =>
+        Object.create(
+          new Proxy({}, { getOwnPropertyDescriptor: () => (trap(), undefined) }) as object,
+        ) as object,
+    ],
+  ])('refuses %s without running its traps', (_name, make) => {
+    const trap = jest.fn(() => {
+      plant(Object.prototype)
+    })
+    const value = make(trap)
+    try {
+      expect(() => returnable(value)).toThrow(expect.objectContaining(REFUSED))
+      expect(trap).not.toHaveBeenCalled()
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'then')
+    }
+  })
 })
 
 describe('the gate returns what a host answered only when nothing in its chain has a then', () => {

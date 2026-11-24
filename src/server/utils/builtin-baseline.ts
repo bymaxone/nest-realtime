@@ -2,6 +2,7 @@
  * @fileoverview The built-ins the option, validation and admission paths call, recorded when the library loads and compared by identity.
  * @layer utils
  */
+import { types } from 'node:util'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { realtimeError } from './realtime-error'
 
@@ -12,6 +13,7 @@ const describe = Object.getOwnPropertyDescriptor
 const hasOwn = Object.prototype.hasOwnProperty
 const apply = Reflect.apply
 const getProto = Object.getPrototypeOf
+const isProxy = types.isProxy
 
 /**
  * What a slot holds: its value, or the getter of an accessor, which is what a flag of a RegExp is. A descriptor is an
@@ -261,18 +263,21 @@ function refusal(message: string): Error {
  * walked: returning an object from an async function makes the engine ask it for a `then`, and it asks the object's own
  * chain, which is a class, a `Buffer`, a typed array or a stream as often as a plain record. A `then` on any object of the
  * chain would answer for the value; it is refused, and no `then` is read, so none runs. It is the last thing evaluated
- * before the `return`, with nothing in between a host can run, and it is not a defence against a `then` that is put in
+ * before the `return`, with nothing in between a host can run: a Proxy is refused before any of its traps is asked a
+ * question, since a trap is host code. It is not a defence against a `then` that is put in
  * place after it returns. The walk uses the functions taken at load, not the ones on `Object`.
  *
  * @param value - What the function returns; a primitive is returned as it is.
  * @returns The same value.
  * @throws Error carrying `REALTIME_TRANSPORT_UNAVAILABLE` when a built-in was replaced or an object of the chain holds a
- *   `then`.
+ *   `then` or is a Proxy.
  */
 export function returnable<T>(value: T): T {
   assertBuiltinsIntact()
   if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return value
   for (let node: unknown = value; node !== null; node = getProto(node as object)) {
+    if (isProxy(node))
+      throw refusal('an object a decision returns, or one it inherits from, is a Proxy')
     if (apply(hasOwn, node, ['then']) as boolean) {
       throw refusal('an object a decision returns, or one it inherits from, holds a then')
     }
