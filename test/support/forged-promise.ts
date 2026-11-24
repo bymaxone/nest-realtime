@@ -7,6 +7,7 @@
 /** Which built-in is replaced. */
 export type ForgedBuiltin = 'race' | 'resolve' | 'then'
 
+/** Every Promise built-in the forgery tests replace in turn, so a site is exercised once per kind. */
 export const FORGED_BUILTINS: readonly ForgedBuiltin[] = ['race', 'resolve', 'then']
 
 /**
