@@ -4,7 +4,7 @@
  * @layer utils
  */
 import { types } from 'node:util'
-import { assertBuiltinsIntact } from './builtin-baseline'
+import { assertBuiltinsIntact, returnable } from './builtin-baseline'
 import { apply, getPrototypeOf, hasOwnProperty } from './captured-builtins'
 
 /**
@@ -14,12 +14,18 @@ import { apply, getPrototypeOf, hasOwnProperty } from './captured-builtins'
  * answer once a host has replaced them, and a decision made on it is the host's.
  */
 const enginePromisePrototype: unknown = Object.getPrototypeOf((async () => undefined)())
-const NativePromise = (enginePromisePrototype as { constructor: PromiseConstructor }).constructor
+// Read as a descriptor and not through the property: a getter a host put in the slot would run on a read, and a value it
+// answers there is not the constructor the slot holds.
+const slot = Object.getOwnPropertyDescriptor(enginePromisePrototype, 'constructor')
+const NativePromise = slot?.value as PromiseConstructor
 
-// The slot that gave the constructor is writable, so a host that ran before this module loaded may have put its own
-// there. A function that is the engine's Promise has the engine's prototype and prints as native code; refusing to load
-// is better than pinning a stranger's constructor on every promise a decision awaits.
+// The slot is writable, so a host that ran before this module loaded may have put its own there, as a function or as a
+// getter. A data property that holds the engine's Promise has the engine's prototype and prints as native code; refusing
+// to load is better than pinning a stranger's constructor on every promise a decision awaits.
 if (
+  slot === undefined ||
+  !('value' in slot) ||
+  typeof NativePromise !== 'function' ||
   NativePromise.prototype !== enginePromisePrototype ||
   NativePromise.name !== 'Promise' ||
   !Function.prototype.toString.call(NativePromise).includes('[native code]')
@@ -104,6 +110,15 @@ export function isPlainResult<T>(result: PromiseLike<T> | T): result is T {
  */
 export async function absorbed(call: PromiseLike<unknown> | undefined): Promise<void> {
   try {
+    // Pinned first: an await of a native promise reads its `constructor`, and a species that throws there fails the await
+    // before it attaches a handler, leaving the rejection unhandled. One that cannot be pinned is awaited as it is.
+    if (types.isPromise(call)) {
+      try {
+        shielded(call)
+      } catch {
+        // No handler can be attached to it by any other path.
+      }
+    }
     await call
   } catch {
     // Read by whoever decides on it.
@@ -125,12 +140,12 @@ function boxed<T>(value: T): Decided<T> {
 }
 
 /**
- * The value of a settled wait, after the baseline was checked once more: the caller returns it from an async function,
- * which resolves its own promise with it and so reads a `then` the value inherits.
+ * The value of a settled wait, after the baseline was checked once more and the value's prototype chain was walked: the
+ * caller returns it from an async function, which resolves its own promise with it and so reads a `then` the value
+ * inherits.
  */
 export function unboxed<T>(box: Decided<T>): T {
-  assertBuiltinsIntact()
-  return box.v
+  return returnable(box.v)
 }
 
 /** What a timeout does besides rejecting the wait. */

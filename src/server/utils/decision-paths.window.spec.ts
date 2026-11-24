@@ -157,14 +157,33 @@ describe('the wait that absorbs a rejection', () => {
     expect(bare).toEqual([])
   })
 
-  // Scenario: the same read for a promise that is not the library's. Expected: the probe sees it, so the row above can fail.
-  it('is observed when the promise is not shielded', async () => {
+  // Scenario: an await of a promise that nothing shielded, made by a function of this file. Expected: the probe sees the
+  // read of the slot, so the rows above can fail.
+  it('is observed when a promise is awaited without being shielded', async () => {
+    const foreign = Promise.reject(new Error('foreign'))
+    const awaitBare = async (call: Promise<unknown>): Promise<void> => {
+      try {
+        await call
+      } catch {
+        // Read by the probe, not by the row.
+      }
+    }
+
+    const reads = readsDuring(() => void awaitBare(foreign))
+    await awaitBare(foreign)
+
+    expect(reads.filter((stack) => stack.includes('awaitBare'))).toHaveLength(1)
+  })
+
+  // Scenario: `absorbed` is given a native promise that nothing shielded. Expected: it pins the constructor before it
+  // awaits, so the wait reads no slot on `Promise.prototype`.
+  it('absorbed reads no slot of a promise that nothing shielded', async () => {
     const foreign = Promise.reject(new Error('foreign'))
 
     const reads = readsDuring(() => void absorbed(foreign))
     await absorbed(foreign)
 
-    expect(reads.filter((stack) => stack.includes('absorbed'))).toHaveLength(1)
+    expect(reads.filter((stack) => stack.includes('absorbed'))).toHaveLength(0)
   })
 })
 

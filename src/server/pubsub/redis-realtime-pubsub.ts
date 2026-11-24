@@ -13,7 +13,7 @@ import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
-import { assertBuiltinsIntact } from '../utils/builtin-baseline'
+import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
 import { absorbed, firstOf, shielded, unboxed } from '../utils/within-deadline'
 
 /** The shortest time between two reports of dropped malformed payloads. */
@@ -318,8 +318,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
           } catch (err) {
             if ((err as Error).name === 'ReplyError') throw err
             // The last statement before an object return, which asks the object for a `then`.
-            assertBuiltinsIntact()
-            return { unreachable: err }
+            return returnable({ unreachable: err })
           }
         })(),
       )

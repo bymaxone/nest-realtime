@@ -11,6 +11,7 @@ export type BuiltinSlot = readonly [target: object, key: PropertyKey]
 const describe = Object.getOwnPropertyDescriptor
 const hasOwn = Object.prototype.hasOwnProperty
 const apply = Reflect.apply
+const getProto = Object.getPrototypeOf
 
 /**
  * What a slot holds: its value, or the getter of an accessor, which is what a flag of a RegExp is. A descriptor is an
@@ -243,12 +244,40 @@ const defineProperty = Object.defineProperty
 export function assertBuiltinsIntact(): void {
   const replaced = replacedBuiltinCount()
   if (replaced === 0) return
-  const refusal = realtimeError(
-    REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+  throw refusal(
     `${replaced} built-in${replaced === 1 ? '' : 's'} the library calls ${replaced === 1 ? 'was' : 'were'} replaced after it was loaded`,
   )
-  defineProperty(refusal, REFUSAL, { __proto__: null, value: true } as PropertyDescriptor)
-  throw refusal
+}
+
+/** The error both checks throw, marked so that {@link isBuiltinsRefusal} can tell it from a store's own failure. */
+function refusal(message: string): Error {
+  const error = realtimeError(REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE, message)
+  defineProperty(error, REFUSAL, { __proto__: null, value: true } as PropertyDescriptor)
+  return error
+}
+
+/**
+ * The value an async function is about to return, after the baseline was checked and its whole prototype chain was
+ * walked: returning an object from an async function makes the engine ask it for a `then`, and it asks the object's own
+ * chain, which is a class, a `Buffer`, a typed array or a stream as often as a plain record. A `then` on any object of the
+ * chain would answer for the value; it is refused, and no `then` is read, so none runs. It is the last thing evaluated
+ * before the `return`, with nothing in between a host can run, and it is not a defence against a `then` that is put in
+ * place after it returns. The walk uses the functions taken at load, not the ones on `Object`.
+ *
+ * @param value - What the function returns; a primitive is returned as it is.
+ * @returns The same value.
+ * @throws Error carrying `REALTIME_TRANSPORT_UNAVAILABLE` when a built-in was replaced or an object of the chain holds a
+ *   `then`.
+ */
+export function returnable<T>(value: T): T {
+  assertBuiltinsIntact()
+  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return value
+  for (let node: unknown = value; node !== null; node = getProto(node as object)) {
+    if (apply(hasOwn, node, ['then']) as boolean) {
+      throw refusal('an object a decision returns, or one it inherits from, holds a then')
+    }
+  }
+  return value
 }
 
 /**

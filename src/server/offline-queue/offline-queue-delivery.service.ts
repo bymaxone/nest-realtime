@@ -17,7 +17,7 @@ import type {
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { logEvent } from '../utils/log-event'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
-import { assertBuiltinsIntact, isBuiltinsRefusal } from '../utils/builtin-baseline'
+import { assertBuiltinsIntact, isBuiltinsRefusal, returnable } from '../utils/builtin-baseline'
 import { shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
@@ -121,8 +121,7 @@ export class OfflineQueueDeliveryService {
     const { events } = await shielded(this.retrieveGap(userId, lastEventId))
     const fresh = events.filter((e) => !ringBufferIds.has(e.id))
     // Returning an array from an async function reads `then` on it, so the check is the last thing before the return.
-    assertBuiltinsIntact()
-    return fresh
+    return returnable(fresh)
   }
 
   /**
@@ -139,8 +138,7 @@ export class OfflineQueueDeliveryService {
     const storage = this.storage
     // Returning an object from an async function reads `then` on it, so the check is the last thing before each return.
     if (!storage) {
-      assertBuiltinsIntact()
-      return { events: [], degraded: false }
+      return returnable({ events: [], degraded: false })
     }
 
     // Outside the try: a refusal is not the store failing, and must not be served as an empty gap.
@@ -162,8 +160,7 @@ export class OfflineQueueDeliveryService {
         },
         'Offline queue retrieve failed',
       )
-      assertBuiltinsIntact()
-      return { events: [], degraded: true }
+      return returnable({ events: [], degraded: true })
     }
 
     if (events.length === RETRIEVE_LIMIT) {
@@ -176,8 +173,7 @@ export class OfflineQueueDeliveryService {
       )
     }
 
-    assertBuiltinsIntact()
-    return { events, degraded: false }
+    return returnable({ events, degraded: false })
   }
 
   /**
@@ -241,14 +237,12 @@ export class OfflineQueueDeliveryService {
     // Returning an array, or a promise, from an async function reads `then` on it, so what is read is awaited here and
     // the check is the last thing before each return.
     if (!storage || read.degraded || room <= 0) {
-      assertBuiltinsIntact()
-      return []
+      return returnable([])
     }
     const appended = await shielded(
       this.read(storage, userId, read.events.at(-1)?.id ?? lastEventId, room),
     )
-    assertBuiltinsIntact()
-    return appended
+    return returnable(appended)
   }
 
   /** One bounded call to the storage: refused at once when the reads waiting are all taken. */

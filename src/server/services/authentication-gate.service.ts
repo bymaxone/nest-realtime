@@ -16,7 +16,7 @@ import type {
 } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { logEvent } from '../utils/log-event'
-import { assertBuiltinsIntact } from '../utils/builtin-baseline'
+import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
 import {
   awaitable,
   isPlainResult,
@@ -124,9 +124,9 @@ export class AuthenticationGate {
         // promise would read the shared constructor and `then` after the host call, which can have put in them a getter
         // that restores itself as it is read and leaves nothing for the check below to see.
         const answer = isPlainResult(result) ? result : await awaitable(result)
-        // The last statement before the return: resolving this promise with an object asks it for a `then`.
-        assertBuiltinsIntact()
-        return answer
+        // The last thing before the return: resolving this promise with an object asks it, and everything it inherits from,
+        // for a `then`.
+        return returnable(answer)
       })(),
     )
     const decided = await withinDeadline(call, this.timeoutMs, {

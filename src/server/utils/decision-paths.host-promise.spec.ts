@@ -177,6 +177,26 @@ describe('the Promise constructor this module pins on the promises it awaits', (
       Object.defineProperty(Promise.prototype, 'constructor', real)
     }
   })
+
+  // Scenario: the slot holds a getter that answers the engine's own Promise. Expected: refused, because a read of the slot
+  // runs the getter, which can answer something else the next time, and the slot is read as a descriptor.
+  it('refuses a getter in the slot, even one that answers the engine constructor', () => {
+    const real = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor',
+    ) as PropertyDescriptor
+    const reads = jest.fn(() => real.value as unknown)
+    Object.defineProperty(Promise.prototype, 'constructor', {
+      configurable: true,
+      get: reads,
+    })
+    try {
+      expect(load).toThrow('replaced before this module loaded')
+      expect(reads).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(Promise.prototype, 'constructor', real)
+    }
+  })
 })
 
 describe('a host promise that carries a constructor or a then of its own', () => {

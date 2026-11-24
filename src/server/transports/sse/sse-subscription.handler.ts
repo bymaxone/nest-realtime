@@ -50,7 +50,7 @@ import { resolveClientAddress } from '../../utils/client-address'
 import { AuthenticationUnavailableError } from '../../services/authentication-gate.service'
 import { ConnectionLimitError } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
-import { assertBuiltinsIntact, isBuiltinsRefusal } from '../../utils/builtin-baseline'
+import { assertBuiltinsIntact, isBuiltinsRefusal, returnable } from '../../utils/builtin-baseline'
 import { absorbed, shielded } from '../../utils/within-deadline'
 import { runHook } from '../../utils/run-hook'
 import { SseTransport } from './sse.transport'
@@ -444,8 +444,7 @@ export class SseSubscriptionHandler {
       const resolved = this.resolveAndValidateIdentity(auth)
       const queueRead = await shielded(this.readQueue(req, resolved.userId))
       // The last statement before the return, which resolves the function's promise with an object and so reads its `then`.
-      assertBuiltinsIntact()
-      return { context, auth: resolved, ticket, queueRead }
+      return returnable({ context, auth: resolved, ticket, queueRead })
     } catch (err) {
       ticket.release()
       throw err
@@ -468,13 +467,11 @@ export class SseSubscriptionHandler {
     // Stryker disable next-line BooleanLiteral: equivalent — with no Last-Event-ID or no queue there is no second read either, so this flag is never read
     if (!lastEventId || !this.offlineDelivery) {
       // The last statement before an object return, as below: the function's promise is resolved with it.
-      assertBuiltinsIntact()
-      return { events: [], degraded: false }
+      return returnable({ events: [], degraded: false })
     }
     try {
       const gap = await shielded(this.offlineDelivery.retrieveGap(userId, lastEventId))
-      assertBuiltinsIntact()
-      return gap
+      return returnable(gap)
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) throw new ServiceUnavailableException()
       throw this.serverError(err, 'SSE handshake failed')
@@ -503,16 +500,14 @@ export class SseSubscriptionHandler {
     if (!lastEventId || !this.offlineDelivery) {
       // The last statement before an array return: the function's promise is resolved with it, which reads a `then`
       // that a host planted on `Array.prototype` before this call would answer for.
-      assertBuiltinsIntact()
-      return queueRead.events
+      return returnable(queueRead.events)
     }
     try {
       const appended = await shielded(
         this.offlineDelivery.retrieveAppended(authenticated.auth.userId, lastEventId, queueRead),
       )
       const gap = [...queueRead.events, ...appended]
-      assertBuiltinsIntact()
-      return gap
+      return returnable(gap)
     } catch (err) {
       // The baseline's refusal is the answer as it is: wrapping it as a 500 would hide the count-only code.
       if (isBuiltinsRefusal(err)) throw err
