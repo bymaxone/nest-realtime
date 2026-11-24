@@ -10,8 +10,10 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { Logger } from '@nestjs/common'
 import {
   FORGED_BUILTINS,
+  plantSelfErasingThen,
   withConstructorReplacedAndRestored,
   withPromiseForged,
   withSelfErasingThen,
@@ -411,6 +413,92 @@ describe('with a then that erases itself, planted on a root prototype before the
 
     expect(gap).toBeUndefined()
     expect(failure).toBe(refusal)
+  })
+
+  // Scenario: the store fails, and a `then` that erases itself is planted on Object.prototype while it does. Nothing
+  // asserted after the failure, so the degraded gap that is returned reads the planted `then`.
+  // Expected: the gap read refuses; it does not return a gap that something else named.
+  it('a gap read refuses a then planted while the store fails', async () => {
+    const queue = new OfflineQueueDeliveryService(
+      {
+        retrieveSince: () =>
+          new Promise((_resolve, reject) =>
+            setImmediate(() => {
+              plantSelfErasingThen(Object.prototype, { events: INJECTED, degraded: false })
+              reject(new Error('store down'))
+            }),
+          ),
+      } as never,
+      undefined,
+      { authenticateTimeoutMs: 1_000 } as never,
+    )
+    let gap: unknown
+    let failure: unknown
+
+    try {
+      gap = await queue.retrieveGap('u1', '0')
+    } catch (error) {
+      failure = error
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'then')
+    }
+
+    expect(gap).toBeUndefined()
+    expect(failure).toMatchObject(REFUSED)
+  })
+
+  // Scenario: the store answers with a full page, and the warning that the page hit its limit is where a `then` that
+  // erases itself is planted, after every check that ran before the return. Expected: the gap read refuses.
+  it('a gap read refuses a then planted by the warning for a full page', async () => {
+    const full = Array.from({ length: 200 }, (_, i) => ({
+      id: `e${i}`,
+      event: 'x',
+      data: {},
+      createdAt: 0,
+    }))
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {
+      plantSelfErasingThen(Object.prototype, { events: INJECTED, degraded: false })
+    })
+    const queue = new OfflineQueueDeliveryService(
+      { retrieveSince: () => full } as never,
+      undefined,
+      { authenticateTimeoutMs: 1_000 } as never,
+    )
+    let gap: unknown
+    let failure: unknown
+
+    try {
+      gap = await queue.retrieveGap('u1', '0')
+    } catch (error) {
+      failure = error
+    } finally {
+      warn.mockRestore()
+      Reflect.deleteProperty(Object.prototype, 'then')
+    }
+
+    expect(gap).toBeUndefined()
+    expect(failure).toMatchObject(REFUSED)
+  })
+
+  // Scenario: no store is configured and a `then` is already planted when the gap is read. Expected: the gap read
+  // refuses; an empty gap is not a reason to skip the check the other returns make.
+  it('a gap read without a store refuses a then planted before it', async () => {
+    const queue = new OfflineQueueDeliveryService(undefined, undefined, {
+      authenticateTimeoutMs: 1_000,
+    } as never)
+    let gap: unknown
+    let failure: unknown
+
+    await withSelfErasingThen(Object.prototype, { events: INJECTED, degraded: false }, async () => {
+      try {
+        gap = await queue.retrieveGap('u1', '0')
+      } catch (error) {
+        failure = error
+      }
+    })
+
+    expect(gap).toBeUndefined()
+    expect(failure).toMatchObject(REFUSED)
   })
 })
 

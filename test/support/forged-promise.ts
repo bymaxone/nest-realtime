@@ -85,6 +85,23 @@ export async function withConstructorReplacedAndRestored<T>(
 }
 
 /**
+ * Plants, on `root`, a `then` that erases itself on first use and then answers `forged`. The caller removes it again if
+ * nothing used it.
+ *
+ * @param root - The prototype to plant it on.
+ * @param forged - What the first promise resolved with an object appears to settle with.
+ */
+export function plantSelfErasingThen(root: object, forged: unknown): void {
+  Object.defineProperty(root, 'then', {
+    configurable: true,
+    value: (resolve: (value: unknown) => void) => {
+      Reflect.deleteProperty(root, 'then')
+      resolve(forged)
+    },
+  })
+}
+
+/**
  * Runs `run` with a `then` planted on `root` that erases itself on first use and then answers `forged`: it answers for
  * whichever promise is resolved with an object first, and leaves no trace. It is removed again before returning. The
  * test runner reads `then` as well, so `run` keeps what it observes in variables of its own and returns nothing.
@@ -98,13 +115,7 @@ export async function withSelfErasingThen(
   forged: unknown,
   run: () => Promise<void>,
 ): Promise<void> {
-  Object.defineProperty(root, 'then', {
-    configurable: true,
-    value: (resolve: (value: unknown) => void) => {
-      Reflect.deleteProperty(root, 'then')
-      resolve(forged)
-    },
-  })
+  plantSelfErasingThen(root, forged)
   try {
     await run()
   } finally {

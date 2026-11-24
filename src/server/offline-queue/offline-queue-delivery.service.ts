@@ -137,7 +137,11 @@ export class OfflineQueueDeliveryService {
    */
   async retrieveGap(userId: string, lastEventId: string): Promise<OfflineQueueRead> {
     const storage = this.storage
-    if (!storage) return { events: [], degraded: false }
+    // Returning an object from an async function reads `then` on it, so the check is the last thing before each return.
+    if (!storage) {
+      assertBuiltinsIntact()
+      return { events: [], degraded: false }
+    }
 
     // Outside the try: a refusal is not the store failing, and must not be served as an empty gap.
     assertBuiltinsIntact()
@@ -158,6 +162,7 @@ export class OfflineQueueDeliveryService {
         },
         'Offline queue retrieve failed',
       )
+      assertBuiltinsIntact()
       return { events: [], degraded: true }
     }
 
@@ -171,6 +176,7 @@ export class OfflineQueueDeliveryService {
       )
     }
 
+    assertBuiltinsIntact()
     return { events, degraded: false }
   }
 
