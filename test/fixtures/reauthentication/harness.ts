@@ -85,3 +85,9 @@ export function build(
     hooks as never,
   )
 }
+
+/** Stands the service's clock on the global `Date`, which fake timers replace, so a test can move the cache window. */
+export function withFakeClock<T extends object>(service: T): T {
+  Object.assign(service, { clock: () => Date.now() })
+  return service
+}

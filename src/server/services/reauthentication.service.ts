@@ -26,6 +26,7 @@ import type {
 import { RealtimeTracing } from '../observability/realtime-tracing'
 import { callHostMethod, hostMethod } from '../utils/read-host-key'
 import { assertBuiltinsIntact } from '../utils/builtin-baseline'
+import { realtimeError } from '../utils/realtime-error'
 import { logEvent } from '../utils/log-event'
 import { Semaphore } from '../utils/semaphore'
 import { runHook } from '../utils/run-hook'
@@ -33,6 +34,12 @@ import { shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
 import { RealtimeService } from './realtime.service'
+
+/** The clock the cache window is read from, taken at load: a replaced `Date.now` is refused by the baseline. */
+const clockNow = Date.now
+
+/** The `Date` the clock was taken from; fake timers replace the global binding, not this object's `now`. */
+const clockOwner = Date
 
 /** Resolved re-auth policy with all fields required. */
 interface RequiredPolicy {
@@ -81,6 +88,9 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   private readonly inFlight = new Set<string>()
   /** The cap on revalidations in flight, shared by every cycle. */
   private readonly slots: Semaphore
+
+  /** The clock a cycle reads; the one taken at load, so a test of the cache window can stand its own in. */
+  private readonly clock: () => number = clockNow
 
   constructor(
     @Inject(ConnectionRegistry) private readonly connections: ConnectionRegistry,
@@ -165,7 +175,13 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    * Exposed as public for test access.
    */
   async runCycle(): Promise<void> {
-    const now = Date.now()
+    if (clockOwner.now !== clockNow) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        'Date.now was replaced after the library loaded',
+      )
+    }
+    const now = this.clock()
     // Both transports, not SSE alone. A revocation policy that runs on one of them
     // is not a revocation policy: a WebSocket admitted under credentials that were
     // valid at handshake would keep delivering for the life of the socket, which is

@@ -287,23 +287,19 @@ const EXEMPT: Record<string, readonly Site[]> = {
   ],
   'server/transports/sse/sse.transport.ts': [
     ['Promise.all', 'shutdown: waits for every connection to be cut'],
-    [
-      'Promise.all',
-      'emitToUser: the failures it collects only choose between throwing to the emitter and logging; no identity, admission or replay is read. Tracked, not fixed here',
-    ],
     ['.catch(', 'logs a disconnect that failed; the connection is already being closed'],
     ['await Promise.all', 'shutdown above'],
-    ['await Promise.all', 'emitToUser above'],
+    ['await append', 'started gave it its own constructor'],
+    ['await publish', 'started gave it its own constructor'],
     ['await runHook', 'a lifecycle hook whose failure is logged, never decided on'],
-    ['await queue.append', 'a host store call that records an event for later; no answer is read'],
   ],
   'websocket/transports/composite/composite.transport.ts': [
     [
-      'await call',
+      'await a',
       'the call was started by `started`, which gave it its own constructor, so the await reads no slot',
     ],
     [
-      'await call',
+      'await b',
       'the call was started by `started`, which gave it its own constructor, so the await reads no slot',
     ],
   ],
@@ -436,6 +432,21 @@ describe('every server-side file that ships', () => {
     '%s reads a host value only through the helpers, bar its listed sites',
     (path, source) => {
       expect(sitesIn(source)).toEqual((EXEMPT[path] ?? []).map((site) => site[0]).sort())
+    },
+  )
+
+  // Scenario: the files that collect the outcome of a host call into a decision. Expected: none pushes to an array or
+  // iterates one with `for...of` there, because both ask `Array.prototype` for a slot a host call can have replaced; the
+  // outcome is held in plain fields instead.
+  it.each(['websocket/transports/composite/composite.transport.ts'])(
+    '%s collects outcomes without a live array method or iterator',
+    (path) => {
+      const source = shippedSources().find((candidate) => candidate.path === path)
+      const text = bare(source?.source ?? '')
+
+      expect(
+        text.match(/\.\s*push\s*\(|\bfor\s*\(\s*(?:const|let)\s+[\w{}[\], ]+\s+of\b/g) ?? [],
+      ).toEqual([])
     },
   )
 })

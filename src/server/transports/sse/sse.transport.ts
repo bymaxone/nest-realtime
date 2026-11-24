@@ -40,13 +40,13 @@ import { composeRoomId } from '../../utils/compose-room-id'
 import { AuthenticationGate } from '../../services/authentication-gate.service'
 import { ConnectionAdmission, UNBOUNDED_TICKET } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
-import { assertBuiltinsIntact } from '../../utils/builtin-baseline'
+import { assertBuiltinsIntact, returnable } from '../../utils/builtin-baseline'
 import { logEvent } from '../../utils/log-event'
 import { runHook } from '../../utils/run-hook'
 import { reportDeliveryFailure } from '../../utils/report-delivery-failure'
 import { refuseReservedRoom, requireRoomName } from '../../utils/reserved-room'
 import { unavailableError } from '../../utils/unavailable-error'
-import { awaitable, shielded } from '../../utils/within-deadline'
+import { awaitable, shielded, started } from '../../utils/within-deadline'
 import { InMemoryPubSub } from '../../pubsub/in-memory-pubsub'
 import { EventReplayBuffer } from './event-replay-buffer'
 import { HeartbeatService } from './heartbeat.service'
@@ -348,12 +348,16 @@ export class SseTransport implements ITransport {
     this.emitToUserLocal(userId, event, data, id)
     const queue = this.offlineQueue
     const offline = queue !== undefined && this.connections.byUser(userId, 'sse').length === 0
-    const [queueFailure, publishFailure] = await Promise.all([
-      offline
-        ? this.tryAppend(queue, userId, { id, event, data, emittedAt: new Date() })
-        : undefined,
+    // Both start before either is awaited, each through `started` so that neither has a `then` or a species of its own
+    // to ask: no Promise static decides which failure the call reports or whether it throws.
+    const append = offline
+      ? started(() => this.tryAppend(queue, userId, { id, event, data, emittedAt: new Date() }))
+      : undefined
+    const publish = started(() =>
       this.tryPublish({ op: 'emitToUser', args: { userId, event, data, id } }),
-    ])
+    )
+    const queueFailure = await append
+    const publishFailure = await publish
     if (
       queueFailure !== undefined &&
       (publishFailure !== undefined || !this.busReachesOtherInstances())
@@ -388,10 +392,10 @@ export class SseTransport implements ITransport {
     event: OfflineQueuedEvent,
   ): Promise<Failure | undefined> {
     try {
-      await queue.append(userId, event)
+      await awaitable(queue.append(userId, event))
       return undefined
     } catch (error) {
-      return { error }
+      return returnable({ error })
     }
   }
 
@@ -641,7 +645,7 @@ export class SseTransport implements ITransport {
       await awaitable(this.pubsub.publish({ ...message, origin: this.instanceId }))
       return undefined
     } catch (error) {
-      return { error }
+      return returnable({ error })
     }
   }
 

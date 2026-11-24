@@ -4,18 +4,32 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import {
+  assertBuiltinsIntact,
   awaitable,
   describeError,
   logEvent,
   REALTIME_ERROR_CODES,
   SseTransport,
+  shielded,
   started,
   unavailableError,
   refuseReservedRoom,
   requireRoomName,
+  returnable,
 } from '@bymax-one/nest-realtime/internal'
 import type { ITransport } from '@bymax-one/nest-realtime/internal'
 import { WebSocketTransport } from '../websocket/websocket.transport'
+
+/** The two operations a call is made of, one per transport. */
+type Tasks = [() => Promise<void>, () => Promise<void>]
+
+/** What each of the two settled with, in plain fields. */
+interface Outcomes {
+  firstFailed: boolean
+  secondFailed: boolean
+  firstReason: unknown
+  secondReason: unknown
+}
 
 /**
  * Fan-out transport activated when `transport: 'both'`.
@@ -168,50 +182,66 @@ export class CompositeTransport implements ITransport {
    * One failure is rethrown as it is; both are reported together under
    * `REALTIME_TRANSPORT_UNAVAILABLE`, with every reason in `cause`.
    */
-  private async settleBoth(
-    op: string,
-    connectionId: string,
-    tasks: Array<() => Promise<void>>,
-  ): Promise<void> {
-    const reasons: unknown[] = []
-    for (const call of tasks.map((task) => started(task))) {
-      try {
-        await call
-      } catch (error) {
-        reasons.push(error)
-      }
-    }
-    if (reasons.length === 0) return
-    if (reasons.length === 1) throw reasons[0]
-    throw this.allFailed(`${op} of ${connectionId}`, reasons)
+  private async settleBoth(op: string, connectionId: string, tasks: Tasks): Promise<void> {
+    const outcome = await shielded(this.outcomes(tasks))
+    if (!outcome.firstFailed && !outcome.secondFailed) return
+    if (outcome.firstFailed !== outcome.secondFailed)
+      throw outcome.firstFailed ? outcome.firstReason : outcome.secondReason
+    throw this.allFailed(`${op} of ${connectionId}`, [outcome.firstReason, outcome.secondReason])
   }
 
   /**
-   * Run two transport tasks in parallel via `Promise.allSettled`.
+   * Run two transport tasks, both started before either is awaited.
    *
    * One task failing is logged as a warning and the call resolves, so one failing transport
    * never blocks delivery on the other. Every task failing rejects.
    */
-  private async fanOut(op: string, ...tasks: Array<() => Promise<void>>): Promise<void> {
-    const reasons: unknown[] = []
-    for (const call of tasks.map((task) => started(task))) {
-      try {
-        await call
-      } catch (error) {
-        reasons.push(error)
-      }
+  private async fanOut(op: string, ...tasks: Tasks): Promise<void> {
+    const outcome = await shielded(this.outcomes(tasks))
+    if (outcome.firstFailed && outcome.secondFailed)
+      throw this.allFailed(op, [outcome.firstReason, outcome.secondReason])
+    if (outcome.firstFailed) this.warnPartial(op, outcome.firstReason)
+    if (outcome.secondFailed) this.warnPartial(op, outcome.secondReason)
+  }
+
+  private warnPartial(op: string, reason: unknown): void {
+    logEvent(
+      this.logger,
+      'warn',
+      'REALTIME_COMPOSITE_PARTIAL_FAILURE',
+      `Composite ${op} partially failed`,
+      { op },
+      reason,
+    )
+  }
+
+  /**
+   * What each of two tasks settled with, read into plain fields: no array is built, pushed to or iterated while a host
+   * call can still have replaced `push` or the iterator, and the baseline is asserted last, after every host call, so a
+   * replacement a task planted refuses the call instead of answering for it.
+   */
+  private async outcomes(tasks: Tasks): Promise<Outcomes> {
+    const a = started(tasks[0])
+    const b = started(tasks[1])
+    let firstFailed = false
+    let secondFailed = false
+    let firstReason: unknown
+    let secondReason: unknown
+    try {
+      await a
+    } catch (error) {
+      firstFailed = true
+      firstReason = error
     }
-    if (reasons.length === tasks.length) throw this.allFailed(op, reasons)
-    for (const reason of reasons) {
-      logEvent(
-        this.logger,
-        'warn',
-        'REALTIME_COMPOSITE_PARTIAL_FAILURE',
-        `Composite ${op} partially failed`,
-        { op },
-        reason,
-      )
+    try {
+      await b
+    } catch (error) {
+      secondFailed = true
+      secondReason = error
     }
+    assertBuiltinsIntact()
+    // The last thing before the return: resolving with an object asks it, and what it inherits from, for a `then`.
+    return returnable({ firstFailed, secondFailed, firstReason, secondReason })
   }
 
   /** The rejection for an operation that failed on every transport, with every reason in `cause`. */

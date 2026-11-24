@@ -59,6 +59,7 @@ const NAMED: readonly BuiltinSlot[] = [
   [Object, 'values'],
   [Array, 'from'],
   [Array, 'isArray'],
+  [Date, 'now'],
   [Array.prototype, 'concat'],
   [Array.prototype, 'every'],
   [Array.prototype, 'filter'],
@@ -261,6 +262,9 @@ function refusal(message: string): Error {
   return error
 }
 
+/** No honest prototype chain is this long; a walk that reaches it stops instead of following a chain a host made endless. */
+const CHAIN_DEPTH_CAP = 64
+
 /**
  * The value an async function is about to return, after the baseline was checked and its whole prototype chain was
  * walked: returning an object from an async function makes the engine ask it for a `then`, and it asks the object's own
@@ -278,7 +282,11 @@ function refusal(message: string): Error {
 export function returnable<T>(value: T): T {
   assertBuiltinsIntact()
   if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return value
+  let depth = 0
   for (let node: unknown = value; node !== null; node = getProto(node as object)) {
+    depth += 1
+    if (depth > CHAIN_DEPTH_CAP)
+      throw refusal('an object a decision returns has a prototype chain that is too deep')
     if (isProxy(node))
       throw refusal('an object a decision returns, or one it inherits from, is a Proxy')
     if (apply(hasOwn, node, ['then']) as boolean) {
@@ -298,4 +306,21 @@ export function isBuiltinsRefusal(error: unknown): boolean {
     error !== null &&
     (error as Record<symbol, unknown>)[REFUSAL] === true
   )
+}
+
+/**
+ * Refuses a Proxy a host call returned, before anything asks it a question: awaiting one reads `then` through a trap,
+ * which is host code. A value that is not an object is returned as it is.
+ *
+ * @throws Error carrying `REALTIME_TRANSPORT_UNAVAILABLE` when the value is a Proxy.
+ */
+export function unproxied<T>(value: T): T {
+  if (
+    (typeof value === 'object' || typeof value === 'function') &&
+    value !== null &&
+    isProxy(value)
+  ) {
+    throw refusal('a host call returned a Proxy')
+  }
+  return value
 }

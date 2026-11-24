@@ -4,7 +4,7 @@
  * @layer utils
  */
 import { types } from 'node:util'
-import { assertBuiltinsIntact, returnable } from './builtin-baseline'
+import { assertBuiltinsIntact, returnable, unproxied } from './builtin-baseline'
 import { apply, getPrototypeOf, hasOwnProperty } from './captured-builtins'
 
 /**
@@ -76,12 +76,13 @@ export function shielded<T>(promise: T): T {
 
 /**
  * A host call's result, ready to await: a native promise is given its own constructor first, so that the await reads
- * neither the shared constructor nor a `then`. Anything else is returned as it is.
+ * neither the shared constructor nor a `then`. A Proxy is refused, since awaiting it would run its trap; anything else is
+ * returned as it is.
  */
 export function awaitable<P extends PromiseLike<unknown>>(result: P): P
 export function awaitable<T>(result: PromiseLike<T> | T): PromiseLike<T> | T
 export function awaitable(result: unknown): unknown {
-  if (!isPromise(result)) return result
+  if (!isPromise(result)) return unproxied(result)
   try {
     return shielded(result)
   } catch (error) {

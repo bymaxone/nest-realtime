@@ -110,6 +110,9 @@ export class RealtimeTracing implements OnModuleInit {
         if (!latch.claimed) {
           latch.claimed = true
           latch.started = this.traced(span, run)
+        } else {
+          // A span handed over after the operation was claimed is not one `traced` ends: it is ended here, or it is never.
+          attempt(() => span.end())
         }
         return latch.started
       }),

@@ -11,6 +11,7 @@ import {
   mkAuth,
   mkOptions,
   build,
+  withFakeClock,
 } from '../../../test/fixtures/reauthentication/harness'
 import { RESERVED_EVENT_NAMES } from '../../shared/constants/reserved-events.constants'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
@@ -122,6 +123,7 @@ describe('ReauthenticationService', () => {
       auth,
       mkOptions({ intervalSeconds: 10, cacheTtlMs: 15_000 }),
     )
+    withFakeClock(svc)
     svc.onModuleInit()
     // Tick 1 (t=10s): revalidate called, lastValid=10_000.
     jest.advanceTimersByTime(10_000)
@@ -150,6 +152,7 @@ describe('ReauthenticationService', () => {
       auth,
       mkOptions({ intervalSeconds: 10, cacheTtlMs: 10_000 }),
     )
+    withFakeClock(svc)
     svc.onModuleInit()
     // Tick 1 (t=10_000): revalidate runs, cache set at t=10_000.
     jest.advanceTimersByTime(10_000)

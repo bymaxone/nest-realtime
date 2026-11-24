@@ -11,6 +11,7 @@ import {
   mkAuth,
   mkOptions,
   build,
+  withFakeClock,
 } from '../../../test/fixtures/reauthentication/harness'
 
 const REVOKED = 'REALTIME_REAUTHENTICATION_FAILED'
@@ -312,6 +313,7 @@ describe('ReauthenticationService: the cycle is bounded', () => {
       mkOptions({ intervalSeconds: 60, cacheTtlMs: 60_000 }),
     )
 
+    withFakeClock(svc)
     await svc.runCycle()
     await jest.advanceTimersByTimeAsync(59_999)
     await svc.runCycle()
@@ -334,6 +336,7 @@ describe('ReauthenticationService: the cycle is bounded', () => {
       mkAuth(revalidate as never),
       mkOptions({ intervalSeconds: 60, cacheTtlMs: 600_000 }),
     )
+    withFakeClock(svc)
     await svc.runCycle()
     expect(record.revalidatedAt).toBeDefined()
     ok = false
