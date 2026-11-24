@@ -17,7 +17,7 @@ import type {
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { logEvent } from '../utils/log-event'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
-import { assertBuiltinsIntact } from '../utils/builtin-baseline'
+import { assertBuiltinsIntact, isBuiltinsRefusal } from '../utils/builtin-baseline'
 import { unboxed, withinDeadline } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
@@ -147,7 +147,7 @@ export class OfflineQueueDeliveryService {
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) throw err
       // A refusal raised while the store was being read is not the store failing either.
-      assertBuiltinsIntact()
+      if (isBuiltinsRefusal(err)) throw err
       reportDeliveryFailure(
         this.logger,
         this.hooks,

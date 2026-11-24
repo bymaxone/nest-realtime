@@ -228,6 +228,12 @@ export function replacedBuiltinCount(): number {
   return count
 }
 
+/** Marks the error this module throws, so that a `catch` that sorts failures can tell it from a store's own. */
+const REFUSAL = Symbol('builtins-refusal')
+
+/** Taken at load: the refusal is raised while `Object` may be the thing that was replaced. */
+const defineProperty = Object.defineProperty
+
 /**
  * Refuses, before the code that follows runs, when a built-in it calls was replaced after the library loaded: a replaced
  * `startsWith` or iterator makes a check pass or a loop end where it should not.
@@ -237,8 +243,22 @@ export function replacedBuiltinCount(): number {
 export function assertBuiltinsIntact(): void {
   const replaced = replacedBuiltinCount()
   if (replaced === 0) return
-  throw realtimeError(
+  const refusal = realtimeError(
     REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
     `${replaced} built-in${replaced === 1 ? '' : 's'} the library calls ${replaced === 1 ? 'was' : 'were'} replaced after it was loaded`,
+  )
+  defineProperty(refusal, REFUSAL, { __proto__: null, value: true } as PropertyDescriptor)
+  throw refusal
+}
+
+/**
+ * Whether `error` is the refusal {@link assertBuiltinsIntact} throws. The mark is a symbol private to this module, so
+ * a failure of a host's own cannot carry it, and it stays true after the replaced built-in was put back.
+ */
+export function isBuiltinsRefusal(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Record<symbol, unknown>)[REFUSAL] === true
   )
 }

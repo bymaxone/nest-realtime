@@ -28,6 +28,7 @@ import {
 import { OfflineQueueDeliveryService } from '../offline-queue/offline-queue-delivery.service'
 import { AuthenticationGate } from '../services/authentication-gate.service'
 import type { ConnectionAuthContext } from '../interfaces/connection-authenticator.interface'
+import { assertBuiltinsIntact } from './builtin-baseline'
 
 const CONTEXT: ConnectionAuthContext = {
   transport: 'sse',
@@ -376,6 +377,40 @@ describe('with a then that erases itself, planted on a root prototype before the
 
     expect(gap).toBeUndefined()
     expect(failure).toMatchObject(REFUSED)
+  })
+
+  // Scenario: the store fails with the refusal that was raised while a built-in was replaced, and the built-in is back
+  // by the time the failure is sorted. Expected: the gap read refuses; it does not serve an empty, degraded gap.
+  it('a gap read refuses a refusal raised earlier, whether or not the breach is still there', async () => {
+    let refusal: unknown
+    Object.defineProperty(Function.prototype, 'then', { configurable: true, value: undefined })
+    try {
+      assertBuiltinsIntact()
+    } catch (error) {
+      refusal = error
+    } finally {
+      Reflect.deleteProperty(Function.prototype, 'then')
+    }
+    const queue = new OfflineQueueDeliveryService(
+      {
+        retrieveSince: () => {
+          throw refusal
+        },
+      } as never,
+      undefined,
+      { authenticateTimeoutMs: 1_000 } as never,
+    )
+    let gap: unknown
+    let failure: unknown
+
+    try {
+      gap = await queue.retrieveGap('u1', '0')
+    } catch (error) {
+      failure = error
+    }
+
+    expect(gap).toBeUndefined()
+    expect(failure).toBe(refusal)
   })
 })
 
