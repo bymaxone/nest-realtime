@@ -63,7 +63,27 @@ export function shielded<T>(promise: T): T {
 export function awaitable<P extends PromiseLike<unknown>>(result: P): P
 export function awaitable<T>(result: PromiseLike<T> | T): PromiseLike<T> | T
 export function awaitable(result: unknown): unknown {
-  return types.isPromise(result) ? shielded(result) : result
+  if (!types.isPromise(result)) return result
+  try {
+    return shielded(result)
+  } catch (error) {
+    // Refused, and nothing else will read it: its rejection is read here so that it is not left unhandled.
+    void absorbed(result)
+    throw error
+  }
+}
+
+/** `awaitable`, giving back the caller's place when it refuses: the promise that place was taken for will not be tracked. */
+function awaitableOrGiveBack<T>(
+  work: PromiseLike<T> | T,
+  onSettled: (() => void) | undefined,
+): PromiseLike<T> | T {
+  try {
+    return awaitable(work)
+  } catch (error) {
+    onSettled?.()
+    throw error
+  }
 }
 
 /**
@@ -153,7 +173,7 @@ export function withinDeadline<T>(
   const { timeoutError, onExpire, onSettled, outcomeUnread } = options
   // Before anything awaits it: a host's native promise carries no constructor of its own, and the first await of it would
   // read the shared slot ahead of the check below. A result that is not a promise is not awaited until after that check.
-  const call = awaitable(work)
+  const call = awaitableOrGiveBack(work, onSettled)
   if (types.isPromise(call)) void absorbed(call)
   let timer: NodeJS.Timeout | undefined
   let finished = false
@@ -206,7 +226,13 @@ export function firstOf<A, B>(
   first: PromiseLike<A>,
   second: PromiseLike<B>,
 ): Promise<Decided<A | B>> {
-  const calls = [awaitable(first), awaitable(second)]
+  let calls: [PromiseLike<A>, PromiseLike<B>]
+  try {
+    calls = [awaitable(first), awaitable(second)]
+  } catch (error) {
+    for (const call of [first, second]) if (types.isPromise(call)) void absorbed(call)
+    throw error
+  }
   for (const call of calls) if (types.isPromise(call)) void absorbed(call)
   const promise = new NativePromise<Decided<A | B>>((resolve, reject) => {
     const follow = async (call: PromiseLike<A | B>): Promise<void> => {

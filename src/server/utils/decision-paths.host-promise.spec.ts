@@ -16,8 +16,10 @@ import {
   mkRealtime,
   mkRecord,
 } from '../../../test/fixtures/reauthentication/harness'
+import { OfflineQueueDeliveryService } from '../offline-queue/offline-queue-delivery.service'
 import { AuthenticationGate } from '../services/authentication-gate.service'
 import type { ConnectionAuthContext } from '../interfaces/connection-authenticator.interface'
+import { firstOf } from './within-deadline'
 
 const CONTEXT: ConnectionAuthContext = {
   transport: 'sse',
@@ -211,5 +213,67 @@ describe('a host promise that carries a constructor or a then of its own', () =>
     await expect(
       gateOf(Object.freeze(Promise.resolve(ATTACKER))).authenticate(CONTEXT),
     ).rejects.toThrow()
+  })
+})
+
+describe('a host promise that is refused is not left behind', () => {
+  const settleTicks = async (): Promise<void> => {
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+  }
+
+  // Scenario: the authenticator returns a frozen promise that rejects, which cannot take the pinned constructor.
+  // Expected: the gate refuses, and the promise's rejection is read, so that the process sees no unhandled rejection.
+  it('reads the rejection of a refused promise at the gate', async () => {
+    const seen: unknown[] = []
+    const onUnhandled = (reason: unknown): void => void seen.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    const gate = new AuthenticationGate(
+      {} as never,
+      { authenticate: () => Object.freeze(Promise.reject(new Error('host'))) } as never,
+    )
+
+    try {
+      await expect(gate.authenticate(CONTEXT)).rejects.toThrow(TypeError)
+      await settleTicks()
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+
+    expect(seen).toEqual([])
+  })
+
+  // Scenario: a queue store returns a frozen promise, on a queue that allows two reads at once, three times over.
+  // Expected: no read keeps its place, so the next read of an honest store is answered and not refused as a timeout.
+  it('gives back the place a refused store promise was holding', async () => {
+    let answer: () => unknown = () => Object.freeze(Promise.resolve([]))
+    const storage = { retrieveSince: () => answer() }
+    const queue = new OfflineQueueDeliveryService(storage as never, undefined, {
+      authenticateTimeoutMs: 1_000,
+      maxPendingHandshakes: 2,
+    } as never)
+
+    for (let i = 0; i < 3; i++) await queue.retrieve('u1', '0', new Set()).catch(() => undefined)
+    answer = async () => []
+
+    expect((queue as unknown as { pending: number }).pending).toBe(0)
+  })
+
+  // Scenario: firstOf is given a promise that rejects and cannot be pinned (it is frozen), and one that is fine.
+  // Expected: it refuses, and the rejection of the first is read, so the process sees no unhandled rejection.
+  it('reads the rejection of both promises when firstOf refuses', async () => {
+    const seen: unknown[] = []
+    const onUnhandled = (reason: unknown): void => void seen.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    const refused = Object.freeze(Promise.reject(new Error('host')))
+
+    try {
+      expect(() => firstOf(refused, Promise.resolve(1))).toThrow(TypeError)
+      await settleTicks()
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+
+    expect(seen).toEqual([])
   })
 })

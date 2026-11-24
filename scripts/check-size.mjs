@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  26,195 B → 26,225 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  26,272 B → 26,300 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -86,6 +86,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     and, 34 B more than the figure above (25,886 B), the pinned own constructor that every promise a caller awaits is handed over with, out to the outermost hop, the facades of the gate and of the bounded re-authentication, and the absorbing of a discarded promise whose species cannot be read, measured on 2026-11-24)
 //     and, 160 B more than the figure above (25,920 B), the same constructor given to the native promise a host call returned before the wait that reads it, and the answer of a host call that has no `then` to ask for used as it is, measured on 2026-11-24)
 //     and, 115 B more than the figure above (26,080 B), the check at load that the engine's Promise constructor is in place and the refusal of a promise that cannot carry it, measured on 2026-11-24)
+//     and, 77 B more than the figure above (26,195 B), the reading of the rejection of a promise that was refused and the giving back of the place a refused call held, measured on 2026-11-24)
 //   observability  1,092 B → 1,122 B (the metrics contributor and the pub/sub health indicator: five collectors read from the tally and the registry, the
 //     entry nobody installs unless they publish metrics, so it carries no weight for anyone else)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
@@ -104,7 +105,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 26_225 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 26_300 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 8_320 },
   {
     name: 'observability (metrics contributor)',
