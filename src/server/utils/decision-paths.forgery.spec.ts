@@ -618,6 +618,12 @@ describe('the files whose answer is a decision', () => {
   // is one site, listed with the reason nobody decides on it; a new match, or one more of the same, fails here.
   // Scenario: each file is read with its comments taken out. Expected: its matches are exactly the exempt ones.
   const EXEMPT: Record<string, readonly (readonly [match: string, reason: string])[]> = {
+    'utils/within-deadline.ts': [
+      [
+        "['then']",
+        'names the slot for an own-property check on a host result; the property is not read, so no `then` runs',
+      ],
+    ],
     'services/reauthentication.service.ts': [
       ['.catch(', 'the interval tick logs a cycle that threw; no answer is read'],
       [

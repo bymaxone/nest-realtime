@@ -3,7 +3,9 @@
  * built-in or a planted `then` what it settled with.
  * @layer utils
  */
+import { types } from 'node:util'
 import { assertBuiltinsIntact } from './builtin-baseline'
+import { apply, getPrototypeOf, hasOwnProperty } from './captured-builtins'
 
 /**
  * The engine's own Promise constructor, taken from a promise an async function returns and not from the global binding:
@@ -11,30 +13,69 @@ import { assertBuiltinsIntact } from './builtin-baseline'
  * would not be a native promise. A reply read through `Promise.race`, `Promise.resolve` or `.then` is whatever those
  * answer once a host has replaced them, and a decision made on it is the host's.
  */
-const NativePromise = (
-  Object.getPrototypeOf((async () => undefined)()) as { constructor: PromiseConstructor }
-).constructor
+const enginePromisePrototype: unknown = Object.getPrototypeOf((async () => undefined)())
+const NativePromise = (enginePromisePrototype as { constructor: PromiseConstructor }).constructor
+
+// The slot that gave the constructor is writable, so a host that ran before this module loaded may have put its own
+// there. A function that is the engine's Promise has the engine's prototype and prints as native code; refusing to load
+// is better than pinning a stranger's constructor on every promise a decision awaits.
+if (
+  NativePromise.prototype !== enginePromisePrototype ||
+  NativePromise.name !== 'Promise' ||
+  !Function.prototype.toString.call(NativePromise).includes('[native code]')
+) {
+  throw new TypeError('The Promise constructor was replaced before this module loaded.')
+}
 
 const define = Object.defineProperty
+const getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor
 
 /**
- * Gives a promise this library made an own `constructor`, the engine's own, pinned: neither writable nor configurable, so
- * that whoever holds the promise cannot swap it back. Awaiting it then never reads the slot on
- * `Promise.prototype`: a getter that throws there, or a replaced constructor, would otherwise make the await fail before
- * it attached its handlers and leave the rejection of a promise nobody else reads unhandled. It is only for promises the
- * library created; a promise from the host is left as it is.
+ * Gives a promise an own `constructor`, the engine's own, pinned: neither writable nor configurable, so that whoever
+ * holds the promise cannot swap it back. Awaiting it then never reads the slot on `Promise.prototype` and never asks
+ * for a `then`: a getter or a replaced constructor there would otherwise make the await route through whatever the host
+ * put in them, or fail before it attached its handlers and leave the rejection of a promise nobody else reads
+ * unhandled. It is for a promise about to be awaited, the library's own or a native one a host call returned.
  *
- * @param promise - A promise this library created and has not awaited yet; anything else is returned as it is.
+ * @param promise - A native promise about to be awaited; anything else is returned as it is.
  * @returns The same promise.
+ * @throws {TypeError} When the promise holds an own `constructor` that is not the engine's and cannot be replaced, or
+ *   cannot take one: awaiting it would route through that value.
  */
 export function shielded<T>(promise: T): T {
   if (typeof promise !== 'object' || promise === null) return promise
   try {
     define(promise, 'constructor', { value: NativePromise, configurable: false, writable: false })
   } catch {
-    // A promise that cannot take a property is awaited as it is.
+    // A promise that kept an own constructor of its own, or cannot take one, is checked below.
+  }
+  const own = getOwnPropertyDescriptor(promise, 'constructor')
+  if (own?.value !== NativePromise || own.writable !== false || own.configurable !== false) {
+    throw new TypeError('A promise that cannot carry the engine constructor is not awaited.')
   }
   return promise
+}
+
+/**
+ * A host call's result, ready to await: a native promise is given its own constructor first, so that the await reads
+ * neither the shared constructor nor a `then`. Anything else is returned as it is.
+ */
+export function awaitable<P extends PromiseLike<unknown>>(result: P): P
+export function awaitable<T>(result: PromiseLike<T> | T): PromiseLike<T> | T
+export function awaitable(result: unknown): unknown {
+  return types.isPromise(result) ? shielded(result) : result
+}
+
+/**
+ * Whether a host call's result has no `then` to ask for: not an object, or null, or a plain record with none of its own.
+ * Awaiting any other object reads its `then`, and a `then` a host planted on a root prototype answers for a record that
+ * has none; a result used as it is, with the baseline asserted before it is returned, is never asked.
+ */
+export function isPlainResult<T>(result: PromiseLike<T> | T): result is T {
+  if (typeof result === 'function') return false
+  if (typeof result !== 'object' || result === null) return true
+  const proto = getPrototypeOf(result)
+  return (proto === Object.prototype || proto === null) && !apply(hasOwnProperty, result, ['then'])
 }
 
 /**
@@ -110,7 +151,10 @@ export function withinDeadline<T>(
   options: DeadlineOptions,
 ): Promise<Decided<T>> {
   const { timeoutError, onExpire, onSettled, outcomeUnread } = options
-  void absorbed(work as PromiseLike<T>)
+  // Before anything awaits it: a host's native promise carries no constructor of its own, and the first await of it would
+  // read the shared slot ahead of the check below. A result that is not a promise is not awaited until after that check.
+  const call = awaitable(work)
+  if (types.isPromise(call)) void absorbed(call)
   let timer: NodeJS.Timeout | undefined
   let finished = false
   let orphaned = false
@@ -118,7 +162,7 @@ export function withinDeadline<T>(
     const wait = async (): Promise<void> => {
       try {
         if (outcomeUnread !== true) assertBuiltinsIntact()
-        resolve(boxed(await work))
+        resolve(boxed(await call))
       } catch (error) {
         if (!orphaned) reject(error)
       } finally {
@@ -162,8 +206,8 @@ export function firstOf<A, B>(
   first: PromiseLike<A>,
   second: PromiseLike<B>,
 ): Promise<Decided<A | B>> {
-  void absorbed(first)
-  void absorbed(second)
+  const calls = [awaitable(first), awaitable(second)]
+  for (const call of calls) if (types.isPromise(call)) void absorbed(call)
   const promise = new NativePromise<Decided<A | B>>((resolve, reject) => {
     const follow = async (call: PromiseLike<A | B>): Promise<void> => {
       try {
@@ -173,8 +217,7 @@ export function firstOf<A, B>(
         reject(error)
       }
     }
-    void follow(first)
-    void follow(second)
+    for (const call of calls) void follow(call)
   })
   return shielded(promise)
 }

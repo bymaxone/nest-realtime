@@ -8,7 +8,14 @@ import { join } from 'node:path'
 import { plantSelfErasingThen } from '../../../test/support/forged-promise'
 import { AuthenticationGate } from '../services/authentication-gate.service'
 import type { ConnectionAuthContext } from '../interfaces/connection-authenticator.interface'
-import { absorbed, firstOf, shielded, withinDeadline } from './within-deadline'
+import {
+  absorbed,
+  awaitable,
+  firstOf,
+  isPlainResult,
+  shielded,
+  withinDeadline,
+} from './within-deadline'
 
 const CONTEXT: ConnectionAuthContext = {
   transport: 'sse',
@@ -162,15 +169,19 @@ describe('the wait that absorbs a rejection', () => {
 })
 
 describe('shielded', () => {
-  // Scenario: a value that is not an object, and a promise that cannot take a property. Expected: each is returned as it is;
-  // the first has nothing to shield and the second is awaited the way it was.
+  // Scenario: a value that is not an object. Expected: returned as it is; there is nothing to shield.
   it.each([
     ['undefined', undefined],
     ['null', null],
     ['a string', 'text'],
-    ['a frozen promise', Object.freeze(Promise.resolve())],
   ])('returns %s as it is', (_name, value) => {
     expect(shielded(value)).toBe(value)
+  })
+
+  // Scenario: a promise that cannot take the constructor, because it is frozen. Expected: refused, since an await of it
+  // would read the shared slot.
+  it('refuses a frozen promise', () => {
+    expect(() => shielded(Object.freeze(Promise.resolve()))).toThrow(TypeError)
   })
 
   // Scenario: a promise the library made. Expected: it carries its own constructor, the intrinsic one.
@@ -272,5 +283,57 @@ describe('a decision that returns an object', () => {
     expect(answered).toBe(0)
     expect(result).toBeUndefined()
     expect(failure).toMatchObject(REFUSED)
+  })
+})
+
+describe('a promise a host call returned', () => {
+  const pinned = { writable: false, configurable: false }
+  const settle = (): { promise: Promise<number>; resolve: (n: number) => void } => {
+    let resolve: (n: number) => void = () => undefined
+    const promise = new Promise<number>((r) => (resolve = r))
+    return { promise, resolve }
+  }
+
+  // Scenario: a native promise is handed to a wait. Expected: it has its own pinned constructor before anything awaits it.
+  it('withinDeadline gives it its own constructor', async () => {
+    const work = settle()
+    const wait = withinDeadline(work.promise, 1000, { timeoutError: () => new Error('late') })
+    work.resolve(1)
+    await wait
+
+    expect(Object.getOwnPropertyDescriptor(work.promise, 'constructor')).toMatchObject(pinned)
+  })
+
+  // Scenario: two native promises are handed to firstOf. Expected: both have their own pinned constructor.
+  it('firstOf gives both of them their own constructor', async () => {
+    const a = settle()
+    const b = settle()
+    const wait = firstOf(a.promise, b.promise)
+    a.resolve(1)
+    await wait
+
+    expect(Object.getOwnPropertyDescriptor(a.promise, 'constructor')).toMatchObject(pinned)
+    expect(Object.getOwnPropertyDescriptor(b.promise, 'constructor')).toMatchObject(pinned)
+  })
+
+  // Scenario: results of every shape. Expected: only a native promise is changed, and only a value with no then to ask for
+  // is plain.
+  it('tells a promise, a plain value and a thenable apart', () => {
+    const native = Promise.resolve(1)
+    const thenable = { then: () => undefined }
+
+    expect(awaitable(native)).toBe(native)
+    expect(Object.hasOwn(native, 'constructor')).toBe(true)
+    expect(awaitable(thenable)).toBe(thenable)
+    expect(Object.hasOwn(thenable, 'constructor')).toBe(false)
+    expect(isPlainResult(undefined)).toBe(true)
+    expect(isPlainResult(5)).toBe(true)
+    expect(isPlainResult(null)).toBe(true)
+    expect(isPlainResult({})).toBe(true)
+    expect(isPlainResult(Object.create(null))).toBe(true)
+    expect(isPlainResult(thenable)).toBe(false)
+    expect(isPlainResult(native)).toBe(false)
+    expect(isPlainResult(() => 1)).toBe(false)
+    expect(isPlainResult(new (class Identity {})())).toBe(false)
   })
 })

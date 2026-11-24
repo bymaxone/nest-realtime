@@ -166,3 +166,64 @@ export function hostCallThatSwapsInside<T>(
   }
   return { call, restore }
 }
+
+/**
+ * A host call that answers `answer`, and leaves behind accessors that put their slot back the first time they are read:
+ * `constructor` and `then` on `Promise.prototype` when it returns a native promise, `then` on `Object.prototype` when it
+ * returns the answer itself. Whatever reads them gets the replacement; a check made afterwards finds nothing, because
+ * each read restored its slot. The replacement `then` settles whatever it is asked about with `forged`. `restore` puts
+ * everything back in case nothing read.
+ *
+ * @param answer - What the call honestly answers.
+ * @param forged - What any promise or record appears to settle with once the replacement `then` is asked.
+ * @param kind - Whether the call returns a native promise or the answer itself.
+ */
+export function hostCallWithSelfRestoringAccessors<T>(
+  answer: T,
+  forged: unknown,
+  kind: 'promise' | 'record',
+): { readonly call: () => Promise<T> | T; readonly restore: () => void } {
+  const realConstructor = Object.getOwnPropertyDescriptor(
+    Promise.prototype,
+    'constructor',
+  ) as PropertyDescriptor
+  const realThen = Object.getOwnPropertyDescriptor(Promise.prototype, 'then') as PropertyDescriptor
+  const forgedThen = (onFulfilled?: (value: unknown) => unknown): undefined => {
+    onFulfilled?.(forged)
+    return undefined
+  }
+  const restore = (): void => {
+    Object.defineProperty(Promise.prototype, 'constructor', realConstructor)
+    Object.defineProperty(Promise.prototype, 'then', realThen)
+    Reflect.deleteProperty(Object.prototype, 'then')
+  }
+  const call = (): Promise<T> | T => {
+    if (kind === 'record') {
+      Object.defineProperty(Object.prototype, 'then', {
+        configurable: true,
+        get() {
+          Reflect.deleteProperty(Object.prototype, 'then')
+          return forgedThen
+        },
+      })
+      return answer
+    }
+    const honest = Promise.resolve(answer)
+    Object.defineProperty(Promise.prototype, 'constructor', {
+      configurable: true,
+      get() {
+        Object.defineProperty(Promise.prototype, 'constructor', realConstructor)
+        return function Fake() {}
+      },
+    })
+    Object.defineProperty(Promise.prototype, 'then', {
+      configurable: true,
+      get() {
+        Object.defineProperty(Promise.prototype, 'then', realThen)
+        return forgedThen
+      },
+    })
+    return honest
+  }
+  return { call, restore }
+}

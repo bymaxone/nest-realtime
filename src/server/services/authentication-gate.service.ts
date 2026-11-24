@@ -17,7 +17,13 @@ import type {
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { logEvent } from '../utils/log-event'
 import { assertBuiltinsIntact } from '../utils/builtin-baseline'
-import { shielded, unboxed, withinDeadline } from '../utils/within-deadline'
+import {
+  awaitable,
+  isPlainResult,
+  shielded,
+  unboxed,
+  withinDeadline,
+} from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 /** How long a window of refusals is summarised in one log line. */
@@ -112,7 +118,12 @@ export class AuthenticationGate {
     // promise carries its own `constructor`, so that the wait that absorbs its rejection never reads the shared slot.
     const call = shielded(
       (async () => {
-        const answer = await this.authenticator.authenticate(context, { signal })
+        const result: PromiseLike<AuthenticationResult | null> | AuthenticationResult | null =
+          this.authenticator.authenticate(context, { signal })
+        // Not awaited when it has no `then` to ask for, and shielded when it is a promise: an await of the host's own
+        // promise would read the shared constructor and `then` after the host call, which can have put in them a getter
+        // that restores itself as it is read and leaves nothing for the check below to see.
+        const answer = isPlainResult(result) ? result : await awaitable(result)
         // The last statement before the return: resolving this promise with an object asks it for a `then`.
         assertBuiltinsIntact()
         return answer

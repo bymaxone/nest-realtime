@@ -79,7 +79,11 @@ function absorbRejection(value: unknown): void {
     // of it goes through `then` too unless its constructor is the intrinsic one. This promise is being discarded, so it is
     // given that constructor, and the await then attaches its handlers directly.
     if (types.isPromise(value)) {
-      void absorbed(shielded(value))
+      try {
+        void absorbed(shielded(value))
+      } catch {
+        // One whose `constructor` cannot be replaced: no handler can be attached by any path.
+      }
       return
     }
     // Not a promise by brand: its own `catch` is the last way to a handler.
