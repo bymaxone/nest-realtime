@@ -271,7 +271,8 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    */
   private async revoke(conn: ConnectionRecord): Promise<void> {
     try {
-      // Nobody reads what the revocation answers, and a refusal here would leave the connection in place.
+      // Nobody reads what the revocation answers, so the wait itself does not check the built-ins. The disconnect it
+      // calls still refuses when one is replaced; the connection then stays, and the next cycle tries again.
       await this.bounded('revocation', () => this.handleFailure(conn), true)
     } catch (err) {
       logEvent(

@@ -146,6 +146,8 @@ export class OfflineQueueDeliveryService {
       events = await this.read(storage, userId, lastEventId, RETRIEVE_LIMIT)
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) throw err
+      // A refusal raised while the store was being read is not the store failing either.
+      assertBuiltinsIntact()
       reportDeliveryFailure(
         this.logger,
         this.hooks,

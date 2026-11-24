@@ -14,7 +14,7 @@ import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
 import { assertBuiltinsIntact } from '../utils/builtin-baseline'
-import { firstOf, unboxed } from '../utils/within-deadline'
+import { absorbed, firstOf, unboxed } from '../utils/within-deadline'
 
 /** The shortest time between two reports of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
@@ -305,6 +305,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     first: Promise<unknown>,
     unreachableFirst: Promise<{ readonly unreachable: unknown }>,
   ): Promise<void> {
+    // A refusal below leaves `first` unread, and closing the connection then rejects it.
+    void absorbed(first)
     try {
       const subscribed = (async () => {
         // Outside the `try`: a refusal is not the connection failing.

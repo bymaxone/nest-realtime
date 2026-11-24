@@ -346,6 +346,37 @@ describe('with a then that erases itself, planted on a root prototype before the
     expect(events).toBeUndefined()
     expect(failure).toBeDefined()
   })
+
+  // Scenario: the store plants a `then` on Function.prototype while it answers, so the breach appears after the
+  // call began. Expected: the gap read refuses; it is not served as an empty, degraded gap.
+  it('a gap read refuses a breach that appears while the store answers', async () => {
+    const queue = new OfflineQueueDeliveryService(
+      {
+        retrieveSince: () => {
+          Object.defineProperty(Function.prototype, 'then', {
+            configurable: true,
+            value: undefined,
+          })
+          return []
+        },
+      } as never,
+      undefined,
+      { authenticateTimeoutMs: 1_000 } as never,
+    )
+    let gap: unknown
+    let failure: unknown
+
+    try {
+      gap = await queue.retrieveGap('u1', '0')
+    } catch (error) {
+      failure = error
+    } finally {
+      Reflect.deleteProperty(Function.prototype, 'then')
+    }
+
+    expect(gap).toBeUndefined()
+    expect(failure).toMatchObject(REFUSED)
+  })
 })
 
 describe('the files whose answer is a decision', () => {
