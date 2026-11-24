@@ -2,7 +2,7 @@
  * @fileoverview The wait under a deadline settles like the call, or on the deadline, and tells the caller when the call is done.
  * @layer utils
  */
-import { absorbed, firstOf, unboxed, withinDeadline } from './within-deadline'
+import { absorbed, firstOf, started, unboxed, withinDeadline } from './within-deadline'
 
 const never = (): Promise<never> => new Promise<never>(() => undefined)
 
@@ -298,4 +298,33 @@ describe('firstOf', () => {
       expect(unhandled).not.toHaveBeenCalled()
     },
   )
+})
+
+describe('started', () => {
+  // Scenario: the task throws before it returns a promise. Expected: the caller gets a rejected promise carrying the error,
+  // with its own constructor, and nothing is left unhandled.
+  it('hands back a rejected promise for a task that throws', async () => {
+    const boom = new Error('boom')
+    const call = started<void>(() => {
+      throw boom
+    }) as Promise<void>
+
+    expect(Object.hasOwn(call, 'constructor')).toBe(true)
+    await expect(call).rejects.toBe(boom)
+  })
+
+  // Scenario: the task returns a value that is not a promise. Expected: it comes back as it is.
+  it('hands back what is not a promise as it is', () => {
+    expect(started(() => 7)).toBe(7)
+  })
+
+  // Scenario: the task returns a promise that rejects, and the caller waits on another one first. Expected: the rejection
+  // is read at once, so it is not unhandled, and the caller still sees it later.
+  it('reads a rejection at once and keeps it for the caller', async () => {
+    const boom = new Error('late')
+    const call = started<void>(() => Promise.reject(boom)) as Promise<void>
+    await new Promise((resolve) => setImmediate(resolve))
+
+    await expect(call).rejects.toBe(boom)
+  })
 })

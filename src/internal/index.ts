@@ -103,6 +103,7 @@ export {
   returnable,
 } from '../server/utils/builtin-baseline'
 export { composeRoomId } from '../server/utils/compose-room-id'
+export { awaitable, shielded, started } from '../server/utils/within-deadline'
 export { describeError } from '../server/utils/describe-error'
 export { logEvent, REALTIME_LOG_EVENTS } from '../server/utils/log-event'
 export type { LogFields, RealtimeLogEvent } from '../server/utils/log-event'

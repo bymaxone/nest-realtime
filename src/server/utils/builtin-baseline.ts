@@ -118,6 +118,9 @@ const NAMED: readonly BuiltinSlot[] = [
   // `await` of a native promise asks it for its constructor, and a replaced one sends the wait through `then` instead.
   // `then` and the statics are not listed: an APM wraps `then` by design, and nothing a decision reads calls them.
   [Object.getPrototypeOf((async () => undefined)()) as object, 'constructor'],
+  // `then` asks the promise's constructor for its species, and what it answers builds the promise `then` hands back: a
+  // replaced getter makes a dependency's own `then` give a host's promise to the await that follows.
+  [Promise, Symbol.species],
   [Map.prototype, 'delete'],
   [Map.prototype, 'entries'],
   [Map.prototype, 'forEach'],

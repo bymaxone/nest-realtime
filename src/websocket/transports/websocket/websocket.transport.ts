@@ -23,6 +23,7 @@ import {
   UNBOUNDED_TICKET,
   refuseReservedRoom,
   requireRoomName,
+  shielded,
 } from '@bymax-one/nest-realtime/internal'
 import type {
   ITransport,
@@ -209,11 +210,11 @@ export class WebSocketTransport implements ITransport {
       },
     })
 
-    await this.joinRooms(socket, auth)
+    await shielded(this.joinRooms(socket, auth))
 
-    await this.evictBeyondLimit(auth.userId)
+    await shielded(this.evictBeyondLimit(auth.userId))
 
-    const failed = await this.runOnConnect(socket, auth, connectedAt)
+    const failed = await shielded(this.runOnConnect(socket, auth, connectedAt))
     if (!failed) return
     // Raised, the failure reaches the gateway, which logs it and disconnects the socket.
     // The host's error travels as the cause, so its text never enters the library's message.
@@ -239,11 +240,12 @@ export class WebSocketTransport implements ITransport {
     const user = `${ROOM_PREFIXES.USER}:${auth.userId}`
     const tenant = auth.tenantId ? `${ROOM_PREFIXES.TENANT}:${auth.tenantId}` : undefined
     const named = auth.rooms ?? []
-    await this.joinSocket(socket, user)
-    if (tenant) await this.joinSocket(socket, tenant)
+    await shielded(this.joinSocket(socket, user))
+    if (tenant) await shielded(this.joinSocket(socket, tenant))
     // Per-connection room — enables adapter-aware cross-node revocation in disconnect().
-    await this.joinSocket(socket, `${CONNECTION_ROOM_PREFIX}:${socket.id}`)
-    for (let i = 0; i < named.length; i += 1) await this.joinSocket(socket, named[i] as string)
+    await shielded(this.joinSocket(socket, `${CONNECTION_ROOM_PREFIX}:${socket.id}`))
+    for (let i = 0; i < named.length; i += 1)
+      await shielded(this.joinSocket(socket, named[i] as string))
 
     this.recordJoin(socket.id, user)
     if (tenant) this.recordJoin(socket.id, tenant)
@@ -390,7 +392,7 @@ export class WebSocketTransport implements ITransport {
     refuseReservedRoom('joinRoom', roomId)
     const socket = this.localSockets()?.get(connectionId)
     if (socket) {
-      await this.joinSocket(socket, roomId)
+      await shielded(this.joinSocket(socket, roomId))
       this.recordJoin(connectionId, roomId)
     }
   }
@@ -474,8 +476,12 @@ export class WebSocketTransport implements ITransport {
     while (userConnections.length > max) {
       const oldest = userConnections.reduce((a, b) => (a.connectedAt <= b.connectedAt ? a : b))
       this.tally?.evicted('per_user_cap')
-      await this.disconnect(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
-      await this.unregisterSocket(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS)
+      await shielded(
+        this.disconnect(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS),
+      )
+      await shielded(
+        this.unregisterSocket(oldest.connectionId, REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS),
+      )
       userConnections = this.connections.byUser(userId, 'websocket')
     }
   }

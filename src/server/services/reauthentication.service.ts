@@ -225,7 +225,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         conn.revalidatedAt = now
         return
       }
-      await this.revoke(conn)
+      await shielded(this.revoke(conn))
     } catch (err) {
       logEvent(
         this.logger,
@@ -235,7 +235,7 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
         { connectionId: conn.connectionId },
         err,
       )
-      await this.revoke(conn)
+      await shielded(this.revoke(conn))
     }
   }
 

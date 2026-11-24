@@ -4,10 +4,12 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import {
+  awaitable,
   describeError,
   logEvent,
   REALTIME_ERROR_CODES,
   SseTransport,
+  started,
   unavailableError,
   refuseReservedRoom,
   requireRoomName,
@@ -52,10 +54,12 @@ export class CompositeTransport implements ITransport {
    * @param data - Payload forwarded to all matching connections.
    */
   async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
-    await this.fanOut(
-      'emitToUser',
-      () => this.sse.emitToUser(userId, event, data),
-      () => this.ws.emitToUser(userId, event, data),
+    await awaitable(
+      this.fanOut(
+        'emitToUser',
+        () => this.sse.emitToUser(userId, event, data),
+        () => this.ws.emitToUser(userId, event, data),
+      ),
     )
   }
 
@@ -67,10 +71,12 @@ export class CompositeTransport implements ITransport {
    * @param data - Payload forwarded to all matching connections.
    */
   async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
-    await this.fanOut(
-      'emitToTenant',
-      () => this.sse.emitToTenant(tenantId, event, data),
-      () => this.ws.emitToTenant(tenantId, event, data),
+    await awaitable(
+      this.fanOut(
+        'emitToTenant',
+        () => this.sse.emitToTenant(tenantId, event, data),
+        () => this.ws.emitToTenant(tenantId, event, data),
+      ),
     )
   }
 
@@ -83,10 +89,12 @@ export class CompositeTransport implements ITransport {
    */
   async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
     requireRoomName('emitToRoom', roomId)
-    await this.fanOut(
-      'emitToRoom',
-      () => this.sse.emitToRoom(roomId, event, data),
-      () => this.ws.emitToRoom(roomId, event, data),
+    await awaitable(
+      this.fanOut(
+        'emitToRoom',
+        () => this.sse.emitToRoom(roomId, event, data),
+        () => this.ws.emitToRoom(roomId, event, data),
+      ),
     )
   }
 
@@ -97,10 +105,12 @@ export class CompositeTransport implements ITransport {
    * @param data - Payload forwarded to every connected client.
    */
   async broadcast(event: string, data: unknown): Promise<void> {
-    await this.fanOut(
-      'broadcast',
-      () => this.sse.broadcast(event, data),
-      () => this.ws.broadcast(event, data),
+    await awaitable(
+      this.fanOut(
+        'broadcast',
+        () => this.sse.broadcast(event, data),
+        () => this.ws.broadcast(event, data),
+      ),
     )
   }
 
@@ -112,10 +122,12 @@ export class CompositeTransport implements ITransport {
    */
   async joinRoom(connectionId: string, roomId: string): Promise<void> {
     refuseReservedRoom('joinRoom', roomId)
-    await this.settleBoth('joinRoom', connectionId, [
-      () => this.sse.joinRoom(connectionId, roomId),
-      () => this.ws.joinRoom(connectionId, roomId),
-    ])
+    await awaitable(
+      this.settleBoth('joinRoom', connectionId, [
+        () => this.sse.joinRoom(connectionId, roomId),
+        () => this.ws.joinRoom(connectionId, roomId),
+      ]),
+    )
   }
 
   /**
@@ -127,10 +139,12 @@ export class CompositeTransport implements ITransport {
    */
   async leaveRoom(connectionId: string, roomId: string): Promise<void> {
     refuseReservedRoom('leaveRoom', roomId)
-    await this.settleBoth('leaveRoom', connectionId, [
-      () => this.sse.leaveRoom(connectionId, roomId),
-      () => this.ws.leaveRoom(connectionId, roomId),
-    ])
+    await awaitable(
+      this.settleBoth('leaveRoom', connectionId, [
+        () => this.sse.leaveRoom(connectionId, roomId),
+        () => this.ws.leaveRoom(connectionId, roomId),
+      ]),
+    )
   }
 
   /**
@@ -140,10 +154,12 @@ export class CompositeTransport implements ITransport {
    * either one could not: the revocation has not reached the connection.
    */
   async disconnect(connectionId: string, reason?: string): Promise<void> {
-    await this.settleBoth('disconnect', connectionId, [
-      () => this.sse.disconnect(connectionId, reason),
-      () => this.ws.disconnect(connectionId, reason),
-    ])
+    await awaitable(
+      this.settleBoth('disconnect', connectionId, [
+        () => this.sse.disconnect(connectionId, reason),
+        () => this.ws.disconnect(connectionId, reason),
+      ]),
+    )
   }
 
   /**
@@ -157,8 +173,14 @@ export class CompositeTransport implements ITransport {
     connectionId: string,
     tasks: Array<() => Promise<void>>,
   ): Promise<void> {
-    const results = await Promise.allSettled(tasks.map((t) => t()))
-    const reasons = results.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []))
+    const reasons: unknown[] = []
+    for (const call of tasks.map((task) => started(task))) {
+      try {
+        await call
+      } catch (error) {
+        reasons.push(error)
+      }
+    }
     if (reasons.length === 0) return
     if (reasons.length === 1) throw reasons[0]
     throw this.allFailed(`${op} of ${connectionId}`, reasons)
@@ -171,8 +193,14 @@ export class CompositeTransport implements ITransport {
    * never blocks delivery on the other. Every task failing rejects.
    */
   private async fanOut(op: string, ...tasks: Array<() => Promise<void>>): Promise<void> {
-    const results = await Promise.allSettled(tasks.map((t) => t()))
-    const reasons = results.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []))
+    const reasons: unknown[] = []
+    for (const call of tasks.map((task) => started(task))) {
+      try {
+        await call
+      } catch (error) {
+        reasons.push(error)
+      }
+    }
     if (reasons.length === tasks.length) throw this.allFailed(op, reasons)
     for (const reason of reasons) {
       logEvent(

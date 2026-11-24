@@ -32,7 +32,7 @@ const FOUND =
 // A return of a call on something the host supplied: an async function that returns it resolves with it, and asks it for
 // a `then`. The members are the ones the library holds a host's object in.
 const HOST_RETURN =
-  /\breturn\s+(?:await\s+)?(?:this\.#?(?:client|storage|pubsub|authenticator|tracing)|queue|storage|pubsub|authenticator)(?:\??\.#?\w+)*\s*\(/g
+  /\breturn\s+(?:await\s+)?(?:this\.#?(?:client|storage|pubsub|authenticator|tracing|transport)|queue|storage|pubsub|authenticator)(?:\??\.#?\w+)*\s*\(/g
 
 // The helpers whose result is what an await may take: each shields what it is given, or is the library's own wait.
 const HELPERS = /^(?:shielded|awaitable|withinDeadline|firstOf|absorbed)$/
@@ -126,8 +126,6 @@ type Site = readonly [site: string, reason: string]
 
 // Each entry is one site, with the reason nobody decides on it. Two of the same site are two entries. A site a file gains
 // that is not here, or one more of the same, fails the row of that file.
-const OWN_AWAIT =
-  "awaits the library's own async method, whose own returns are checked where it returns"
 const EXEMPT: Record<string, readonly Site[]> = {
   'server/utils/within-deadline.ts': [
     [
@@ -180,8 +178,6 @@ const EXEMPT: Record<string, readonly Site[]> = {
       'a slot for one check; the check reads its own answer through the helpers',
     ],
     ['await this.bounded', "the library's bounded wait, which reads through the helpers"],
-    ['await this.revoke', OWN_AWAIT],
-    ['await this.revoke', OWN_AWAIT],
     ['await this.bounded', "the library's bounded wait, which reads through the helpers"],
     ['await this.realtime.disconnect', "the library's own disconnect; no answer is read"],
   ],
@@ -238,7 +234,6 @@ const EXEMPT: Record<string, readonly Site[]> = {
       'await this.pubsub.subscribe',
       'the bus subscription at boot: availability, not identity or admission',
     ],
-    ['await this.unsubscribe', OWN_AWAIT],
   ],
   'server/pubsub/redis-realtime-pubsub.ts': [
     ['.catch(', 'a connect started in the background; its failure is retried, not read'],
@@ -253,8 +248,6 @@ const EXEMPT: Record<string, readonly Site[]> = {
       '.then(',
       'a confirmation after boot marks the bus up or refused: availability state, not identity or admission',
     ],
-    ['await this.ensureSubscriber', OWN_AWAIT],
-    ['await this.publisherSettled', OWN_AWAIT],
     ['await quitWithin', 'closes a client on shutdown; the answer is not read'],
     [
       'await first',
@@ -301,37 +294,18 @@ const EXEMPT: Record<string, readonly Site[]> = {
     ['.catch(', 'logs a disconnect that failed; the connection is already being closed'],
     ['await Promise.all', 'shutdown above'],
     ['await Promise.all', 'emitToUser above'],
-    ['await this.beforeApplicationShutdown', OWN_AWAIT],
-    ['await this.evictBeyondLimit', OWN_AWAIT],
-    ['await this.notifyDisconnect', OWN_AWAIT],
-    ['await this.notifyDisconnect', OWN_AWAIT],
     ['await runHook', 'a lifecycle hook whose failure is logged, never decided on'],
     ['await queue.append', 'a host store call that records an event for later; no answer is read'],
-    ['await this.publish', OWN_AWAIT],
-    ['await this.publish', OWN_AWAIT],
-    ['await this.publish', OWN_AWAIT],
-    ['await this.disconnectLocal', OWN_AWAIT],
-    ['await this.disconnectLocal', OWN_AWAIT],
-    ['await this.tryPublish', OWN_AWAIT],
   ],
   'websocket/transports/composite/composite.transport.ts': [
     [
-      'Promise.allSettled',
-      'fanOut: the failures it collects only choose between throwing to the emitter and logging; no identity, admission or replay is read. Tracked, not fixed here',
+      'await call',
+      'the call was started by `started`, which gave it its own constructor, so the await reads no slot',
     ],
     [
-      'Promise.allSettled',
-      'settleBoth: reports a room change or a revocation that failed on a library transport; a replaced `Promise.allSettled` could report a failed one as done. Tracked, not fixed here',
+      'await call',
+      'the call was started by `started`, which gave it its own constructor, so the await reads no slot',
     ],
-    ['await Promise.allSettled', 'fanOut above'],
-    ['await Promise.allSettled', 'settleBoth above'],
-    ['await this.fanOut', OWN_AWAIT],
-    ['await this.fanOut', OWN_AWAIT],
-    ['await this.fanOut', OWN_AWAIT],
-    ['await this.fanOut', OWN_AWAIT],
-    ['await this.settleBoth', OWN_AWAIT],
-    ['await this.settleBoth', OWN_AWAIT],
-    ['await this.settleBoth', OWN_AWAIT],
   ],
   'websocket/transports/websocket/realtime-io-adapter.ts': [
     ['.catch(', 'closes a server whose boot failed; the boot error is what is thrown'],
@@ -356,18 +330,6 @@ const EXEMPT: Record<string, readonly Site[]> = {
       'await (this.tracing',
       "the handshake inside its span: the outcome is read from the variable the handshake sets, never from the span's return",
     ],
-    ['await registering', "the library's own registration promise; it resolves with nothing"],
-    ['await this.handshake', OWN_AWAIT],
-    ['await this.takeHandshake', OWN_AWAIT],
-    [
-      'await this.transport.authenticate',
-      "the transport's own method, which reads the host through the helpers and checks what it returns",
-    ],
-    [
-      'await this.transport.authenticate',
-      "the transport's own method, which reads the host through the helpers and checks what it returns",
-    ],
-    ['await this.transport.unregisterSocket', OWN_AWAIT],
   ],
   'websocket/transports/websocket/websocket.transport.ts': [
     [
@@ -382,19 +344,6 @@ const EXEMPT: Record<string, readonly Site[]> = {
       'await socket.leave',
       'Socket.IO removes the socket from a room; the built-ins are checked after it and before the library records the leave',
     ],
-    ['await this.disconnect', OWN_AWAIT],
-    ['await this.evictBeyondLimit', OWN_AWAIT],
-    ['await this.joinRooms', OWN_AWAIT],
-    ['await this.joinSocket', OWN_AWAIT],
-    ['await this.joinSocket', OWN_AWAIT],
-    ['await this.joinSocket', OWN_AWAIT],
-    ['await this.joinSocket', OWN_AWAIT],
-    ['await this.joinSocket', OWN_AWAIT],
-    ['await this.runOnConnect', OWN_AWAIT],
-    ['await this.unregisterSocket', OWN_AWAIT],
-  ],
-  'server/services/realtime.service.ts': [
-    ['await this.transport.disconnect', "the library's own transport; no answer is read"],
   ],
   'server/factories/sse-controller.factory.ts': [
     [

@@ -13,6 +13,7 @@ import { RealtimeMetricsTally } from '../observability/realtime-metrics-tally'
 import { assertBuiltinsIntact } from '../utils/builtin-baseline'
 import { callHostMethod } from '../utils/read-host-key'
 import { refuseReservedRoom, requireRoomName } from '../utils/reserved-room'
+import { awaitable, shielded } from '../utils/within-deadline'
 
 /**
  * Transport-agnostic realtime API.
@@ -56,15 +57,19 @@ export class RealtimeService {
    * await realtime.emitToUser('u_abc', 'invoice.paid', { id: 'inv_123' })
    * ```
    */
-  async emitToUser(userId: string, event: string, data: unknown): Promise<void> {
-    assertBuiltinsIntact()
-    return this.transport.emitToUser(userId, event, data)
+  emitToUser(userId: string, event: string, data: unknown): Promise<void> {
+    return this.pinned(async () => {
+      assertBuiltinsIntact()
+      await awaitable(this.transport.emitToUser(userId, event, data))
+    })
   }
 
   /** Send to every connection in a tenant. */
-  async emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
-    assertBuiltinsIntact()
-    return this.transport.emitToTenant(tenantId, event, data)
+  emitToTenant(tenantId: string, event: string, data: unknown): Promise<void> {
+    return this.pinned(async () => {
+      assertBuiltinsIntact()
+      await awaitable(this.transport.emitToTenant(tenantId, event, data))
+    })
   }
 
   /**
@@ -74,16 +79,20 @@ export class RealtimeService {
    * @throws {Error} `REALTIME_AUTH_FAILED` when `roomId` is not a non-empty string: socket.io
    *   reads an array as several rooms.
    */
-  async emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
-    assertBuiltinsIntact()
-    requireRoomName('emitToRoom', roomId)
-    return this.transport.emitToRoom(roomId, event, data)
+  emitToRoom(roomId: string, event: string, data: unknown): Promise<void> {
+    return this.pinned(async () => {
+      assertBuiltinsIntact()
+      requireRoomName('emitToRoom', roomId)
+      await awaitable(this.transport.emitToRoom(roomId, event, data))
+    })
   }
 
   /** Send to every connected client. Use sparingly. */
-  async broadcast(event: string, data: unknown): Promise<void> {
-    assertBuiltinsIntact()
-    return this.transport.broadcast(event, data)
+  broadcast(event: string, data: unknown): Promise<void> {
+    return this.pinned(async () => {
+      assertBuiltinsIntact()
+      await awaitable(this.transport.broadcast(event, data))
+    })
   }
 
   /**
@@ -98,10 +107,12 @@ export class RealtimeService {
    * Acts on a connection this instance holds; for any other id it resolves and changes
    * nothing. A failure of the transport that holds the connection rejects the call.
    */
-  async joinRoom(connectionId: string, roomId: string): Promise<void> {
-    assertBuiltinsIntact()
-    refuseReservedRoom('joinRoom', roomId)
-    return this.transport.joinRoom(connectionId, roomId)
+  joinRoom(connectionId: string, roomId: string): Promise<void> {
+    return this.pinned(async () => {
+      assertBuiltinsIntact()
+      refuseReservedRoom('joinRoom', roomId)
+      await awaitable(this.transport.joinRoom(connectionId, roomId))
+    })
   }
 
   /**
@@ -111,10 +122,12 @@ export class RealtimeService {
    * Acts on a connection this instance holds; for any other id it resolves and changes
    * nothing. A failure of the transport that holds the connection rejects the call.
    */
-  async leaveRoom(connectionId: string, roomId: string): Promise<void> {
-    assertBuiltinsIntact()
-    refuseReservedRoom('leaveRoom', roomId)
-    return this.transport.leaveRoom(connectionId, roomId)
+  leaveRoom(connectionId: string, roomId: string): Promise<void> {
+    return this.pinned(async () => {
+      assertBuiltinsIntact()
+      refuseReservedRoom('leaveRoom', roomId)
+      await awaitable(this.transport.leaveRoom(connectionId, roomId))
+    })
   }
 
   /**
@@ -127,10 +140,21 @@ export class RealtimeService {
    *   `REALTIME_TRANSPORT_UNAVAILABLE` when the transport that holds the connection fails.
    *   The connection may still be connected: retry.
    */
-  async disconnect(connectionId: string, reason?: string): Promise<void> {
-    assertBuiltinsIntact()
-    await this.transport.disconnect(connectionId, reason)
-    // Counted here, once, because under `'both'` the composite asks each transport to close the id.
-    this.tally?.evicted('revoked')
+  disconnect(connectionId: string, reason?: string): Promise<void> {
+    return this.pinned(async () => {
+      assertBuiltinsIntact()
+      await awaitable(this.transport.disconnect(connectionId, reason))
+      // Counted here, once, because under `'both'` the composite asks each transport to close the id.
+      this.tally?.evicted('revoked')
+    })
+  }
+
+  /**
+   * The promise a public method hands its caller, given its own `constructor` before anything else can read it: the
+   * caller's `await` then reads neither the shared slot nor a `then`, and a revocation or a room change cannot be reported
+   * as done by a host that replaced either while the transport ran.
+   */
+  private pinned(work: () => Promise<void>): Promise<void> {
+    return shielded(work())
   }
 }

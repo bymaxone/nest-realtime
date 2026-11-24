@@ -34,6 +34,9 @@ if (
   throw new TypeError('The Promise constructor was replaced before this module loaded.')
 }
 
+// Taken once, as the engine's own brand check: read off `types` at each call, a host that replaced it after the load would
+// decide which results are promises, and a promise it declared otherwise would be awaited without its own constructor.
+const isPromise = types.isPromise
 const define = Object.defineProperty
 const getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor
 
@@ -78,7 +81,7 @@ export function shielded<T>(promise: T): T {
 export function awaitable<P extends PromiseLike<unknown>>(result: P): P
 export function awaitable<T>(result: PromiseLike<T> | T): PromiseLike<T> | T
 export function awaitable(result: unknown): unknown {
-  if (!types.isPromise(result)) return result
+  if (!isPromise(result)) return result
   try {
     return shielded(result)
   } catch (error) {
@@ -86,6 +89,30 @@ export function awaitable(result: unknown): unknown {
     void absorbed(result)
     throw error
   }
+}
+
+/**
+ * Starts one task and hands back its outcome as a promise that is safe to await later, however long the caller waits on
+ * another: a rejection is read here, so it is never unhandled meanwhile, and the promise carries its own `constructor`. A
+ * task that throws before it returns a promise, or returns one that cannot be pinned, comes back as a rejected promise
+ * carrying that error, so the caller reads every task the same way.
+ *
+ * @param task - Starts the call.
+ */
+export function started<T>(task: () => PromiseLike<T> | T): PromiseLike<T> | T {
+  let call: PromiseLike<T> | T
+  try {
+    call = awaitable(task())
+  } catch (error) {
+    call = shielded(failed<T>(error))
+  }
+  if (isPromise(call)) void absorbed(call)
+  return call
+}
+
+/** A native promise that rejects with `error`, made without a Promise static. */
+async function failed<T>(error: unknown): Promise<T> {
+  throw error
 }
 
 /** `awaitable`, giving back the caller's place when it refuses: the promise that place was taken for will not be tracked. */
@@ -121,7 +148,7 @@ export async function absorbed(call: PromiseLike<unknown> | undefined): Promise<
   try {
     // Pinned first: an await of a native promise reads its `constructor`, and a species that throws there fails the await
     // before it attaches a handler, leaving the rejection unhandled. One that cannot be pinned is awaited as it is.
-    if (types.isPromise(call)) {
+    if (isPromise(call)) {
       try {
         shielded(call)
       } catch {
@@ -198,7 +225,7 @@ export function withinDeadline<T>(
   // Before anything awaits it: a host's native promise carries no constructor of its own, and the first await of it would
   // read the shared slot ahead of the check below. A result that is not a promise is not awaited until after that check.
   const call = awaitableOrGiveBack(work, onSettled)
-  if (types.isPromise(call)) void absorbed(call)
+  if (isPromise(call)) void absorbed(call)
   let timer: NodeJS.Timeout | undefined
   let finished = false
   let orphaned = false
@@ -254,10 +281,10 @@ export function firstOf<A, B>(
   try {
     calls = [awaitable(first), awaitable(second)]
   } catch (error) {
-    for (const call of [first, second]) if (types.isPromise(call)) void absorbed(call)
+    for (const call of [first, second]) if (isPromise(call)) void absorbed(call)
     throw error
   }
-  for (const call of calls) if (types.isPromise(call)) void absorbed(call)
+  for (const call of calls) if (isPromise(call)) void absorbed(call)
   const promise = new NativePromise<Decided<A | B>>((resolve, reject) => {
     const follow = async (call: PromiseLike<A | B>): Promise<void> => {
       try {

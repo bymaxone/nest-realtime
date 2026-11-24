@@ -208,7 +208,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     this.handlers.add(handler)
     let sub: Redis
     try {
-      sub = await this.ensureSubscriber()
+      sub = await shielded(this.ensureSubscriber())
     } catch (err) {
       // Atomically undo the handler registration and clear the failed init promise
       // so the next subscribe() retries with a fresh client.
@@ -217,7 +217,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       throw err
     }
     // Only now: the subscriber is attached, so it recovers from a reconnect while this waits.
-    await this.publisherSettled()
+    await shielded(this.publisherSettled())
     return async () => {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {
