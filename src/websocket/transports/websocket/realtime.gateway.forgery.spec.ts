@@ -29,10 +29,14 @@ function makeSocket() {
 }
 
 async function setup() {
-  const release = jest.fn()
+  const releases: jest.Mock[] = []
   const transport = {
     setServer: jest.fn(),
-    admit: () => ({ release, renew: jest.fn() }),
+    admit: () => {
+      const release = jest.fn()
+      releases.push(release)
+      return { release, renew: jest.fn() }
+    },
     authenticate: jest.fn().mockResolvedValue({ userId: 'alice', tenantId: 't-1' }),
     registerSocket: jest.fn().mockResolvedValue(undefined),
     shuttingDown: false,
@@ -48,7 +52,7 @@ async function setup() {
   const server = { use: jest.fn() }
   gateway.afterInit(server as never)
   const middleware = server.use.mock.calls[0]?.[0] as (socket: unknown, next: Next) => Promise<void>
-  return { gateway, middleware, release, transport }
+  return { gateway, middleware, releases, transport }
 }
 
 describe('RealtimeGateway: what the handshake hands over is checked last', () => {
@@ -64,9 +68,10 @@ describe('RealtimeGateway: what the handshake hands over is checked last', () =>
 
   // Scenario: a socket the middleware authenticated, and a `then` that erases itself is planted on Object.prototype by
   // namespace middleware that ran after ours, before the connection handler takes the identity. Expected: the socket
-  // is refused and disconnected, and nothing is registered under the forged identity.
+  // is refused and disconnected, nothing is registered under the forged identity, and the place the middleware took is
+  // given back once.
   it('refuses a then planted on objects between the middleware and the connection handler', async () => {
-    const { gateway, middleware, transport } = await setup()
+    const { gateway, middleware, releases, transport } = await setup()
     const socket = makeSocket()
     await middleware(socket, jest.fn())
     plantSelfErasingThen(Object.prototype, FORGED)
@@ -76,5 +81,6 @@ describe('RealtimeGateway: what the handshake hands over is checked last', () =>
 
     expect(transport.registerSocket).not.toHaveBeenCalled()
     expect(socket.disconnect).toHaveBeenCalledWith(true)
+    expect(releases[0]).toHaveBeenCalledTimes(1)
   })
 })

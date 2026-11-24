@@ -191,9 +191,9 @@ function readBaseline():
   try {
     const iterators = iteratorSlots()
     const listed = NAMED.concat(iterators, ABSENT)
-    const recorded = listed.map((slot, i) =>
-      i < NAMED.length + iterators.length ? held(slot[0], slot[1]) : undefined,
-    )
+    // An absent slot is recorded too: whether one was there at load is what `kinds` holds, and a value of a slot that was
+    // not meant to be there is never compared on its own.
+    const recorded = listed.map((slot) => held(slot[0], slot[1]))
     const kinds = listed.map((slot, i) =>
       i < NAMED.length + iterators.length ? kindOf(slot[0], slot[1]) : 0,
     )
@@ -281,7 +281,7 @@ const CHAIN_DEPTH_CAP = 64
  */
 export function returnable<T>(value: T): T {
   assertBuiltinsIntact()
-  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return value
+  if (typeof value !== 'object' && typeof value !== 'function') return value
   let depth = 0
   for (let node: unknown = value; node !== null; node = getProto(node as object)) {
     depth += 1
@@ -315,12 +315,6 @@ export function isBuiltinsRefusal(error: unknown): boolean {
  * @throws Error carrying `REALTIME_TRANSPORT_UNAVAILABLE` when the value is a Proxy.
  */
 export function unproxied<T>(value: T): T {
-  if (
-    (typeof value === 'object' || typeof value === 'function') &&
-    value !== null &&
-    isProxy(value)
-  ) {
-    throw refusal('a host call returned a Proxy')
-  }
+  if (isProxy(value)) throw refusal('a host call returned a Proxy')
   return value
 }

@@ -27,6 +27,8 @@ describe('the mark on the refusal', () => {
       isBuiltinsRefusal(Object.assign(new Error('x'), { code: 'REALTIME_TRANSPORT_UNAVAILABLE' })),
     ).toBe(false)
     expect(isBuiltinsRefusal(null)).toBe(false)
+    expect(isBuiltinsRefusal(undefined)).toBe(false)
+    expect(isBuiltinsRefusal(() => 1)).toBe(false)
     expect(isBuiltinsRefusal('REALTIME_TRANSPORT_UNAVAILABLE')).toBe(false)
   })
 })
