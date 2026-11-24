@@ -51,6 +51,7 @@ import { AuthenticationUnavailableError } from '../../services/authentication-ga
 import { ConnectionLimitError } from '../../services/connection-admission.service'
 import type { AdmissionTicket } from '../../services/connection-admission.service'
 import { assertBuiltinsIntact } from '../../utils/builtin-baseline'
+import { absorbed } from '../../utils/within-deadline'
 import { runHook } from '../../utils/run-hook'
 import { SseTransport } from './sse.transport'
 import { probeOf } from './outbound-backlog'
@@ -594,16 +595,23 @@ export class SseSubscriptionHandler {
     // The registry holds the connection from the call on, so the place would be counted twice for as
     // long as the rest of the registration takes.
     p.ticket.release()
-    registering
-      .then(() => this.onRegistered(p, subscriber))
-      .catch((err: unknown) => {
+    // A refusal below leaves `registering` unread; its rejection is absorbed here, whatever happens to the wait.
+    void absorbed(registering)
+    void (async () => {
+      try {
+        // Immediately before the await whose end decides whether the connection is completed.
+        assertBuiltinsIntact()
+        await registering
+        this.onRegistered(p, subscriber)
+      } catch (err: unknown) {
         this.fireHook(() =>
           callHostMethod(this.hooks, 'onError', [
             { connectionId, error: err as Error, transport: 'sse' },
           ]),
         )
         subscriber.error(this.serverError(err, 'SSE registration failed'))
-      })
+      }
+    })()
   }
 
   /**

@@ -291,13 +291,12 @@ describe('RealtimeIoAdapter guards', () => {
     }
 
     for (let n = 0; n < BUILTIN_SLOTS.length; n += 1) {
-      expect([
-        String((BUILTIN_SLOTS[n] as (typeof BUILTIN_SLOTS)[number])[1]),
-        bodies[n],
-        passed[n],
-      ]).toStrictEqual([
-        String((BUILTIN_SLOTS[n] as (typeof BUILTIN_SLOTS)[number])[1]),
-        '{"code":"REALTIME_TRANSPORT_UNAVAILABLE","count":1}',
+      const slot = BUILTIN_SLOTS[n] as (typeof BUILTIN_SLOTS)[number]
+      // A `then` on `Object.prototype` is a planted key as well as a replaced slot, and the guard counts both.
+      const count = slot[0] === Object.prototype && slot[1] === 'then' ? 2 : 1
+      expect([String(slot[1]), bodies[n], passed[n]]).toStrictEqual([
+        String(slot[1]),
+        `{"code":"REALTIME_TRANSPORT_UNAVAILABLE","count":${count}}`,
         false,
       ])
     }

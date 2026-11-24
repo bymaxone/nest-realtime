@@ -16,7 +16,8 @@ import type {
 } from '../interfaces/connection-authenticator.interface'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { logEvent } from '../utils/log-event'
-import { withinDeadline } from '../utils/within-deadline'
+import { assertBuiltinsIntact } from '../utils/builtin-baseline'
+import { unboxed, withinDeadline } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 /** How long a window of refusals is summarised in one log line. */
@@ -87,6 +88,9 @@ export class AuthenticationGate {
    *   time. Whatever the authenticator itself throws is thrown as it is.
    */
   async authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
+    // Before the authenticator is called: its own promise resolves with the identity it answers, and a `then` planted
+    // on the root prototypes would answer for it.
+    assertBuiltinsIntact()
     if (this.pending >= this.maxPending) {
       this.refuse('saturated')
       throw new AuthenticationUnavailableError('saturated')
@@ -96,7 +100,7 @@ export class AuthenticationGate {
     // `await`, not a returned promise: returning one makes the engine call its `then`, which a host can replace.
     const call = (async () =>
       await this.authenticator.authenticate(context, { signal: controller.signal }))()
-    return await withinDeadline(call, this.timeoutMs, {
+    const decided = await withinDeadline(call, this.timeoutMs, {
       // Counted before the wait is rejected, and the abort is dispatched after it, so an answer given from an abort
       // listener cannot win.
       timeoutError: () => {
@@ -108,6 +112,7 @@ export class AuthenticationGate {
         this.pending -= 1
       },
     })
+    return unboxed(decided)
   }
 
   /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */

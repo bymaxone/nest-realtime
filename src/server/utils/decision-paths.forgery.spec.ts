@@ -10,7 +10,12 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { FORGED_BUILTINS, withPromiseForged } from '../../../test/support/forged-promise'
+import {
+  FORGED_BUILTINS,
+  withConstructorReplacedAndRestored,
+  withPromiseForged,
+  withSelfErasingThen,
+} from '../../../test/support/forged-promise'
 import {
   build,
   flush,
@@ -210,28 +215,217 @@ describe('with Promise.prototype.constructor replaced', () => {
   })
 })
 
+const REFUSED = { code: 'REALTIME_TRANSPORT_UNAVAILABLE' }
+const MALLORY = { userId: 'mallory', roles: ['admin'] }
+
+describe('with the constructor replaced and put back by a forged then', () => {
+  // Scenario: the answer is read after the await, when the forged `then` has put the constructor back. Expected: the
+  // replacement is seen before the await, so the call is refused and the forged answer is never read.
+  it('the handshake gate refuses, and does not admit the forged identity', async () => {
+    const gate = new AuthenticationGate({} as never, { authenticate: async () => null } as never)
+    let outcome: unknown
+    let failure: unknown
+
+    await withConstructorReplacedAndRestored(ATTACKER, async () => {
+      try {
+        outcome = await gate.authenticate(CONTEXT)
+      } catch (error) {
+        failure = error
+      }
+    })
+
+    expect(outcome).toBeUndefined()
+    expect(failure).toMatchObject(REFUSED)
+  })
+
+  it('a connection whose revalidate answered false is still disconnected', async () => {
+    const realtime = mkRealtime()
+    const svc = build(
+      mkConnections([mkRecord()]),
+      realtime,
+      mkAuth(jest.fn(async () => false)),
+      mkOptions({ intervalSeconds: 60 }),
+    )
+
+    await withConstructorReplacedAndRestored(true, async () => {
+      await svc.runCycle()
+      await flush()
+    })
+
+    expect(realtime.disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it('a replay is refused, and carries nothing the store did not return', async () => {
+    const queue = new OfflineQueueDeliveryService(
+      { retrieveSince: async () => [] } as never,
+      undefined,
+      { authenticateTimeoutMs: 1_000 } as never,
+    )
+    let events: unknown
+    let failure: unknown
+
+    await withConstructorReplacedAndRestored(INJECTED, async () => {
+      try {
+        events = await queue.retrieve('u1', '0', new Set())
+      } catch (error) {
+        failure = error
+      }
+    })
+
+    expect(events).toBeUndefined()
+    expect(failure).toBeDefined()
+  })
+})
+
+describe('with a then that erases itself, planted on a root prototype before the call', () => {
+  // Scenario: the first promise resolved with an object is answered by the planted `then`. Expected: refused at entry,
+  // before anything is resolved, and the planted answer is never used.
+  it.each([
+    ['Object.prototype', Object.prototype],
+    ['Array.prototype', Array.prototype],
+  ])(
+    'the handshake gate refuses, and does not admit the identity planted on %s',
+    async (_name, root) => {
+      const gate = new AuthenticationGate(
+        {} as never,
+        { authenticate: async () => ({ userId: 'alice' }) } as never,
+      )
+      let outcome: unknown
+      let failure: unknown
+
+      await withSelfErasingThen(root, MALLORY, async () => {
+        try {
+          outcome = await gate.authenticate(CONTEXT)
+        } catch (error) {
+          failure = error
+        }
+      })
+
+      expect(outcome).toBeUndefined()
+      expect(failure).toMatchObject(REFUSED)
+    },
+  )
+
+  it('a connection whose revalidate answered false is still disconnected', async () => {
+    const realtime = mkRealtime()
+    const svc = build(
+      mkConnections([mkRecord()]),
+      realtime,
+      mkAuth(jest.fn(async () => false)),
+      mkOptions({ intervalSeconds: 60 }),
+    )
+
+    await withSelfErasingThen(Object.prototype, true, async () => {
+      await svc.runCycle()
+      await flush()
+    })
+
+    expect(realtime.disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['Object.prototype', Object.prototype],
+    ['Array.prototype', Array.prototype],
+  ])('a replay is refused, and carries no event planted on %s', async (_name, root) => {
+    const queue = new OfflineQueueDeliveryService(
+      { retrieveSince: async () => [{ id: 'e1', event: 'x', data: {}, createdAt: 0 }] } as never,
+      undefined,
+      { authenticateTimeoutMs: 1_000 } as never,
+    )
+    let events: unknown
+    let failure: unknown
+
+    await withSelfErasingThen(root, INJECTED, async () => {
+      try {
+        events = await queue.retrieve('u1', '0', new Set())
+      } catch (error) {
+        failure = error
+      }
+    })
+
+    expect(events).toBeUndefined()
+    expect(failure).toBeDefined()
+  })
+})
+
 describe('the files whose answer is a decision', () => {
   const root = join(__dirname, '..')
-  const bare = (file: string): string =>
-    readFileSync(join(root, file), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\/\/[^\n]*/g, '')
-  const FOUND = /Promise\.(race|all|allSettled|any|resolve|reject)\b|\.then\(/g
+  const bare = (source: string): string =>
+    source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  // A Promise static by dot or by bracket, a destructured one, `then`, `catch` and `finally` called on something, and
+  // `then` called through `call`, `apply` or `bind`. Whitespace inside a match is not part of it.
+  const FOUND =
+    /\bPromise\s*(?:\.\s*\w+|\[\s*['"`]\w+['"`]\s*\])|\{[^}]*\}\s*=\s*Promise\b|\.\s*(?:then|catch|finally)\s*\(|\bthen\s*\.\s*(?:call|apply|bind)|\[\s*['"`](?:then|catch|finally)['"`]\s*\]/g
+  const matchesIn = (source: string): string[] =>
+    (bare(source).match(FOUND) ?? []).map((found) => found.replace(/\s+/g, '')).sort()
 
-  // Files whose awaited answer decides admission, a revocation, a replay or a subscription. A Promise static or a `then`
-  // call in one is a place where a replaced built-in can put the answer; `withinDeadline` is the only wait they use.
-  // Scenario: each file is read with its comments taken out. Expected: it has no match, bar the exempt ones below, each
-  // with the reason nobody reads its answer.
-  const EXEMPT: Record<string, readonly string[]> = {
-    // The cycle's `Promise.all` only waits for every check to finish, and the `then` logs a hook failure: neither is read.
-    'services/reauthentication.service.ts': ['Promise.all', '.then('],
-    // Boot-time promise of the host's own factory; the options read from it are validated, after it, against the baseline.
-    'config/guard-host-reads.ts': ['Promise.resolve'],
-    // The publish deadline's outcome is not read: a late or lost publish is counted by its own path, not decided by it.
-    'pubsub/redis-realtime-pubsub.ts': ['Promise.race', 'Promise.resolve', '.then('],
-    // Neither wait's outcome is read: one closes a client on shutdown, the other runs a hook whose failure is logged.
-    'utils/quit-within.ts': ['Promise.race', '.then('],
-    'utils/run-hook.ts': ['Promise.race'],
+  // Scenario: forms a scan that matched only `Promise.race` and `.then(` would miss. Expected: each is found.
+  it.each([
+    ["Promise['race'](x)", ["Promise['race']"]],
+    ['const { race } = Promise', ['{race}=Promise']],
+    ['Promise.try(f)', ['Promise.try']],
+    ['Promise.withResolvers()', ['Promise.withResolvers']],
+    ['p.catch(f)', ['.catch(']],
+    ['p.finally(f)', ['.finally(']],
+    ['then.call(p, f)', ['then.call']],
+    ['p.then (f)', ['.then(']],
+    ['p["then"]', ['["then"]']],
+    ['// Promise.race(x) /* p.then(f) */', []],
+  ])('finds %s', (source, expected) => {
+    expect(matchesIn(source)).toEqual(expected)
+  })
+
+  // Files whose awaited answer decides admission, a revocation, a replay or a subscription. A match in one is a place
+  // where a replaced built-in can put the answer; `withinDeadline` and `firstOf` are the waits they use. Each exempt match
+  // is one site, listed with the reason nobody decides on it; a new match, or one more of the same, fails here.
+  // Scenario: each file is read with its comments taken out. Expected: its matches are exactly the exempt ones.
+  const EXEMPT: Record<string, readonly (readonly [match: string, reason: string])[]> = {
+    'services/reauthentication.service.ts': [
+      ['.catch(', 'the interval tick logs a cycle that threw; no answer is read'],
+      [
+        'Promise.all',
+        'waits for every check to finish; the checks decide, and each reads its own answer',
+      ],
+      ['.then(', 'logs a hook failure; the hook runs after the decision'],
+      ['.catch(', 'reports a failure of the failure event; the disconnect is not waiting for it'],
+    ],
+    // Boot time only, and older than the wait helper. `Promise.resolve` and `then` are not in the baseline, so this read is
+    // not covered by the guard: the options it returns are validated after it, against the baseline.
+    'config/guard-host-reads.ts': [
+      ['Promise.resolve', 'boot-time read of a host factory, outside the guard'],
+      ['then.call', 'boot-time read of a host factory, outside the guard'],
+    ],
+    'pubsub/redis-realtime-pubsub.ts': [
+      [
+        'Promise.race',
+        'the publish deadline: a late or lost publish is counted by its own path, not decided by it',
+      ],
+      ['.catch(', 'a connect started in the background; its failure is retried, not read'],
+      ['Promise.resolve', 'returns at once when the connection is already up; carries no value'],
+      ['.catch(', 'a refusal after boot marks the bus unsubscribed and logs; it admits nothing'],
+      [
+        '.then(',
+        'a confirmation after boot marks the bus up or refused: availability state, not identity or admission',
+      ],
+    ],
+    'utils/quit-within.ts': [
+      ['.then(', 'closes a client on shutdown; the answer is not read'],
+      ['Promise.race', 'closes a client on shutdown; the answer is not read'],
+    ],
+    'utils/run-hook.ts': [
+      ['Promise.race', 'runs a hook whose failure is logged, never decided on'],
+    ],
+    'transports/sse/sse-subscription.handler.ts': [
+      ['.then(', 'logs a failed lifecycle hook; the hook runs after the decision'],
+    ],
+    'transports/sse/sse.transport.ts': [
+      ['Promise.all', 'shutdown: waits for every connection to be cut'],
+      [
+        'Promise.all',
+        'emitToUser: the failures it collects only choose between throwing to the emitter and logging; no identity, admission or replay is read. Tracked, not fixed here',
+      ],
+      ['.catch(', 'logs a disconnect that failed; the connection is already being closed'],
+    ],
   }
   const FILES = [
     'services/authentication-gate.service.ts',
@@ -242,11 +436,13 @@ describe('the files whose answer is a decision', () => {
     'utils/quit-within.ts',
     'utils/run-hook.ts',
     'utils/within-deadline.ts',
+    'transports/sse/sse-subscription.handler.ts',
+    'transports/sse/sse.transport.ts',
   ]
 
-  it.each(FILES)('%s waits only through withinDeadline, bar its exempt sites', (file) => {
-    const found = [...new Set(bare(file).match(FOUND) ?? [])].sort()
+  it.each(FILES)('%s waits only through the helpers, bar its exempt sites', (file) => {
+    const found = matchesIn(readFileSync(join(root, file), 'utf8'))
 
-    expect(found).toEqual([...(EXEMPT[file] ?? [])].sort())
+    expect(found).toEqual((EXEMPT[file] ?? []).map((site) => site[0]).sort())
   })
 })

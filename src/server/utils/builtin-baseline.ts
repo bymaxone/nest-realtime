@@ -114,7 +114,7 @@ const NAMED: readonly BuiltinSlot[] = [
   [Date.prototype, Symbol.toPrimitive],
   // `await` of a native promise asks it for its constructor, and a replaced one sends the wait through `then` instead.
   // `then` and the statics are not listed: an APM wraps `then` by design, and nothing a decision reads calls them.
-  [Promise.prototype, 'constructor'],
+  [Object.getPrototypeOf((async () => undefined)()) as object, 'constructor'],
   [Map.prototype, 'delete'],
   [Map.prototype, 'entries'],
   [Map.prototype, 'forEach'],
@@ -149,6 +149,17 @@ const NAMED: readonly BuiltinSlot[] = [
   [globalThis, 'Function'],
 ]
 
+/**
+ * Slots that must hold nothing: a `then` on the root prototypes is read by every promise resolved with an object that has
+ * none of its own, and a self-erasing one answers once and leaves no trace. Unlike the slots above these are not compared
+ * with what the library found at load: a `then` that was already there then is refused too.
+ */
+const ABSENT: readonly BuiltinSlot[] = [
+  [Object.prototype, 'then'],
+  [Array.prototype, 'then'],
+  [Function.prototype, 'then'],
+]
+
 /** The prototypes behind `for...of`, spread and destructuring, which no name in the source calls. */
 function iteratorSlots(): BuiltinSlot[] {
   const arrayIterator = Object.getPrototypeOf([][Symbol.iterator]()) as object
@@ -172,13 +183,17 @@ function readBaseline():
   { listed: BuiltinSlot[]; recorded: unknown[]; kinds: number[] } | undefined {
   try {
     const iterators = iteratorSlots()
-    const listed = NAMED.concat(iterators)
-    const recorded = listed.map((slot) => held(slot[0], slot[1]))
-    const kinds = listed.map((slot) => kindOf(slot[0], slot[1]))
+    const listed = NAMED.concat(iterators, ABSENT)
+    const recorded = listed.map((slot, i) =>
+      i < NAMED.length + iterators.length ? held(slot[0], slot[1]) : undefined,
+    )
+    const kinds = listed.map((slot, i) =>
+      i < NAMED.length + iterators.length ? kindOf(slot[0], slot[1]) : 0,
+    )
     // `concat` and `map` are the process's own, and a process polluted before the import can make them answer what it likes:
     // a list or a record of the wrong size is not a baseline.
     if (
-      listed.length !== NAMED.length + iterators.length ||
+      listed.length !== NAMED.length + iterators.length + ABSENT.length ||
       recorded.length !== listed.length ||
       kinds.length !== listed.length
     ) {

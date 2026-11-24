@@ -29,7 +29,7 @@ import { assertBuiltinsIntact } from '../utils/builtin-baseline'
 import { logEvent } from '../utils/log-event'
 import { Semaphore } from '../utils/semaphore'
 import { runHook } from '../utils/run-hook'
-import { withinDeadline } from '../utils/within-deadline'
+import { unboxed, withinDeadline } from '../utils/within-deadline'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
 import { RealtimeService } from './realtime.service'
@@ -221,9 +221,6 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
       const rawResult = await this.bounded('revalidate', (signal) =>
         revalidate(conn.connectionId, originalAuth, { signal }),
       )
-      // The answer came through `await`, which asks `Promise.prototype.constructor`: a replaced one is refused, as
-      // a replaced built-in is anywhere a decision is made.
-      assertBuiltinsIntact()
       if (rawResult === true) {
         conn.revalidatedAt = now
         return
@@ -251,15 +248,20 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
   private async bounded<T>(
     what: string,
     work: (signal: AbortSignal) => Promise<T> | undefined,
+    outcomeUnread = false,
   ): Promise<T | undefined> {
     const controller = new AbortController()
+    // Before the call: its own promise resolves with what it answers, and a planted `then` would answer for it.
+    if (!outcomeUnread) assertBuiltinsIntact()
     // The wait is rejected before the abort is dispatched: a call that answers from its abort listener
     // settles after the timeout, so its answer cannot win.
-    return await withinDeadline(work(controller.signal), this.policy.revalidateTimeoutMs, {
+    const decided = await withinDeadline(work(controller.signal), this.policy.revalidateTimeoutMs, {
       timeoutError: () =>
         new Error(`${what} did not settle within ${this.policy.revalidateTimeoutMs} ms`),
       onExpire: () => controller.abort(),
+      outcomeUnread,
     })
+    return outcomeUnread ? undefined : unboxed(decided)
   }
 
   /**
@@ -269,7 +271,8 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    */
   private async revoke(conn: ConnectionRecord): Promise<void> {
     try {
-      await this.bounded('revocation', () => this.handleFailure(conn))
+      // Nobody reads what the revocation answers, and a refusal here would leave the connection in place.
+      await this.bounded('revocation', () => this.handleFailure(conn), true)
     } catch (err) {
       logEvent(
         this.logger,

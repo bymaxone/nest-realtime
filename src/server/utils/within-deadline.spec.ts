@@ -2,9 +2,33 @@
  * @fileoverview The wait under a deadline settles like the call, or on the deadline, and tells the caller when the call is done.
  * @layer utils
  */
-import { firstOf, withinDeadline } from './within-deadline'
+import { absorbed, firstOf, unboxed, withinDeadline } from './within-deadline'
 
 const never = (): Promise<never> => new Promise<never>(() => undefined)
+
+/**
+ * Runs `run` with a `then` that answers for every object planted on `target`, the way a polluting host would, and takes it
+ * away before returning: the test runner reads `then` too, so nothing is awaited while it is there.
+ */
+function whilePlanted<T>(target: object, run: () => T): T {
+  Object.defineProperty(target, 'then', {
+    value: () => undefined,
+    configurable: true,
+    writable: true,
+  })
+  try {
+    return run()
+  } finally {
+    Reflect.deleteProperty(target, 'then')
+  }
+}
+
+const ROOTS: readonly [string, object][] = [
+  ['Object.prototype', Object.prototype],
+  ['Array.prototype', Array.prototype],
+  ['Function.prototype', Function.prototype],
+]
+const REFUSED = { code: 'REALTIME_TRANSPORT_UNAVAILABLE' }
 
 describe('withinDeadline', () => {
   beforeEach(() => jest.useFakeTimers())
@@ -13,8 +37,8 @@ describe('withinDeadline', () => {
   it('settles with what the call settled with, and with a plain value', async () => {
     const options = { timeoutError: () => new Error('late') }
 
-    expect(await withinDeadline(Promise.resolve(7), 50, options)).toBe(7)
-    expect(await withinDeadline('plain', 50, options)).toBe('plain')
+    expect((await withinDeadline(Promise.resolve(7), 50, options)).v).toBe(7)
+    expect((await withinDeadline('plain', 50, options)).v).toBe('plain')
   })
 
   it('rejects with what the call rejected with, and reports that it settled', async () => {
@@ -106,6 +130,124 @@ describe('withinDeadline', () => {
     expect(unhandled).not.toHaveBeenCalled()
   })
 
+  // Scenario: the wait settles. Expected: the value sits in a box that inherits nothing, so a `then` planted on the root
+  // prototypes after the wait cannot answer for it.
+  it('settles with a box that has no prototype', async () => {
+    const box = await withinDeadline({ userId: 'alice' }, 50, {
+      timeoutError: () => new Error('late'),
+    })
+
+    expect(Object.getPrototypeOf(box)).toBeNull()
+    expect(unboxed(box)).toStrictEqual({ userId: 'alice' })
+  })
+
+  // Scenario: a `then` is on a root prototype before the call. Expected: refused at entry, and the call's place is released.
+  it.each(ROOTS)('refuses a then planted on %s before the call', async (_name, root) => {
+    const onSettled = jest.fn()
+    const waiting = whilePlanted(root, () =>
+      withinDeadline(Promise.resolve(1), 50, { timeoutError: () => new Error('late'), onSettled }),
+    )
+
+    await expect(waiting).rejects.toMatchObject(REFUSED)
+    expect(onSettled).toHaveBeenCalledTimes(1)
+  })
+
+  // Scenario: unboxing after a `then` was planted. Expected: refused.
+  it('refuses to unbox while a then is planted', async () => {
+    const box = await withinDeadline(1, 50, { timeoutError: () => new Error('late') })
+
+    const outcome = whilePlanted(Object.prototype, () => {
+      try {
+        return unboxed(box)
+      } catch (error) {
+        return error
+      }
+    })
+
+    expect(outcome).toMatchObject(REFUSED)
+  })
+
+  // Scenario: arming the timer, which a host can replace, plants a `then` after the wait started. Expected: the call is
+  // refused before the caller awaits, the place is still released when the call settles, and nothing is left unhandled.
+  it('refuses when the timer plants a then, and still releases the call', async () => {
+    let settle: (value: string) => void = () => undefined
+    const call = new Promise<string>((resolve) => {
+      settle = resolve
+    })
+    const onSettled = jest.fn()
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    const timers = jest.spyOn(global, 'setTimeout').mockImplementation(((...args: unknown[]) => {
+      Object.defineProperty(Object.prototype, 'then', {
+        value: () => undefined,
+        configurable: true,
+      })
+      return { unref: () => undefined, args }
+    }) as unknown as typeof setTimeout)
+    let thrown: unknown
+    try {
+      withinDeadline(call, 50, { timeoutError: () => new Error('late'), onSettled })
+    } catch (error) {
+      thrown = error
+    } finally {
+      timers.mockRestore()
+      Reflect.deleteProperty(Object.prototype, 'then')
+    }
+    expect(thrown).toMatchObject(REFUSED)
+    expect(onSettled).not.toHaveBeenCalled()
+
+    settle('later')
+    jest.useRealTimers()
+    await new Promise((resolve) => setImmediate(resolve))
+    process.off('unhandledRejection', unhandled)
+
+    expect(onSettled).toHaveBeenCalledTimes(1)
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+
+  // Scenario: arming the timer throws. Expected: the wait rejects with that error, and the call's place is still released.
+  it('rejects when the timer cannot be armed, and still releases the call', async () => {
+    const onSettled = jest.fn()
+    const timers = jest.spyOn(global, 'setTimeout').mockImplementation(() => {
+      throw new Error('no timer')
+    })
+    try {
+      await expect(
+        withinDeadline(Promise.resolve(1), 50, {
+          timeoutError: () => new Error('late'),
+          onSettled,
+        }),
+      ).rejects.toThrow('no timer')
+    } finally {
+      timers.mockRestore()
+    }
+    await Promise.resolve()
+
+    expect(onSettled).toHaveBeenCalledTimes(1)
+  })
+
+  // Scenario: nobody reads the outcome (a revocation). Expected: a planted then does not stop the wait.
+  it('does not refuse a wait whose outcome is unread', async () => {
+    const waiting = whilePlanted(Object.prototype, () =>
+      withinDeadline(1, 50, { timeoutError: () => new Error('late'), outcomeUnread: true }),
+    )
+
+    expect((await waiting).v).toBe(1)
+  })
+
+  // Scenario: a rejection that nobody awaits. Expected: absorbed, nothing unhandled.
+  it('absorbs a rejection and an absent call', async () => {
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    await absorbed(Promise.reject(new Error('no')))
+    await absorbed(undefined)
+    jest.useRealTimers()
+    await new Promise((resolve) => setImmediate(resolve))
+    process.off('unhandledRejection', unhandled)
+
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+
   it('does not keep the process alive for the deadline', async () => {
     const unref = jest.spyOn(global, 'setTimeout')
 
@@ -122,7 +264,7 @@ describe('firstOf', () => {
     ['the first', Promise.resolve('a'), never(), 'a'],
     ['the second', never(), Promise.resolve('b'), 'b'],
   ])('settles with %s to settle', async (_label, first, second, expected) => {
-    expect(await firstOf(first, second)).toBe(expected)
+    expect((await firstOf(first, second)).v).toBe(expected)
   })
 
   it('rejects with the rejection that came first', async () => {
@@ -134,11 +276,26 @@ describe('firstOf', () => {
   it('does not leave an unhandled rejection from the one that lost', async () => {
     const unhandled = jest.fn()
     process.on('unhandledRejection', unhandled)
-    const winner = await firstOf(Promise.resolve('a'), Promise.reject(new Error('lost')))
+    const winner = (await firstOf(Promise.resolve('a'), Promise.reject(new Error('lost')))).v
     await new Promise((resolve) => setImmediate(resolve))
     process.off('unhandledRejection', unhandled)
 
     expect(winner).toBe('a')
     expect(unhandled).not.toHaveBeenCalled()
   })
+  it.each(ROOTS)(
+    'refuses a then planted on %s, and leaves no rejection unhandled',
+    async (_name, root) => {
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+      const waiting = whilePlanted(root, () =>
+        firstOf(Promise.resolve('a'), Promise.reject(new Error('lost'))),
+      )
+      await expect(waiting).rejects.toMatchObject(REFUSED)
+      await new Promise((resolve) => setImmediate(resolve))
+      process.off('unhandledRejection', unhandled)
+
+      expect(unhandled).not.toHaveBeenCalled()
+    },
+  )
 })

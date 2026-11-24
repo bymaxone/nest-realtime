@@ -17,7 +17,8 @@ import type {
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { logEvent } from '../utils/log-event'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
-import { withinDeadline } from '../utils/within-deadline'
+import { assertBuiltinsIntact } from '../utils/builtin-baseline'
+import { unboxed, withinDeadline } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 const RETRIEVE_LIMIT = 200
@@ -118,7 +119,10 @@ export class OfflineQueueDeliveryService {
     ringBufferIds: Set<string>,
   ): Promise<OfflineQueuedEvent[]> {
     const { events } = await this.retrieveGap(userId, lastEventId)
-    return events.filter((e) => !ringBufferIds.has(e.id))
+    const fresh = events.filter((e) => !ringBufferIds.has(e.id))
+    // Returning an array from an async function reads `then` on it, so the check is the last thing before the return.
+    assertBuiltinsIntact()
+    return fresh
   }
 
   /**
@@ -135,6 +139,8 @@ export class OfflineQueueDeliveryService {
     const storage = this.storage
     if (!storage) return { events: [], degraded: false }
 
+    // Outside the try: a refusal is not the store failing, and must not be served as an empty gap.
+    assertBuiltinsIntact()
     let events: OfflineQueuedEvent[]
     try {
       events = await this.read(storage, userId, lastEventId, RETRIEVE_LIMIT)
@@ -240,6 +246,9 @@ export class OfflineQueueDeliveryService {
       throw new OfflineQueueTimeoutError()
     }
     try {
+      // Before the store is called: its own promise resolves with the events it answers, and a planted `then` would
+      // answer for it.
+      assertBuiltinsIntact()
       // A store that is not async returns its events, not a promise, and the wait takes either. Nothing between the
       // count and the wait can throw and leave the place taken.
       const call = storage.retrieveSince(userId, sinceId, limit)
@@ -247,12 +256,13 @@ export class OfflineQueueDeliveryService {
       // was given up on: a store that never answers fills the limit instead of piling up one more
       // abandoned call for every reconnect.
       this.pending += 1
-      return await withinDeadline(call, this.timeoutMs, {
+      const decided = await withinDeadline(call, this.timeoutMs, {
         timeoutError: () => new OfflineQueueTimeoutError(),
         onSettled: () => {
           this.pending -= 1
         },
       })
+      return unboxed(decided)
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) this.countTimeout()
       throw err
