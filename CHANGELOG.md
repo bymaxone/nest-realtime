@@ -7,6 +7,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Documentation
+
+- **`websocket.cors` is documented as response headers, not an origin check.** A WebSocket upgrade is not subject to CORS, and the library accepts it whatever its `Origin` is, so a client with an unlisted origin and a valid cookie connects. The README and `SECURITY.md` now say so and say what the host does: refuse an unlisted `ctx.headers.origin` in its `IConnectionAuthenticator`, and set the session cookie `SameSite=Lax` or `Strict`. The library's behaviour is unchanged.
+
 ## [1.2.36] - 2026-11-22
 
 ### Fixed
