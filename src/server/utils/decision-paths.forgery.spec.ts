@@ -107,6 +107,19 @@ describe.each(FORGED_BUILTINS)('with Promise.%s replaced after load', (kind) => 
 
     expect(events).toEqual([])
   })
+
+  it('the second read of a replay carries only what the store returned', async () => {
+    const storage = { retrieveSince: async () => [] }
+    const queue = new OfflineQueueDeliveryService(storage as never, undefined, {
+      authenticateTimeoutMs: 1_000,
+    } as never)
+
+    const events = await withPromiseForged(kind, INJECTED, () =>
+      queue.retrieveAppended('u1', '0', { events: [], degraded: false }),
+    )
+
+    expect(events).toEqual([])
+  })
 })
 
 /** Runs `run` with `Promise.prototype.then` wrapped the way an APM does: it calls the real one and passes the value on. */
@@ -415,8 +428,7 @@ describe('with a then that erases itself, planted on a root prototype before the
     expect(failure).toBe(refusal)
   })
 
-  // Scenario: the store fails, and a `then` that erases itself is planted on Object.prototype while it does. Nothing
-  // asserted after the failure, so the degraded gap that is returned reads the planted `then`.
+  // Scenario: the store fails, and a `then` that erases itself is planted on Object.prototype while it does.
   // Expected: the gap read refuses; it does not return a gap that something else named.
   it('a gap read refuses a then planted while the store fails', async () => {
     const queue = new OfflineQueueDeliveryService(
@@ -498,6 +510,27 @@ describe('with a then that erases itself, planted on a root prototype before the
     })
 
     expect(gap).toBeUndefined()
+    expect(failure).toMatchObject(REFUSED)
+  })
+
+  // Scenario: nothing is left to read after the first page, and a `then` is planted on Array.prototype before the call.
+  // Expected: the second read refuses; an empty answer is not a reason to skip the check the other returns make.
+  it('a second read with nothing to ask refuses a then planted on arrays', async () => {
+    const queue = new OfflineQueueDeliveryService(undefined, undefined, {
+      authenticateTimeoutMs: 1_000,
+    } as never)
+    let appended: unknown
+    let failure: unknown
+
+    await withSelfErasingThen(Array.prototype, INJECTED, async () => {
+      try {
+        appended = await queue.retrieveAppended('u1', '0', { events: [], degraded: false })
+      } catch (error) {
+        failure = error
+      }
+    })
+
+    expect(appended).toBeUndefined()
     expect(failure).toMatchObject(REFUSED)
   })
 })

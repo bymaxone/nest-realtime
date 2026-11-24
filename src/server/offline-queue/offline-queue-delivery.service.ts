@@ -238,8 +238,15 @@ export class OfflineQueueDeliveryService {
   ): Promise<OfflineQueuedEvent[]> {
     const storage = this.storage
     const room = RETRIEVE_LIMIT - read.events.length
-    if (!storage || read.degraded || room <= 0) return []
-    return this.read(storage, userId, read.events.at(-1)?.id ?? lastEventId, room)
+    // Returning an array, or a promise, from an async function reads `then` on it, so what is read is awaited here and
+    // the check is the last thing before each return.
+    if (!storage || read.degraded || room <= 0) {
+      assertBuiltinsIntact()
+      return []
+    }
+    const appended = await this.read(storage, userId, read.events.at(-1)?.id ?? lastEventId, room)
+    assertBuiltinsIntact()
+    return appended
   }
 
   /** One bounded call to the storage: refused at once when the reads waiting are all taken. */
