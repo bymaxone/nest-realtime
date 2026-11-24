@@ -167,42 +167,63 @@ describe('withinDeadline', () => {
     expect(outcome).toMatchObject(REFUSED)
   })
 
-  // Scenario: arming the timer, which a host can replace, plants a `then` after the wait started. Expected: the call is
-  // refused before the caller awaits, the place is still released when the call settles, and nothing is left unhandled.
-  it('refuses when the timer plants a then, and still releases the call', async () => {
-    let settle: (value: string) => void = () => undefined
-    const call = new Promise<string>((resolve) => {
-      settle = resolve
-    })
-    const onSettled = jest.fn()
-    const unhandled = jest.fn()
-    process.on('unhandledRejection', unhandled)
-    const timers = jest.spyOn(global, 'setTimeout').mockImplementation(((...args: unknown[]) => {
-      Object.defineProperty(Object.prototype, 'then', {
-        value: () => undefined,
-        configurable: true,
+  // Scenario: arming the timer, which a host can replace, plants a `then` after the wait started, and the call settles
+  // later with an answer or with a rejection. Expected: the call is refused before the caller awaits, the place is still
+  // released when the call settles, and the wait nobody holds leaves nothing unhandled.
+  it.each([
+    ['answers', false],
+    ['rejects', true],
+  ])(
+    'refuses when the timer plants a then, and still releases the call when it later %s',
+    async (_name, rejects) => {
+      let finish: () => void = () => undefined
+      const call = new Promise<string>((resolve, reject) => {
+        finish = () => (rejects ? reject(new Error('later')) : resolve('later'))
       })
-      return { unref: () => undefined, args }
-    }) as unknown as typeof setTimeout)
-    let thrown: unknown
-    try {
-      withinDeadline(call, 50, { timeoutError: () => new Error('late'), onSettled })
-    } catch (error) {
-      thrown = error
-    } finally {
-      timers.mockRestore()
-      Reflect.deleteProperty(Object.prototype, 'then')
-    }
-    expect(thrown).toMatchObject(REFUSED)
-    expect(onSettled).not.toHaveBeenCalled()
+      const onSettled = jest.fn()
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+      const timers = jest.spyOn(global, 'setTimeout').mockImplementation(((...args: unknown[]) => {
+        Object.defineProperty(Object.prototype, 'then', {
+          value: () => undefined,
+          configurable: true,
+        })
+        return { unref: () => undefined, args }
+      }) as unknown as typeof setTimeout)
+      let thrown: unknown
+      try {
+        withinDeadline(call, 50, { timeoutError: () => new Error('late'), onSettled })
+      } catch (error) {
+        thrown = error
+      } finally {
+        timers.mockRestore()
+        Reflect.deleteProperty(Object.prototype, 'then')
+      }
+      expect(thrown).toMatchObject(REFUSED)
+      expect(onSettled).not.toHaveBeenCalled()
 
-    settle('later')
-    jest.useRealTimers()
-    await new Promise((resolve) => setImmediate(resolve))
-    process.off('unhandledRejection', unhandled)
+      finish()
+      jest.useRealTimers()
+      await new Promise((resolve) => setImmediate(resolve))
+      process.off('unhandledRejection', unhandled)
 
-    expect(onSettled).toHaveBeenCalledTimes(1)
-    expect(unhandled).not.toHaveBeenCalled()
+      expect(onSettled).toHaveBeenCalledTimes(1)
+      expect(unhandled).not.toHaveBeenCalled()
+    },
+  )
+
+  // Scenario: a then is planted before the wait starts, so it refuses before the timer is armed. Expected: no timer is
+  // armed, and nothing is told that a deadline passed.
+  it('arms no timer for a wait that refused before it started', async () => {
+    const onExpire = jest.fn()
+    const waiting = whilePlanted(Object.prototype, () =>
+      withinDeadline(1, 50, { timeoutError: () => new Error('late'), onExpire }),
+    )
+    await expect(waiting).rejects.toMatchObject(REFUSED)
+
+    expect(jest.getTimerCount()).toBe(0)
+    jest.advanceTimersByTime(100)
+    expect(onExpire).not.toHaveBeenCalled()
   })
 
   // Scenario: arming the timer throws. Expected: the wait rejects with that error, and the call's place is still released.

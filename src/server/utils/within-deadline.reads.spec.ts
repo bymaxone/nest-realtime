@@ -33,6 +33,16 @@ function stubborn(): { promise: Promise<unknown>; reads: () => number } {
 const options = { timeoutError: () => new Error('late') }
 
 describe('what a call is asked for, and how often', () => {
+  // Scenario: absorbed is given a thenable that is not a native promise. Expected: it is awaited as it is, and nothing is
+  // pinned on it: only a native promise takes the engine's constructor.
+  it('absorbed pins no constructor on what is not a native promise', async () => {
+    const { thenable } = countingThenable('ok')
+
+    await absorbed(thenable)
+
+    expect(Object.hasOwn(thenable, 'constructor')).toBe(false)
+  })
+
   // Scenario: a thenable that is not a native promise goes through each entry point. Expected: its `then` is read once.
   it.each([
     ['started', (t: PromiseLike<unknown>) => Promise.resolve(started(() => t))],

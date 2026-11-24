@@ -39,6 +39,7 @@ describe('ReauthenticationService reads the clock it started with', () => {
 
     await expect(service.runCycle()).rejects.toMatchObject({
       code: 'REALTIME_TRANSPORT_UNAVAILABLE',
+      message: expect.stringContaining('Date.now was replaced after the library loaded'),
     })
   })
 

@@ -6,6 +6,7 @@
  * Constraint under test: the gate and the bounded re-authentication await what a host call returned. A host that
  * installs accessors which put themselves back on the first read leaves nothing for a check made after the await.
  */
+import { Logger } from '@nestjs/common'
 import { hostCallWithSelfRestoringAccessors } from '../../../test/support/forged-promise'
 import {
   build,
@@ -178,6 +179,32 @@ describe('the Promise constructor this module pins on the promises it awaits', (
     }
   })
 
+  // Scenario: the slot holds a value that passes every check but one: it is not a function; or it is a native function
+  // with the right name and the wrong prototype; or one with the right prototype and the wrong name. Expected: each is
+  // refused by the check of its own, so removing one lets a stranger through.
+  it.each([
+    ['is not a function', () => ({ prototype: Promise.prototype, name: 'Promise' })],
+    [
+      'has another prototype',
+      () => Object.defineProperty(Map.bind(null), 'name', { value: 'Promise' }),
+    ],
+    [
+      'has another name',
+      () => Object.defineProperty(Promise.bind(null), 'prototype', { value: Promise.prototype }),
+    ],
+  ])('refuses a slot value that %s, and says it was replaced', (_name, make) => {
+    const real = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor',
+    ) as PropertyDescriptor
+    Object.defineProperty(Promise.prototype, 'constructor', { ...real, value: make() })
+    try {
+      expect(load).toThrow('replaced before this module loaded')
+    } finally {
+      Object.defineProperty(Promise.prototype, 'constructor', real)
+    }
+  })
+
   // Scenario: the slot holds a getter that answers the engine's own Promise. Expected: refused, because a read of the slot
   // runs the getter, which can answer something else the next time, and the slot is read as a descriptor.
   it('refuses a getter in the slot, even one that answers the engine constructor', () => {
@@ -318,7 +345,98 @@ describe('a host promise that is refused is not left behind', () => {
   })
 })
 
+describe('firstOf refusing the first of its two calls', () => {
+  const settleTicks = async (): Promise<void> => {
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+  }
+
+  // Scenario: the first call is a frozen promise, refused before the second is looked at, and the second rejects.
+  // Expected: the rejection of the second is read too, so the process sees no unhandled rejection.
+  it('reads the rejection of the call it never got to look at', async () => {
+    const seen: unknown[] = []
+    const onUnhandled = (reason: unknown): void => void seen.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    const frozen = Object.freeze(Promise.reject(new Error('first')))
+
+    try {
+      expect(() => firstOf(frozen, Promise.reject(new Error('second')))).toThrow(TypeError)
+      await settleTicks()
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+
+    expect(seen).toEqual([])
+  })
+
+  // Scenario: the first call is a Proxy over a promise. Expected: refused, and no trap runs, not even to read what it
+  // would settle with, because a trap is host code.
+  it('runs no trap of a Proxy it refuses', async () => {
+    const reads: PropertyKey[] = []
+    const proxy = new Proxy(Promise.resolve(1), {
+      get(target, key) {
+        reads.push(key)
+        return Reflect.get(target, key) as unknown
+      },
+    })
+
+    expect(() => firstOf(proxy, new Promise(() => undefined))).toThrow(
+      expect.objectContaining(REFUSED) as Error,
+    )
+    await settleTicks()
+
+    expect(reads).toEqual([])
+  })
+})
+
+describe('a revalidation cycle that finds a built-in replaced', () => {
+  // Scenario: `Array.prototype.includes` is replaced by a function that behaves the same, before a cycle runs over one
+  // connection. Expected: the authenticator is not called at all, because whatever it answered would be read through the
+  // replacement.
+  it('does not start the revalidation', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const real = Object.getOwnPropertyDescriptor(Array.prototype, 'includes') as PropertyDescriptor
+    const revalidate = jest.fn().mockResolvedValue(true)
+    const svc = build(
+      mkConnections([mkRecord()]),
+      mkRealtime(),
+      mkAuth(revalidate),
+      mkOptions({ intervalSeconds: 60 }),
+    )
+    Object.defineProperty(Array.prototype, 'includes', {
+      ...real,
+      value: function (this: unknown[], ...args: unknown[]): boolean {
+        return (real.value as (...a: unknown[]) => boolean).apply(this, args)
+      },
+    })
+
+    try {
+      await svc.runCycle().catch(() => undefined)
+      await flush()
+    } finally {
+      Object.defineProperty(Array.prototype, 'includes', real)
+    }
+
+    expect(revalidate).not.toHaveBeenCalled()
+  })
+})
+
 describe('a promise that holds an accessor for its constructor', () => {
+  // Scenario: a promise reports a constructor that is writable, or configurable, while it refuses every attempt to pin
+  // one (a Proxy over it answers the attempt with success and changes nothing). Expected: refused; it is the engine's
+  // constructor, but not one that cannot be swapped back.
+  it.each([
+    ['writable', { writable: true, configurable: false }],
+    ['configurable', { writable: false, configurable: true }],
+  ])('is refused when it reports a %s constructor it never pinned', (_name, flags) => {
+    const target = Promise.resolve()
+    Object.defineProperty(target, 'constructor', { value: Promise, ...flags })
+    const swallowing = new Proxy(target, { defineProperty: () => true })
+
+    expect(() => shielded(swallowing)).toThrow('cannot carry the engine constructor')
+  })
+
   // Scenario: a native promise holds a non-configurable accessor named `constructor`, so the pin cannot replace it, and
   // `Object.prototype` answers `value`, `writable` and `configurable` as a pinned data property would. Expected: refused;
   // the descriptor of an accessor holds none of the three itself.
