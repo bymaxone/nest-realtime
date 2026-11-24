@@ -19,7 +19,7 @@ import {
 import { OfflineQueueDeliveryService } from '../offline-queue/offline-queue-delivery.service'
 import { AuthenticationGate } from '../services/authentication-gate.service'
 import type { ConnectionAuthContext } from '../interfaces/connection-authenticator.interface'
-import { firstOf } from './within-deadline'
+import { firstOf, shielded } from './within-deadline'
 
 const CONTEXT: ConnectionAuthContext = {
   transport: 'sse',
@@ -197,6 +197,26 @@ describe('the Promise constructor this module pins on the promises it awaits', (
       Object.defineProperty(Promise.prototype, 'constructor', real)
     }
   })
+
+  // Scenario: the slot holds a getter, and `Object.prototype.value` answers the engine's Promise, so a read of `value` off
+  // the descriptor that is not an own read finds it. Expected: refused; the descriptor of an accessor holds no value.
+  it('refuses a getter in the slot when the root prototype answers for its value', () => {
+    const real = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor',
+    ) as PropertyDescriptor
+    Object.defineProperty(Promise.prototype, 'constructor', {
+      configurable: true,
+      get: () => real.value as unknown,
+    })
+    Object.defineProperty(Object.prototype, 'value', { configurable: true, value: real.value })
+    try {
+      expect(load).toThrow('replaced before this module loaded')
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'value')
+      Object.defineProperty(Promise.prototype, 'constructor', real)
+    }
+  })
 })
 
 describe('a host promise that carries a constructor or a then of its own', () => {
@@ -295,5 +315,29 @@ describe('a host promise that is refused is not left behind', () => {
     }
 
     expect(seen).toEqual([])
+  })
+})
+
+describe('a promise that holds an accessor for its constructor', () => {
+  // Scenario: a native promise holds a non-configurable accessor named `constructor`, so the pin cannot replace it, and
+  // `Object.prototype` answers `value`, `writable` and `configurable` as a pinned data property would. Expected: refused;
+  // the descriptor of an accessor holds none of the three itself.
+  it('is refused even when the root prototype answers for the fields of a pinned constructor', () => {
+    const promise = Promise.resolve()
+    Object.defineProperty(promise, 'constructor', { configurable: false, get: () => Promise })
+    for (const [name, value] of [
+      ['value', Promise],
+      ['writable', false],
+      ['configurable', false],
+    ] as const) {
+      Object.defineProperty(Object.prototype, name, { configurable: true, value })
+    }
+    try {
+      expect(() => shielded(promise)).toThrow('cannot carry the engine constructor')
+    } finally {
+      for (const name of ['value', 'writable', 'configurable']) {
+        Reflect.deleteProperty(Object.prototype, name)
+      }
+    }
   })
 })

@@ -25,7 +25,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
 // measurement and reason. Each line is the measured size, then the budget:
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
-//   internal  26,404 B → 26,434 B (the bulk of an SSE install: the route guard that authenticates
+//   internal  26,461 B → 26,491 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
 //     stream, the peer address and the client address validated against the trusted-proxy chain,
 //     the revocation that rejects when it cannot reach its connection, the report of a delivery
@@ -64,7 +64,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     `RedisOfflineQueue`'s two options, with its error, 117 B, and the start-up check of the shape of the
 //     option groups and of the pluggable pieces, 448 B, and the refusal of an options argument, of a registration endpoint and of one with whitespace in it, of a built-in object where a group is expected, and of a queue built without its options or its client, 188 B, and the one test that counts the factory patterns and chooses the provider, so that a pattern set to `null` is read as unset, 42 B, and the read of the CORS block by the names of `CorsConfig` with the frozen copy of `roles` refused when its read throws, and the absorbed rejection of an async resolver, 173 B, with the CORS block read whenever it is an object rather than when it reports a plain type, 1 B, and the bound on the roles copy with its guard, and the absorption of a promise by the intrinsic then, 110 B, measured on 2026-11-21)
 //     and, 991 B more than the figure above, the table of the built-ins and the symbol-keyed methods and flags of a regular expression the option, validation and admission code call, recorded when the library loads, with the count and the refusal that read it, measured on 2026-11-22)
-//     and, 355 B over the 25,284 B budget of the figure above, the wait under a deadline that the handshake gate, the re-authentication revalidate, the offline-queue replay, the Redis subscribe race and the SSE registration share: it uses no `Promise` static and no `then`, answers in a box with no prototype, and is preceded by a check of the baseline, which now holds the intrinsic Promise constructor and requires `then` to be absent from `Object.prototype`, `Array.prototype` and `Function.prototype`, measured on 2026-11-24, and 136 B more than the 25,750 B measured before it, for the check of the baseline before each object or array the handshake, the replay, the gate's wrapper and the Redis negotiation return, and the own constructor of a promise a wait absorbs, measured on 2026-11-24, and 132 B more than the 26,272 B measured before it, for the walk of the prototype chain of what a decision returns, the load check of the Promise constructor slot by its descriptor, and the pinned constructor of a promise `absorbed` awaits, measured on 2026-11-24)
+//     and, 355 B over the 25,284 B budget of the figure above, the wait under a deadline that the handshake gate, the re-authentication revalidate, the offline-queue replay, the Redis subscribe race and the SSE registration share: it uses no `Promise` static and no `then`, answers in a box with no prototype, and is preceded by a check of the baseline, which now holds the intrinsic Promise constructor and requires `then` to be absent from `Object.prototype`, `Array.prototype` and `Function.prototype`, measured on 2026-11-24, and 136 B more than the 25,750 B measured before it, for the check of the baseline before each object or array the handshake, the replay, the gate's wrapper and the Redis negotiation return, and the own constructor of a promise a wait absorbs, measured on 2026-11-24, and 132 B more than the 26,272 B measured before it, for the walk of the prototype chain of what a decision returns, the load check of the Promise constructor slot by its descriptor, and the pinned constructor of a promise `absorbed` awaits, measured on 2026-11-24, and 57 B more than the 26,404 B measured before it, for the refusal of a Proxy in the chain of what a decision returns and the own-field reads of the constructor slot's descriptor and of a pinned constructor, measured on 2026-11-24)
 //   websocket  8,290 B →  8,320 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -105,7 +105,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 26_434 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 26_491 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 8_320 },
   {
     name: 'observability (metrics contributor)',

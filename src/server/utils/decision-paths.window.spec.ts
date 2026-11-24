@@ -145,7 +145,9 @@ describe('the wait that absorbs a rejection', () => {
     const missing: string[] = []
 
     for (const callee of callees) {
-      const calls = [...source.matchAll(new RegExp(`${callee.replace(/\./g, '\\.')}\\(`, 'g'))]
+      const calls = [
+        ...source.matchAll(new RegExp(`${callee.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}\\(`, 'g')),
+      ]
       if (calls.length === 0) missing.push(callee)
       for (const call of calls) {
         const before = source.slice(0, call.index).replace(/\s+$/, '')

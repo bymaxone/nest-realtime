@@ -15,16 +15,17 @@ import { apply, getPrototypeOf, hasOwnProperty } from './captured-builtins'
  */
 const enginePromisePrototype: unknown = Object.getPrototypeOf((async () => undefined)())
 // Read as a descriptor and not through the property: a getter a host put in the slot would run on a read, and a value it
-// answers there is not the constructor the slot holds.
+// answers there is not the constructor the slot holds. A descriptor is an ordinary object, so `value` is read only when
+// the descriptor holds it itself: an accessor's does not, and `Object.prototype.value` would answer for it.
 const slot = Object.getOwnPropertyDescriptor(enginePromisePrototype, 'constructor')
-const NativePromise = slot?.value as PromiseConstructor
+const holdsValue = slot !== undefined && (apply(hasOwnProperty, slot, ['value']) as boolean)
+const NativePromise = (holdsValue ? slot.value : undefined) as PromiseConstructor
 
 // The slot is writable, so a host that ran before this module loaded may have put its own there, as a function or as a
 // getter. A data property that holds the engine's Promise has the engine's prototype and prints as native code; refusing
 // to load is better than pinning a stranger's constructor on every promise a decision awaits.
 if (
-  slot === undefined ||
-  !('value' in slot) ||
+  !holdsValue ||
   typeof NativePromise !== 'function' ||
   NativePromise.prototype !== enginePromisePrototype ||
   NativePromise.name !== 'Promise' ||
@@ -56,7 +57,15 @@ export function shielded<T>(promise: T): T {
     // A promise that kept an own constructor of its own, or cannot take one, is checked below.
   }
   const own = getOwnPropertyDescriptor(promise, 'constructor')
-  if (own?.value !== NativePromise || own.writable !== false || own.configurable !== false) {
+  // A data descriptor holds `value`, `writable` and `configurable` itself; an accessor's holds none of them, and the root
+  // prototype would answer for each.
+  if (
+    own === undefined ||
+    !(apply(hasOwnProperty, own, ['value']) as boolean) ||
+    own.value !== NativePromise ||
+    own.writable !== false ||
+    own.configurable !== false
+  ) {
     throw new TypeError('A promise that cannot carry the engine constructor is not awaited.')
   }
   return promise
