@@ -191,9 +191,9 @@ function readBaseline():
   try {
     const iterators = iteratorSlots()
     const listed = NAMED.concat(iterators, ABSENT)
-    const recorded = listed.map((slot, i) =>
-      i < NAMED.length + iterators.length ? held(slot[0], slot[1]) : undefined,
-    )
+    // An absent slot is recorded too: whether one was there at load is what `kinds` holds, and a value of a slot that was
+    // not meant to be there is never compared on its own.
+    const recorded = listed.map((slot) => held(slot[0], slot[1]))
     const kinds = listed.map((slot, i) =>
       i < NAMED.length + iterators.length ? kindOf(slot[0], slot[1]) : 0,
     )
@@ -242,8 +242,9 @@ const REFUSAL = Symbol('builtins-refusal')
 const defineProperty = Object.defineProperty
 
 /**
- * Refuses, before the code that follows runs, when a built-in it calls was replaced after the library loaded: a replaced
- * `startsWith` or iterator makes a check pass or a loop end where it should not.
+ * Refuses, before the code that follows runs, when a built-in it calls was replaced after the library loaded, or a root
+ * prototype already held a `then` when it loaded: a replaced `startsWith` or iterator makes a check pass or a loop end
+ * where it should not.
  *
  * @throws Error carrying `REALTIME_TRANSPORT_UNAVAILABLE`, with the count and nothing else.
  */
@@ -251,7 +252,7 @@ export function assertBuiltinsIntact(): void {
   const replaced = replacedBuiltinCount()
   if (replaced === 0) return
   throw refusal(
-    `${replaced} built-in${replaced === 1 ? '' : 's'} the library calls ${replaced === 1 ? 'was' : 'were'} replaced after it was loaded`,
+    `${replaced} built-in${replaced === 1 ? '' : 's'} the library calls ${replaced === 1 ? 'is' : 'are'} not as the library expects`,
   )
 }
 
@@ -281,7 +282,7 @@ const CHAIN_DEPTH_CAP = 64
  */
 export function returnable<T>(value: T): T {
   assertBuiltinsIntact()
-  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return value
+  if (typeof value !== 'object' && typeof value !== 'function') return value
   let depth = 0
   for (let node: unknown = value; node !== null; node = getProto(node as object)) {
     depth += 1
@@ -315,12 +316,6 @@ export function isBuiltinsRefusal(error: unknown): boolean {
  * @throws Error carrying `REALTIME_TRANSPORT_UNAVAILABLE` when the value is a Proxy.
  */
 export function unproxied<T>(value: T): T {
-  if (
-    (typeof value === 'object' || typeof value === 'function') &&
-    value !== null &&
-    isProxy(value)
-  ) {
-    throw refusal('a host call returned a Proxy')
-  }
+  if (isProxy(value)) throw refusal('a host call returned a Proxy')
   return value
 }

@@ -174,7 +174,7 @@ describe('the built-ins the library calls', () => {
         'REALTIME_TRANSPORT_UNAVAILABLE',
       ])
       expect(outcome.message).toBe(
-        'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls was replaced after it was loaded',
+        'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls is not as the library expects',
       )
     }
     expect(replacedBuiltinCount()).toBe(0)
@@ -192,7 +192,7 @@ describe('the built-ins the library calls', () => {
     })
 
     expect(message).toBe(
-      'REALTIME_TRANSPORT_UNAVAILABLE: 2 built-ins the library calls were replaced after it was loaded',
+      'REALTIME_TRANSPORT_UNAVAILABLE: 2 built-ins the library calls are not as the library expects',
     )
   })
 })
@@ -499,7 +499,7 @@ describe('a process whose string iterator was replaced before the library loaded
     expect(loaded?.BUILTIN_SLOTS).toHaveLength(0)
     expect(loaded?.replacedBuiltinCount()).toBe(1)
     expect(() => loaded?.assertBuiltinsIntact()).toThrow(
-      'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls was replaced after it was loaded',
+      'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls is not as the library expects',
     )
   })
 })
@@ -743,7 +743,7 @@ describe('a process whose Array.prototype methods were replaced before the libra
 
       expect(loaded?.replacedBuiltinCount()).toBe(1)
       expect(() => loaded?.assertBuiltinsIntact()).toThrow(
-        'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls was replaced after it was loaded',
+        'REALTIME_TRANSPORT_UNAVAILABLE: 1 built-in the library calls is not as the library expects',
       )
     },
   )
