@@ -474,6 +474,35 @@ describe('resolveAuthTenant', () => {
       }
     })
 
+    // Scenario: a rejecting promise whose constructor has a species that throws, so that `then` fails before it attaches a
+    // handler. Expected: its rejection is handled, no error reaches the process, and the result still cannot route.
+    it('is absorbed: a promise whose species throws', async () => {
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+      try {
+        const promise = Object.defineProperty(rejecting(), 'constructor', {
+          configurable: true,
+          writable: true,
+          value: {
+            get [Symbol.species](): never {
+              throw new Error('own species')
+            },
+          },
+        })
+        const out = resolveAuthTenant({ tenantResolver: () => promise as never }, { userId: 'u1' })
+        await settle()
+
+        expect(unhandled).not.toHaveBeenCalled()
+        expect(Object.getOwnPropertyDescriptor(promise, 'constructor')?.value).toBe(
+          (Object.getPrototypeOf((async () => undefined)()) as { constructor: unknown })
+            .constructor,
+        )
+        expect(() => assertIdentityIsNotBlank(out)).toThrow('REALTIME_AUTH_FAILED')
+      } finally {
+        process.off('unhandledRejection', unhandled)
+      }
+    })
+
     // Scenario: a proxy whose get trap binds the methods it hands out, over a rejecting promise. The intrinsic
     // `then` refuses it (it is not a promise by brand), so the promise's own `catch` is the way to a handler.
     it('is absorbed: a proxy over a promise, with its methods bound', async () => {
@@ -495,6 +524,25 @@ describe('resolveAuthTenant', () => {
       } finally {
         process.off('unhandledRejection', unhandled)
       }
+    })
+
+    // Scenario: a proxy over a promise whose own `catch` throws, which is not a promise by brand. Expected: the library does
+    // not throw the host's error, and the result still cannot route.
+    it('does not throw the host error for a proxy whose catch throws', () => {
+      const target = rejecting()
+      target.catch(() => undefined)
+      const proxy = new Proxy(target, {
+        get: (t, key) => {
+          if (key === 'catch') {
+            throw new Error('own catch')
+          }
+          return Reflect.get(t, key) as unknown
+        },
+      })
+
+      const out = resolveAuthTenant({ tenantResolver: () => proxy as never }, { userId: 'u1' })
+
+      expect(() => assertIdentityIsNotBlank(out)).toThrow('REALTIME_AUTH_FAILED')
     })
 
     // The residual: a promise whose constructor cannot be read cannot be given a handler, so its own rejection

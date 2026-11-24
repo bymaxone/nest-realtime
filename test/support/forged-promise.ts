@@ -122,3 +122,47 @@ export async function withSelfErasingThen(
     Reflect.deleteProperty(root, 'then')
   }
 }
+
+/**
+ * A host call that does its work synchronously: it answers `answer` honestly, but while it runs it replaces the
+ * constructor of every promise and a `then` that puts both back the first time it is asked and answers `forged`,
+ * dropping a rejection. A check made before the call sees nothing, and a check made after the caller's await sees a clean
+ * process. `restore` puts both back in case nothing asked.
+ *
+ * @param answer - What the call honestly settles with.
+ * @param forged - What any other promise appears to settle with once the forged `then` is asked.
+ */
+export function hostCallThatSwapsInside<T>(
+  answer: T,
+  forged: unknown,
+): { readonly call: () => Promise<T>; readonly restore: () => void } {
+  const proto = Promise.prototype as unknown as Record<string, unknown>
+  const realThen = Promise.prototype.then
+  const realConstructor = Object.getOwnPropertyDescriptor(
+    Promise.prototype,
+    'constructor',
+  ) as PropertyDescriptor
+  const restore = (): void => {
+    Object.defineProperty(Promise.prototype, 'constructor', realConstructor)
+    proto['then'] = realThen
+  }
+  const call = (): Promise<T> => {
+    const honest = Promise.resolve(answer)
+    Object.defineProperty(Promise.prototype, 'constructor', {
+      ...realConstructor,
+      value: function Fake() {},
+    })
+    proto['then'] = function (
+      this: Promise<unknown>,
+      onFulfilled?: (value: unknown) => unknown,
+      onRejected?: (reason: unknown) => unknown,
+    ) {
+      if (this === honest) return realThen.call(this, onFulfilled, onRejected)
+      restore()
+      onFulfilled?.(forged)
+      return undefined
+    }
+    return honest
+  }
+  return { call, restore }
+}

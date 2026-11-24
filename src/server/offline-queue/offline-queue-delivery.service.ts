@@ -18,7 +18,7 @@ import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constan
 import { logEvent } from '../utils/log-event'
 import { reportDeliveryFailure } from '../utils/report-delivery-failure'
 import { assertBuiltinsIntact, isBuiltinsRefusal } from '../utils/builtin-baseline'
-import { unboxed, withinDeadline } from '../utils/within-deadline'
+import { shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 const RETRIEVE_LIMIT = 200
@@ -118,7 +118,7 @@ export class OfflineQueueDeliveryService {
     lastEventId: string,
     ringBufferIds: Set<string>,
   ): Promise<OfflineQueuedEvent[]> {
-    const { events } = await this.retrieveGap(userId, lastEventId)
+    const { events } = await shielded(this.retrieveGap(userId, lastEventId))
     const fresh = events.filter((e) => !ringBufferIds.has(e.id))
     // Returning an array from an async function reads `then` on it, so the check is the last thing before the return.
     assertBuiltinsIntact()
@@ -147,7 +147,7 @@ export class OfflineQueueDeliveryService {
     assertBuiltinsIntact()
     let events: OfflineQueuedEvent[]
     try {
-      events = await this.read(storage, userId, lastEventId, RETRIEVE_LIMIT)
+      events = await shielded(this.read(storage, userId, lastEventId, RETRIEVE_LIMIT))
     } catch (err) {
       if (err instanceof OfflineQueueTimeoutError) throw err
       // A refusal raised while the store was being read is not the store failing either.
@@ -244,7 +244,9 @@ export class OfflineQueueDeliveryService {
       assertBuiltinsIntact()
       return []
     }
-    const appended = await this.read(storage, userId, read.events.at(-1)?.id ?? lastEventId, room)
+    const appended = await shielded(
+      this.read(storage, userId, read.events.at(-1)?.id ?? lastEventId, room),
+    )
     assertBuiltinsIntact()
     return appended
   }

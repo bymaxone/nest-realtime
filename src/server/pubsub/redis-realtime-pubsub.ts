@@ -290,7 +290,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     sub.on('ready', () => {
       if (attached) this.confirm(sub)
     })
-    await this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst)
+    await shielded(this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst))
     attached = true
     return sub
   }

@@ -586,6 +586,8 @@ describe('the list of built-ins', () => {
     getTime:
       'Date.prototype.getTime, which only stamps a time and is replaced with the clock on purpose',
     then: 'Promise.prototype.then, which instrumentation and zone libraries patch on purpose',
+    isPromise:
+      'util.types.isPromise: it only chooses how a promise the library is discarding gets its handler, and decides nothing',
     catch: 'Promise.prototype.catch, patched like then',
     resolve: 'Promise.resolve, patched like then',
     race: 'Promise.race, patched like then',

@@ -18,7 +18,8 @@ const NativePromise = (
 const define = Object.defineProperty
 
 /**
- * Gives a promise this library made an own `constructor`, the engine's own, so that awaiting it never reads the slot on
+ * Gives a promise this library made an own `constructor`, the engine's own, pinned: neither writable nor configurable, so
+ * that whoever holds the promise cannot swap it back. Awaiting it then never reads the slot on
  * `Promise.prototype`: a getter that throws there, or a replaced constructor, would otherwise make the await fail before
  * it attached its handlers and leave the rejection of a promise nobody else reads unhandled. It is only for promises the
  * library created; a promise from the host is left as it is.
@@ -29,7 +30,7 @@ const define = Object.defineProperty
 export function shielded<T>(promise: T): T {
   if (typeof promise !== 'object' || promise === null) return promise
   try {
-    define(promise, 'constructor', { value: NativePromise, configurable: true, writable: true })
+    define(promise, 'constructor', { value: NativePromise, configurable: false, writable: false })
   } catch {
     // A promise that cannot take a property is awaited as it is.
   }
@@ -134,8 +135,8 @@ export function withinDeadline<T>(
     }, ms)
     timer.unref()
   })
-  // The caller awaits the promise next, and that await asks it for its constructor. When the wait already refused, the
-  // promise is rejected and is handed over as it is.
+  // The caller awaits the promise next, and that await asks it for its constructor. A wait that refused before the timer
+  // was armed skips the check below, so what is handed over carries its own constructor on every path.
   if (!finished && outcomeUnread !== true) {
     try {
       assertBuiltinsIntact()
@@ -145,7 +146,7 @@ export function withinDeadline<T>(
       throw error
     }
   }
-  return promise
+  return shielded(promise)
 }
 
 /**
@@ -163,7 +164,7 @@ export function firstOf<A, B>(
 ): Promise<Decided<A | B>> {
   void absorbed(first)
   void absorbed(second)
-  return new NativePromise<Decided<A | B>>((resolve, reject) => {
+  const promise = new NativePromise<Decided<A | B>>((resolve, reject) => {
     const follow = async (call: PromiseLike<A | B>): Promise<void> => {
       try {
         assertBuiltinsIntact()
@@ -175,4 +176,5 @@ export function firstOf<A, B>(
     void follow(first)
     void follow(second)
   })
+  return shielded(promise)
 }

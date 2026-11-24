@@ -29,7 +29,7 @@ import { assertBuiltinsIntact } from '../utils/builtin-baseline'
 import { logEvent } from '../utils/log-event'
 import { Semaphore } from '../utils/semaphore'
 import { runHook } from '../utils/run-hook'
-import { unboxed, withinDeadline } from '../utils/within-deadline'
+import { shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 import { ConnectionRegistry } from './connection-registry.service'
 import type { ConnectionRecord } from './connection-registry.service'
 import { RealtimeService } from './realtime.service'
@@ -245,10 +245,19 @@ export class ReauthenticationService implements OnModuleInit, OnApplicationShutd
    * The same bound holds for the call to `revalidate` and for the revocation after it, because both
    * run in a slot that every connection shares.
    */
-  private async bounded<T>(
+  private bounded<T>(
     what: string,
     work: (signal: AbortSignal) => Promise<T> | undefined,
     outcomeUnread = false,
+  ): Promise<T | undefined> {
+    // Both callers await this promise: it carries its own constructor, so that await never reads the shared slot.
+    return shielded(this.bound(what, work, outcomeUnread))
+  }
+
+  private async bound<T>(
+    what: string,
+    work: (signal: AbortSignal) => Promise<T> | undefined,
+    outcomeUnread: boolean,
   ): Promise<T | undefined> {
     const controller = new AbortController()
     // Before the call: its own promise resolves with what it answers, and a planted `then` would answer for it.

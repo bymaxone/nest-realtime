@@ -6,6 +6,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { REALTIME_OPTIONS_TOKEN } from '../constants/injection-tokens.constants'
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
+import { freeze } from '../utils/captured-builtins'
 import { logEvent } from '../utils/log-event'
 import { windowedReport } from '../utils/windowed-report'
 import { ConnectionRegistry } from './connection-registry.service'
@@ -46,10 +47,10 @@ export interface AdmissionTicket {
 }
 
 /** The ticket of a transport with no admission, which holds nothing. */
-export const UNBOUNDED_TICKET: AdmissionTicket = {
+export const UNBOUNDED_TICKET: AdmissionTicket = freeze({
   release: () => undefined,
   renew: () => undefined,
-}
+})
 
 /**
  * Decides, before a handshake is authenticated, whether the instance has room for one more

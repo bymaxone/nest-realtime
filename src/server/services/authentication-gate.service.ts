@@ -87,7 +87,13 @@ export class AuthenticationGate {
    * @throws AuthenticationUnavailableError when too many are waiting, or this one did not settle in
    *   time. Whatever the authenticator itself throws is thrown as it is.
    */
-  async authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
+  authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
+    // Every caller awaits this promise, and an await of a promise that has no constructor of its own reads the shared
+    // slot, which a host call that ran inside the wait can have replaced and put back.
+    return shielded(this.decide(context))
+  }
+
+  private async decide(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
     if (this.pending >= this.maxPending) {
       assertBuiltinsIntact()
       this.refuse('saturated')

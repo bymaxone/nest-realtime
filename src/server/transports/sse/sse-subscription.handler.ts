@@ -287,13 +287,13 @@ export class SseSubscriptionHandler {
     this.authenticated.delete(req)
     let authenticated: AuthenticatedRequest
     try {
-      authenticated = done ?? (await this.authenticateRequest(req, res))
+      authenticated = done ?? (await shielded(this.authenticateRequest(req, res)))
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
     let queueEvents: OfflineQueuedEvent[]
     try {
-      queueEvents = await this.readAppended(req, authenticated)
+      queueEvents = await shielded(this.readAppended(req, authenticated))
       // The replay ring and the queue reconciliation are read by key and by id next: a built-in they rely on that was replaced
       // while this request waited would hand this connection another user's events, so nothing is read before this check.
       assertBuiltinsIntact()
@@ -382,7 +382,7 @@ export class SseSubscriptionHandler {
    */
   async authenticateBeforeCommit(req: SseRequest, res?: SseResponse): Promise<void> {
     try {
-      this.authenticated.set(req, await this.authenticateRequest(req, res))
+      this.authenticated.set(req, await shielded(this.authenticateRequest(req, res)))
     } catch (err) {
       throw this.toClientError(err, 'SSE authentication failed')
     }
@@ -415,7 +415,7 @@ export class SseSubscriptionHandler {
 
   /** Admit and authenticate a handshake, inside the `realtime.handshake` span when tracing is wired. */
   private authenticateRequest(req: SseRequest, res?: SseResponse): Promise<AuthenticatedRequest> {
-    const run = (): Promise<AuthenticatedRequest> => this.admitAndAuthenticate(req, res)
+    const run = (): Promise<AuthenticatedRequest> => shielded(this.admitAndAuthenticate(req, res))
     return this.tracing
       ? this.tracing.span('realtime.handshake', { 'bymax.realtime.transport': 'sse' }, run)
       : run()
@@ -442,7 +442,7 @@ export class SseSubscriptionHandler {
       const auth = await this.transport.authenticate(context)
       if (!auth) throw new UnauthorizedException(REALTIME_ERROR_CODES.AUTH_FAILED)
       const resolved = this.resolveAndValidateIdentity(auth)
-      const queueRead = await this.readQueue(req, resolved.userId)
+      const queueRead = await shielded(this.readQueue(req, resolved.userId))
       // The last statement before the return, which resolves the function's promise with an object and so reads its `then`.
       assertBuiltinsIntact()
       return { context, auth: resolved, ticket, queueRead }
@@ -472,7 +472,7 @@ export class SseSubscriptionHandler {
       return { events: [], degraded: false }
     }
     try {
-      const gap = await this.offlineDelivery.retrieveGap(userId, lastEventId)
+      const gap = await shielded(this.offlineDelivery.retrieveGap(userId, lastEventId))
       assertBuiltinsIntact()
       return gap
     } catch (err) {
@@ -507,10 +507,8 @@ export class SseSubscriptionHandler {
       return queueRead.events
     }
     try {
-      const appended = await this.offlineDelivery.retrieveAppended(
-        authenticated.auth.userId,
-        lastEventId,
-        queueRead,
+      const appended = await shielded(
+        this.offlineDelivery.retrieveAppended(authenticated.auth.userId, lastEventId, queueRead),
       )
       const gap = [...queueRead.events, ...appended]
       assertBuiltinsIntact()

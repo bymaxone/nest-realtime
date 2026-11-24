@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { plantSelfErasingThen } from '../../../test/support/forged-promise'
 import { AuthenticationGate } from '../services/authentication-gate.service'
 import type { ConnectionAuthContext } from '../interfaces/connection-authenticator.interface'
-import { absorbed, shielded } from './within-deadline'
+import { absorbed, firstOf, shielded, withinDeadline } from './within-deadline'
 
 const CONTEXT: ConnectionAuthContext = {
   transport: 'sse',
@@ -64,7 +64,7 @@ describe('the order of the gate before it asks the authenticator', () => {
       join(__dirname, '..', 'services/authentication-gate.service.ts'),
       'utf8',
     )
-    const body = source.slice(source.indexOf('async authenticate('))
+    const body = source.slice(source.indexOf('async decide('))
     const controller = body.indexOf('new AbortController()')
     const signal = body.indexOf('const { signal } = controller')
     const lastCheck = body.lastIndexOf('assertBuiltinsIntact()', body.indexOf('shielded('))
@@ -111,16 +111,43 @@ describe('the wait that absorbs a rejection', () => {
     expect(reads.filter((stack) => stack.includes('absorbed'))).toHaveLength(0)
   })
 
-  // Scenario: each library-made promise that a decision path absorbs is made by `shielded`. Expected: the gate, the Redis
-  // negotiation and the handler's registration each wrap theirs once; a promise absorbed without it reads the shared slot.
+  // Scenario: every async method of the library that a decision path awaits, out to the outermost hop, is called inside
+  // `shielded(`, so that the caller's await never reads the shared slot. Expected: no call to one of them is left bare,
+  // and each is called at least once; an await of a bare one reads a constructor that a host call can have replaced and
+  // put back.
   it.each([
-    ['services/authentication-gate.service.ts', 1],
-    ['pubsub/redis-realtime-pubsub.ts', 1],
-    ['transports/sse/sse-subscription.handler.ts', 1],
-  ])('%s shields the promise it hands to a wait', (file, count) => {
+    ['services/authentication-gate.service.ts', ['this.decide']],
+    ['services/reauthentication.service.ts', ['this.bound']],
+    ['pubsub/redis-realtime-pubsub.ts', ['this.negotiate']],
+    ['offline-queue/offline-queue-delivery.service.ts', ['this.retrieveGap', 'this.read']],
+    [
+      'transports/sse/sse-subscription.handler.ts',
+      [
+        'this.transport.registerConnection',
+        'this.authenticateRequest',
+        'this.admitAndAuthenticate',
+        'this.readQueue',
+        'this.readAppended',
+        'this.offlineDelivery.retrieveGap',
+        'this.offlineDelivery.retrieveAppended',
+      ],
+    ],
+  ])('%s calls each awaited method inside shielded()', (file, callees) => {
     const source = readFileSync(join(__dirname, '..', file), 'utf8')
+    const bare: string[] = []
+    const missing: string[] = []
 
-    expect(source.match(/\bshielded\(/g)?.length).toBe(count)
+    for (const callee of callees) {
+      const calls = [...source.matchAll(new RegExp(`${callee.replace(/\./g, '\\.')}\\(`, 'g'))]
+      if (calls.length === 0) missing.push(callee)
+      for (const call of calls) {
+        const before = source.slice(0, call.index).replace(/\s+$/, '')
+        if (!before.endsWith('shielded(')) bare.push(callee)
+      }
+    }
+
+    expect(missing).toEqual([])
+    expect(bare).toEqual([])
   })
 
   // Scenario: the same read for a promise that is not the library's. Expected: the probe sees it, so the row above can fail.
@@ -151,6 +178,51 @@ describe('shielded', () => {
     const made = shielded(Promise.resolve())
 
     expect(Object.hasOwn(made, 'constructor')).toBe(true)
+    expect(Object.getOwnPropertyDescriptor(made, 'constructor')).toMatchObject({
+      writable: false,
+      configurable: false,
+    })
+  })
+})
+
+describe('the promise a wait hands to its caller', () => {
+  const options = { timeoutError: () => new Error('deadline') }
+  const realConstructor = Object.getOwnPropertyDescriptor(
+    Promise.prototype,
+    'constructor',
+  ) as PropertyDescriptor
+
+  // Scenario: a wait that settles normally, one that refused at once because the constructor was replaced before it began
+  // (the path that skips the last check), and `firstOf` on both. Expected: every promise handed over carries its own
+  // constructor, so the caller's await never reads the shared slot, whatever a host call did while the wait ran.
+  it.each([
+    ['a wait that settles', false],
+    ['a wait that refused before its timer was armed', true],
+  ])('%s hands over a promise with its own constructor', async (_name, replaced) => {
+    if (replaced) {
+      Object.defineProperty(Promise.prototype, 'constructor', {
+        ...realConstructor,
+        value: function Fake() {},
+      })
+    }
+    let handed: Promise<unknown> | undefined
+    try {
+      handed = withinDeadline(Promise.resolve(1), 1_000, options)
+    } finally {
+      Object.defineProperty(Promise.prototype, 'constructor', realConstructor)
+    }
+    const own = Object.hasOwn(handed, 'constructor')
+    await absorbed(handed)
+
+    expect(own).toBe(true)
+  })
+
+  it('firstOf hands over a promise with its own constructor', async () => {
+    const handed = firstOf(Promise.resolve(1), new Promise<number>(() => undefined))
+    const own = Object.hasOwn(handed, 'constructor')
+    await absorbed(handed)
+
+    expect(own).toBe(true)
   })
 })
 

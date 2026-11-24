@@ -15,6 +15,7 @@ import {
   FORGED_BUILTINS,
   plantSelfErasingThen,
   withConstructorReplacedAndRestored,
+  hostCallThatSwapsInside,
   withPromiseForged,
   withSelfErasingThen,
 } from '../../../test/support/forged-promise'
@@ -290,6 +291,53 @@ describe('with the constructor replaced and put back by a forged then', () => {
 
     expect(events).toBeUndefined()
     expect(failure).toBeDefined()
+  })
+})
+
+describe('with the constructor replaced inside the host call and put back by a forged then', () => {
+  // Scenario: the authenticator refuses (answers null), but while it runs it replaces the constructor of every promise
+  // and a `then` that restores both and answers an identity. The replacement is gone by the time any check that follows an
+  // await runs. Expected: the gate refuses, and the caller's await never reads the shared constructor, so the forged
+  // identity is never delivered.
+  it('the gate refuses what a host call swaps inside itself', async () => {
+    const host = hostCallThatSwapsInside(null, ATTACKER)
+    const gate = new AuthenticationGate({} as never, { authenticate: host.call } as never)
+    let outcome: unknown
+    let failure: unknown
+
+    try {
+      outcome = await gate.authenticate(CONTEXT)
+    } catch (error) {
+      failure = error
+    } finally {
+      host.restore()
+    }
+
+    expect(outcome).toBeUndefined()
+    expect(failure).toMatchObject(REFUSED)
+  })
+
+  // Scenario: revalidate answers false and swaps inside its own call, as above, with `true` as the forged answer.
+  // Expected: the connection is revoked, never kept.
+  it('a connection whose revalidate answered false is revoked, not kept', async () => {
+    const host = hostCallThatSwapsInside(false, true)
+    const realtime = mkRealtime()
+    const record = mkRecord()
+    const svc = build(
+      mkConnections([record]),
+      realtime,
+      mkAuth(jest.fn(host.call)),
+      mkOptions({ intervalSeconds: 60 }),
+    )
+
+    try {
+      await svc.runCycle()
+      await flush()
+    } finally {
+      host.restore()
+    }
+
+    expect(realtime.disconnect).toHaveBeenCalledTimes(1)
   })
 })
 
