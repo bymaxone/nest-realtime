@@ -15,6 +15,27 @@ const NativePromise = (
   Object.getPrototypeOf((async () => undefined)()) as { constructor: PromiseConstructor }
 ).constructor
 
+const define = Object.defineProperty
+
+/**
+ * Gives a promise this library made an own `constructor`, the engine's own, so that awaiting it never reads the slot on
+ * `Promise.prototype`: a getter that throws there, or a replaced constructor, would otherwise make the await fail before
+ * it attached its handlers and leave the rejection of a promise nobody else reads unhandled. It is only for promises the
+ * library created; a promise from the host is left as it is.
+ *
+ * @param promise - A promise this library created and has not awaited yet; anything else is returned as it is.
+ * @returns The same promise.
+ */
+export function shielded<T>(promise: T): T {
+  if (typeof promise !== 'object' || promise === null) return promise
+  try {
+    define(promise, 'constructor', { value: NativePromise, configurable: true, writable: true })
+  } catch {
+    // A promise that cannot take a property is awaited as it is.
+  }
+  return promise
+}
+
 /**
  * Reads a started call's rejection so that it can never be unhandled, whichever way the wait ends. It awaits, and calls no
  * `then`. The answer is not read: this is for a call whose outcome the caller reads elsewhere, or does not read at all.

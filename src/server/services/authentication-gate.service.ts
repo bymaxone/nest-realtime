@@ -17,7 +17,7 @@ import type {
 import type { BymaxRealtimeModuleOptions } from '../interfaces/realtime-module-options.interface'
 import { logEvent } from '../utils/log-event'
 import { assertBuiltinsIntact } from '../utils/builtin-baseline'
-import { unboxed, withinDeadline } from '../utils/within-deadline'
+import { shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 import { windowedReport } from '../utils/windowed-report'
 
 /** How long a window of refusals is summarised in one log line. */
@@ -88,18 +88,30 @@ export class AuthenticationGate {
    *   time. Whatever the authenticator itself throws is thrown as it is.
    */
   async authenticate(context: ConnectionAuthContext): Promise<AuthenticationResult | null> {
-    // Before the authenticator is called: its own promise resolves with the identity it answers, and a `then` planted
-    // on the root prototypes would answer for it.
-    assertBuiltinsIntact()
     if (this.pending >= this.maxPending) {
+      assertBuiltinsIntact()
       this.refuse('saturated')
       throw new AuthenticationUnavailableError('saturated')
     }
-    this.pending += 1
+    // Made, and its signal read, before the check and not after it: a replaceable constructor or getter that runs between
+    // the check and the await below could swap `Promise.prototype.constructor`, plant a `then`, and put both back before
+    // the check that follows the wait.
     const controller = new AbortController()
-    // `await`, not a returned promise: returning one makes the engine call its `then`, which a host can replace.
-    const call = (async () =>
-      await this.authenticator.authenticate(context, { signal: controller.signal }))()
+    const { signal } = controller
+    // Before the authenticator is called: its own promise resolves with the identity it answers, and a `then` planted
+    // on the root prototypes would answer for it. Nothing a host can replace runs between this and that promise's await.
+    assertBuiltinsIntact()
+    this.pending += 1
+    // `await`, not a returned promise: returning one makes the engine call its `then`, which a host can replace. The
+    // promise carries its own `constructor`, so that the wait that absorbs its rejection never reads the shared slot.
+    const call = shielded(
+      (async () => {
+        const answer = await this.authenticator.authenticate(context, { signal })
+        // The last statement before the return: resolving this promise with an object asks it for a `then`.
+        assertBuiltinsIntact()
+        return answer
+      })(),
+    )
     const decided = await withinDeadline(call, this.timeoutMs, {
       // Counted before the wait is rejected, and the abort is dispatched after it, so an answer given from an abort
       // listener cannot win.

@@ -14,7 +14,7 @@ import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
 import { assertBuiltinsIntact } from '../utils/builtin-baseline'
-import { absorbed, firstOf, unboxed } from '../utils/within-deadline'
+import { absorbed, firstOf, shielded, unboxed } from '../utils/within-deadline'
 
 /** The shortest time between two reports of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
@@ -308,17 +308,21 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // A refusal below leaves `first` unread, and closing the connection then rejects it.
     void absorbed(first)
     try {
-      const subscribed = (async () => {
-        // Outside the `try`: a refusal is not the connection failing.
-        assertBuiltinsIntact()
-        try {
-          await first
-          return 'subscribed' as const
-        } catch (err) {
-          if ((err as Error).name === 'ReplyError') throw err
-          return { unreachable: err }
-        }
-      })()
+      const subscribed = shielded(
+        (async () => {
+          // Outside the `try`: a refusal is not the connection failing.
+          assertBuiltinsIntact()
+          try {
+            await first
+            return 'subscribed' as const
+          } catch (err) {
+            if ((err as Error).name === 'ReplyError') throw err
+            // The last statement before an object return, which asks the object for a `then`.
+            assertBuiltinsIntact()
+            return { unreachable: err }
+          }
+        })(),
+      )
       const outcome = unboxed(await firstOf(subscribed, unreachableFirst))
       if (outcome === 'subscribed') {
         this.markUp()

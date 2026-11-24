@@ -513,8 +513,9 @@ describe('with a then that erases itself, planted on a root prototype before the
     expect(failure).toMatchObject(REFUSED)
   })
 
-  // Scenario: nothing is left to read after the first page, and a `then` is planted on Array.prototype before the call.
-  // Expected: the second read refuses; an empty answer is not a reason to skip the check the other returns make.
+  // Scenario: the service has no storage, so the second read has nothing to ask, and a `then` is planted on Array.prototype
+  // before the call. Expected: the second read refuses; an empty answer is not a reason to skip the check the other
+  // returns make.
   it('a second read with nothing to ask refuses a then planted on arrays', async () => {
     const queue = new OfflineQueueDeliveryService(undefined, undefined, {
       authenticateTimeoutMs: 1_000,
@@ -539,10 +540,10 @@ describe('the files whose answer is a decision', () => {
   const root = join(__dirname, '..')
   const bare = (source: string): string =>
     source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-  // A Promise static by dot or by bracket, a destructured one, `then`, `catch` and `finally` called on something, and
-  // `then` called through `call`, `apply` or `bind`. Whitespace inside a match is not part of it.
+  // A Promise static by dot or by bracket, a destructured one, a promise built with `new`, `then`, `catch` and `finally`
+  // called on something, and `then` called through `call`, `apply` or `bind`. Whitespace inside a match is not part of it.
   const FOUND =
-    /\bPromise\s*(?:\.\s*\w+|\[\s*['"`]\w+['"`]\s*\])|\{[^}]*\}\s*=\s*Promise\b|\.\s*(?:then|catch|finally)\s*\(|\bthen\s*\.\s*(?:call|apply|bind)|\[\s*['"`](?:then|catch|finally)['"`]\s*\]/g
+    /\bnew\s+Promise\b|\bPromise\s*(?:\.\s*\w+|\[\s*['"`]\w+['"`]\s*\])|\{[^}]*\}\s*=\s*Promise\b|\.\s*(?:then|catch|finally)\s*\(|\bthen\s*\.\s*(?:call|apply|bind)|\[\s*['"`](?:then|catch|finally)['"`]\s*\]/g
   const matchesIn = (source: string): string[] =>
     (bare(source).match(FOUND) ?? []).map((found) => found.replace(/\s+/g, '')).sort()
 
@@ -557,7 +558,9 @@ describe('the files whose answer is a decision', () => {
     ['then.call(p, f)', ['then.call']],
     ['p.then (f)', ['.then(']],
     ['p["then"]', ['["then"]']],
-    ['// Promise.race(x) /* p.then(f) */', []],
+    ['new Promise((resolve) => resolve())', ['newPromise']],
+    ['new  Promise<void>(f)', ['newPromise']],
+    ['// Promise.race(x) /* p.then(f) */ // new Promise(f)', []],
   ])('finds %s', (source, expected) => {
     expect(matchesIn(source)).toEqual(expected)
   })
@@ -581,13 +584,26 @@ describe('the files whose answer is a decision', () => {
     'config/guard-host-reads.ts': [
       ['Promise.resolve', 'boot-time read of a host factory, outside the guard'],
       ['then.call', 'boot-time read of a host factory, outside the guard'],
+      ['newPromise', "adapts the host factory's callback at boot, outside the guard"],
     ],
     'pubsub/redis-realtime-pubsub.ts': [
       [
         'Promise.race',
         'the publish deadline: a late or lost publish is counted by its own path, not decided by it',
       ],
+      [
+        'newPromise',
+        'the publish deadline timer: rejects with a fresh error, raced only by the publish wait',
+      ],
       ['.catch(', 'a connect started in the background; its failure is retried, not read'],
+      [
+        'newPromise',
+        'waits for a connecting publisher to settle before the quit; carries no value',
+      ],
+      [
+        'newPromise',
+        'the unreachable operand of the subscribe negotiation: resolved with a box it makes, read only through firstOf',
+      ],
       ['Promise.resolve', 'returns at once when the connection is already up; carries no value'],
       ['.catch(', 'a refusal after boot marks the bus unsubscribed and logs; it admits nothing'],
       [
@@ -596,15 +612,18 @@ describe('the files whose answer is a decision', () => {
       ],
     ],
     'utils/quit-within.ts': [
+      ['newPromise', 'the shutdown bound for a client close; the answer is not read'],
       ['.then(', 'closes a client on shutdown; the answer is not read'],
       ['Promise.race', 'closes a client on shutdown; the answer is not read'],
     ],
     'utils/run-hook.ts': [
+      ['newPromise', 'the hook timeout; a hook failure is logged, never decided on'],
       ['Promise.race', 'runs a hook whose failure is logged, never decided on'],
     ],
     'transports/sse/sse-subscription.handler.ts': [
       ['.then(', 'logs a failed lifecycle hook; the hook runs after the decision'],
     ],
+    'utils/semaphore.ts': [['newPromise', 'a waiter for a free slot; carries no value']],
     'transports/sse/sse.transport.ts': [
       ['Promise.all', 'shutdown: waits for every connection to be cut'],
       [
@@ -622,6 +641,7 @@ describe('the files whose answer is a decision', () => {
     'config/guard-host-reads.ts',
     'utils/quit-within.ts',
     'utils/run-hook.ts',
+    'utils/semaphore.ts',
     'utils/within-deadline.ts',
     'transports/sse/sse-subscription.handler.ts',
     'transports/sse/sse.transport.ts',
