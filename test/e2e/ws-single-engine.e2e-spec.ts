@@ -132,6 +132,13 @@ describe('one engine per port and path (e2e)', () => {
     for (const namespace of hostNamespaces) {
       expect(await connect(port, namespace)).toBe('connected')
     }
+    // The host handler fires once for each client that connected to its namespace, and for no other.
+    const connected = ['/rt', ...hostNamespaces]
+    expect(hosts.map((host) => host.count)).toStrictEqual(
+      hostOptions.map(
+        (options) => connected.filter((namespace) => namespace === `/${options.namespace}`).length,
+      ),
+    )
     expect(uncaught).toStrictEqual([])
   })
 
@@ -143,6 +150,7 @@ describe('one engine per port and path (e2e)', () => {
 
     expect(app?.getHttpServer().listenerCount('upgrade')).toBe(1)
     expect(await connect(port, '/y')).toBe('connected')
+    expect(host.count).toBe(1)
     expect(uncaught).toStrictEqual([])
   })
 

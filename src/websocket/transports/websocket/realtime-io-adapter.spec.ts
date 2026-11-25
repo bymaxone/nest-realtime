@@ -395,6 +395,18 @@ describe('RealtimeIoAdapter', () => {
       expect(createSuperSpy).toHaveBeenCalledWith(3000, { namespace: '/y', server: given })
     })
 
+    it('hands the stock adapter the very options object it was given when none is a namespace of its own', () => {
+      // A copy would drop what the host put on the object by reference, so only a root swap may build a new one.
+      const given = { of: jest.fn() }
+      const options = { namespace: '/y', server: given }
+      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue({} as never)
+      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
+
+      adapter.create(3000, options as never)
+
+      expect(createSuperSpy.mock.calls[0]?.[1]).toBe(options)
+    })
+
     it('returns the root server unchanged when namespace is unset', () => {
       // No namespace → the root server is returned as-is, of() is never called.
       const root = makeRootServer({})
