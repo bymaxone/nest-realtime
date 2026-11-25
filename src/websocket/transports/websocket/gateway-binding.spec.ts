@@ -192,6 +192,17 @@ describe('gatewayBoundToNamespace', () => {
     expect(() => construct(Bound, { namespace: '/b' })).toThrow('REALTIME_INVALID_OPTIONS')
   })
 
+  // Scenario: two instances wait on one namespace and the second one is connected. Expected: the first still holds it.
+  it('holds the namespace for the first instance when the second is connected', () => {
+    const Bound = gatewayBoundToNamespace()
+    construct(Bound, { namespace: '/a' })
+    const second = construct(Bound, { namespace: '/a' })
+
+    connect(second)
+
+    expect(() => construct(Bound, { namespace: '/b' })).toThrow('REALTIME_INVALID_OPTIONS')
+  })
+
   // Scenario: the key Nest reads a gateway's options under. Expected: it is the one this module writes. Nest's own decorator
   // is the witness, so a key Nest renames fails here, in a spec, and not in an application that boots on the wrong namespace.
   it("writes the key Nest's own decorator writes", () => {
