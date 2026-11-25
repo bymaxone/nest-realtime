@@ -519,8 +519,7 @@ export class SseTransport implements ITransport {
     const message = this.buildMessage(id, event, data)
     this.tally?.emitted('sse')
     const members = this.rooms.members(roomId)
-    // Stryker disable next-line EqualityOperator: equivalent — past the last member the element is `undefined`, which no connection is registered under, so the lookup finds none and nothing is delivered
-    for (let i = 0; i < members.length; i += 1) {
+    for (let i = 0; i !== members.length; i += 1) {
       const conn = this.connections.get(members[i] as string)
       if (conn && conn.transport === 'sse') this.deliver(conn, message)
     }
