@@ -75,7 +75,7 @@ const interesting = (
 })
 
 describe('the WebSocket transport, with a key planted while a request is served', () => {
-  let app: INestApplication
+  let app: INestApplication | undefined
   let port: number
 
   beforeAll(async () => {
@@ -96,7 +96,8 @@ describe('the WebSocket transport, with a key planted while a request is served'
   })
 
   afterAll(async () => {
-    await app.close()
+    // A setup that failed leaves nothing to close, and closing it would hide the failure behind its own.
+    await app?.close()
     jest.restoreAllMocks()
   })
 
@@ -166,7 +167,7 @@ describe('the WebSocket transport, with a key planted while a request is served'
 })
 
 describe('the SSE transport, with a key planted while a request is served', () => {
-  let app: INestApplication
+  let app: INestApplication | undefined
   let port: number
 
   beforeAll(async () => {
@@ -180,7 +181,8 @@ describe('the SSE transport, with a key planted while a request is served', () =
   })
 
   afterAll(async () => {
-    await app.close()
+    // A setup that failed leaves nothing to close, and closing it would hide the failure behind its own.
+    await app?.close()
     jest.restoreAllMocks()
   })
 
@@ -215,7 +217,7 @@ describe('the SSE transport, with a key planted while a request is served', () =
 })
 
 describe('the cors block Nest hands the adapter, with a key planted while a request is served', () => {
-  let app: INestApplication
+  let app: INestApplication | undefined
   let port: number
 
   beforeAll(async () => {
@@ -232,7 +234,8 @@ describe('the cors block Nest hands the adapter, with a key planted while a requ
   })
 
   afterAll(async () => {
-    await app.close()
+    // A setup that failed leaves nothing to close, and closing it would hide the failure behind its own.
+    await app?.close()
     jest.restoreAllMocks()
   })
 
@@ -307,7 +310,7 @@ const GATEWAY_OPTIONS: ReadonlyArray<
 describe.each(GATEWAY_OPTIONS)(
   'the options Nest hands the adapter as %s, with a key planted while a request is served',
   (_name, build, expectClean) => {
-    let app: INestApplication
+    let app: INestApplication | undefined
     let port: number
 
     beforeAll(async () => {
@@ -322,7 +325,8 @@ describe.each(GATEWAY_OPTIONS)(
     })
 
     afterAll(async () => {
-      await app.close()
+      // A setup that failed leaves nothing to close, and closing it would hide the failure behind its own.
+      await app?.close()
       jest.restoreAllMocks()
     })
 
