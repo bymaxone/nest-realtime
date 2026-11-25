@@ -482,6 +482,19 @@ describe('the own keys the shadows give', () => {
 
     expect(Object.getOwnPropertyNames(target).sort()).toStrictEqual([...names].sort())
   })
+
+  // Scenario: an object already holds each name as its own, with a value. Expected: the values stay, because a name the
+  // target holds is not defined again.
+  it.each([
+    ['a server', shadowServerInstance, SERVER_INSTANCE_NAMES],
+    ['a socket', shadowSocket, SOCKET_LAZY_NAMES],
+  ])('leaves a name %s already holds as it is', (_what, shadow, names) => {
+    const target = Object.fromEntries(names.map((name) => [name, 7]))
+
+    shadow(target)
+
+    expect(Object.values(target)).toStrictEqual(names.map(() => 7))
+  })
 })
 
 describe('shadowDecoder', () => {

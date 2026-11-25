@@ -354,3 +354,22 @@ describe('the extraProviders of forRootAsync', () => {
     expect(() => register(value)).not.toThrow()
   })
 })
+
+describe('a registration whose key throws', () => {
+  // Scenario: a key of the registration other than extraProviders throws when it is read. Expected: the typed refusal that
+  // the registration could not be read, with the host's error as the cause.
+  it('is refused with the cause, naming the registration', async () => {
+    const registration = {
+      transport: 'sse',
+      useFactory: () => ({ transport: 'sse', authenticator }),
+      get inject(): never {
+        throw new Error(SENTINEL)
+      },
+    }
+
+    await typedRefusal(
+      () => BymaxRealtimeModule.forRootAsync(registration as never),
+      'the registration',
+    )
+  })
+})

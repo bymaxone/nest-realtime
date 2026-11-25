@@ -389,6 +389,17 @@ describe('BymaxRealtimeModule.forRootAsync', () => {
     expect(dynamic.imports).toEqual([])
   })
 
+  // Scenario: the registration names modules to import. Expected: the dynamic module imports those modules.
+  it('passes through the imports it is given', () => {
+    class Dependency {}
+    const dynamic = BymaxRealtimeModule.forRootAsync({
+      transport: 'sse',
+      imports: [Dependency],
+      useFactory: async () => ({ transport: 'sse', authenticator }),
+    })
+    expect(dynamic.imports).toEqual([Dependency])
+  })
+
   // useClass: a class implementing BymaxRealtimeModuleOptionsFactory is instantiated by DI.
   it('wires RealtimeService when useClass is provided', async () => {
     @Injectable()
