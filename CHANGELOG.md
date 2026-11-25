@@ -9,7 +9,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Fixed
 
-- **A WebSocket upgrade no longer ends the process when `websocket.namespace` is set and the application has a gateway of its own on another namespace.** With that layout the adapter built a second Socket.IO server on the application's HTTP server, so every upgrade reached two engines and the second one threw. The adapter now gives Nest's stored server back as the root one when a gateway of another namespace joins it, so one server, and one engine, serves the port and path. Applications that set `websocket.namespace` and host a gateway on a different namespace are affected; layouts without both are not.
+- **A WebSocket upgrade no longer ends the process when `websocket.namespace` is set and the application has a gateway of its own that declares a namespace.** With that layout the adapter built a second Socket.IO server on the application's HTTP server, so every upgrade reached two engines and the second one threw. The adapter now gives Nest's stored server back as the root one when a gateway that declares a namespace joins it, so one server, and one engine, serves the port and path. Applications that set `websocket.namespace` and host a gateway that declares a namespace, whether the same one or another, are affected; a host gateway that declares none is not.
 
 ### Documentation
 

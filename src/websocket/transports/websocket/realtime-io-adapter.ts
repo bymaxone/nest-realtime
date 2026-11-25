@@ -111,7 +111,7 @@ const realtimeServers = new WeakSet<object>()
 
 /**
  * The root server of each namespace `create` handed to Nest. Nest stores what `create` returns as the server of the port
- * and path, and gives it back as `options.server` when a gateway of another namespace joins it. A `Namespace` cannot
+ * and path, and gives it back as `options.server` when a gateway that declares a namespace joins it. A `Namespace` cannot
  * take `.of`, so the stock adapter would build a second server, and with it a second engine, on the same HTTP server.
  */
 const namespaceRoots = new WeakMap<object, object>()
