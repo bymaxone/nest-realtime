@@ -20,11 +20,9 @@ const consumerSource = `import { RealtimeIoAdapter } from '@bymax-one/nest-realt
 export class HostAdapter extends RealtimeIoAdapter {}
 `
 
-/** The `tsc` diagnostics located inside the packed package: the host's own dependencies are not this gate's to judge. */
-function ownDiagnostics(output, packageName) {
-  return output
-    .split('\n')
-    .filter((line) => line.includes(packageName) && line.includes('error TS'))
+/** The first diagnostic of a `tsc` run that failed: one in the package or in the consumer's own file fails the same. */
+function firstDiagnostic(output) {
+  return output.split('\n').find((line) => line.includes('error TS')) ?? output.trim()
 }
 
 /**
@@ -62,20 +60,17 @@ export function consumerTypeFailures({ rootDir, tarball, packageName, workDir })
         files: ['index.ts'],
       }
       writeFileSync(join(dir, `tsconfig.${moduleResolution}.json`), JSON.stringify(config))
-      let output = ''
+      const label = `${copies} socket.io ${copies === 'one' ? 'copy' : 'copies'}, ${moduleResolution}`
       try {
-        output = execFileSync('node', [tsc, '-p', join(dir, `tsconfig.${moduleResolution}.json`)], {
+        execFileSync('node', [tsc, '-p', join(dir, `tsconfig.${moduleResolution}.json`)], {
           cwd: dir,
           encoding: 'utf8',
           stdio: 'pipe',
         })
+        console.log(`✓ declarations compile with ${label}`)
       } catch (error) {
-        output = `${error.stdout ?? ''}${error.stderr ?? ''}`
+        failures.push(`${label}: ${firstDiagnostic(`${error.stdout ?? ''}${error.stderr ?? ''}`)}`)
       }
-      const own = ownDiagnostics(output, packageName)
-      const label = `${copies} socket.io ${copies === 'one' ? 'copy' : 'copies'}, ${moduleResolution}`
-      if (own.length > 0) failures.push(`${label}: ${own[0]}`)
-      else console.log(`✓ declarations compile with ${label}`)
     }
   }
   return failures

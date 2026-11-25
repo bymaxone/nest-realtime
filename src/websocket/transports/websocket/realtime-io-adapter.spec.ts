@@ -328,10 +328,94 @@ describe('RealtimeIoAdapter', () => {
     })
   })
 
+  describe('the library namespace', () => {
+    const boot = (namespace: string | undefined, port: number, opts?: object): jest.Mock => {
+      const server = makeServer()
+      superSpy.mockImplementation(() => server)
+      const websocket = namespace === undefined ? {} : { namespace }
+      new RealtimeIoAdapter(makeApp({ websocket }) as never).createIOServer(port, opts as never)
+      return server.of
+    }
+
+    // Scenario: the server of the application's port and default path. Expected: the library's namespace is opened on it,
+    // under the name Socket.IO gives it.
+    it.each([
+      ['/rt', '/rt'],
+      ['rt', '/rt'],
+    ])('opens %p as %p on the library server', (configured, opened) => {
+      expect(boot(configured, 0).mock.calls).toStrictEqual([['/'], [opened]])
+    })
+
+    // Scenario: no namespace, the root, or a server of another port or path. Expected: only '/' is read for the guards.
+    it.each([
+      ['unset', undefined, 0, undefined],
+      ['empty', '', 0, undefined],
+      ['the root', '/', 0, undefined],
+      ['on another port', '/rt', 3001, undefined],
+      ['on another path', '/rt', 0, { path: '/own' }],
+    ])('opens nothing more when it is %s', (_case, namespace, port, opts) => {
+      expect(boot(namespace, port, opts).mock.calls).toStrictEqual([['/']])
+    })
+  })
+
+  describe('bindClientConnect', () => {
+    let warnSpy: jest.SpyInstance
+
+    beforeEach(() => {
+      warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    })
+    afterEach(() => warnSpy.mockRestore())
+
+    /** An adapter with a server of `port`, and what binding a gateway to each of `targets` warns. */
+    function bind(
+      namespace: string | undefined,
+      port: number,
+      targets: (server: object) => object[],
+    ): { warnings: unknown[]; handlers: jest.Mock[] } {
+      const server = makeServer()
+      superSpy.mockImplementation(() => server)
+      const websocket = namespace === undefined ? {} : { namespace }
+      const adapter = new RealtimeIoAdapter(makeApp({ websocket }) as never)
+      adapter.createIOServer(port)
+      const handlers = targets(server).map((target) => {
+        const on = jest.fn()
+        adapter.bindClientConnect(Object.assign(target, { on }), () => undefined)
+        return on
+      })
+      return {
+        warnings: warnSpy.mock.calls.map(([line]) => (line as { event: string }).event),
+        handlers,
+      }
+    }
+
+    // Scenario: a gateway on the server itself, or on its '/' namespace, with the library elsewhere. Expected: one warning
+    // for any number of them, and each handler is bound as IoAdapter binds it.
+    it.each([
+      ['the server', (server: object) => [server, server]],
+      ["its '/' namespace", (server: object) => [{ name: '/', server }]],
+    ])('warns once about a gateway on %s', (_case, targets) => {
+      const { warnings, handlers } = bind('/rt', 0, targets)
+
+      expect(warnings).toStrictEqual(['REALTIME_GATEWAY_OUTSIDE_NAMESPACE'])
+      for (const on of handlers) expect(on).toHaveBeenCalledWith('connection', expect.any(Function))
+    })
+
+    // Scenario: a gateway on another namespace, on another server, or no namespace configured. Expected: no warning.
+    it.each([
+      ['a namespace of the server', '/rt', 0, (server: object) => [{ name: '/rt', server }]],
+      ['a server of another port', '/rt', 3001, (server: object) => [server]],
+      ['another server', '/rt', 0, () => [{}, { name: '/', server: {} }]],
+      ['the server, with no namespace configured', undefined, 0, (server: object) => [server]],
+      ["the server, with '/' configured", '/', 0, (server: object) => [server]],
+    ])('says nothing about %s', (_case, namespace, port, targets) => {
+      expect(bind(namespace, port, targets).warnings).toStrictEqual([])
+    })
+  })
+
   describe('create', () => {
     // Scenario: the adapter's `create`. Expected: it is the stock one, which returns the root server, so Nest stores the
     // root and every gateway without a namespace binds to `/`; the library's gateway alone is bound to its namespace.
-    it('is the stock adapter create, which returns the root server', () => {
+    it('declares no create of its own', () => {
       expect(Object.prototype.hasOwnProperty.call(RealtimeIoAdapter.prototype, 'create')).toBe(
         false,
       )

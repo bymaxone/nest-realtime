@@ -20,6 +20,7 @@ import type { Socket as ClientSocket } from 'socket.io-client'
 import type { Server } from 'socket.io'
 import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
 import { RealtimeIoAdapter } from '../../src/websocket/transports/websocket/realtime-io-adapter'
+import { freePort } from '../support/free-port'
 
 jest.setTimeout(20_000)
 
@@ -159,7 +160,7 @@ describe('root server binding (e2e)', () => {
 
   // Scenario: a gateway with its own port. Expected: that port is released when the application closes.
   it('releases the port of an own-port gateway on close', async () => {
-    const ownPort = 40_000 + Math.floor(Math.random() * 10_000)
+    const ownPort = await freePort()
     await boot([hostGateway(ownPort, {})])
     expect(await portBound(ownPort)).toBe(true)
 
