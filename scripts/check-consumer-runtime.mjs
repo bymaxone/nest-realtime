@@ -342,6 +342,66 @@ setTimeout(() => {
 `
 
 /**
+ * The single-engine probe, identical in both formats. With `websocket.namespace` set and a gateway of the application's own
+ * that declares a namespace, every upgrade must reach one engine: a second one on the HTTP server makes the second
+ * `handleUpgrade` throw and ends the process. The probe is the process, so a death is a failed gate, and it makes fifty
+ * upgrades with a raw socket, which needs no client library, to see that none of them ends it.
+ */
+const singleEngineProbeBody = `
+;(async () => {
+const fail = (message) => {
+  console.error('  ✗ ' + FORMAT + ': ' + message)
+  process.exit(1)
+}
+process.on('uncaughtException', (error) => fail('an upgrade ended the process: ' + String(error.message).slice(0, 80)))
+const { Module } = common
+const upgrade = (port, path) =>
+  new Promise((done) => {
+    const socket = net.connect(port, '127.0.0.1')
+    let answer = ''
+    socket.on('data', (chunk) => {
+      answer += chunk.toString('latin1')
+      socket.destroy()
+    })
+    socket.on('close', () => done(answer.split('\\r\\n')[0] || 'closed'))
+    socket.on('error', () => done('error'))
+    socket.write('GET ' + path + ' HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: Upgrade\\r\\nUpgrade: websocket\\r\\nSec-WebSocket-Version: 13\\r\\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\\r\\n\\r\\n')
+    setTimeout(() => socket.destroy(), 1000)
+  })
+for (const hostNamespace of ['y', 'rt']) {
+  class Host {
+    handleConnection() {}
+  }
+  websockets.WebSocketGateway({ namespace: hostNamespace })(Host)
+  class Library {}
+  Module({
+    imports: [
+      ws.BymaxRealtimeWebSocketModule.forRoot({
+        transport: 'websocket',
+        authenticator: { authenticate: async () => null },
+        websocket: { namespace: '/rt' },
+      }),
+    ],
+    providers: [Host],
+  })(Library)
+  const app = await NestFactory.create(Library, { logger: false })
+  app.useWebSocketAdapter(new ws.RealtimeIoAdapter(app))
+  await app.listen(0, '127.0.0.1')
+  const server = app.getHttpServer()
+  const label = 'a gateway of the namespace /' + hostNamespace
+  if (server.listenerCount('upgrade') !== 1) fail(label + ' left ' + server.listenerCount('upgrade') + ' upgrade listeners, not 1')
+  const port = server.address().port
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const status = await upgrade(port, '/socket.io/?EIO=4&transport=websocket')
+    if (!status.includes('101')) fail(label + ': upgrade ' + attempt + ' answered ' + status)
+  }
+  await app.close()
+}
+console.log('  ✓ ' + FORMAT + ': 50 upgrades with websocket.namespace and a gateway of another namespace, or of the same one, leave one engine and a live process')
+})()
+`
+
+/**
  * The pre-load probe, identical in both formats. `vm` reads its options with inheritance, so a wrong-typed value planted
  * under one of their names makes it throw, with the planted value in the message. The library builds a realm with `vm`
  * when the WebSocket entry loads: the import must not throw, and the server must refuse to run with the count-only error
@@ -404,6 +464,28 @@ require('socket.io')
 const FORMAT = 'CJS'
 const loadWebSocketEntry = async () => require('${packageName}/websocket')
 ${preloadProbeBody}`
+
+const esmSingleEngineProbe = `import 'reflect-metadata'
+import net from 'node:net'
+import * as common from '@nestjs/common'
+import { NestFactory } from '@nestjs/core'
+import * as websockets from '@nestjs/websockets'
+import '@nestjs/platform-socket.io'
+import 'socket.io'
+import * as ws from '${packageName}/websocket'
+const FORMAT = 'ESM'
+${singleEngineProbeBody}`
+
+const cjsSingleEngineProbe = `require('reflect-metadata')
+const net = require('node:net')
+const common = require('@nestjs/common')
+const { NestFactory } = require('@nestjs/core')
+const websockets = require('@nestjs/websockets')
+require('@nestjs/platform-socket.io')
+require('socket.io')
+const ws = require('${packageName}/websocket')
+const FORMAT = 'CJS'
+${singleEngineProbeBody}`
 
 const esmRejectionProbe = `import vm from 'node:vm'
 import { resolveAuthTenant } from '${packageName}/internal'
@@ -485,6 +567,8 @@ try {
   writeFileSync(join(consumerDir, 'preload.cjs'), cjsPreloadProbe)
   writeFileSync(join(consumerDir, 'rejections.mjs'), esmRejectionProbe)
   writeFileSync(join(consumerDir, 'rejections.cjs'), cjsRejectionProbe)
+  writeFileSync(join(consumerDir, 'engine.mjs'), esmSingleEngineProbe)
+  writeFileSync(join(consumerDir, 'engine.cjs'), cjsSingleEngineProbe)
 
   // A consumer's bundler picks the package's `import` build by the consumer's import syntax, whatever
   // format it emits. The same probe, bundled to CommonJS with esbuild (the engine of this repo's own
@@ -533,6 +617,8 @@ try {
     'preload.cjs',
     'rejections.mjs',
     'rejections.cjs',
+    'engine.mjs',
+    'engine.cjs',
   ]) {
     try {
       process.stdout.write(run('node', [probe], { cwd: consumerDir, stdio: 'pipe' }))

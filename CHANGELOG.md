@@ -7,9 +7,19 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.37] - 2026-11-25
+
+### Fixed
+
+- **A WebSocket upgrade no longer ends the process when `websocket.namespace` is set and the application has a gateway of its own that declares a namespace, and a gateway of its own with a port no longer fails to start with `EADDRINUSE`.** With that layout the adapter built a second Socket.IO server on the application's HTTP server, so every upgrade reached two engines and the second one threw; for a gateway with a port of its own the second server listened on a port that was taken, and the error was uncaught at start-up. The adapter now gives Nest's stored server back as the root one when a gateway that declares a namespace joins it, so one server, and one engine, serves the port and path. Applications that set `websocket.namespace` and host a gateway that declares a namespace, whether the same one or another, are affected. A host gateway whose `path` is the library's path or lies under it still builds an engine of its own, with the stock adapter as well, because Nest keeps servers of different paths apart; and a host gateway that declares no namespace did not have this defect but is served on `websocket.namespace`, see the README, "Known limits".
+
 ### Documentation
 
 - **`websocket.cors` is documented as response headers, not an origin check.** A WebSocket upgrade is not subject to CORS, and the library accepts it whatever its `Origin` is, so a client with an unlisted origin and a valid cookie connects. The README and `SECURITY.md` now say so and say what the host does: refuse an unlisted `ctx.headers.origin` in its `IConnectionAuthenticator`, and set the session cookie `SameSite=Lax` or `Strict`. The library's behaviour is unchanged.
+
+### Apply to a derived backend
+
+An application that sets `websocket.namespace` and hosts a gateway of its own that declares a namespace no longer ends its process on a WebSocket upgrade, and one with a gateway of its own on a port starts; nothing has to be changed for that. Two behaviours that were already there are now documented as limits in the README, "Known limits": a gateway that declares no namespace is served on `websocket.namespace`, behind the library's authenticator, and with `websocket.namespace` set an open WebSocket connection keeps `app.close()` pending unless the application is created with `forceCloseConnections: true`.
 
 ## [1.2.36] - 2026-11-22
 
@@ -1488,7 +1498,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.36...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.37...HEAD
+[1.2.37]: https://github.com/bymaxone/nest-realtime/compare/v1.2.36...v1.2.37
 [1.2.36]: https://github.com/bymaxone/nest-realtime/compare/v1.2.35...v1.2.36
 [1.2.35]: https://github.com/bymaxone/nest-realtime/compare/v1.2.34...v1.2.35
 [1.2.34]: https://github.com/bymaxone/nest-realtime/compare/v1.2.33...v1.2.34
