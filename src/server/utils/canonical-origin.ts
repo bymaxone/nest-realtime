@@ -22,6 +22,24 @@ const DEFAULT_PORT: Readonly<Record<string, string>> = {
   https: '443',
 }
 
+/** The host as a browser serializes it: an IPv4 address in four plain decimal parts, an IPv6 address compressed. */
+function isCanonicalHost(host: string): boolean {
+  if (host.startsWith('[')) {
+    try {
+      return new URL(`http://${host}`).host === host
+    } catch {
+      return false
+    }
+  }
+  const parts = host.split('.')
+  const last = parts[parts.length - 1] as string
+  if (!/^(?:[0-9]+|0x[0-9a-f]*)$/.test(last)) return true
+  return (
+    parts.length === 4 &&
+    parts.every((part) => String(Number(part)) === part && Number(part) <= 255)
+  )
+}
+
 /**
  * Whether `value` is an origin written as a browser sends it: a lowercase scheme, `://`, a lowercase host (a DNS name
  * in ASCII, punycode for an international one, or a bracketed IPv6 address) and, only when it is not the default of
@@ -36,6 +54,7 @@ export function isCanonicalOrigin(value: unknown): value is string {
   const match = SHAPE.exec(value)
   if (match === null) return false
   const scheme = match[1] as string
+  if (!isCanonicalHost(match[2] as string)) return false
   const port = match[3]
   if (port === undefined) return true
   return Number(port) <= 65535 && DEFAULT_PORT[scheme] !== port

@@ -81,22 +81,45 @@ describe('RealtimeGateway', () => {
       ['allowedOrigins', { allowedOrigins: ['https://app.example'] }],
       ['websocketOnly', { websocketOnly: true }],
     ])(
-      'refuses to boot when %s is set and the adapter is not RealtimeIoAdapter',
+      'refuses the boot when %s is set and the adapter is not RealtimeIoAdapter',
       async (_name, websocket) => {
         // Neither option would apply, which leaves polling on and no origin check, so the boot is refused, not logged.
+        // The refusal is thrown from a hook Nest awaits: a throw from afterInit lands in an rxjs subscriber and
+        // surfaces later as an uncaughtException, after the application is already serving.
         gateway = (await buildModule({ websocket })).get(RealtimeGateway)
 
-        expect(() => gateway.afterInit({ use: jest.fn() } as never)).toThrow(
+        expect(() => gateway.afterInit({ use: jest.fn() } as never)).not.toThrow()
+        expect(() => gateway.onApplicationBootstrap()).toThrow(
           /REALTIME_TRANSPORT_UNAVAILABLE.*app\.useWebSocketAdapter\(new RealtimeIoAdapter\(app\)\)/,
         )
         expect(errorSpy).not.toHaveBeenCalled()
       },
     )
 
+    it('rejects app.init() of a real application that sets allowedOrigins without the adapter', async () => {
+      // The unit row above reads the hook; this one reads what a host sees: init rejecting, nothing listening.
+      const moduleRef = await buildModule({
+        websocket: { allowedOrigins: ['https://app.example'] },
+      })
+      const app = moduleRef.createNestApplication({ logger: false })
+      try {
+        await expect(app.init()).rejects.toThrow(/REALTIME_TRANSPORT_UNAVAILABLE/)
+      } finally {
+        await app.close()
+      }
+    })
+
+    it('does not refuse the bootstrap when the options are not asking for the policy', async () => {
+      gateway.afterInit({ use: jest.fn() } as never)
+
+      expect(() => gateway.onApplicationBootstrap()).not.toThrow()
+    })
+
     it('only logs when websocketOnly is false', async () => {
       gateway = (await buildModule({ websocket: { websocketOnly: false } })).get(RealtimeGateway)
 
       expect(() => gateway.afterInit({ use: jest.fn() } as never)).not.toThrow()
+      expect(() => gateway.onApplicationBootstrap()).not.toThrow()
       expect(errorSpy).toHaveBeenCalledTimes(1)
     })
 

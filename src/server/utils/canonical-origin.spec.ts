@@ -24,6 +24,10 @@ describe('isCanonicalOrigin', () => {
     'chrome-extension://abcdefghijklmnopabcdefghijklmnop',
     'https://a-b.example',
     'https://a--b.example',
+    'http://127.0.0.1:3000',
+    'http://192.168.1.10',
+    'http://10.0.0.255:8080',
+    'https://app.example.1password',
   ])('accepts %s', (origin) => {
     expect(isCanonicalOrigin(origin)).toBe(true)
   })
@@ -57,6 +61,15 @@ describe('isCanonicalOrigin', () => {
     ['an unbracketed IPv6 host', 'http://::1'],
     ['a scheme starting with a digit', '1http://app.example'],
     ['a newline', 'https://app.example\n'],
+    ['an IPv4 shorthand a browser expands', 'http://127.1'],
+    ['an IPv4 in hexadecimal', 'http://0x7f.1'],
+    ['an IPv4 with three parts', 'http://1.2.3'],
+    ['an IPv4 with a leading zero', 'http://127.0.0.01'],
+    ['an IPv4 part above 255', 'http://256.0.0.1'],
+    ['a single decimal number host', 'http://2130706433'],
+    ['an IPv6 a browser compresses', 'http://[0:0:0:0:0:0:0:1]'],
+    ['an uppercase IPv6', 'http://[::A]'],
+    ['brackets that are not an address', 'http://[abc]'],
   ])('refuses %s', (_name, origin) => {
     expect(isCanonicalOrigin(origin)).toBe(false)
   })

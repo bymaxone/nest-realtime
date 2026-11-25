@@ -9,7 +9,7 @@ import {
   type BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
 
-/** What engine.io hands `allowRequest` to answer with: `success` false refuses the request with a 403. */
+/** What engine.io hands `allowRequest` to answer with: `success` false refuses the upgrade with a 400. */
 type Answer = (message: string | null | undefined, success: boolean) => void
 
 /** The `allowRequest` of an engine.io server: it is given the request and answers once. */
