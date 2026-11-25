@@ -287,7 +287,7 @@ For WebSocket, scaling goes through Socket.IO's own Redis adapter instead, confi
 
 ### 7. Add WebSocket (optional)
 
-WebSocket lives behind its own subpath, so an SSE application never installs the Socket.IO stack. Install its peers (see [Install](#1-install)), then do two things: register `BymaxRealtimeWebSocketModule` from `/websocket` instead of `BymaxRealtimeModule`, and install `RealtimeIoAdapter` in `main.ts`. Two copies of `socket.io` in `node_modules` make TypeScript report TS2416 on `RealtimeIoAdapter` under `skipLibCheck: false`; dedupe to one copy.
+WebSocket lives behind its own subpath, so an SSE application never installs the Socket.IO stack. Install its peers (see [Install](#1-install)), then do two things: register `BymaxRealtimeWebSocketModule` from `/websocket` instead of `BymaxRealtimeModule`, and install `RealtimeIoAdapter` in `main.ts`.
 
 ```typescript
 // app.module.ts
@@ -328,7 +328,7 @@ bootstrap()
 ```
 
 > [!IMPORTANT]
-> The `main.ts` line is not optional. `RealtimeIoAdapter` is what applies `websocket.cors`, `allowedOrigins`, `websocketOnly`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`. Without it those options are ignored (but `allowedOrigins` or `websocketOnly` refuses the boot instead, see [WebSocket origin](#websocket-origin)), the gateway's own CORS stays closed (`origin: false`) so no CORS header lets a browser on another origin read a long-polling response (a WebSocket upgrade is not subject to CORS: see [WebSocket origin](#websocket-origin)), and the module logs this error once at start-up:
+> The `main.ts` line is not optional. `RealtimeIoAdapter` is what applies `websocket.cors`, `allowedOrigins`, `websocketOnly`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`. `websocket.namespace` does not depend on it: the library is served there with or without the adapter, and the library's authenticator never runs for the clients of another namespace. Without the adapter those options are ignored (but `allowedOrigins` or `websocketOnly` refuses the boot instead, see [WebSocket origin](#websocket-origin)), the gateway's own CORS stays closed (`origin: false`) so no CORS header lets a browser on another origin read a long-polling response (a WebSocket upgrade is not subject to CORS: see [WebSocket origin](#websocket-origin)), and the module logs this error once at start-up:
 
 ```
 RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options are ignored and the gateway CORS stays closed (origin: false): browsers on another origin cannot connect. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from '@bymax-one/nest-realtime/websocket'.
@@ -455,6 +455,28 @@ This section lists the bounds the library applies, what happens when each one is
 | `sse.replayBufferSize`, `sse.replayTtlMs`, `sse.replayMaxIdleUsers`                | 100 events; 300,000 ms; 1,000 users | A user's ring keeps the newest `replayBufferSize` events and drops the older ones. An entry is dropped `replayTtlMs` after its user's last connection closed. At most `replayMaxIdleUsers` such entries are kept, and the one that closed longest ago goes first. See [Replay is per instance, and bounded](#replay-is-per-instance-and-bounded).                                                                                                                                                                                |
 | Length of a `Last-Event-ID` header or `lastEventId` query value                    | 256 characters                      | An id longer than that is treated as absent: no replay and no offline-queue read is made for it. An id of exactly 256 characters is used. A longer header with a valid query value falls back to the query value.                                                                                                                                                                                                                                                                                                                |
 
+### Known limits
+
+**A host gateway that declares the same namespace as `websocket.namespace` shares it with the library's gateway.** It runs its handlers for the library's connections, and what the library does to its own connections, such as revoking, capping or denying them, is not something that gateway can opt out of. Give a host gateway a namespace of its own unless it is meant to receive from those clients.
+
+**A host gateway on another namespace is outside the library.** A gateway that declares no namespace, or `/`, is served on `/`. When `websocket.namespace` is set to something other than `/`, the library's authenticator is not called for it and the library's rooms are not reachable from it; the adapter logs `REALTIME_GATEWAY_OUTSIDE_NAMESPACE` once at start for one on its server. When `websocket.namespace` is unset, empty or `/`, such a gateway shares `/` with the library's gateway.
+
+**Upgrading: a gateway that declares `/`.** With `websocket.namespace` set to another namespace, a gateway that declares `/` on the application's port and default path was authenticated by the library's authenticator in 1.2.37; it no longer is. Authenticate it yourself or give it the namespace of `websocket.namespace`. Its `handleConnection` and `handleDisconnect` also ran for the library's clients and no longer do, so a disconnect it makes in `handleConnection` no longer applies to them.
+
+**`RealtimeIoAdapter` keeps a dynamic host namespace off `websocket.namespace`.** On the application's port and default path, `RealtimeIoAdapter` opens `websocket.namespace` before any gateway joins the server, so a RegExp that matches it serves its other matches and not that one. Otherwise nothing is opened.
+
+**Without `RealtimeIoAdapter`, a RegExp namespace of a host gateway can take `websocket.namespace`.** Nest's own adapter opens the library's namespace as a child of a RegExp that matches it, when that gateway is connected first. The library's authenticator still runs there, and the host's broadcasts without a room, and its room emits, reach the library's clients. Install `RealtimeIoAdapter`.
+
+**One module object holds one `websocket.namespace` until its gateway is connected.** A second application made from the same `forRoot` or `forRootAsync` result while the first has not reached `init`, with another namespace, is refused with `REALTIME_INVALID_OPTIONS`. After the first is connected or closed, another namespace is accepted. `createApplicationContext` connects no gateway, so a second context with another namespace is refused until the first is closed. A boot that fails while Nest is still creating providers returns no application to close, so that module object can keep its namespace for the process's life. Call `forRoot` once for each application.
+
+**`forRoot` twice in one application serves both namespaces**, each with a library gateway. Call it once.
+
+**Replacing the `RealtimeGateway` provider drops the namespace.** `overrideProvider(RealtimeGateway).useClass(...)`, with a subclass of the exported class, serves the library on `/`: the namespace is declared by the class the module registers, not by `RealtimeGateway`. Under `RealtimeIoAdapter`, `websocket.namespace` is then still open with no gateway on it, and a client connects there without authentication. Replace the options provider instead.
+
+**Some connections keep `app.close()` pending.** Authenticated WebSocket and polling clients, a client whose authenticator never answers, and a polling request whose answer is never read do not. A connection that finished the upgrade and then answers nothing is waited for until its close times out, about 30 seconds with the installed `ws`. A TCP connection that sent nothing, or part of a request, is not one the Socket.IO engine knows, and close waits for the peer. This holds with or without `websocket.namespace`. `NestFactory.create(AppModule, { forceCloseConnections: true })` ends them at once on the application's port; it does not reach the server of a gateway on a port of its own.
+
+**A gateway in a module loaded with `LazyModuleLoader` after the application started is not wired.** Nest connects gateways at start only, so a client reaches the Socket.IO server but no handler of that gateway runs. This is Nest's behavior and the library does not change it.
+
 ### When a dependency fails
 
 | Situation                                                                                         | What the instance does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Evidence                                                                                                                                                    |
@@ -533,6 +555,7 @@ A label is one of the values listed and never an id, a tenant or a user. A revoc
 | `REALTIME_REAUTH_FAILED`               | warn        | A re-authentication cycle, a check or its notification failed.                      | `connectionId` where known                                               |
 | `REALTIME_REVOCATION_FAILED`           | warn        | A revocation failed and is retried on the next cycle.                               | `connectionId`                                                           |
 | `REALTIME_ADAPTER_MISSING`             | error       | `RealtimeIoAdapter` is not the active WebSocket adapter.                            | none                                                                     |
+| `REALTIME_GATEWAY_OUTSIDE_NAMESPACE`   | warn        | Another gateway is on `/`, the library elsewhere.                                   | none                                                                     |
 | `REALTIME_ADAPTER_COMMAND_FAILED`      | warn        | A command of the Redis adapter's subscriber failed (once for each connection).      | none                                                                     |
 | `REALTIME_COMPOSITE_PARTIAL_FAILURE`   | warn        | One of the two transports failed an emit under `transport: 'both'`.                 | `op`                                                                     |
 | `REALTIME_SERVER_NOT_ATTACHED`         | warn        | An emit was made before the WebSocket server was attached (once).                   | `op`                                                                     |
@@ -1083,7 +1106,7 @@ Every name below is exported; the subpath says where to import it from. A type i
 | `maxAttempts`        | `number`                         | — (unlimited) | **SSE only** — give up and close after N failures   |
 
 > [!NOTE]
-> `emit` is WebSocket-exclusive — SSE is server → client only — and the server ignores what it sends: `RealtimeGateway` registers no message handlers, so receiving client events needs a gateway of your own. `reconnectAttempts` is always `0` on WebSocket, where Socket.IO owns the retry policy and exposes no count.
+> `emit` is WebSocket-exclusive — SSE is server → client only — and the server ignores what it sends: `RealtimeGateway` registers no message handlers, so receiving client events needs a gateway of your own, declared on the namespace of `websocket.namespace` (see [Known limits](#known-limits)). `reconnectAttempts` is always `0` on WebSocket, where Socket.IO owns the retry policy and exposes no count.
 
 ---
 
@@ -1092,7 +1115,7 @@ Every name below is exported; the subpath says where to import it from. A type i
 - **Authenticate.** It holds no credential logic. The strength of your realtime auth is the strength of the `IConnectionAuthenticator` you plug in.
 - **Guarantee delivery.** Emits are at-most-once, with no acknowledgement. `Last-Event-ID` replay and the offline queue are SSE-only and bounded.
 - **Track presence.** `IPresenceStorage` is a seam the library never calls, and `presence:*` events are emitted by your code.
-- **Receive client messages.** `RealtimeGateway` registers no message handlers, so a WebSocket client's `emit` is ignored unless you write a gateway.
+- **Receive client messages.** `RealtimeGateway` registers no message handlers, so a WebSocket client's `emit` is ignored unless you write a gateway on the namespace of `websocket.namespace`.
 - **Route by role.** There is no `emitToRole`; build a room from `ConnectionEventMeta.roles` (see [Role-scoped delivery](#role-scoped-delivery)).
 - **Configure your proxy.** SSE needs response compression and proxy buffering off and an idle timeout above `sse.heartbeatMs`; the library sends `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform`. WebSocket with the polling fallback needs sticky sessions. See [docs/proxies-cheat-sheet.md](./docs/proxies-cheat-sheet.md).
 - **Run a separate server.** It runs inside your NestJS application.

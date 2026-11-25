@@ -77,7 +77,7 @@ Three concrete implementations:
 ### WebSocket transport details
 
 - Built on Socket.IO 4.x via `@nestjs/websockets` + `@nestjs/platform-socket.io`.
-- `RealtimeIoAdapter` extends `IoAdapter` and registers the Socket.IO server on the configured `namespace`.
+- `RealtimeIoAdapter` extends `IoAdapter`: it applies the server options and opens the configured `namespace` on the application's server. The module registers a subclass of `RealtimeGateway` that declares that namespace.
 - `RealtimeGateway` handles `connection` and `disconnect` Socket.IO events; authentication runs in a connection middleware.
 - The Redis adapter (`@socket.io/redis-adapter`) is wired in `RealtimeIoAdapter` when `websocket.redisAdapter.pubClient` is provided. It calls `.duplicate()` on the supplied ioredis client to create a subscriber client. That connection is the library's, and `RealtimeIoAdapter.dispose()` closes it, with a bounded QUIT, after every server has closed; the supplied client is never closed or changed. If the adapter cannot be installed, the boot fails with `REALTIME_REDIS_ADAPTER_FAILED`.
 
@@ -190,15 +190,15 @@ E2E tests use the `eventsource` npm package as a Node.js polyfill for `EventSour
 
 ## Error Code Catalog (§14)
 
-| Code                               | Constant                                       | When emitted                                      |
-| ---------------------------------- | ---------------------------------------------- | ------------------------------------------------- |
-| `REALTIME_INVALID_OPTIONS`         | `REALTIME_ERROR_CODES.INVALID_OPTIONS`         | Bad `forRoot` options at bootstrap                |
-| `REALTIME_AUTH_FAILED`             | `REALTIME_ERROR_CODES.AUTH_FAILED`             | `authenticate()` returned `null` (SSE 401 only)   |
-| `REALTIME_REAUTHENTICATION_FAILED` | `REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED` | `revalidate()` returned `false`                   |
-| `REALTIME_TOO_MANY_CONNECTIONS`    | `REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS`    | FIFO eviction of oldest connection                |
-| `REALTIME_INVALID_TICKET`          | `REALTIME_ERROR_CODES.INVALID_TICKET`          | Ticket not found / expired                        |
-| `REALTIME_PUBSUB_UNAVAILABLE`      | `REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE`      | `disconnect()` rejects: the bus refused the revocation (an emit's publish failure is logged) |
+| Code                               | Constant                                       | When emitted                                                                                      |
+| ---------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `REALTIME_INVALID_OPTIONS`         | `REALTIME_ERROR_CODES.INVALID_OPTIONS`         | Bad `forRoot` options at bootstrap                                                                |
+| `REALTIME_AUTH_FAILED`             | `REALTIME_ERROR_CODES.AUTH_FAILED`             | `authenticate()` returned `null` (SSE 401 only)                                                   |
+| `REALTIME_REAUTHENTICATION_FAILED` | `REALTIME_ERROR_CODES.REAUTHENTICATION_FAILED` | `revalidate()` returned `false`                                                                   |
+| `REALTIME_TOO_MANY_CONNECTIONS`    | `REALTIME_ERROR_CODES.TOO_MANY_CONNECTIONS`    | FIFO eviction of oldest connection                                                                |
+| `REALTIME_INVALID_TICKET`          | `REALTIME_ERROR_CODES.INVALID_TICKET`          | Ticket not found / expired                                                                        |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | `REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE`      | `disconnect()` rejects: the bus refused the revocation (an emit's publish failure is logged)      |
 | `REALTIME_TRANSPORT_UNAVAILABLE`   | `REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE`   | `disconnect()`, `joinRoom()`, `leaveRoom()` reject: the holding transport failed or has no server |
-| `REALTIME_REDIS_ADAPTER_FAILED`    | `REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED`    | `websocket.redisAdapter` set, adapter not installable (boot fails) |
-| `REALTIME_PAYLOAD_TOO_LARGE`       | `REALTIME_ERROR_CODES.PAYLOAD_TOO_LARGE`       | Event data exceeds configured limit               |
-| `REALTIME_REPLAY_BUFFER_MISS`      | `REALTIME_ERROR_CODES.REPLAY_BUFFER_MISS`      | `Last-Event-ID` outside the replay window         |
+| `REALTIME_REDIS_ADAPTER_FAILED`    | `REALTIME_ERROR_CODES.REDIS_ADAPTER_FAILED`    | `websocket.redisAdapter` set, adapter not installable (boot fails)                                |
+| `REALTIME_PAYLOAD_TOO_LARGE`       | `REALTIME_ERROR_CODES.PAYLOAD_TOO_LARGE`       | Event data exceeds configured limit                                                               |
+| `REALTIME_REPLAY_BUFFER_MISS`      | `REALTIME_ERROR_CODES.REPLAY_BUFFER_MISS`      | `Last-Event-ID` outside the replay window                                                         |

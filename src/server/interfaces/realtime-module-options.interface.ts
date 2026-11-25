@@ -83,6 +83,12 @@ export interface SseOptions {
 
 /** WebSocket-transport-specific options. */
 export interface WebSocketOptions {
+  /**
+   * The Socket.IO namespace the library's gateway is bound to, `/` when unset.
+   *
+   * A host gateway that declares no namespace is served on `/`; when this namespace is not `/`, the library's
+   * authenticator is not called for it. A host gateway that declares this namespace shares it with the library's gateway: give host gateways their own.
+   */
   namespace?: string
   cors?: CorsConfig
   maxHttpBufferSize?: number

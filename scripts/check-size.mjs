@@ -66,8 +66,16 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     and, 991 B more than the figure above, the table of the built-ins and the symbol-keyed methods and flags of a regular expression the option, validation and admission code call, recorded when the library loads, with the count and the refusal that read it, measured on 2026-11-22)
 //     and the wait under a deadline that the handshake gate, the re-authentication revalidate, the offline-queue replay, the Redis subscribe race and publish, and the SSE registration share, which uses no `Promise` static and no `then` and answers in a box with no prototype, and the check of the baseline and of the prototype chain of what each decision path returns, so that no object or array is handed over before the built-ins and the root prototypes are known to be intact; the figure on the first line is the measure of the whole bundle on 2026-11-24)
 //     and, 104 B more than the figure above (of the websocket bundle, 29 B), measured on 2026-11-24, the pin that gives the promise each public method of the service hands back, and each caller's own await of a method that decides something, its own `constructor`, and the species getter of `Promise` in the table of built-ins,
-//   internal, 609 B more than the figure above, measured on 2026-11-25: the canonical origin check, which refuses an IP host a browser serializes differently, and the boot validation of `websocket.allowedOrigins` and `websocket.websocketOnly`, with their snapshot, so that the list is copied once and refused when it is empty, over 1,000 entries, not in the browser's form, or set beside a `cors.origin`; the budget below is the whole bundle, 27,391 B
-//   websocket  8,456 B →  9,215 B (the Socket.IO stack alone: the start-up message that names the
+//   internal, 609 B more than the figure above, measured on 2026-11-25: the canonical origin check, which refuses an IP host a browser serializes differently, and the boot validation of `websocket.allowedOrigins` and `websocket.websocketOnly`, with their snapshot, so that the list is copied once and refused when it is empty, over 1,000 entries, not in the browser's form, or set beside a `cors.origin`; the budget below, 27,451 B, is 30 B above the 27,421 B measured for the whole bundle
+//   websocket  10,089 B, 30 B above the 10,059 B measured on 2026-11-25 (the Socket.IO stack, which beyond what
+//     the entry below lists carries the subclass that writes `websocket.namespace` into the gateway options Nest
+//     reads, the claim of a namespace until the gateway is connected or destroyed, the namespace opened on the
+//     library's server before any gateway joins it, the boot warning for a gateway on '/' with the record of the
+//     library's root server, and the one reading of the configured name; and the origin policy: the allow-request
+//     that refuses a request that is not a WebSocket upgrade or whose Origin is not listed, the guard that refuses a
+//     request carrying a sid, their registration with the refusal of an engine that cannot take it, and the
+//     bootstrap-time refusal of a gateway whose adapter is missing while the policy is asked for)
+//   websocket  8,456 B →  8,486 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
 //     attached or its fan-out throws, the one-time warning for an emit made before the server
@@ -85,7 +93,6 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     and, 414 B in all, the refusal of a server run while `Object.prototype` holds a key outside the standard names or a standard name that was changed or was not the built-in of a clean realm at load, in boot, per request and per packet, with the own keys of the decoder subclass, measured on 2026-11-22)
 //     and, 188 B more than the figure above, the clean-realm functions the guard's helpers call (the unshift that puts the request guard first, the keys and the definition of an own key, the check that it ended up first and the refusal of a server where it did not), the body of the 500 written as text, and the construction of that realm inside a try, measured on 2026-11-22)
 //     and, 200 B more than the figure above, the count of the replaced built-ins and of the symbol keys in the guard and the check before each join of a room and each send, measured on 2026-11-22)
-//     and, 769 B more than the figure above, measured on 2026-11-25: the allow-request that refuses a request that is not a WebSocket upgrade or whose Origin is not listed, the guard that refuses a request carrying a sid, their registration with the refusal of an engine that cannot take it, and the bootstrap-time refusal of a gateway whose adapter is missing while the policy is asked for; the budget below is the whole bundle, 9,255 B
 //   observability  1,092 B → 1,122 B (the metrics contributor and the pub/sub health indicator: five collectors read from the tally and the registry, the
 //     entry nobody installs unless they publish metrics, so it carries no weight for anyone else)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
@@ -105,8 +112,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 27_391 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 9_255 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 27_451 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 10_089 },
   {
     name: 'observability (metrics contributor)',
     path: 'dist/observability/index.mjs',

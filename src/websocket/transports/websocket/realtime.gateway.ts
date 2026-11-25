@@ -33,7 +33,13 @@ import type {
 import { ConnectHookFailure } from './connect-hook-failure'
 import { wantsPolicy } from './origin-policy'
 import { isRealtimeIoServer } from './realtime-io-adapter'
+import { socketNamespace } from './socket-namespace'
 import { WebSocketTransport } from './websocket.transport'
+
+/** The root server a namespace belongs to; a root server has no `server` and is its own root. */
+function rootOf(server: Server): unknown {
+  return (server as { server?: unknown }).server ?? server
+}
 
 /** Collapse a possibly multi-valued query parameter to its first string value. */
 function firstQueryValue(value: string | string[] | undefined): string | undefined {
@@ -48,9 +54,10 @@ function firstQueryValue(value: string | string[] | undefined): string | undefin
  * imports a concrete auth library; it only shapes the `ConnectionAuthContext`
  * from the Socket.IO handshake and delegates to the authenticator.
  *
- * Namespace, CORS, ping options, and the Redis adapter are applied by
- * `RealtimeIoAdapter` (not here), because `@WebSocketGateway()` args are
- * evaluated at class-decoration time — before the module options are resolved.
+ * `@WebSocketGateway()` args are evaluated when the class is decorated, before the
+ * module options are resolved, so none of those options is read here: the module
+ * registers a subclass that declares `websocket.namespace`, and `RealtimeIoAdapter`
+ * applies CORS, the ping options, the message size limit and the Redis adapter.
  *
  * CORS is intentionally disabled in the decorator (`origin: false`). The real
  * policy is applied by `RealtimeIoAdapter.createIOServer` from the consumer's
@@ -204,7 +211,7 @@ export class RealtimeGateway
   afterInit(server: Server): void {
     server.use(this.authenticateHandshake)
     this.transport.setServer(server)
-    if (!isRealtimeIoServer(server)) this.refuseOrReportMissingAdapter()
+    if (!isRealtimeIoServer(rootOf(server))) this.refuseOrReportMissingAdapter()
     this.logger.log('RealtimeGateway initialized')
   }
 
@@ -231,9 +238,10 @@ export class RealtimeGateway
     this.reportMissingAdapter()
   }
 
-  /** Report a server that `RealtimeIoAdapter` did not create: its options are dropped. */
+  /** Report a server that `RealtimeIoAdapter` did not create: the options the adapter applies are dropped. */
   private reportMissingAdapter(): void {
-    const configured = Object.keys(this.options.websocket ?? {})
+    const websocket = this.options.websocket ?? {}
+    const configured = Object.keys(websocket).filter((key) => key !== 'namespace')
     logEvent(
       this.logger,
       'error',
@@ -242,7 +250,12 @@ export class RealtimeGateway
         (configured.length > 0 ? ` (${configured.join(', ')})` : '') +
         ' are ignored and the gateway CORS stays closed (origin: false): browsers on another ' +
         'origin cannot connect. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in ' +
-        "main.ts, importing it from '@bymax-one/nest-realtime/websocket'.",
+        "main.ts, importing it from '@bymax-one/nest-realtime/websocket'." +
+        (socketNamespace(websocket.namespace) === '/'
+          ? ''
+          : " websocket.namespace is applied without it: the library is served there, and the library's authenticator " +
+            "does not run for the clients of '/' or of any other gateway's namespace. Isolation from your gateways' " +
+            'namespaces is not guaranteed without RealtimeIoAdapter.'),
     )
   }
 

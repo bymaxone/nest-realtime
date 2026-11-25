@@ -7,7 +7,7 @@ import { Logger } from '@nestjs/common'
 import type { INestApplicationContext } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
-import type { Server, ServerOptions } from 'socket.io'
+import type { ServerOptions } from 'socket.io'
 import {
   logEvent,
   quitWithin,
@@ -35,6 +35,7 @@ import {
   shadowServerInstance,
   shadowSocket,
 } from './server-option-names'
+import { socketNamespace } from './socket-namespace'
 
 /** The part of a Socket.IO namespace this adapter uses. */
 type Namespace = { on: (event: 'connection', listener: (socket: object) => void) => void }
@@ -119,6 +120,15 @@ const ADAPTER_COMMANDS = ['subscribe', 'psubscribe', 'unsubscribe', 'punsubscrib
 
 const realtimeServers = new WeakSet<object>()
 
+/** The servers of an application's port and default path, which is where the library's gateway listens. */
+const libraryServers = new WeakSet<object>()
+
+/** Whether `server` is the `/` namespace of a library server: the server itself, or its namespace of that name. */
+function isLibraryRoot(server: unknown): boolean {
+  const { name, server: root } = Object(server) as { name?: unknown; server?: unknown }
+  return libraryServers.has((name === '/' ? root : server) as object)
+}
+
 /** Whether `server` was created by `RealtimeIoAdapter`. */
 export function isRealtimeIoServer(server: unknown): boolean {
   return typeof server === 'object' && server !== null && realtimeServers.has(server)
@@ -153,35 +163,11 @@ export class RealtimeIoAdapter extends IoAdapter {
   private readonly options: BymaxRealtimeModuleOptions
   /** The subscriber connections this adapter opened for the Redis adapter, closed with it. */
   private readonly subscribers = new Set<QuitableClient>()
+  private reportedOutside = false
 
   constructor(app: INestApplicationContext) {
     super(app)
     this.options = app.get<BymaxRealtimeModuleOptions>(REALTIME_OPTIONS_TOKEN)
-  }
-
-  /**
-   * Bind the gateway to `websocket.namespace` when configured.
-   *
-   * `@WebSocketGateway()` args are evaluated at class-decoration time — before
-   * the module options resolve — so the namespace cannot be declared there.
-   * Instead we build the root server via `super.create` (which routes through the
-   * overridden {@link createIOServer}, applying CORS/ping/Redis) and then return
-   * the requested namespace via `server.of(ns)`. The gateway's `@WebSocketServer()`
-   * and `WebSocketTransport` then operate on that `Namespace`. A `'/'` or unset
-   * namespace leaves the root server untouched.
-   */
-  override create(
-    port: number,
-    options?: ServerOptions & { namespace?: string; server?: unknown },
-  ): Server {
-    const server = super.create(port, options)
-    const ns = this.options.websocket?.namespace
-    if (ns && ns !== '/' && typeof (server as { of?: unknown }).of === 'function') {
-      const namespace = (server as unknown as { of: (name: string) => Server }).of(ns)
-      realtimeServers.add(namespace)
-      return namespace
-    }
-    return server
   }
 
   /**
@@ -220,6 +206,8 @@ export class RealtimeIoAdapter extends IoAdapter {
     const server = super.createIOServer(port, mergedOpts) as GuardedServer
     installGuards(server)
     if (policy) this.installSidGuard(server)
+    const isLibraryServer = port === 0 && opts?.path === undefined
+    if (isLibraryServer) this.openLibraryNamespace(server)
 
     if (wsOpts.redisAdapter?.pubClient) {
       try {
@@ -232,7 +220,18 @@ export class RealtimeIoAdapter extends IoAdapter {
     }
 
     realtimeServers.add(server)
+    if (isLibraryServer) libraryServers.add(server)
     return server
+  }
+
+  /**
+   * Opens the library's namespace on its server, the one of the application's port and default path, before any gateway
+   * joins it: Socket.IO makes a namespace opened later by name a child of a RegExp namespace that matches it, and that
+   * gateway's broadcasts, rooms and handlers would then reach the library's sockets.
+   */
+  private openLibraryNamespace(server: GuardedServer): void {
+    const namespace = socketNamespace(this.options.websocket?.namespace)
+    if (namespace !== '/') server.of(namespace)
   }
 
   /**
@@ -267,6 +266,25 @@ export class RealtimeIoAdapter extends IoAdapter {
       )
     }
     server.engine.use(refuseSid)
+  }
+
+  /**
+   * Binds a gateway's connection handler as `IoAdapter` does. Nest calls this for every gateway, so this is where one on
+   * `/` of the library's server is seen while the library is served on another namespace.
+   */
+  override bindClientConnect(server: unknown, callback: (...args: unknown[]) => void): void {
+    super.bindClientConnect(server as Parameters<IoAdapter['bindClientConnect']>[0], callback)
+    if (this.reportedOutside || socketNamespace(this.options.websocket?.namespace) === '/') return
+    if (!isLibraryRoot(server)) return
+    this.reportedOutside = true
+    logEvent(
+      this.adapterLogger,
+      'warn',
+      'REALTIME_GATEWAY_OUTSIDE_NAMESPACE',
+      "A gateway of this application is on '/' while websocket.namespace puts the library elsewhere: the library's " +
+        "authenticator does not run for the clients of '/', and the library's rooms are not reachable from it. Give the " +
+        'gateway the namespace of websocket.namespace, or authenticate its clients in the gateway itself.',
+    )
   }
 
   /**

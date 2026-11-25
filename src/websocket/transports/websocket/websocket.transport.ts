@@ -150,8 +150,8 @@ export class WebSocketTransport implements ITransport {
    * Resolve the map of locally-connected sockets, tolerating both server shapes.
    *
    * A root Socket.IO `Server` exposes the socket map at `.sockets.sockets` (its
-   * `.sockets` is the root `Namespace`). When `websocket.namespace` is configured,
-   * `RealtimeIoAdapter` wires the gateway to a `Namespace` instead, whose own
+   * `.sockets` is the root `Namespace`). When `websocket.namespace` is not the root,
+   * Nest gives the gateway a `Namespace` instead, whose own
    * `.sockets` IS the socket map. Per-socket lookups (join/leave/disconnect) use
    * this indirection so they work under either shape.
    */
