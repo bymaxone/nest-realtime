@@ -132,6 +132,8 @@ const EVERY_WEBSOCKET_KEY = {
   maxHttpBufferSize: 8,
   pingIntervalMs: 9,
   pingTimeoutMs: 10,
+  allowedOrigins: ['https://app.example'],
+  websocketOnly: true,
   maxConnectionsPerUser: 11,
   emitConnectionEvent: false,
   redisAdapter: { pubClient: {} },

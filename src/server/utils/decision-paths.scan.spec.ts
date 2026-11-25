@@ -311,6 +311,10 @@ const EXEMPT: Record<string, readonly Site[]> = {
     ],
     [
       '.catch(',
+      'closes a server whose engine cannot take the sid guard; the refusal is what is thrown',
+    ],
+    [
+      '.catch(',
       'logs a rejection of a subscriber command the Socket.IO adapter discards; it admits nothing',
     ],
     ['Promise.allSettled', 'disposal: waits for the subscribers to quit; no answer is read'],

@@ -17,6 +17,15 @@ import {
 } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions, QuitableClient } from '@bymax-one/nest-realtime/internal'
 import {
+  POLICY_TRANSPORTS,
+  allowRequestFor,
+  corsAnswersOrigins,
+  refuseHostAllowRequest,
+  refuseSid,
+  wantsPolicy,
+} from './origin-policy'
+import type { AllowRequest } from './origin-policy'
+import {
   corsWithOwnNames,
   placeFirst,
   plantedKeyCount,
@@ -72,6 +81,7 @@ type GuardedServer = {
   close: () => Promise<void>
   engine?: {
     middlewares: EngineGuard[]
+    use: (guard: typeof refuseSid) => void
     on: (event: 'connection', listener: (connection: EngineSocket) => void) => void
   }
   of: (name: string) => Namespace
@@ -188,8 +198,19 @@ export class RealtimeIoAdapter extends IoAdapter {
       })
     }
     const wsOpts = this.options.websocket ?? {}
+    const policy = wantsPolicy(wsOpts)
+    if (policy) this.refuseConflicts(wsOpts.cors ?? opts?.cors, opts)
     const mergedOpts = serverOptionsWithOwnNames({
       ...opts,
+      ...(policy
+        ? {
+            transports: [...POLICY_TRANSPORTS],
+            allowRequest: allowRequestFor(
+              wsOpts.allowedOrigins,
+              (opts as { allowRequest?: AllowRequest } | undefined)?.allowRequest,
+            ),
+          }
+        : {}),
       cors: corsWithOwnNames(wsOpts.cors ?? opts?.cors),
       pingInterval: wsOpts.pingIntervalMs ?? 25_000,
       pingTimeout: wsOpts.pingTimeoutMs ?? 20_000,
@@ -198,6 +219,7 @@ export class RealtimeIoAdapter extends IoAdapter {
 
     const server = super.createIOServer(port, mergedOpts) as GuardedServer
     installGuards(server)
+    if (policy) this.installSidGuard(server)
 
     if (wsOpts.redisAdapter?.pubClient) {
       try {
@@ -211,6 +233,40 @@ export class RealtimeIoAdapter extends IoAdapter {
 
     realtimeServers.add(server)
     return server
+  }
+
+  /**
+   * Refuses the boot of a policy that two lists would decide: a `cors` that answers origins beside `allowedOrigins`, or
+   * a host `allowRequest` that cannot be called.
+   */
+  private refuseConflicts(cors: unknown, opts: ServerOptions | undefined): void {
+    refuseHostAllowRequest((opts as { allowRequest?: unknown } | undefined)?.allowRequest)
+    if (this.options.websocket?.allowedOrigins !== undefined && corsAnswersOrigins(cors)) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.INVALID_OPTIONS,
+        'websocket.allowedOrigins cannot be set together with a cors.origin other than false, in websocket.cors or in the gateway options',
+        { who: RealtimeIoAdapter.name },
+      )
+    }
+  }
+
+  /**
+   * Installs the guard that refuses a request naming a session, after the request guard and before any middleware the
+   * host adds, which can only be added once this server has been returned. A server with no engine, which is not
+   * attached to a port, answers no request. One whose engine cannot take the guard is closed and refused, since it would
+   * answer requests the policy cannot cover.
+   */
+  private installSidGuard(server: GuardedServer): void {
+    if (server.engine === undefined) return
+    if (typeof server.engine.use !== 'function') {
+      server.close().catch(() => undefined)
+      throw realtimeError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        'the websocket origin policy could not be installed: the engine has no middleware hook',
+        { who: RealtimeIoAdapter.name },
+      )
+    }
+    server.engine.use(refuseSid)
   }
 
   /**

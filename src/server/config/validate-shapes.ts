@@ -11,7 +11,8 @@ import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
 import { readHostKey } from '../utils/read-host-key'
 import { refuseObject } from '../utils/refuse-object'
 import { realtimeError } from '../utils/realtime-error'
-import { METHODS_KINDS, ORIGIN_KINDS } from './drop-unset'
+import { isCanonicalOrigin } from '../utils/canonical-origin'
+import { ALLOWED_ORIGINS_KINDS, METHODS_KINDS, ORIGIN_KINDS } from './drop-unset'
 
 /** The functions each pluggable piece must have when it is set; what it lacks would fail at its first use. */
 const REQUIRED_FUNCTIONS = {
@@ -142,7 +143,39 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
   assertBoolean('sse.emitConnectionEvent', options.sse?.emitConnectionEvent)
   assertBoolean('websocket.emitConnectionEvent', options.websocket?.emitConnectionEvent)
   assertSseEndpoint('sse.endpoint', options.sse?.endpoint)
+  assertBoolean('websocket.websocketOnly', options.websocket?.websocketOnly)
   assertCors(options.websocket?.cors)
+  assertAllowedOrigins(options.websocket)
+}
+
+/**
+ * Refuse an `allowedOrigins` that is not a non-empty list of origins in the spelling a browser sends, and one that is
+ * set beside a `cors.origin` other than `false`: two lists for one decision, of which the stricter would silently
+ * win. An unset one is left alone.
+ */
+function assertAllowedOrigins(websocket: BymaxRealtimeModuleOptions['websocket']): void {
+  const list: unknown = websocket?.allowedOrigins
+  if (list === undefined) return
+  if (!isArray(list) || list.length === 0) {
+    refuse('websocket.allowedOrigins', ALLOWED_ORIGINS_KINDS, list)
+  }
+  for (let index = 0; index < list.length; index += 1) {
+    if (!isCanonicalOrigin(list[index])) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.INVALID_OPTIONS,
+        `options.websocket.allowedOrigins[${index}] must be an origin as a browser sends it: a lowercase scheme, "://", a lowercase host and a port only when it is not the default of http or https, with no path, trailing slash, userinfo, wildcard or "null"`,
+        { who: 'BymaxRealtimeModule' },
+      )
+    }
+  }
+  const cors = websocket?.cors as { origin?: unknown } | undefined
+  if (cors !== undefined && 'origin' in cors && cors.origin !== false) {
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      'options.websocket.allowedOrigins cannot be set together with options.websocket.cors.origin: set one list, or set cors.origin to false',
+      { who: 'BymaxRealtimeModule' },
+    )
+  }
 }
 
 /** Whether an origin entry is one Socket.IO matches by itself: a string, or a RegExp of this realm. */

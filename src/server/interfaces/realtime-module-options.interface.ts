@@ -89,6 +89,32 @@ export interface WebSocketOptions {
   pingIntervalMs?: number
   pingTimeoutMs?: number
   /**
+   * The origins that may open a WebSocket, each written as a browser sends it: a lowercase scheme, `://`, a lowercase
+   * host (punycode for an international name, brackets for IPv6) and a port only when it is not the default of `http`
+   * (80) or `https` (443); `capacitor://localhost` and `chrome-extension://<id>` are written the same way. An entry
+   * with a path, a trailing slash, userinfo, a trailing dot, uppercase, a wildcard, `null`, or a default port written
+   * out is refused at boot with `REALTIME_INVALID_OPTIONS`, as is an empty list or one over 1,000 entries. The list is
+   * copied once at boot.
+   *
+   * A handshake is admitted only when its `Origin` header equals an entry exactly, without case folding; two `Origin`
+   * headers, which arrive as one joined string, match nothing. An absent `Origin` is admitted on the WebSocket
+   * upgrade, because a browser always sends one, so that header bounds browsers and is not authentication: the
+   * authenticator still decides who the connection is. Setting this implies {@link websocketOnly}, and a request that
+   * carries a `sid`, which can only address a session that already exists, is refused before engine.io reads it.
+   *
+   * It governs the WebSocket handshake only: the SSE endpoint's origin policy stays `app.enableCors`. It cannot be
+   * combined with a `websocket.cors.origin` other than `false`, nor with a gateway `cors.origin` other than `false`,
+   * and it needs `RealtimeIoAdapter`: without it the gateway refuses to boot.
+   */
+  allowedOrigins?: readonly string[]
+  /**
+   * Serve the WebSocket transport only: engine.io's polling transport, including its JSONP form, is not offered, and a
+   * request that carries a `sid` is refused before engine.io reads it. Defaults to `false`, which keeps the polling
+   * fallback. A client then has to connect with the same option (`websocketOnly` on `useRealtime`), or its first
+   * polling request is refused. It needs `RealtimeIoAdapter`: without it the gateway refuses to boot.
+   */
+  websocketOnly?: boolean
+  /**
    * Connections one user may hold at once; beyond it the OLDEST is closed. Defaults to `5`,
    * the SSE default. `0` switches the bound off.
    */

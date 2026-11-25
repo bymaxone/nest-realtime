@@ -41,6 +41,11 @@ export interface UseRealtimeOptions {
   /** socket.io path (WebSocket only). Default `/socket.io`. */
   path?: string
   /**
+   * WebSocket only: open the socket on the `websocket` transport alone, with no polling first. Set it when the server
+   * runs with `websocket.websocketOnly` or `websocket.allowedOrigins`, which refuse a polling request. Default false.
+   */
+  websocketOnly?: boolean
+  /**
    * SSE-only: extra named SSE events to subscribe to.
    *
    * `EventSource` never routes a named event to `onmessage`, so an
@@ -123,6 +128,7 @@ export function useRealtime<TEvents extends Record<string, unknown> = Record<str
     url: opts.url,
     ...(opts.auth !== undefined ? { auth: opts.auth } : {}),
     ...(opts.path !== undefined ? { path: opts.path } : {}),
+    ...(opts.websocketOnly !== undefined ? { websocketOnly: opts.websocketOnly } : {}),
     enabled: isWs,
   })
 

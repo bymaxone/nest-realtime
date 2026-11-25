@@ -127,6 +127,17 @@ describe('useRealtime — transport detection', () => {
     expect(mockWs).toHaveBeenCalledWith(expect.objectContaining({ path: '/custom-io' }))
   })
 
+  it.each([true, false])('forwards websocketOnly %p to the WS hook', (websocketOnly) => {
+    // The option reaches the socket only if the universal hook hands it on; unset must stay unset.
+    renderHook(() => useRealtime({ url: 'ws://localhost', websocketOnly }))
+    expect(mockWs).toHaveBeenCalledWith(expect.objectContaining({ websocketOnly }))
+  })
+
+  it('leaves websocketOnly out of the WS options when unset', () => {
+    renderHook(() => useRealtime({ url: 'ws://localhost' }))
+    expect(mockWs.mock.calls[0]?.[0]).not.toHaveProperty('websocketOnly')
+  })
+
   it('forwards the SSE-only tuning options to the SSE hook when provided', () => {
     // Subscribing to application event names and bounding the retry policy are
     // useless unless they survive the trip through the universal hook.

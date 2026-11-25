@@ -48,6 +48,8 @@ const WEBSOCKET_KEYS = {
   maxHttpBufferSize: true,
   pingIntervalMs: true,
   pingTimeoutMs: true,
+  allowedOrigins: true,
+  websocketOnly: true,
   maxConnectionsPerUser: true,
   emitConnectionEvent: true,
   redisAdapter: true,
@@ -139,6 +141,9 @@ function snapshotList(list: readonly unknown[], path: string, kinds: string): re
 export const ORIGIN_KINDS =
   'a string, a RegExp, a function, an array of strings and RegExps, or a boolean'
 
+/** What `allowedOrigins` may be, for the refusal of a list that cannot be copied. */
+export const ALLOWED_ORIGINS_KINDS = 'a list of 1 to 1000 origins'
+
 /** The kinds `methods` may be. */
 export const METHODS_KINDS = 'a string or a list of at most 1000 strings'
 
@@ -223,6 +228,14 @@ export function dropUnset<T extends object>(options: T): T {
   }
   const websocket = kept.websocket
   if (isPlainObject(websocket)) {
+    const allowed = (websocket as Record<string, unknown>).allowedOrigins
+    if (isArray(allowed)) {
+      ;(websocket as Record<string, unknown>).allowedOrigins = snapshotList(
+        allowed as unknown[],
+        'websocket.allowedOrigins',
+        ALLOWED_ORIGINS_KINDS,
+      )
+    }
     const cors = (websocket as Record<string, unknown>).cors
     if (typeof cors === 'object' && cors !== null) {
       const read = readSet(cors, CORS_NAMES, 'origin')

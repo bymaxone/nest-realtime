@@ -36,6 +36,12 @@ export interface UseRealtimeWsOptions {
   /** socket.io path. Default `/socket.io`. */
   path?: string
   /**
+   * Open the socket on the `websocket` transport alone, with no polling first. Set it when the server runs with
+   * `websocket.websocketOnly` or `websocket.allowedOrigins`, which refuse a polling request; a default client then fails
+   * its first request and reports a `connect_error`. Default false.
+   */
+  websocketOnly?: boolean
+  /**
    * When false the hook does nothing — useful for conditional transport selection
    * without violating Rules of Hooks. Default true.
    */
@@ -126,6 +132,7 @@ async function openSocket(
   path: string | undefined,
   ticket: string | undefined,
   token: string | undefined,
+  websocketOnly: boolean,
 ): Promise<SocketLike> {
   // DYNAMIC IMPORT — the bundler keeps socket.io-client out of the static graph.
   const { io } = await import('socket.io-client')
@@ -136,6 +143,7 @@ async function openSocket(
   return io(url, {
     path: path ?? '/socket.io',
     ...(ticket !== undefined || token !== undefined ? { auth } : {}),
+    ...(websocketOnly ? { transports: ['websocket'] } : {}),
     withCredentials: true,
   })
 }
@@ -207,28 +215,30 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
   // matter how the caller spells the option.
   const authTicket = opts.auth?.ticket
   const authToken = opts.auth?.token
+  const websocketOnly = opts.websocketOnly === true
+  const { url, path, enabled } = opts
 
   const connect = useCallback(async () => {
-    if (opts.enabled === false) return
+    if (enabled === false) return
     // Dispose any existing socket BEFORE opening a new one so reconnect() never leaks
     // the previous connection or leaves stale listeners mutating state.
     disposeSocket()
     setConnected(false)
     try {
-      const socket = await openSocket(opts.url, opts.path, authTicket, authToken)
+      const socket = await openSocket(url, path, authTicket, authToken, websocketOnly)
       socketRef.current = socket
       bindSocket(socket, { setConnected, setError, setEvents, setLastEvent })
     } catch (e) {
       setError(asError(e))
     }
-  }, [opts.enabled, opts.url, authTicket, authToken, opts.path, disposeSocket, socketRef])
+  }, [enabled, url, authTicket, authToken, path, websocketOnly, disposeSocket, socketRef])
 
   useEffect(() => {
     void connect()
     // Unmount cleanup disconnects exactly once — `disposeSocket` is idempotent and
     // clears the ref, so a later cleanup never double-disconnects a live socket.
     return () => disposeSocket()
-  }, [connect, opts.enabled, disposeSocket])
+  }, [connect, enabled, disposeSocket])
 
   const reconnect = useCallback(() => {
     void connect()

@@ -77,6 +77,29 @@ describe('RealtimeGateway', () => {
       expect(message).not.toMatch(/websocket options \(/)
     })
 
+    it.each([
+      ['allowedOrigins', { allowedOrigins: ['https://app.example'] }],
+      ['websocketOnly', { websocketOnly: true }],
+    ])(
+      'refuses to boot when %s is set and the adapter is not RealtimeIoAdapter',
+      async (_name, websocket) => {
+        // Neither option would apply, which leaves polling on and no origin check, so the boot is refused, not logged.
+        gateway = (await buildModule({ websocket })).get(RealtimeGateway)
+
+        expect(() => gateway.afterInit({ use: jest.fn() } as never)).toThrow(
+          /REALTIME_TRANSPORT_UNAVAILABLE.*app\.useWebSocketAdapter\(new RealtimeIoAdapter\(app\)\)/,
+        )
+        expect(errorSpy).not.toHaveBeenCalled()
+      },
+    )
+
+    it('only logs when websocketOnly is false', async () => {
+      gateway = (await buildModule({ websocket: { websocketOnly: false } })).get(RealtimeGateway)
+
+      expect(() => gateway.afterInit({ use: jest.fn() } as never)).not.toThrow()
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+    })
+
     it('says in the README exactly what it logs', () => {
       // A consumer who meets the message looks it up in the README, so the text must match.
       gateway.afterInit({ use: jest.fn() } as never)

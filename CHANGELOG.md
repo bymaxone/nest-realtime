@@ -7,6 +7,16 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Added
+
+- **`websocket.allowedOrigins` and `websocket.websocketOnly` refuse a WebSocket handshake from an unlisted origin at the server.**
+  - `allowedOrigins` is a list of 1 to 1,000 origins in the form a browser sends (lowercase, no path, no trailing slash, no default port, no wildcard); anything else is refused at boot with `REALTIME_INVALID_OPTIONS` naming the index. The engine refuses an upgrade whose `Origin` is not listed, including `null` and a repeated `Origin`, before a socket exists.
+  - Polling and JSONP are refused, and so is any request carrying a `sid`, so an unlisted origin cannot take over a session whose `sid` it learned. `webtransport` is never offered. A host `allowRequest` still runs after the check and can only refuse more.
+  - `websocketOnly: true` serves the `websocket` transport alone without a list; `allowedOrigins` implies it. `useRealtime` and `useRealtimeWs` take `websocketOnly` to open the socket without polling.
+  - An upgrade with no `Origin` is admitted: it comes from a client that is not a browser, so the list bounds browsers, not authentication.
+  - Both options need `RealtimeIoAdapter`: without it the application now refuses to start with `REALTIME_TRANSPORT_UNAVAILABLE` when either is set. `allowedOrigins` beside a `cors.origin` is refused at boot. The SSE endpoint is unchanged; its origin stays `app.enableCors`.
+  - **Apply to a derived backend:** nothing changes until `allowedOrigins` or `websocketOnly` is set. To use them, set the option, keep `app.useWebSocketAdapter(new RealtimeIoAdapter(app))` in `main.ts`, remove any `cors.origin` and set `websocketOnly: true` in the clients.
+
 ### Documentation
 
 - **`websocket.cors` is documented as response headers, not an origin check.** A WebSocket upgrade is not subject to CORS, and the library accepts it whatever its `Origin` is, so a client with an unlisted origin and a valid cookie connects. The README and `SECURITY.md` now say so and say what the host does: refuse an unlisted `ctx.headers.origin` in its `IConnectionAuthenticator`, and set the session cookie `SameSite=Lax` or `Strict`. The library's behaviour is unchanged.

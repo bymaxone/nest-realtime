@@ -16,6 +16,7 @@ import {
   REALTIME_OPTIONS_TOKEN,
   RESERVED_EVENT_NAMES,
   parseCookieHeader,
+  realtimeError,
   admitRooms,
   assertIdentityIsNotBlank,
   resolveAuthTenant,
@@ -29,6 +30,7 @@ import type {
   BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
 import { ConnectHookFailure } from './connect-hook-failure'
+import { wantsPolicy } from './origin-policy'
 import { isRealtimeIoServer } from './realtime-io-adapter'
 import { WebSocketTransport } from './websocket.transport'
 
@@ -196,8 +198,23 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   afterInit(server: Server): void {
     server.use(this.authenticateHandshake)
     this.transport.setServer(server)
-    if (!isRealtimeIoServer(server)) this.reportMissingAdapter()
+    if (!isRealtimeIoServer(server)) this.refuseOrReportMissingAdapter()
     this.logger.log('RealtimeGateway initialized')
+  }
+
+  /**
+   * A server that `RealtimeIoAdapter` did not create has dropped the websocket options. When the origin policy was
+   * asked for, that means no origin check and polling on, so the boot is refused; otherwise it is reported.
+   */
+  private refuseOrReportMissingAdapter(): void {
+    if (wantsPolicy(this.options.websocket)) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        'websocket.allowedOrigins or websocket.websocketOnly is set but RealtimeIoAdapter is not the active WebSocket adapter, so neither would apply. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from "@bymax-one/nest-realtime/websocket".',
+        { who: RealtimeGateway.name },
+      )
+    }
+    this.reportMissingAdapter()
   }
 
   /** Report a server that `RealtimeIoAdapter` did not create: its options are dropped. */
