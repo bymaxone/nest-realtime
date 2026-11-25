@@ -53,9 +53,9 @@ jobs:
       # cold one — the first run after enabling incremental, and any run whose baseline cache
       # expired. Measured on a hosted runner against 1235 mutants: 835 tested at 43 min
       # (0 survived, 69 timed out), about 75 min projected, and a 45 min ceiling cancelled
-      # the run. The ceiling was 120 min and is now 240, so that a cold run of the suite as it
-      # has grown is not cancelled. The job is CANCELLED rather than failed when it lands, which
-      # reads as an infrastructure blip instead of a budget.
+      # the run. The ceiling must stay above the cold run of the suite as it grows, or the job is
+      # cancelled. A job that hits it is CANCELLED rather than failed, which reads as an
+      # infrastructure blip instead of a budget.
       mutation-timeout-minutes: 240
 
   verify:
