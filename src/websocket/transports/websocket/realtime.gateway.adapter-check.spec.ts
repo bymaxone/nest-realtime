@@ -160,6 +160,51 @@ describe('RealtimeGateway', () => {
       expect(await reported(websocket)).toBe(missing(dropped))
     })
 
+    it('does not list as ignored what is applied without the adapter', async () => {
+      const message = await reported({
+        emitConnectionEvent: false,
+        maxConnectionsPerUser: 2,
+        cors: { origin: 'https://app.example' },
+        pingIntervalMs: 1000,
+        pingTimeoutMs: 1000,
+        maxHttpBufferSize: 10,
+      })
+
+      expect(message).toBe(missing(' (cors, pingIntervalMs, pingTimeoutMs, maxHttpBufferSize)'))
+    })
+
+    it.each([
+      ['no policy', {}],
+      ['the policy', { websocketOnly: true }],
+    ])(
+      'refuses the boot from onApplicationBootstrap when the server has no `use`, with %s',
+      async (_case, websocket) => {
+        // The handshake authenticator cannot be installed on it, and a throw from afterInit would surface only after
+        // the application is serving.
+        gateway = (await buildModule({ websocket })).get(RealtimeGateway)
+
+        expect(() => gateway.afterInit({} as never)).not.toThrow()
+        expect(() => gateway.onApplicationBootstrap()).toThrow(/REALTIME_TRANSPORT_UNAVAILABLE/)
+      },
+    )
+
+    it('never serves HTTP for an application whose WebSocket server has no `use`', async () => {
+      const app = (await buildModule()).createNestApplication({ logger: false })
+      app.useWebSocketAdapter({
+        create: () => ({}),
+        bindClientConnect: () => undefined,
+        bindMessageHandlers: () => undefined,
+        close: () => undefined,
+        dispose: async () => undefined,
+      } as never)
+      try {
+        await expect(app.listen(0, '127.0.0.1')).rejects.toThrow(/REALTIME_TRANSPORT_UNAVAILABLE/)
+        expect(app.getHttpServer().listening).toBe(false)
+      } finally {
+        await app.close()
+      }
+    })
+
     it('says in the README exactly what it logs', () => {
       // A consumer who meets the message looks it up in the README, so the text must match.
       gateway.afterInit({ use: jest.fn() } as never)

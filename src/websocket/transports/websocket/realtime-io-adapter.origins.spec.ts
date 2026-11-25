@@ -353,6 +353,11 @@ describe('the origin policy on a real engine.io server', () => {
     )
   })
 
+  it('accepts a gateway cors origin when only websocketOnly is set', async () => {
+    booted = await boot({ websocketOnly: true }, { cors: { origin: '*' } })
+    expect(await status(booted.port, WS, {})).toBe('101')
+  })
+
   it('refuses an allowRequest that is not a function', async () => {
     await expect(boot({ websocketOnly: true }, { allowRequest: 'yes' })).rejects.toThrow(
       /allowRequest must be a function/,

@@ -347,6 +347,18 @@ describe('useRealtimeWs — enabled, defaults and reconnect', () => {
     expect('transports' in (mockIo.mock.calls[0]?.[1] ?? {})).toBe(transports !== undefined)
   })
 
+  it('reconnects when websocketOnly changes', async () => {
+    const { rerender } = renderHook(
+      ({ websocketOnly }: { websocketOnly: boolean }) =>
+        useRealtimeWs({ url: 'wss://x', websocketOnly }),
+      { initialProps: { websocketOnly: false } },
+    )
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    rerender({ websocketOnly: true })
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(2))
+    expect(mockIo.mock.calls[1]?.[1]?.transports).toEqual(['websocket'])
+  })
+
   it('uses /socket.io as the path when none is given', async () => {
     renderHook(() => useRealtimeWs({ url: 'ws://localhost' }))
     await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))

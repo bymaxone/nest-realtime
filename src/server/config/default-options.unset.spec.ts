@@ -165,7 +165,9 @@ describe.each(GROUPS)('the %s group as a class instance', (group, every) => {
     for (const instance of [withFields, withGetter]) {
       const kept = dropUnset({ [group]: instance } as never)[group] as Record<string, unknown>
 
-      expect(key in kept).toBe(false)
+      // An own `null` of an origin-policy option is kept for validation to refuse.
+      const own = Object.keys(instance).includes(key)
+      expect(key in kept).toBe(own && ['allowedOrigins', 'websocketOnly'].includes(key))
     }
   })
 

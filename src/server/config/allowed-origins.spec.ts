@@ -109,3 +109,20 @@ describe('websocket.websocketOnly', () => {
     )
   })
 })
+
+describe('a policy option the host set to nothing', () => {
+  // Scenario: `allowedOrigins: env?.split(',')` with the variable unset. Expected: refused, not read as no policy.
+  it.each([
+    ['allowedOrigins', undefined],
+    ['allowedOrigins', null],
+    ['websocketOnly', null],
+  ])('refuses %s: %p', (key, value) => {
+    expect(() => validateOptions(withWebsocket({ [key]: value }))).toThrow(
+      new RegExp(`REALTIME_INVALID_OPTIONS: options\\.websocket\\.${key} must be`),
+    )
+  })
+
+  it('reads websocketOnly: undefined as unset', () => {
+    expect(() => validateOptions(withWebsocket({ websocketOnly: undefined }))).not.toThrow()
+  })
+})

@@ -104,6 +104,13 @@ const GROUPS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['reauthenticationPolicy', REAUTHENTICATION_NAMES],
 ]
 
+/**
+ * The options of the origin policy, which only `websocket` has: an own key the host set to nothing is kept for
+ * validation to refuse, since read as unset it would switch the policy off. Validation takes `websocketOnly: undefined`
+ * as unset, as for any boolean.
+ */
+const POLICY_NAMES: readonly string[] = ['allowedOrigins', 'websocketOnly']
+
 /** The most entries an origin or a methods list may hold: a bound on the copy, not on how many a host may name. */
 const MAX_LIST_ENTRIES = 1000
 
@@ -166,37 +173,39 @@ function includesKey(names: readonly string[], key: string): boolean {
   return apply(includes, names, [key]) as boolean
 }
 
-/** Keep what `source[key]` holds, as `readSet` does for each key. */
+/** Keep what `source[key]` holds; with `keepNothing`, also a `null`, or an `undefined` the object has. */
 function readKey(
   kept: Record<string, unknown>,
   source: object,
   key: string,
-  keepWhenSet: string | undefined,
+  keepNothing: boolean,
 ): void {
   const value = readHostKey(source, key)
   if (value !== undefined && value !== null) kept[key] = value
-  else if (key === keepWhenSet && (value === null || hasHostKey(source, key))) kept[key] = value
+  else if (keepNothing && (value === null || hasHostKey(source, key))) kept[key] = value
 }
 
 /**
- * Read the own keys of `source` and the `known` ones by property access, keeping what holds a value. A key in
- * `keepWhenSet` is also kept when it holds `null`, or `undefined` while the object has the property, however it
- * has it: that is a value the host set to nothing, which validation refuses, not an option left unset. Each key is
- * read once, with the `Object.keys` taken at load and without a `Set` or an iterator, which a host can replace.
+ * Read the own keys of `source` and the `known` ones by property access, keeping what holds a value. `keepWhenSet`, and
+ * a key of `keepOwn` that is an own key of `source`, is also kept when it holds `null`, or `undefined` while the object
+ * has the property: that is a value the host set to nothing, which validation refuses, not an option left unset. Each
+ * key is read once, with the `Object.keys` taken at load and without a `Set` or an iterator, which a host can replace.
  */
 function readSet(
   source: object,
   known: readonly string[],
   keepWhenSet?: string,
+  keepOwn: readonly string[] = [],
 ): Record<string, unknown> {
   const kept: Record<string, unknown> = { __proto__: null }
   const own = keys(source)
   for (let index = 0; index < own.length; index += 1) {
-    readKey(kept, source, own[index] as string, keepWhenSet)
+    const key = own[index] as string
+    readKey(kept, source, key, key === keepWhenSet || includesKey(keepOwn, key))
   }
   for (let index = 0; index < known.length; index += 1) {
     const key = known[index] as string
-    if (!includesKey(own, key)) readKey(kept, source, key, keepWhenSet)
+    if (!includesKey(own, key)) readKey(kept, source, key, key === keepWhenSet)
   }
   return kept
 }
@@ -224,7 +233,7 @@ export function dropUnset<T extends object>(options: T): T {
   for (let index = 0; index < GROUPS.length; index += 1) {
     const entry = GROUPS[index] as readonly [string, readonly string[]]
     const value = kept[entry[0]]
-    if (isPlainObject(value)) kept[entry[0]] = readSet(value, entry[1])
+    if (isPlainObject(value)) kept[entry[0]] = readSet(value, entry[1], undefined, POLICY_NAMES)
   }
   const websocket = kept.websocket
   if (isPlainObject(websocket)) {

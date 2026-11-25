@@ -251,17 +251,18 @@ export class RealtimeIoAdapter extends IoAdapter {
 
   /**
    * Installs the guard that refuses a request naming a session, after the request guard and before any middleware the
-   * host adds, which can only be added once this server has been returned. A server with no engine, which is not
-   * attached to a port, answers no request. One whose engine cannot take the guard is closed and refused, since it would
-   * answer requests the policy cannot cover.
+   * host adds, which can only be added once this server has been returned. A server whose engine cannot take the guard,
+   * or that has no engine yet, is closed and refused: it would answer requests the policy cannot cover, at once or once
+   * attached.
    */
   private installSidGuard(server: GuardedServer): void {
-    if (server.engine === undefined) return
-    if (typeof server.engine.use !== 'function') {
+    if (typeof server.engine?.use !== 'function') {
       server.close().catch(() => undefined)
       throw realtimeError(
         REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
-        'the websocket origin policy could not be installed: the engine has no middleware hook',
+        server.engine === undefined
+          ? 'the websocket origin policy could not be installed: the server has no engine, so one attached later would not be covered'
+          : 'the websocket origin policy could not be installed: the engine has no middleware hook',
         { who: RealtimeIoAdapter.name },
       )
     }

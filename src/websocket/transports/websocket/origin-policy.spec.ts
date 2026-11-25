@@ -120,6 +120,58 @@ describe('allowRequestFor', () => {
   })
 })
 
+describe('allowRequestFor with a host allowRequest', () => {
+  const request = { headers: { upgrade: 'websocket' } } as never
+  const settled = () => new Promise((done) => setImmediate(done))
+  const answersOf = async (host: unknown): Promise<unknown[][]> => {
+    const answer = jest.fn()
+    allowRequestFor(undefined, host as never)(request, answer)
+    await settled()
+    return answer.mock.calls
+  }
+
+  it.each([
+    ['a rejected promise', async () => Promise.reject(new Error('late'))],
+    [
+      'a rejecting thenable',
+      () => ({ then: (_ok: unknown, no: (e: Error) => void) => no(new Error('late')) }),
+    ],
+  ])('refuses when it returns %s', async (_case, host) => {
+    expect(await answersOf(host)).toStrictEqual([['forbidden', false]])
+  })
+
+  it('takes no decision from a resolved value', async () => {
+    expect(await answersOf(async () => true)).toStrictEqual([])
+  })
+
+  it('keeps its first answer when it rejects or answers again', async () => {
+    const host = async (_r: unknown, done: (m: null, ok: boolean) => void) => {
+      done(null, true)
+      done(null, false)
+      throw new Error('late')
+    }
+    expect(await answersOf(host)).toStrictEqual([[null, true]])
+  })
+
+  it('is called on the object engine.io called the policy on', () => {
+    const options = { allowRequest: undefined as unknown, seen: undefined as unknown }
+    options.allowRequest = allowRequestFor(undefined, function (this: typeof options) {
+      options.seen = this
+    } as never)
+    ;(options.allowRequest as (r: unknown, a: () => void) => void).call(options, request, jest.fn())
+    expect(options.seen).toBe(options)
+  })
+
+  it('refuses an empty Origin that the list does not hold', () => {
+    const answer = jest.fn()
+    allowRequestFor(['https://a.example'], undefined)(
+      { headers: { upgrade: 'websocket', origin: '' } } as never,
+      answer,
+    )
+    expect(answer).toHaveBeenCalledWith('forbidden', false)
+  })
+})
+
 describe('refuseHostAllowRequest', () => {
   it.each([undefined, () => undefined])('accepts %p', (value) => {
     expect(() => refuseHostAllowRequest(value)).not.toThrow()
@@ -156,9 +208,12 @@ describe('RealtimeIoAdapter on a server that cannot take the sid guard', () => {
     expect(close).toHaveBeenCalledTimes(1)
   })
 
-  it('leaves a server with no engine alone, since it answers no request', () => {
-    const { adapter } = adapterWith(undefined)
-    expect(() => adapter.createIOServer(undefined as never)).not.toThrow()
+  it('closes and refuses a server with no engine, which a later attach would serve unguarded', () => {
+    const { adapter, close } = adapterWith(undefined)
+    expect(() => adapter.createIOServer(undefined as never)).toThrow(
+      /REALTIME_TRANSPORT_UNAVAILABLE.*attached/,
+    )
+    expect(close).toHaveBeenCalledTimes(1)
   })
 
   it('registers the guard on an engine that has the hook', () => {

@@ -4,6 +4,7 @@
  */
 import type { IncomingMessage } from 'node:http'
 import {
+  awaitable,
   REALTIME_ERROR_CODES,
   realtimeError,
   type BymaxRealtimeModuleOptions,
@@ -52,10 +53,17 @@ function isWebSocketUpgrade(request: IncomingMessage): boolean {
 }
 
 /**
- * Runs the host's own `allowRequest` after the policy has admitted a request. It can only refuse, answers at most once
- * (a second answer would start a second handshake in engine.io), and a throw before it answered is a refusal.
+ * Runs the host's own `allowRequest` after the policy has admitted a request, on the object engine.io called the policy
+ * on. It can only refuse and answers at most once (a second answer would start a second handshake in engine.io). A
+ * throw, or a returned promise that rejects, before it answered is a refusal; a value it returns or resolves to
+ * decides nothing.
  */
-function askHost(host: AllowRequest, request: IncomingMessage, answer: Answer): void {
+async function askHost(
+  host: AllowRequest,
+  self: unknown,
+  request: IncomingMessage,
+  answer: Answer,
+): Promise<void> {
   let answered = false
   const once: Answer = (message, success) => {
     if (answered) return
@@ -63,7 +71,7 @@ function askHost(host: AllowRequest, request: IncomingMessage, answer: Answer): 
     answer(message, success)
   }
   try {
-    host(request, once)
+    await awaitable(Reflect.apply(host, self, [request, once]) as unknown)
   } catch {
     once('forbidden', false)
   }
@@ -82,7 +90,7 @@ export function allowRequestFor(
   allowedOrigins: readonly string[] | undefined,
   host: AllowRequest | undefined,
 ): AllowRequest {
-  return (request, answer) => {
+  return function policy(this: unknown, request, answer) {
     const origin = request.headers.origin
     const refused =
       !isWebSocketUpgrade(request) ||
@@ -92,7 +100,7 @@ export function allowRequestFor(
       return
     }
     if (host === undefined) answer(null, true)
-    else askHost(host, request, answer)
+    else void askHost(host, this, request, answer)
   }
 }
 

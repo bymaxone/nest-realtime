@@ -36,6 +36,17 @@ import { isRealtimeIoServer } from './realtime-io-adapter'
 import { socketNamespace } from './socket-namespace'
 import { WebSocketTransport } from './websocket.transport'
 
+/** The `websocket` options only `RealtimeIoAdapter` applies; the others reach the library without it. */
+const ADAPTER_OPTIONS: ReadonlySet<string> = new Set([
+  'cors',
+  'allowedOrigins',
+  'websocketOnly',
+  'pingIntervalMs',
+  'pingTimeoutMs',
+  'maxHttpBufferSize',
+  'redisAdapter',
+])
+
 /** The root server a namespace belongs to; a root server has no `server` and is its own root. */
 function rootOf(server: Server): unknown {
   return (server as { server?: unknown }).server ?? server
@@ -88,10 +99,10 @@ export class RealtimeGateway
     private readonly tracing?: RealtimeTracing,
   ) {}
 
-  /** Identities the handshake middleware resolved, until `handleConnection` takes them. */
-  /** Set by `afterInit` when the origin policy was asked for and the adapter that applies it is absent. */
+  /** Set by `afterInit` when the boot has to be refused: it is thrown from `onApplicationBootstrap`. */
   private adapterRefusal: Error | undefined
 
+  /** Identities the handshake middleware resolved, until `handleConnection` takes them. */
   private readonly authenticated = new WeakMap<Socket, AuthenticationResult>()
 
   /** The place held for a socket from before its handshake is authenticated until it is registered. */
@@ -209,15 +220,28 @@ export class RealtimeGateway
 
   /** Wire the resolved Socket.IO server to the transport after gateway init. */
   afterInit(server: Server): void {
+    if (typeof (server as { use?: unknown }).use !== 'function') {
+      this.refuseServerWithoutUse()
+      return
+    }
     server.use(this.authenticateHandshake)
     this.transport.setServer(server)
     if (!isRealtimeIoServer(rootOf(server))) this.refuseOrReportMissingAdapter()
     this.logger.log('RealtimeGateway initialized')
   }
 
-  /** Fail the boot of an application that asked for the origin policy without the adapter that applies it. */
+  /** Fail the boot `afterInit` refused: a throw from there would surface only after the application is serving. */
   onApplicationBootstrap(): void {
     if (this.adapterRefusal !== undefined) throw this.adapterRefusal
+  }
+
+  /** A server without `use` cannot take the handshake authenticator, so no client of it would be authenticated. */
+  private refuseServerWithoutUse(): void {
+    this.adapterRefusal = realtimeError(
+      REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+      'the WebSocket server has no `use` method, so the handshake authenticator cannot be installed. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from "@bymax-one/nest-realtime/websocket".',
+      { who: RealtimeGateway.name },
+    )
   }
 
   /**
@@ -241,7 +265,7 @@ export class RealtimeGateway
   /** Report a server that `RealtimeIoAdapter` did not create: the options the adapter applies are dropped. */
   private reportMissingAdapter(): void {
     const websocket = this.options.websocket ?? {}
-    const configured = Object.keys(websocket).filter((key) => key !== 'namespace')
+    const configured = Object.keys(websocket).filter((key) => ADAPTER_OPTIONS.has(key))
     logEvent(
       this.logger,
       'error',

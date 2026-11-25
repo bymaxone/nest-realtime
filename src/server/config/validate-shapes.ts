@@ -151,11 +151,11 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
 /**
  * Refuse an `allowedOrigins` that is not a non-empty list of origins in the spelling a browser sends, and one that is
  * set beside a `cors.origin` other than `false`: two lists for one decision, of which the stricter would silently
- * win. An unset one is left alone.
+ * win. An absent one is left alone; one the host set to `undefined` or `null` is refused.
  */
 function assertAllowedOrigins(websocket: BymaxRealtimeModuleOptions['websocket']): void {
   const list: unknown = websocket?.allowedOrigins
-  if (list === undefined) return
+  if (websocket === undefined || !('allowedOrigins' in websocket)) return
   if (!isArray(list) || list.length === 0) {
     refuse('websocket.allowedOrigins', ALLOWED_ORIGINS_KINDS, list)
   }
@@ -163,7 +163,7 @@ function assertAllowedOrigins(websocket: BymaxRealtimeModuleOptions['websocket']
     if (!isCanonicalOrigin(list[index])) {
       throw realtimeError(
         REALTIME_ERROR_CODES.INVALID_OPTIONS,
-        `options.websocket.allowedOrigins[${index}] must be an origin as a browser sends it: a lowercase scheme, "://", a lowercase host and a port only when it is not the default of http or https, with no path, trailing slash, userinfo, wildcard or "null"`,
+        `options.websocket.allowedOrigins[${index}] must be an origin as a browser sends it: a lowercase scheme, "://", a host (lowercase for http and https) and a port only when it is not the default of http or https; not ws, wss or ftp, and with no path, trailing slash, userinfo, wildcard or "null"`,
         { who: 'BymaxRealtimeModule' },
       )
     }
