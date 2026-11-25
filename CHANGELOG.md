@@ -7,6 +7,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- **A WebSocket upgrade no longer ends the process when `websocket.namespace` is set and the application has a gateway of its own on another namespace.** With that layout the adapter built a second Socket.IO server on the application's HTTP server, so every upgrade reached two engines and the second one threw. The adapter now gives Nest's stored server back as the root one when a gateway of another namespace joins it, so one server, and one engine, serves the port and path. Applications that set `websocket.namespace` and host a gateway on a different namespace are affected; layouts without both are not.
+
 ### Documentation
 
 - **`websocket.cors` is documented as response headers, not an origin check.** A WebSocket upgrade is not subject to CORS, and the library accepts it whatever its `Origin` is, so a client with an unlisted origin and a valid cookie connects. The README and `SECURITY.md` now say so and say what the host does: refuse an unlisted `ctx.headers.origin` in its `IConnectionAuthenticator`, and set the session cookie `SameSite=Lax` or `Strict`. The library's behaviour is unchanged.

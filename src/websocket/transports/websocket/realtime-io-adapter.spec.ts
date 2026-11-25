@@ -366,6 +366,35 @@ describe('RealtimeIoAdapter', () => {
       expect(isRealtimeIoServer(adapter.create(3000))).toBe(true)
     })
 
+    it('hands the root server, not its own namespace, to the stock adapter when Nest passes that namespace back', () => {
+      // Nest gives a gateway of another namespace the server it stored, which is the namespace this adapter returned;
+      // a namespace takes no `.of`, so passed on as it is the stock adapter would build a second server.
+      const hostNamespace = { marker: 'host' }
+      const root = makeRootServer({ marker: 'ns' })
+      createSuperSpy = jest
+        .spyOn(IoAdapter.prototype, 'create')
+        .mockReturnValueOnce(root as never)
+        .mockReturnValueOnce(hostNamespace as never)
+      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
+      const ours = adapter.create(3000)
+
+      const result = adapter.create(3000, { namespace: '/y', server: ours } as never)
+
+      expect(createSuperSpy).toHaveBeenLastCalledWith(3000, { namespace: '/y', server: root })
+      expect(result).toBe(hostNamespace)
+    })
+
+    it('passes a server it did not create to the stock adapter as it is', () => {
+      // Only a namespace this adapter returned is swapped for its root; any other server is Nest's or the host's.
+      const given = { of: jest.fn() }
+      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue({} as never)
+      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
+
+      adapter.create(3000, { namespace: '/y', server: given } as never)
+
+      expect(createSuperSpy).toHaveBeenCalledWith(3000, { namespace: '/y', server: given })
+    })
+
     it('returns the root server unchanged when namespace is unset', () => {
       // No namespace → the root server is returned as-is, of() is never called.
       const root = makeRootServer({})
