@@ -352,8 +352,7 @@ export class SseSubscriptionHandler {
     const queueEvents = gapEvents.filter(
       (queued) => !replayEvents.some((replayed) => replayed.id === queued.id),
     )
-    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — `of()` with no arguments emits nothing and completes, exactly as `EMPTY` does; the guard picks the clearer expression, not a different stream
-    const replay$ = replayEvents.length > 0 ? of(...replayEvents) : EMPTY
+    const replay$ = of(...replayEvents)
 
     // Emit `connection:established` first unless disabled in options.
     const established$ = this.transport.emitConnectionEvent
@@ -463,7 +462,6 @@ export class SseSubscriptionHandler {
    */
   private async readQueue(req: SseRequest, userId: string): Promise<OfflineQueueRead> {
     const lastEventId = lastEventIdOf(req)
-    // Stryker disable next-line BooleanLiteral: equivalent — with no Last-Event-ID or no queue there is no second read either, so this flag is never read
     if (!lastEventId || !this.offlineDelivery) {
       // The last statement before an object return, as below: the function's promise is resolved with it.
       return returnable({ events: [], degraded: false })
@@ -556,8 +554,7 @@ export class SseSubscriptionHandler {
    */
   private subscribePipeline(p: StreamParams, subscriber: Subscriber<MessageEvent>): Subscription {
     const { connectionId, subject, close$, established$, replay$, queueEvents } = p
-    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — same as the replay stream above; `of()` with no arguments is `EMPTY`
-    const queueReplay$ = queueEvents.length > 0 ? of(...queueEvents.map(toMessageEvent)) : EMPTY
+    const queueReplay$ = of(...queueEvents.map(toMessageEvent))
     return merge(established$, replay$, queueReplay$, subject)
       .pipe(
         takeUntil(close$),

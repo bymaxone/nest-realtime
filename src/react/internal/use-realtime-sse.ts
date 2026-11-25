@@ -420,8 +420,6 @@ export function useRealtimeSse<TEvents extends Record<string, unknown>>(
   ])
 
   useEffect(() => {
-    // Stryker disable next-line ConditionalExpression: equivalent — `connect` returns at once when `enabled` is false and the cleanup then finds no source, so a disabled hook behaves the same without this guard; measured by running the React specs without it
-    if (opts.enabled === false) return
     connect()
     return () => {
       context.clearReconnectTimer()

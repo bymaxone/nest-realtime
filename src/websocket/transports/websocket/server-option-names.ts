@@ -317,8 +317,7 @@ export const STANDARD_OBJECT_PROTOTYPE_NAMES = [
 /** The root prototype of this realm, and what it held under each standard name when the library was loaded. */
 const root = Object.prototype
 const baseline: (PropertyDescriptor | undefined)[] = []
-// Stryker disable next-line EqualityOperator: equivalent — a read past the last name stores one more entry that nothing reads, since every loop that uses `baseline` is bounded by the names
-for (let i = 0; i < STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
+for (let i = 0; i !== STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
   baseline[i] = clean.describe(root, STANDARD_OBJECT_PROTOTYPE_NAMES[i] as string)
 }
 
@@ -358,8 +357,7 @@ function changed(
   now: PropertyDescriptor | undefined,
 ): boolean {
   if (before === undefined || now === undefined) return before !== now
-  // Stryker disable next-line EqualityOperator: equivalent — past the last field the name is `undefined`, a key neither descriptor holds, so both reads are `undefined` and equal
-  for (let i = 0; i < FIELDS.length; i += 1) {
+  for (let i = 0; i !== FIELDS.length; i += 1) {
     const name = FIELDS[i] as (typeof FIELDS)[number]
     if (!clean.is(before[name], now[name])) return true
   }
@@ -368,8 +366,7 @@ function changed(
 
 /** Whether `name` is one of the standard names. */
 function isStandard(name: string): boolean {
-  // Stryker disable next-line EqualityOperator: equivalent — past the last name the element is `undefined`, which no string equals
-  for (let i = 0; i < STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
+  for (let i = 0; i !== STANDARD_OBJECT_PROTOTYPE_NAMES.length; i += 1) {
     if (STANDARD_OBJECT_PROTOTYPE_NAMES[i] === name) return true
   }
   return false

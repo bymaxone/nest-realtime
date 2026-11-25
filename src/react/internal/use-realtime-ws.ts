@@ -224,8 +224,6 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
   }, [opts.enabled, opts.url, authTicket, authToken, opts.path, disposeSocket, socketRef])
 
   useEffect(() => {
-    // Stryker disable next-line ConditionalExpression: equivalent — `connect` returns at once when `enabled` is false and `disposeSocket` is idempotent, so a disabled hook behaves the same without this guard; measured by running the React specs without it
-    if (opts.enabled === false) return
     void connect()
     // Unmount cleanup disconnects exactly once — `disposeSocket` is idempotent and
     // clears the ref, so a later cleanup never double-disconnects a live socket.

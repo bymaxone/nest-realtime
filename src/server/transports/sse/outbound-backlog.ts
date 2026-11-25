@@ -113,8 +113,7 @@ export class OutboundBacklog {
    */
   private settle(): void {
     const settled = this.settledOffset()
-    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — past the last offset `this.ends[this.head]` is `undefined`, and `undefined <= settled` is false, so the loop ends there whether or not the bound is tested
-    while (this.head < this.ends.length && (this.ends[this.head] as number) <= settled) this.head++
+    while ((this.ends[this.head] ?? NaN) <= settled) this.head++
     if (this.head === this.ends.length) {
       this.ends = []
       this.head = 0
