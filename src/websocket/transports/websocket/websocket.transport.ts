@@ -101,8 +101,7 @@ export class WebSocketTransport implements ITransport {
   /**
    * Mark shutdown as begun, for a caller that runs only this hook; `onModuleDestroy` already did.
    *
-   * Socket.IO closes every connection that is open when the server closes (with `websocket.namespace`
-   * set Nest holds a namespace, which closes nothing: README, "Known limits"), so no connection is
+   * Socket.IO closes every connection that is open when the server closes, so no connection is
    * torn down here; a socket accepted after this point would only be closed a moment later, and
    * its authenticator may already depend on a store the host has closed.
    */
@@ -151,8 +150,8 @@ export class WebSocketTransport implements ITransport {
    * Resolve the map of locally-connected sockets, tolerating both server shapes.
    *
    * A root Socket.IO `Server` exposes the socket map at `.sockets.sockets` (its
-   * `.sockets` is the root `Namespace`). When `websocket.namespace` is configured,
-   * `RealtimeIoAdapter` wires the gateway to a `Namespace` instead, whose own
+   * `.sockets` is the root `Namespace`). When `websocket.namespace` is not the root,
+   * Nest gives the gateway a `Namespace` instead, whose own
    * `.sockets` IS the socket map. Per-socket lookups (join/leave/disconnect) use
    * this indirection so they work under either shape.
    */

@@ -66,7 +66,11 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     and, 991 B more than the figure above, the table of the built-ins and the symbol-keyed methods and flags of a regular expression the option, validation and admission code call, recorded when the library loads, with the count and the refusal that read it, measured on 2026-11-22)
 //     and the wait under a deadline that the handshake gate, the re-authentication revalidate, the offline-queue replay, the Redis subscribe race and publish, and the SSE registration share, which uses no `Promise` static and no `then` and answers in a box with no prototype, and the check of the baseline and of the prototype chain of what each decision path returns, so that no object or array is handed over before the built-ins and the root prototypes are known to be intact; the figure on the first line is the measure of the whole bundle on 2026-11-24)
 //     and, 104 B more than the figure above (of the websocket bundle, 29 B), measured on 2026-11-24, the pin that gives the promise each public method of the service hands back, and each caller's own await of a method that decides something, its own `constructor`, and the species getter of `Promise` in the table of built-ins,
-//   websocket  8,537 B (the Socket.IO stack: 74 B for the table that maps a namespace the adapter returned back to its root server, so that a gateway of another namespace joins the one server and no second engine is created on the HTTP server, measured on 2026-11-25)
+//   websocket  9,292 B, 30 B above the 9,262 B measured on 2026-11-25 (the Socket.IO stack, which beyond what
+//     the entry below lists carries the subclass that writes `websocket.namespace` into the gateway options Nest
+//     reads, the claim of a namespace until the gateway is connected or destroyed, the namespace opened on the
+//     library's server before any gateway joins it, the boot warning for a gateway on '/' with the record of the
+//     library's root server, and the one reading of the configured name)
 //   websocket  8,456 B →  8,486 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -104,7 +108,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
   { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 26_782 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 8_537 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 9_292 },
   {
     name: 'observability (metrics contributor)',
     path: 'dist/observability/index.mjs',

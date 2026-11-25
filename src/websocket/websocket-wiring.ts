@@ -11,6 +11,7 @@ import {
 } from '@bymax-one/nest-realtime/internal'
 import type { TransportWiring } from '@bymax-one/nest-realtime/internal'
 import { CompositeTransport } from './transports/composite/composite.transport'
+import { gatewayBoundToNamespace } from './transports/websocket/gateway-binding'
 import { RealtimeGateway } from './transports/websocket/realtime.gateway'
 import { WebSocketTransport } from './transports/websocket/websocket.transport'
 
@@ -32,7 +33,7 @@ export const webSocketWiring: TransportWiring = {
           { provide: REALTIME_TRANSPORT_TOKEN, useExisting: WebSocketTransport },
         ],
         endpoints: [],
-        gateways: [RealtimeGateway],
+        gateways: [{ provide: RealtimeGateway, useClass: gatewayBoundToNamespace() }],
       }
     }
     return {
@@ -45,7 +46,7 @@ export const webSocketWiring: TransportWiring = {
         { provide: REALTIME_TRANSPORT_TOKEN, useExisting: CompositeTransport },
       ],
       endpoints: [resolved.sse.endpoint],
-      gateways: [RealtimeGateway],
+      gateways: [{ provide: RealtimeGateway, useClass: gatewayBoundToNamespace() }],
     }
   },
 
@@ -54,7 +55,7 @@ export const webSocketWiring: TransportWiring = {
       return {
         providers: [
           WebSocketTransport,
-          RealtimeGateway,
+          { provide: RealtimeGateway, useClass: gatewayBoundToNamespace() },
           { provide: REALTIME_TRANSPORT_TOKEN, useExisting: WebSocketTransport },
         ],
         controllers: [],
@@ -66,7 +67,7 @@ export const webSocketWiring: TransportWiring = {
         SseSubscriptionHandler,
         WebSocketTransport,
         CompositeTransport,
-        RealtimeGateway,
+        { provide: RealtimeGateway, useClass: gatewayBoundToNamespace() },
         RealtimePubSubSubscriber,
         { provide: REALTIME_TRANSPORT_TOKEN, useExisting: CompositeTransport },
       ],

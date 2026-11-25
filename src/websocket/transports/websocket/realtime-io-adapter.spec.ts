@@ -328,130 +328,108 @@ describe('RealtimeIoAdapter', () => {
     })
   })
 
-  describe('create — namespace binding', () => {
-    let createSuperSpy: jest.SpyInstance
-
-    afterEach(() => {
-      createSuperSpy?.mockRestore()
-    })
-
-    /** Root server mock exposing `.of` so namespace binding can be observed. */
-    function makeRootServer(namespace: unknown) {
-      const of = jest.fn().mockReturnValue(namespace)
-      return { of }
+  describe('the library namespace', () => {
+    const boot = (namespace: string | undefined, port: number, opts?: object): jest.Mock => {
+      const server = makeServer()
+      superSpy.mockImplementation(() => server)
+      const websocket = namespace === undefined ? {} : { namespace }
+      new RealtimeIoAdapter(makeApp({ websocket }) as never).createIOServer(port, opts as never)
+      return server.of
     }
 
-    it('returns server.of(namespace) when a non-root namespace is configured', () => {
-      // A configured namespace binds the gateway to server.of(ns).
-      const nsServer = { marker: 'ns' }
-      const root = makeRootServer(nsServer)
-      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
-
-      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
-      const result = adapter.create(3000)
-
-      expect(root.of).toHaveBeenCalledWith('/rt')
-      expect(result).toBe(nsServer)
+    // Scenario: the server of the application's port and default path. Expected: the library's namespace is opened on it,
+    // under the name Socket.IO gives it.
+    it.each([
+      ['/rt', '/rt'],
+      ['rt', '/rt'],
+    ])('opens %p as %p on the library server', (configured, opened) => {
+      expect(boot(configured, 0).mock.calls).toStrictEqual([['/'], [opened]])
     })
 
-    it('marks the namespace it returns as one of its own', () => {
-      // With a namespace the gateway receives the namespace, not the root server.
-      const nsServer = { marker: 'ns' }
-      createSuperSpy = jest
-        .spyOn(IoAdapter.prototype, 'create')
-        .mockReturnValue(makeRootServer(nsServer) as never)
+    // Scenario: no namespace, the root, or a server of another port or path. Expected: only '/' is read for the guards.
+    it.each([
+      ['unset', undefined, 0, undefined],
+      ['empty', '', 0, undefined],
+      ['the root', '/', 0, undefined],
+      ['on another port', '/rt', 3001, undefined],
+      ['on another path', '/rt', 0, { path: '/own' }],
+    ])('opens nothing more when it is %s', (_case, namespace, port, opts) => {
+      expect(boot(namespace, port, opts).mock.calls).toStrictEqual([['/']])
+    })
+  })
 
-      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
+  describe('bindClientConnect', () => {
+    let warnSpy: jest.SpyInstance
 
-      expect(isRealtimeIoServer(adapter.create(3000))).toBe(true)
+    beforeEach(() => {
+      warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    })
+    afterEach(() => warnSpy.mockRestore())
+
+    /** An adapter with a server of `port`, and what binding a gateway to each of `targets` warns. */
+    function bind(
+      namespace: string | undefined,
+      port: number,
+      targets: (server: object) => object[],
+    ): { warnings: unknown[]; handlers: jest.Mock[] } {
+      const server = makeServer()
+      superSpy.mockImplementation(() => server)
+      const websocket = namespace === undefined ? {} : { namespace }
+      const adapter = new RealtimeIoAdapter(makeApp({ websocket }) as never)
+      adapter.createIOServer(port)
+      const handlers = targets(server).map((target) => {
+        const on = jest.fn()
+        adapter.bindClientConnect(Object.assign(target, { on }), () => undefined)
+        return on
+      })
+      return {
+        warnings: warnSpy.mock.calls.map(([line]) => (line as { event: string }).event),
+        handlers,
+      }
+    }
+
+    // Scenario: a gateway on the server itself, or on its '/' namespace, with the library elsewhere. Expected: one warning
+    // for any number of them, and each handler is bound as IoAdapter binds it.
+    it.each([
+      ['the server', (server: object) => [server, server]],
+      ["its '/' namespace", (server: object) => [{ name: '/', server }]],
+    ])('warns once about a gateway on %s', (_case, targets) => {
+      const { warnings, handlers } = bind('/rt', 0, targets)
+
+      expect(warnings).toStrictEqual(['REALTIME_GATEWAY_OUTSIDE_NAMESPACE'])
+      for (const on of handlers) expect(on).toHaveBeenCalledWith('connection', expect.any(Function))
     })
 
-    it('hands the root server, not its own namespace, to the stock adapter when Nest passes that namespace back', () => {
-      // Nest gives a gateway of another namespace the server it stored, which is the namespace this adapter returned;
-      // a namespace takes no `.of`, so passed on as it is the stock adapter would build a second server.
-      const hostNamespace = { marker: 'host' }
-      const root = makeRootServer({ marker: 'ns' })
-      createSuperSpy = jest
-        .spyOn(IoAdapter.prototype, 'create')
-        .mockReturnValueOnce(root as never)
-        .mockReturnValueOnce(hostNamespace as never)
-      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
-      const ours = adapter.create(3000)
+    // Scenario: the warning's text. Expected: what does not reach the clients of '/', and the two ways out.
+    it("says what the library does not do for the clients of '/', and what to change", () => {
+      bind('/rt', 0, (server) => [server])
 
-      const result = adapter.create(3000, { namespace: '/y', server: ours } as never)
-
-      expect(createSuperSpy).toHaveBeenLastCalledWith(3000, { namespace: '/y', server: root })
-      expect(result).toBe(hostNamespace)
+      expect((warnSpy.mock.calls[0]?.[0] as { message: string }).message).toBe(
+        "A gateway of this application is on '/' while websocket.namespace puts the library elsewhere: the library's " +
+          "authenticator does not run for the clients of '/', and the library's rooms are not reachable from it. Give the " +
+          'gateway the namespace of websocket.namespace, or authenticate its clients in the gateway itself.',
+      )
     })
 
-    it('passes a server it did not create to the stock adapter as it is', () => {
-      // Only a namespace this adapter returned is swapped for its root; any other server is Nest's or the host's.
-      const given = { of: jest.fn() }
-      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue({} as never)
-      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
-
-      adapter.create(3000, { namespace: '/y', server: given } as never)
-
-      expect(createSuperSpy).toHaveBeenCalledWith(3000, { namespace: '/y', server: given })
+    // Scenario: a gateway on another namespace, on another server, or no namespace configured. Expected: no warning.
+    it.each([
+      ['a namespace of the server', '/rt', 0, (server: object) => [{ name: '/rt', server }]],
+      ['a server of another port', '/rt', 3001, (server: object) => [server]],
+      ['another server', '/rt', 0, () => [{}, { name: '/', server: {} }]],
+      ['the server, with no namespace configured', undefined, 0, (server: object) => [server]],
+      ["the server, with '/' configured", '/', 0, (server: object) => [server]],
+    ])('says nothing about %s', (_case, namespace, port, targets) => {
+      expect(bind(namespace, port, targets).warnings).toStrictEqual([])
     })
+  })
 
-    it('hands the stock adapter the very options object it was given when none is a namespace of its own', () => {
-      // A copy would drop what the host put on the object by reference, so only a root swap may build a new one.
-      const given = { of: jest.fn() }
-      const options = { namespace: '/y', server: given }
-      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue({} as never)
-      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
-
-      adapter.create(3000, options as never)
-
-      expect(createSuperSpy.mock.calls[0]?.[1]).toBe(options)
-    })
-
-    it('returns the root server unchanged when namespace is unset', () => {
-      // No namespace → the root server is returned as-is, of() is never called.
-      const root = makeRootServer({})
-      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
-
-      const adapter = new RealtimeIoAdapter(makeApp() as never)
-      const result = adapter.create(3000)
-
-      expect(root.of).not.toHaveBeenCalled()
-      expect(result).toBe(root)
-    })
-
-    it('returns the root server unchanged when namespace is the root "/"', () => {
-      // "/" is the root and must NOT trigger a namespace split.
-      const root = makeRootServer({})
-      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
-
-      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/' } }) as never)
-      const result = adapter.create(3000)
-
-      expect(root.of).not.toHaveBeenCalled()
-      expect(result).toBe(root)
-    })
-
-    it('returns the server unchanged when it exposes no of() function', () => {
-      // Defensive: a server without .of (unexpected) is returned as-is.
-      const root = { adapter: jest.fn() }
-      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
-
-      const adapter = new RealtimeIoAdapter(makeApp({ websocket: { namespace: '/rt' } }) as never)
-      const result = adapter.create(3000)
-
-      expect(result).toBe(root)
-    })
-
-    it('forwards port and options to super.create', () => {
-      // The override must not swallow the arguments NestJS passes through.
-      const root = makeRootServer({})
-      createSuperSpy = jest.spyOn(IoAdapter.prototype, 'create').mockReturnValue(root as never)
-
-      const adapter = new RealtimeIoAdapter(makeApp() as never)
-      const opts = { namespace: '/', cors: false } as never
-      adapter.create(3000, opts)
-
-      expect(createSuperSpy).toHaveBeenCalledWith(3000, opts)
+  describe('create', () => {
+    // Scenario: the adapter's `create`. Expected: it is the stock one, which returns the root server, so Nest stores the
+    // root and every gateway without a namespace binds to `/`; the library's gateway alone is bound to its namespace.
+    it('declares no create of its own', () => {
+      expect(Object.prototype.hasOwnProperty.call(RealtimeIoAdapter.prototype, 'create')).toBe(
+        false,
+      )
     })
   })
 })

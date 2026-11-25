@@ -7,6 +7,26 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Changed
+
+- **A host gateway that declares no namespace is now served on `/`, not on `websocket.namespace`.** The adapter no longer returns the library's namespace for every gateway: Nest keeps the root Socket.IO server and the library's gateway alone is bound to `websocket.namespace`. With a namespace other than `/`, the library's authenticator is not called off that namespace, and the adapter logs `REALTIME_GATEWAY_OUTSIDE_NAMESPACE` once at start for `/` on its server. **Migration**, for each gateway that declares no namespace:
+  - Its clients move from the namespace of `websocket.namespace` to `/`. A `@SubscribeMessage` handler there answers an anonymous client unless the gateway authenticates it.
+  - A middleware it installs, or a disconnect it makes in `handleConnection`, no longer applies to the library's clients. Move that rule into your `IConnectionAuthenticator`, or declare the library's namespace on the gateway.
+  - `server.to('user:…')` or any other room emit from it no longer reaches the library's sockets. Emit through the library's service instead.
+  - To keep it behind the library's authenticator, give it the namespace of `websocket.namespace`.
+- **A host gateway that declares `/`, on the application's port and default path, is no longer authenticated by the library when `websocket.namespace` is another namespace.** A gateway that declares `/` was authenticated by the library's authenticator before; it no longer is. Authenticate it yourself or give it the namespace of `websocket.namespace`. Its `handleConnection` and `handleDisconnect` also ran for the library's clients and no longer do, so a disconnect it makes in `handleConnection` no longer applies to them.
+- **`websocket.namespace` is applied without `RealtimeIoAdapter` too.** With Nest's own adapter the library is served on the namespace and a client of `/` reaches your gateways there without the library's authenticator. The `REALTIME_ADAPTER_MISSING` line no longer lists `namespace` among the ignored options and says this. Without the adapter, a host gateway whose RegExp namespace matches `websocket.namespace` can take it, and its broadcasts then reach the library's clients; the library's authenticator still runs. The line says that isolation is not guaranteed.
+- **`RealtimeIoAdapter` no longer overrides `create`.** A subclass that overrides or calls it uses `IoAdapter`'s.
+- **One module object instantiated twice with different `websocket.namespace` values, before the first gateway is connected, is refused** with `REALTIME_INVALID_OPTIONS`. This covers `forRoot` with replaced options and `forRootAsync`, whose factory may answer differently. Once the first application is connected or closed, another namespace is accepted. `createApplicationContext` connects no gateway, so a second context with another namespace is refused until the first is closed. A boot that fails while Nest is still creating providers can leave the namespace held.
+- **Replacing the `RealtimeGateway` provider with a subclass of the exported class serves the library on `/`.** Under `RealtimeIoAdapter`, `websocket.namespace` is then still open with no gateway on it, and a client connects there without authentication.
+
+### Fixed
+
+- **With `websocket.namespace` set, room-less broadcasts no longer cross between `/` and the library.** Both shared one namespace before. Under `RealtimeIoAdapter`, a matching RegExp gateway does not take it on the application's server.
+- **`app.close()` closes the HTTP server of a gateway that listens on its own port, and no longer waits for an open client when `websocket.namespace` is set.** Nest held a namespace, which has no `close()`, so the root server stayed open. A client whose handshake is still pending no longer keeps it open either. Connections that still can, and the `forceCloseConnections` remedy, are in the README, "Known limits".
+- **A class that extends `RealtimeIoAdapter` compiles when the application has two copies of `socket.io`.** `@nestjs/platform-socket.io` pins `socket.io` exactly, so a plain install of a newer 4.x patch makes two copies, and the adapter's re-declared `create` failed with TS2416 under `skipLibCheck: false`. `pnpm check:runtime` compiles a consumer with one copy and with two.
+- **`@types/react` is an optional peer dependency of any version**, because the `./react` declarations import types from `react`. An application on the types of React 18 that uses only the server entry points installs as before.
+
 ## [1.2.37] - 2026-11-25
 
 ### Fixed
