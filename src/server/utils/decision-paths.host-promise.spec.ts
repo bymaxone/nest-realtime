@@ -205,6 +205,21 @@ describe('the Promise constructor this module pins on the promises it awaits', (
     }
   })
 
+  // Scenario: the slot is absent, because the host deleted `Promise.prototype.constructor`. Expected: the load is refused
+  // with the same message, not with a TypeError from reading a value off nothing.
+  it('refuses to load when the constructor slot is absent', () => {
+    const real = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor',
+    ) as PropertyDescriptor
+    Reflect.deleteProperty(Promise.prototype, 'constructor')
+    try {
+      expect(load).toThrow('replaced before this module loaded')
+    } finally {
+      Object.defineProperty(Promise.prototype, 'constructor', real)
+    }
+  })
+
   // Scenario: the slot holds a getter that answers the engine's own Promise. Expected: refused, because a read of the slot
   // runs the getter, which can answer something else the next time, and the slot is read as a descriptor.
   it('refuses a getter in the slot, even one that answers the engine constructor', () => {
