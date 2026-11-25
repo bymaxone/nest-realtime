@@ -328,7 +328,7 @@ bootstrap()
 ```
 
 > [!IMPORTANT]
-> The `main.ts` line is not optional. `RealtimeIoAdapter` is what applies `websocket.cors`, `allowedOrigins`, `websocketOnly`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`. Without it those options are ignored, the gateway's own CORS stays closed (`origin: false`) so no CORS header lets a browser on another origin read a long-polling response (a WebSocket upgrade is not subject to CORS: see [WebSocket origin](#websocket-origin)), and the module logs this error once at start-up:
+> The `main.ts` line is not optional. `RealtimeIoAdapter` is what applies `websocket.cors`, `allowedOrigins`, `websocketOnly`, `namespace`, `pingIntervalMs`, `pingTimeoutMs`, `maxHttpBufferSize` and `redisAdapter`. Without it those options are ignored (but `allowedOrigins` or `websocketOnly` refuses the boot instead, see [WebSocket origin](#websocket-origin)), the gateway's own CORS stays closed (`origin: false`) so no CORS header lets a browser on another origin read a long-polling response (a WebSocket upgrade is not subject to CORS: see [WebSocket origin](#websocket-origin)), and the module logs this error once at start-up:
 
 ```
 RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options are ignored and the gateway CORS stays closed (origin: false): browsers on another origin cannot connect. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from '@bymax-one/nest-realtime/websocket'.
