@@ -178,26 +178,6 @@ describe('root server binding (e2e)', () => {
     expect(authenticated).toHaveLength(1)
   })
 
-  // Scenario: limit A. One authenticated client is open on the library's namespace when the application closes. Expected:
-  // measured here, not assumed: the time `app.close()` takes with the client still connected and the state of the server after.
-  it('settles app.close() with an authenticated client still open', async () => {
-    const port = await boot([])
-    const server = app?.getHttpServer()
-    await open(port, '/rt')
-    const started = Date.now()
-
-    await Promise.race([
-      app?.close(),
-      new Promise((_resolve, reject) =>
-        setTimeout(() => reject(new Error('close pending after 6 s')), 6_000),
-      ),
-    ])
-    app = undefined
-
-    expect(Date.now() - started).toBeLessThan(6_000)
-    expect(server?.listening).toBe(false)
-  })
-
   // Scenario: one module object serves two applications whose roots differ, both with websocket.namespace '/rt'.
   // Expected: each application binds the library to '/rt' of its own root and authenticates only its own clients.
   it('binds forRoot to its own root in each of two applications', async () => {

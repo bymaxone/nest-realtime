@@ -461,6 +461,8 @@ This section lists the bounds the library applies, what happens when each one is
 
 **One module object cannot serve two applications that give it different `websocket.namespace` values.** The gateway refuses to start with `REALTIME_INVALID_OPTIONS` when the same `forRoot` or `forRootAsync` result is instantiated with another namespace than the first. Call `forRoot` once for each application.
 
+**A raw TCP connection that sent an upgrade request and then goes silent keeps `app.close()` pending.** Authenticated WebSocket and polling clients, a client whose authenticator never answers, and a polling request whose answer is never read do not: `app.close()` settled at once with each of them. A connection that is mid-upgrade and silent is not one the Socket.IO engine tracks, so closing the server does not end it, with or without `websocket.namespace`.
+
 **A gateway in a module loaded with `LazyModuleLoader` after the application started is not wired.** Nest connects gateways at start only, so a client reaches the Socket.IO server but no handler of that gateway runs. This is Nest's behavior and the library does not change it; load such a module before `app.listen()`, or declare the gateway in a module the application imports.
 
 ### When a dependency fails
