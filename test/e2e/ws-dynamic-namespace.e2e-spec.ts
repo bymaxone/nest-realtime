@@ -75,7 +75,7 @@ describe('a dynamic host namespace and websocket.namespace (e2e)', () => {
   }
 
   /** The host is a root provider, which Nest connects before the gateway of an imported module. */
-  async function boot(host: Type<unknown>): Promise<number> {
+  async function boot(host: Type<unknown>, withAdapter = true): Promise<number> {
     const moduleRef = await Test.createTestingModule({
       imports: [
         BymaxRealtimeWebSocketModule.forRoot({
@@ -87,7 +87,7 @@ describe('a dynamic host namespace and websocket.namespace (e2e)', () => {
       providers: [host],
     }).compile()
     app = moduleRef.createNestApplication()
-    app.useWebSocketAdapter(new RealtimeIoAdapter(app))
+    if (withAdapter) app.useWebSocketAdapter(new RealtimeIoAdapter(app))
     await app.listen(0)
     return (app.getHttpServer().address() as AddressInfo).port
   }
@@ -173,7 +173,7 @@ describe('a dynamic host namespace and websocket.namespace (e2e)', () => {
     expect(await probe(await open(port, '/chat'))).toBe('host handler on /chat')
   })
 
-  // Scenario: a RegExp or function namespace that does not match '/rt'. Expected: the gateway serves its names and the library '/rt'.
+  // Scenario: a RegExp that misses '/rt', or a function. Expected: the gateway serves its names and the library '/rt'.
   it.each([
     ['a RegExp', /^\/room-\d+$/],
     [
@@ -206,5 +206,22 @@ describe('a dynamic host namespace and websocket.namespace (e2e)', () => {
       kind === 'port' ? await open(ownPort, '/rt') : await open(port, '/rt', '', '/own')
 
     expect(await probe(client)).toBe('host handler on /rt')
+  })
+
+  // Scenario: the same matching gateway with Nest's own adapter. Expected (a documented limit): the library socket hears the
+  // gateway's broadcast, and a client without a credential is still refused.
+  it('lets a matching gateway take /rt with the stock adapter', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    const host = hostGateway({ namespace: /^\/\w+$/ })
+    const port = await boot(host, false)
+    const client = await open(port, '/rt', 'a')
+    const heard: string[] = []
+    client.on('note', () => heard.push('a'))
+
+    host.server?.emit('note', 1)
+    await wait(200)
+
+    expect(heard).toStrictEqual(['a'])
+    await expect(open(port, '/rt')).rejects.toThrow('REALTIME_AUTH_FAILED')
   })
 })

@@ -82,7 +82,7 @@ describe('gateways outside websocket.namespace (e2e)', () => {
 
   const outside = (): string[] => written(warnings, 'REALTIME_GATEWAY_OUTSIDE_NAMESPACE')
 
-  // Scenario: a host gateway with no namespace, or declaring '/', beside a library on '/rt'. Expected: one warning that names
+  // Scenario: a host gateway with no namespace, or declaring '/', beside a moved library. Expected: one warning that names
   // the remedy and not the namespace.
   it.each([
     ['declares no namespace', [] as unknown[]],
