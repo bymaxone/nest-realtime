@@ -95,12 +95,13 @@ export interface WebSocketOptions {
   pingIntervalMs?: number
   pingTimeoutMs?: number
   /**
-   * The origins that may open a WebSocket, each written as a browser sends it: a lowercase scheme, `://`, a lowercase
-   * host (punycode for an international name, brackets for IPv6) and a port only when it is not the default of `http`
-   * (80) or `https` (443); `capacitor://localhost` and `chrome-extension://<id>` are written the same way. An entry
-   * with a path, a trailing slash, userinfo, a trailing dot, uppercase, a wildcard, `null`, or a default port written
-   * out is refused at boot with `REALTIME_INVALID_OPTIONS`, as is an empty list or one over 1,000 entries. The list is
-   * copied once at boot.
+   * The origins that may open a WebSocket, each written as a browser sends it: a lowercase scheme, `://`, a host and,
+   * only when it is not the default of `http` (80) or `https` (443), a port. For `http` and `https` the host is a
+   * lowercase name (punycode for an international one) or a canonical address, with no trailing dot; an application's
+   * own scheme keeps its host as written (`capacitor://localhost`, `chrome-extension://<id>`). `ws`, `wss`, `ftp`, a
+   * path, a trailing slash, userinfo, a wildcard, `null` and a default port written out are refused at boot with
+   * `REALTIME_INVALID_OPTIONS`, as are an empty list, one over 1,000 entries and the option present with `null` or
+   * `undefined`. The list is copied once at boot.
    *
    * A handshake is admitted only when its `Origin` header equals an entry exactly, without case folding; two `Origin`
    * headers, which arrive as one joined string, match nothing. An absent `Origin` is admitted on the WebSocket

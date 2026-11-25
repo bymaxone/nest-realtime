@@ -9,8 +9,7 @@
  */
 
 /** Scheme `://` host and an optional port, with nothing after the port: no userinfo, path, query or fragment. */
-const SHAPE =
-  /^([a-z][a-z0-9+.-]*):\/\/(\[[0-9a-f:.]+\]|[A-Za-z0-9._-]+)(?::([1-9][0-9]{0,4}))?$/
+const SHAPE = /^([a-z][a-z0-9+.-]*):\/\/(\[[0-9a-f:.]+\]|[A-Za-z0-9._-]+)(?::([1-9][0-9]{0,4}))?$/
 
 /** The host name a browser sends for `http` and `https`: lowercase ASCII labels, with no empty one. */
 const WEB_NAME = /^[a-z0-9_-]+(?:\.[a-z0-9_-]+)*$/

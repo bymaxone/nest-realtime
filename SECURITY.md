@@ -86,7 +86,7 @@ The room registry enforces that a `disconnect()` can only target connections sto
 **The consumer owns CORS.** The library exposes:
 
 - `SseOptions` — no `cors` field; the SSE endpoint is a standard HTTP `GET` and cross-origin access is controlled at the NestJS application level via `app.enableCors()`.
-- `WebSocketOptions.cors` — a `CorsConfig` object passed directly to the Socket.IO server. Restrict `origin` to your known frontend origins; avoid `origin: '*'` in production when using `credentials: true`. It sets CORS response headers only: **it does not refuse a WebSocket upgrade**, because a browser does not apply CORS to one (see below).
+- `WebSocketOptions.cors` — a `CorsConfig` object passed directly to the Socket.IO server. Restrict `origin` to your known frontend origins; avoid `origin: '*'` in production when using `credentials: true`. It sets CORS response headers only: **it does not refuse a WebSocket upgrade**, because a browser does not apply CORS to one (see below). `WebSocketOptions.allowedOrigins` is what refuses by origin.
 
 ```typescript
 websocket: {
@@ -97,14 +97,15 @@ websocket: {
 }
 ```
 
-### WebSocket origin is the host's check
+### WebSocket origin
 
-A client that sends `Origin: https://evil.example` and a valid cookie connects over the WebSocket transport even when `websocket.cors.origin` lists only your frontend; the CORS headers decide what a browser lets a page read, and the upgrade is not subject to them. This is cross-site WebSocket hijacking when the session cookie is sent cross-site. The library does not check `Origin`; the host must:
+`websocket.cors` decides what a browser lets a page read; a WebSocket upgrade is not subject to it. A client that sends `Origin: https://evil.example` and a valid cookie therefore connects even when `websocket.cors.origin` lists only your frontend, which is cross-site WebSocket hijacking when the session cookie is sent cross-site. The library checks `Origin` only when `websocket.allowedOrigins` is set (see the README, "WebSocket origin"). The host must:
 
-- refuse an unlisted origin in its `IConnectionAuthenticator` (`ctx.headers.origin` on the handshake), returning `null`;
+- set `websocket.allowedOrigins`, or, without it, refuse an unlisted origin in its `IConnectionAuthenticator` (`ctx.headers.origin`), returning `null`;
+- authenticate every connection: an upgrade with no `Origin` is admitted, and a client that is not a browser can send any `Origin`;
 - set the session cookie `SameSite=Lax` or `Strict`;
 - prefer a short-lived ticket in the handshake to an ambient cookie;
-- serve `transports: ['websocket']` and refuse the long-polling handshake at the proxy if the authenticator is to require an `Origin`: the authenticator reads the headers of the first request only, and a browser sends `Origin` on every WebSocket handshake but not on a same-origin long-polling `GET`.
+- when the authenticator does the origin check, also set `websocket.websocketOnly`: the authenticator reads the headers of the first request only, and a browser does not send `Origin` on a same-origin long-polling `GET`.
 
 ### Secrets via Environment Variables
 
