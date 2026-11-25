@@ -77,6 +77,43 @@ describe('RealtimeGateway', () => {
       expect(message).not.toMatch(/websocket options \(/)
     })
 
+    /** The whole message, up to what is added for a configured namespace. */
+    const missing = (dropped: string): string =>
+      'RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options' +
+      dropped +
+      ' are ignored and the gateway CORS stays closed (origin: false): browsers on another origin cannot connect. ' +
+      'Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from ' +
+      "'@bymax-one/nest-realtime/websocket'."
+
+    /** What the gateway reports for `websocket`, under an adapter that is not the library's. */
+    async function reported(websocket: BymaxRealtimeModuleOptions['websocket']): Promise<string> {
+      const options = websocket === undefined ? {} : { websocket }
+      gateway = (await buildModule(options)).get(RealtimeGateway)
+      gateway.afterInit({ use: jest.fn() } as never)
+      return lineOf(errorSpy.mock.calls[0]?.[0])
+    }
+
+    it('adds what a configured namespace still does, and does not list it as ignored', async () => {
+      // The namespace is the one websocket option applied without the adapter, and it leaves other namespaces open.
+      const message = await reported({ namespace: '/rt', cors: { origin: 'https://app.example' } })
+
+      expect(message).toBe(
+        missing(' (cors)') +
+          " websocket.namespace is applied without it: the library is served there, and the library's authenticator " +
+          "does not run for the clients of '/' or of any other gateway's namespace. Isolation from your gateways' " +
+          'namespaces is not guaranteed without RealtimeIoAdapter.',
+      )
+    })
+
+    it.each([
+      ['no namespace and no option', undefined, ''],
+      ['no namespace beside an option', { cors: { origin: 'https://app.example' } }, ' (cors)'],
+      ["the namespace '/'", { namespace: '/' }, ''],
+    ])('says nothing about the namespace with %s', async (_case, websocket, dropped) => {
+      // The library is on '/' then, with every other gateway that declares none.
+      expect(await reported(websocket)).toBe(missing(dropped))
+    })
+
     it('says in the README exactly what it logs', () => {
       // A consumer who meets the message looks it up in the README, so the text must match.
       gateway.afterInit({ use: jest.fn() } as never)

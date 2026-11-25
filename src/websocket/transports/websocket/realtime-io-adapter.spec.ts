@@ -400,6 +400,17 @@ describe('RealtimeIoAdapter', () => {
       for (const on of handlers) expect(on).toHaveBeenCalledWith('connection', expect.any(Function))
     })
 
+    // Scenario: the warning's text. Expected: what does not reach the clients of '/', and the two ways out.
+    it("says what the library does not do for the clients of '/', and what to change", () => {
+      bind('/rt', 0, (server) => [server])
+
+      expect((warnSpy.mock.calls[0]?.[0] as { message: string }).message).toBe(
+        "A gateway of this application is on '/' while websocket.namespace puts the library elsewhere: the library's " +
+          "authenticator does not run for the clients of '/', and the library's rooms are not reachable from it. Give the " +
+          'gateway the namespace of websocket.namespace, or authenticate its clients in the gateway itself.',
+      )
+    })
+
     // Scenario: a gateway on another namespace, on another server, or no namespace configured. Expected: no warning.
     it.each([
       ['a namespace of the server', '/rt', 0, (server: object) => [{ name: '/rt', server }]],
