@@ -9,7 +9,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Changed
 
-- **A host gateway that declares no namespace is now served on `/`, not on `websocket.namespace`.** The adapter no longer returns the library's namespace for every gateway: Nest keeps the root Socket.IO server, the library's gateway alone is bound to `websocket.namespace`, and the library's authenticator is not called for any other gateway. **Migration:** host clients of a gateway with no namespace move from `/rt` to `/`; a host that relied on the library's authenticator for that gateway must authenticate itself or declare a namespace. `RealtimeIoAdapter` no longer overrides `create`: a subclass that overrides or calls it uses `IoAdapter`'s. A host gateway that declares the same namespace as `websocket.namespace` still shares it with the library's gateway, and the README says so.
+- **A host gateway that declares no namespace is now served on `/`, not on `websocket.namespace`.** The adapter no longer returns the library's namespace for every gateway: Nest keeps the root Socket.IO server, the library's gateway alone is bound to `websocket.namespace`, and the library's authenticator is not called for any other gateway. **Migration:** host clients of a gateway with no namespace move from `/rt` to `/`; a host that relied on the library's authenticator for that gateway must authenticate itself or declare a namespace. `RealtimeIoAdapter` no longer overrides `create`: a subclass that overrides or calls it uses `IoAdapter`'s. A host gateway that declares the same namespace as `websocket.namespace` still shares it with the library's gateway.
 
 ### Fixed
 
