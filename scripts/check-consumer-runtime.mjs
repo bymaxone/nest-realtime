@@ -398,6 +398,32 @@ for (const hostNamespace of ['y', 'rt']) {
   }
   await app.close()
 }
+{
+  // A host allowRequest that rejects: the upgrade is refused and the rejection does not end the process.
+  class Host {
+    handleConnection() {}
+  }
+  websockets.WebSocketGateway({ allowRequest: async () => Promise.reject(new Error('host refused')) })(Host)
+  class Library {}
+  Module({
+    imports: [
+      ws.BymaxRealtimeWebSocketModule.forRoot({
+        transport: 'websocket',
+        authenticator: { authenticate: async () => null },
+        websocket: { websocketOnly: true },
+      }),
+    ],
+    providers: [Host],
+  })(Library)
+  const app = await NestFactory.create(Library, { logger: false })
+  app.useWebSocketAdapter(new ws.RealtimeIoAdapter(app))
+  await app.listen(0, '127.0.0.1')
+  const status = await upgrade(app.getHttpServer().address().port, '/socket.io/?EIO=4&transport=websocket')
+  await new Promise((done) => setTimeout(done, 50))
+  if (!status.includes('400')) fail('a rejecting host allowRequest answered ' + status)
+  await app.close()
+}
+console.log('  ✓ ' + FORMAT + ': a rejecting host allowRequest refuses the upgrade and the process stays up')
 console.log('  ✓ ' + FORMAT + ': 50 upgrades with websocket.namespace and a gateway of another namespace, or of the same one, leave one engine and a live process')
 })()
 `
