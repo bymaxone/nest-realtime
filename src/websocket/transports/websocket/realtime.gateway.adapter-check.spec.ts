@@ -94,7 +94,7 @@ describe('RealtimeGateway', () => {
     }
 
     it('adds what a configured namespace still does, and does not list it as ignored', async () => {
-      // The namespace is the one websocket option applied without the adapter, and it leaves other namespaces open.
+      // The namespace is applied without the adapter, so it is not listed as ignored; it leaves other namespaces open.
       const message = await reported({ namespace: '/rt', cors: { origin: 'https://app.example' } })
 
       expect(message).toBe(

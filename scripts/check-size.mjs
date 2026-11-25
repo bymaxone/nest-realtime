@@ -66,12 +66,11 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     and, 991 B more than the figure above, the table of the built-ins and the symbol-keyed methods and flags of a regular expression the option, validation and admission code call, recorded when the library loads, with the count and the refusal that read it, measured on 2026-11-22)
 //     and the wait under a deadline that the handshake gate, the re-authentication revalidate, the offline-queue replay, the Redis subscribe race and publish, and the SSE registration share, which uses no `Promise` static and no `then` and answers in a box with no prototype, and the check of the baseline and of the prototype chain of what each decision path returns, so that no object or array is handed over before the built-ins and the root prototypes are known to be intact; the figure on the first line is the measure of the whole bundle on 2026-11-24)
 //     and, 104 B more than the figure above (of the websocket bundle, 29 B), measured on 2026-11-24, the pin that gives the promise each public method of the service hands back, and each caller's own await of a method that decides something, its own `constructor`, and the species getter of `Promise` in the table of built-ins,
-//   websocket  9,262 B →  9,292 B (the Socket.IO stack: the namespace opened on the library's server before any
-//     gateway joins it, the boot warning for a gateway on '/' with the record of the library's root server, the
-//     claim of a namespace until the gateway is connected or destroyed, and the one reading of the configured name;
-//     measured on 2026-11-25)
-//   websocket  8,537 B →  8,719 B (the Socket.IO stack: the subclass that binds the library's gateway to `websocket.namespace`, with the refusal of a module object given two namespaces, 256 B, less the 74 B of the table the adapter no longer needs; measured on 2026-11-25)
-//   websocket  8,537 B (the Socket.IO stack: 74 B for the table that maps a namespace the adapter returned back to its root server, so that a gateway of another namespace joins the one server and no second engine is created on the HTTP server, measured on 2026-11-25)
+//   websocket  9,292 B, 30 B above the 9,262 B measured on 2026-11-25 (the Socket.IO stack, which beyond what
+//     the entry below lists carries the subclass that writes `websocket.namespace` into the gateway options Nest
+//     reads, the claim of a namespace until the gateway is connected or destroyed, the namespace opened on the
+//     library's server before any gateway joins it, the boot warning for a gateway on '/' with the record of the
+//     library's root server, and the one reading of the configured name)
 //   websocket  8,456 B →  8,486 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
