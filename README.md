@@ -457,11 +457,11 @@ This section lists the bounds the library applies, what happens when each one is
 
 ### Known limits
 
-**A host gateway that declares no namespace is served on `websocket.namespace`.** When `websocket.namespace` is set, the library binds its own gateway to that namespace of the application's one Socket.IO server, and a gateway of your own that declares no namespace is bound to the same one, behind the library's authenticator. Two consequences follow. A broadcast from that gateway without a room reaches every authenticated library socket, whatever its tenant. Clients that connect to `/` reach no handler. Give every host gateway a namespace of its own (`@WebSocketGateway({ namespace: 'chat' })`); a host gateway that declares one is served as it is declared, on the same engine. A gateway of your own that listens on its own port, together with `websocket.namespace`, leaves that port bound after the application is closed, until the process ends. Moving host gateways back to the root is planned for a later release, because it changes where host clients connect.
+**A host gateway that declares the same namespace as `websocket.namespace` shares it with the library's gateway.** Both bind to that namespace of the one Socket.IO server, so the host gateway runs its handlers for the library's connections as well, and what the library does to its own connections, such as revoking, capping or denying them, is not something that gateway can opt out of. Give host gateways a namespace of their own. A host gateway that declares no namespace, or `/`, is served on `/`, not on `websocket.namespace`, and the library's authenticator is not called for it.
 
-**With `websocket.namespace` set, an open WebSocket connection keeps `app.close()` pending.** Nest holds the namespace the adapter returned, closing a namespace closes nothing, and the Socket.IO server underneath is not closed with the application, so it stays open for as long as a client holds a connection: `app.close()` did not finish within 6 s with one authenticated client on the library's namespace, or with one anonymous client on `/` (which has no authenticator), and `onApplicationShutdown` did not run. Without `websocket.namespace` it finished in 1 ms with a client connected. Create the application with `NestFactory.create(AppModule, { forceCloseConnections: true })`, which closed it at once in the same test, or give the process a termination grace that covers its longest connection.
+**One module object cannot serve two applications that give it different `websocket.namespace` values.** The gateway refuses to start with `REALTIME_INVALID_OPTIONS` when the same `forRoot` or `forRootAsync` result is instantiated with another namespace than the first. Call `forRoot` once for each application.
 
-**A host gateway that declares the namespace `/` is served as the library's gateway is.** Beside `websocket.namespace`, it runs its handlers for connections of the library's namespace (a client on `/rt` made its `handleConnection` run) as well as for clients on `/`, so what the library does to its own connections, such as revoking, capping or denying them, is not something a host gateway on `/` can rely on. Give it a namespace of its own.
+**A gateway in a module loaded with `LazyModuleLoader` after the application started is not wired.** Nest connects gateways at start only, so a client reaches the Socket.IO server but no handler of that gateway runs. This is Nest's behavior and the library does not change it; load such a module before `app.listen()`, or declare the gateway in a module the application imports.
 
 ### When a dependency fails
 
@@ -484,7 +484,7 @@ This section lists the bounds the library applies, what happens when each one is
 
 ### Shutdown order
 
-The Socket.IO server closes first (with `websocket.namespace` set Nest holds a namespace and closes nothing, see Known limits), then the adapter's `dispose()` runs, and `dispose()` closes the adapter's own Redis subscriber connection. The pub/sub subscriber is unsubscribed in the application shutdown hook. When both transports run, the two Redis subscribers are closed in two successive phases, each waited for at most 2,000 ms. [Shutdown](#shutdown) describes how a shutdown starts.
+The Socket.IO server closes first, then the adapter's `dispose()` runs, and `dispose()` closes the adapter's own Redis subscriber connection. The pub/sub subscriber is unsubscribed in the application shutdown hook. When both transports run, the two Redis subscribers are closed in two successive phases, each waited for at most 2,000 ms. [Shutdown](#shutdown) describes how a shutdown starts.
 
 ### Observability
 

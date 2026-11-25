@@ -131,7 +131,9 @@ describe('BymaxRealtimeWebSocketModule.forRoot', () => {
   // no SSE controller alongside.
   it('registers the gateway and no controller for websocket', () => {
     const dynamic = BymaxRealtimeWebSocketModule.forRoot({ transport: 'websocket', authenticator })
-    expect(dynamic.providers).toContain(RealtimeGateway)
+    expect(dynamic.providers).toContainEqual(
+      expect.objectContaining({ provide: RealtimeGateway, useClass: expect.any(Function) }),
+    )
     expect(dynamic.controllers).toHaveLength(0)
   })
 
@@ -139,7 +141,9 @@ describe('BymaxRealtimeWebSocketModule.forRoot', () => {
   // SSE controller — the difference from 'websocket' that the token binding rests on.
   it('registers the gateway and one controller for both', () => {
     const dynamic = BymaxRealtimeWebSocketModule.forRoot({ transport: 'both', authenticator })
-    expect(dynamic.providers).toContain(RealtimeGateway)
+    expect(dynamic.providers).toContainEqual(
+      expect.objectContaining({ provide: RealtimeGateway, useClass: expect.any(Function) }),
+    )
     expect(dynamic.controllers).toHaveLength(1)
   })
 
@@ -194,7 +198,9 @@ describe('BymaxRealtimeWebSocketModule.forRootAsync', () => {
       transport: 'websocket',
       useFactory: async () => ({ transport: 'websocket', authenticator }),
     })
-    expect(dynamic.providers).toContain(RealtimeGateway)
+    expect(dynamic.providers).toContainEqual(
+      expect.objectContaining({ provide: RealtimeGateway, useClass: expect.any(Function) }),
+    )
     expect(dynamic.providers).toContain(WebSocketTransport)
     expect(dynamic.controllers).toHaveLength(0)
   })
@@ -205,7 +211,9 @@ describe('BymaxRealtimeWebSocketModule.forRootAsync', () => {
       transport: 'both',
       useFactory: async () => ({ transport: 'both', authenticator }),
     })
-    expect(dynamic.providers).toContain(RealtimeGateway)
+    expect(dynamic.providers).toContainEqual(
+      expect.objectContaining({ provide: RealtimeGateway, useClass: expect.any(Function) }),
+    )
     expect(dynamic.providers).toContain(CompositeTransport)
     expect(dynamic.controllers).toHaveLength(1)
   })

@@ -101,8 +101,7 @@ export class WebSocketTransport implements ITransport {
   /**
    * Mark shutdown as begun, for a caller that runs only this hook; `onModuleDestroy` already did.
    *
-   * Socket.IO closes every connection that is open when the server closes (with `websocket.namespace`
-   * set Nest holds a namespace, which closes nothing: README, "Known limits"), so no connection is
+   * Socket.IO closes every connection that is open when the server closes, so no connection is
    * torn down here; a socket accepted after this point would only be closed a moment later, and
    * its authenticator may already depend on a store the host has closed.
    */

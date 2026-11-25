@@ -86,9 +86,8 @@ export interface WebSocketOptions {
   /**
    * The Socket.IO namespace the library's gateway is bound to, `/` when unset.
    *
-   * A host gateway that declares no namespace is served on this namespace, behind the library's authenticator: its
-   * broadcast without a room reaches every authenticated library socket whatever the tenant, and clients on `/` reach no
-   * handler. Give host gateways their own namespace.
+   * A host gateway that declares no namespace is served on `/`, and the library's authenticator is not called for it. A
+   * host gateway that declares this namespace shares it with the library's gateway: give host gateways their own.
    */
   namespace?: string
   cors?: CorsConfig

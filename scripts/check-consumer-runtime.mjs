@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { consumerTypeFailures } from './consumer-types-rows.mjs'
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const packageName = '@bymax-one/nest-realtime'
@@ -627,6 +628,15 @@ try {
       process.stderr.write(error.stderr ?? '')
       failed = true
     }
+  }
+  for (const failure of consumerTypeFailures({
+    rootDir,
+    tarball,
+    packageName,
+    workDir: consumerDir,
+  })) {
+    console.error(`✗ ${failure}`)
+    failed = true
   }
 } catch (error) {
   console.error(`✗ gate setup failed: ${error.message}`)

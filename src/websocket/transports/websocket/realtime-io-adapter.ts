@@ -7,7 +7,7 @@ import { Logger } from '@nestjs/common'
 import type { INestApplicationContext } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import type { createAdapter as CreateAdapterFn } from '@socket.io/redis-adapter'
-import type { Server, ServerOptions } from 'socket.io'
+import type { ServerOptions } from 'socket.io'
 import {
   logEvent,
   quitWithin,
@@ -109,13 +109,6 @@ const ADAPTER_COMMANDS = ['subscribe', 'psubscribe', 'unsubscribe', 'punsubscrib
 
 const realtimeServers = new WeakSet<object>()
 
-/**
- * The root server of each namespace `create` handed to Nest. Nest stores what `create` returns as the server of the port
- * and path, and gives it back as `options.server` when a gateway that declares a namespace joins it. A `Namespace` cannot
- * take `.of`, so the stock adapter would build a second server, and with it a second engine, on the same HTTP server.
- */
-const namespaceRoots = new WeakMap<object, object>()
-
 /** Whether `server` was created by `RealtimeIoAdapter`. */
 export function isRealtimeIoServer(server: unknown): boolean {
   return typeof server === 'object' && server !== null && realtimeServers.has(server)
@@ -154,35 +147,6 @@ export class RealtimeIoAdapter extends IoAdapter {
   constructor(app: INestApplicationContext) {
     super(app)
     this.options = app.get<BymaxRealtimeModuleOptions>(REALTIME_OPTIONS_TOKEN)
-  }
-
-  /**
-   * Bind the gateway to `websocket.namespace` when configured.
-   *
-   * `@WebSocketGateway()` args are evaluated at class-decoration time — before
-   * the module options resolve — so the namespace cannot be declared there.
-   * Instead we build the root server via `super.create` (which routes through the
-   * overridden {@link createIOServer}, applying CORS/ping/Redis) and then return
-   * the requested namespace via `server.of(ns)`. The gateway's `@WebSocketServer()`
-   * and `WebSocketTransport` then operate on that `Namespace`. A `'/'` or unset
-   * namespace leaves the root server untouched.
-   */
-  override create(
-    port: number,
-    options?: ServerOptions & { namespace?: string; server?: unknown },
-  ): Server {
-    const given = options?.server
-    const root = typeof given === 'object' && given !== null ? namespaceRoots.get(given) : undefined
-    const passed = root === undefined ? options : ({ ...options, server: root } as typeof options)
-    const server = super.create(port, passed)
-    const ns = this.options.websocket?.namespace
-    if (ns && ns !== '/' && typeof (server as { of?: unknown }).of === 'function') {
-      const namespace = (server as unknown as { of: (name: string) => Server }).of(ns)
-      realtimeServers.add(namespace)
-      namespaceRoots.set(namespace, server)
-      return namespace
-    }
-    return server
   }
 
   /**

@@ -32,6 +32,11 @@ import { ConnectHookFailure } from './connect-hook-failure'
 import { isRealtimeIoServer } from './realtime-io-adapter'
 import { WebSocketTransport } from './websocket.transport'
 
+/** The root server a namespace belongs to; a root server has no `server` and is its own root. */
+function rootOf(server: Server): unknown {
+  return (server as { server?: unknown }).server ?? server
+}
+
 /** Collapse a possibly multi-valued query parameter to its first string value. */
 function firstQueryValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value
@@ -196,7 +201,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   afterInit(server: Server): void {
     server.use(this.authenticateHandshake)
     this.transport.setServer(server)
-    if (!isRealtimeIoServer(server)) this.reportMissingAdapter()
+    if (!isRealtimeIoServer(rootOf(server))) this.reportMissingAdapter()
     this.logger.log('RealtimeGateway initialized')
   }
 
