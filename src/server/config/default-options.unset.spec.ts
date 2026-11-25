@@ -153,8 +153,8 @@ const GROUPS = [
 
 describe.each(GROUPS)('the %s group as a class instance', (group, every) => {
   // Scenario: the group is a class instance whose fields hold nothing, or whose getters return
-  // nothing. Expected: every such key is dropped, and a getter that returns a value is kept, because
-  // the services read properties and a getter is a property.
+  // nothing. Expected: every such key is dropped, except the origin-policy options, which validation
+  // has to see; a getter that returns a value is kept, because a getter is a property.
   it.each(Object.keys(every))('drops %s when a field or a getter holds nothing', (key) => {
     class WithFields {}
     class WithGetter {}
@@ -165,9 +165,8 @@ describe.each(GROUPS)('the %s group as a class instance', (group, every) => {
     for (const instance of [withFields, withGetter]) {
       const kept = dropUnset({ [group]: instance } as never)[group] as Record<string, unknown>
 
-      // An own `null` of an origin-policy option is kept for validation to refuse.
-      const own = Object.keys(instance).includes(key)
-      expect(key in kept).toBe(own && ['allowedOrigins', 'websocketOnly'].includes(key))
+      // An origin-policy option set to nothing is kept for validation to read, wherever the class holds it.
+      expect(key in kept).toBe(['allowedOrigins', 'websocketOnly'].includes(key))
     }
   })
 

@@ -187,25 +187,28 @@ function readKey(
 
 /**
  * Read the own keys of `source` and the `known` ones by property access, keeping what holds a value. `keepWhenSet`, and
- * a key of `keepOwn` that is an own key of `source`, is also kept when it holds `null`, or `undefined` while the object
- * has the property: that is a value the host set to nothing, which validation refuses, not an option left unset. Each
+ * the keys of `keepSet` wherever the object holds them (own, or on its class), are also kept when they hold `null`, or
+ * `undefined` while the object has the property: that is a value the host set to nothing, which validation refuses, not
+ * an option left unset. Each
  * key is read once, with the `Object.keys` taken at load and without a `Set` or an iterator, which a host can replace.
  */
 function readSet(
   source: object,
   known: readonly string[],
   keepWhenSet?: string,
-  keepOwn: readonly string[] = [],
+  keepSet: readonly string[] = [],
 ): Record<string, unknown> {
   const kept: Record<string, unknown> = { __proto__: null }
   const own = keys(source)
   for (let index = 0; index < own.length; index += 1) {
     const key = own[index] as string
-    readKey(kept, source, key, key === keepWhenSet || includesKey(keepOwn, key))
+    readKey(kept, source, key, key === keepWhenSet || includesKey(keepSet, key))
   }
   for (let index = 0; index < known.length; index += 1) {
     const key = known[index] as string
-    if (!includesKey(own, key)) readKey(kept, source, key, key === keepWhenSet)
+    if (!includesKey(own, key)) {
+      readKey(kept, source, key, key === keepWhenSet || includesKey(keepSet, key))
+    }
   }
   return kept
 }

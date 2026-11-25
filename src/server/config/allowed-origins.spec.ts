@@ -122,6 +122,28 @@ describe('a policy option the host set to nothing', () => {
     )
   })
 
+  // Scenario: a config class whose getter reads a value that was never set. Expected: refused like the own key, since
+  // reading it as unset would serve every origin.
+  it.each([
+    ['allowedOrigins', undefined],
+    ['allowedOrigins', null],
+    ['websocketOnly', null],
+  ])('refuses a class getter %s that returns %p', (name, value) => {
+    class Websocket {}
+    Object.defineProperty(Websocket.prototype, name, { get: () => value })
+    expect(() => validateOptions(dropUnset(withWebsocket(new Websocket())))).toThrow(
+      new RegExp(`options\\.websocket\\.${name} `),
+    )
+  })
+
+  // Scenario: a class that has neither option. Expected: accepted, the options are unset.
+  it('accepts a class that holds neither option', () => {
+    class Websocket {
+      readonly namespace = '/rt'
+    }
+    expect(() => validateOptions(dropUnset(withWebsocket(new Websocket())))).not.toThrow()
+  })
+
   it('reads websocketOnly: undefined as unset', () => {
     expect(() => validateOptions(withWebsocket({ websocketOnly: undefined }))).not.toThrow()
   })
