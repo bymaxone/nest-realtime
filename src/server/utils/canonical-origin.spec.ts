@@ -28,6 +28,12 @@ describe('isCanonicalOrigin', () => {
     'http://192.168.1.10',
     'http://10.0.0.255:8080',
     'https://app.example.1password',
+    'https://a_b.example',
+    'https://-a.example',
+    'https://a-.example',
+    'chrome-extension://AbCd',
+    'myapp://Local_Host.',
+    'myapp://-x-:8080',
   ])('accepts %s', (origin) => {
     expect(isCanonicalOrigin(origin)).toBe(true)
   })
@@ -55,8 +61,15 @@ describe('isCanonicalOrigin', () => {
     ['an empty port', 'https://app.example:'],
     ['a space', 'https://app .example'],
     ['an empty host', 'https://'],
-    ['a leading hyphen label', 'https://-a.example'],
-    ['an underscore', 'https://a_b.example'],
+    ['a ws scheme', 'ws://app.example'],
+    ['a wss scheme', 'wss://app.example'],
+    ['an ftp scheme', 'ftp://app.example'],
+    ['a trailing dot over http', 'http://app.example.'],
+    ['an empty label', 'https://a..example'],
+    ['a percent escape on another scheme', 'myapp://a%20b'],
+    ['an IPv6 on another scheme', 'myapp://[::1]'],
+    ['a path on another scheme', 'myapp://host/path'],
+    ['a name ending in a hexadecimal label', 'http://a.0x1'],
     ['a non-ASCII host', 'https://bücher.example'],
     ['an unbracketed IPv6 host', 'http://::1'],
     ['a scheme starting with a digit', '1http://app.example'],
@@ -88,6 +101,14 @@ describe('isCanonicalOrigin', () => {
     const origin = `https://${host}example`
     expect(origin.length).toBeGreaterThan(255)
     expect(isCanonicalOrigin(origin)).toBe(false)
+  })
+
+  // Scenario: an origin of exactly 255 characters. Expected: accepted, the bound being inclusive.
+  it('accepts an origin of 255 characters', () => {
+    const origin = `https://${'a'.repeat(247)}`
+    expect(origin.length).toBe(255)
+    expect(isCanonicalOrigin(origin)).toBe(true)
+    expect(isCanonicalOrigin(`${origin}a`)).toBe(false)
   })
 
   // Scenario: not a string. Expected: refused.
