@@ -191,6 +191,26 @@ describe('the option names the adapter gives an own key', () => {
     ).toStrictEqual([])
   })
 
+  // Scenario: the names of an `httpCompression` block. Expected: the options Node's zlib streams read, plus
+  // engine.io's `threshold`. They are written out here because the module's own list is what every other case in
+  // this file reads, so a name dropped from it would drop from them too and nothing would notice.
+  it('hold every option of a zlib stream and the engine.io threshold', () => {
+    expect([...COMPRESSION_OWN_NAMES]).toStrictEqual([
+      'chunkSize',
+      'dictionary',
+      'finishFlush',
+      'flush',
+      'info',
+      'level',
+      'maxOutputLength',
+      'memLevel',
+      'params',
+      'strategy',
+      'threshold',
+      'windowBits',
+    ])
+  })
+
   // Scenario: the default engine.io gives `httpCompression`, which the adapter states itself so that it has the keys.
   // Expected: the installed version's default is the one the adapter states, a threshold of 1024.
   it('state the default of httpCompression the installed engine.io has', () => {

@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
-# Nothing is granted by default: the job below asks for what the reusable needs.
+# The default for a job that declares no permissions of its own; the job below declares its own.
 permissions:
   contents: read
 

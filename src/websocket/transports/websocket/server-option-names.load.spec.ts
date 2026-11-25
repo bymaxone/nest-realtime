@@ -24,6 +24,11 @@ function loadFresh(): typeof ServerOptionNames {
   return loaded as typeof ServerOptionNames
 }
 
+afterEach(() => {
+  // `doMock` outlives `isolateModules`: a `vm` that throws, left registered, makes every later load unverifiable.
+  jest.dontMock('node:vm')
+})
+
 describe('a process whose Object.prototype was changed before the library was loaded', () => {
   type Names = typeof ServerOptionNames
   const loadedWith = (change: () => void, restore: () => void): Names => {

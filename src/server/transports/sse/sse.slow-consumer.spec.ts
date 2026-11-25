@@ -75,8 +75,10 @@ describe('SSE: a client that never reads', () => {
   afterEach(async () => {
     client?.destroy()
     client = undefined
-    reasons.length = 0
     await app.close()
+    // Closing the app disconnects the connection a test left open, and that runs the hook: cleared
+    // before, the next test would start with that disconnect's reason already in the list.
+    reasons.length = 0
     jest.restoreAllMocks()
   })
 
