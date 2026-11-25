@@ -461,7 +461,7 @@ This section lists the bounds the library applies, what happens when each one is
 
 **A host gateway on another namespace is outside the library.** A gateway that declares no namespace, or `/`, is served on `/`. When `websocket.namespace` is set to something other than `/`, the library's authenticator is not called for it and the library's rooms are not reachable from it; the adapter logs `REALTIME_GATEWAY_OUTSIDE_NAMESPACE` once at start for one on its server. When `websocket.namespace` is unset, empty or `/`, such a gateway shares `/` with the library's gateway.
 
-**Upgrading: a gateway that declares `/`.** With `websocket.namespace` set to another namespace, a gateway that declares `/` was authenticated by the library's authenticator in 1.2.37; it no longer is. Authenticate it yourself or give it the namespace of `websocket.namespace`. Its `handleConnection` also ran for the library's clients and no longer does, so a disconnect it makes there no longer applies to them.
+**Upgrading: a gateway that declares `/`.** With `websocket.namespace` set to another namespace, a gateway that declares `/` was authenticated by the library's authenticator in 1.2.37; it no longer is. Authenticate it yourself or give it the namespace of `websocket.namespace`. Its `handleConnection` and `handleDisconnect` also ran for the library's clients and no longer do, so a disconnect it makes in `handleConnection` no longer applies to them.
 
 **`RealtimeIoAdapter` keeps a dynamic host namespace off `websocket.namespace`.** On the application's port and default path, `RealtimeIoAdapter` opens `websocket.namespace` before any gateway joins the server, so a RegExp that matches it serves its other matches and not that one. Otherwise nothing is opened.
 
