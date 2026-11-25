@@ -10,7 +10,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Changed
 
 - **A host gateway that declares no namespace is now served on `/`, not on `websocket.namespace`.** The adapter no longer returns the library's namespace for every gateway: Nest keeps the root Socket.IO server and the library's gateway alone is bound to `websocket.namespace`. With a namespace other than `/`, the library's authenticator is not called off that namespace, and the adapter logs `REALTIME_GATEWAY_OUTSIDE_NAMESPACE` once at start for `/` on its server. **Migration**, for each gateway that declares no namespace, or `/`:
-  - Its clients move from the namespace of `websocket.namespace` to `/`. A `@SubscribeMessage` handler there answers an anonymous client unless the gateway authenticates it. A gateway that declares `/` was already on `/` and is still there; it is no longer authenticated by the library.
+  - Its clients move from the namespace of `websocket.namespace` to `/`. A `@SubscribeMessage` handler there answers an anonymous client unless the gateway authenticates it. A gateway that declares `/` was already on `/` and is still there.
   - A middleware it installs, or a disconnect it makes in `handleConnection`, no longer applies to the library's clients. Move that rule into your `IConnectionAuthenticator`, or declare the library's namespace on the gateway.
   - `server.to('user:…')` or any other room emit from it no longer reaches the library's sockets. Emit through the library's service instead.
   - To keep it behind the library's authenticator, give it the namespace of `websocket.namespace`.

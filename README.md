@@ -457,7 +457,7 @@ This section lists the bounds the library applies, what happens when each one is
 
 ### Known limits
 
-**A host gateway that declares the same namespace as `websocket.namespace` shares it with the library's gateway.** It is the only kind of gateway that receives what the library's clients `emit` there. It runs its handlers for the library's connections, and what the library does to its own connections, such as revoking, capping or denying them, is not something that gateway can opt out of. Give a host gateway a namespace of its own unless it is meant to receive from those clients.
+**A host gateway that declares the same namespace as `websocket.namespace` shares it with the library's gateway.** It runs its handlers for the library's connections, and what the library does to its own connections, such as revoking, capping or denying them, is not something that gateway can opt out of. Give a host gateway a namespace of its own unless it is meant to receive from those clients.
 
 **A host gateway on another namespace is outside the library.** A gateway that declares no namespace, or `/`, is served on `/`. When `websocket.namespace` is set to something other than `/`, the library's authenticator is not called for it and the library's rooms are not reachable from it; the adapter logs `REALTIME_GATEWAY_OUTSIDE_NAMESPACE` once at start for one on its server. When `websocket.namespace` is unset, empty or `/`, such a gateway shares `/` with the library's gateway.
 
@@ -471,7 +471,7 @@ This section lists the bounds the library applies, what happens when each one is
 
 **Replacing the `RealtimeGateway` provider drops the namespace.** `overrideProvider(RealtimeGateway).useClass(...)`, with a subclass of the exported class, serves the library on `/`: the namespace is declared by the class the module registers, not by `RealtimeGateway`. Replace the options provider instead.
 
-**Some connections keep `app.close()` pending.** Authenticated WebSocket and polling clients, a client whose authenticator never answers, and a polling request whose answer is never read do not. A connection that finished the upgrade and then answers nothing is waited for until its close times out, about 30 seconds with the installed `ws`. A TCP connection that sent nothing, or part of a request, is not one the Socket.IO engine knows, and close waits for the peer or for Node's own request timeouts. This holds with or without `websocket.namespace`. `NestFactory.create(AppModule, { forceCloseConnections: true })` ends all three at once.
+**Some connections keep `app.close()` pending.** Authenticated WebSocket and polling clients, a client whose authenticator never answers, and a polling request whose answer is never read do not. A connection that finished the upgrade and then answers nothing is waited for until its close times out, about 30 seconds with the installed `ws`. A TCP connection that sent nothing, or part of a request, is not one the Socket.IO engine knows, and close waits for the peer. This holds with or without `websocket.namespace`. `NestFactory.create(AppModule, { forceCloseConnections: true })` ends all three at once.
 
 **A gateway in a module loaded with `LazyModuleLoader` after the application started is not wired.** Nest connects gateways at start only, so a client reaches the Socket.IO server but no handler of that gateway runs. This is Nest's behavior and the library does not change it.
 
