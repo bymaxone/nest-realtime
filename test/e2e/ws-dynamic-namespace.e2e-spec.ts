@@ -24,6 +24,7 @@ import type { Server, Socket } from 'socket.io'
 import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
 import { RealtimeIoAdapter } from '../../src/websocket/transports/websocket/realtime-io-adapter'
 import { freePort } from '../support/free-port'
+import { lineOf } from '../support/log-lines'
 
 jest.setTimeout(20_000)
 
@@ -208,10 +209,10 @@ describe('a dynamic host namespace and websocket.namespace (e2e)', () => {
     expect(await probe(client)).toBe('host handler on /rt')
   })
 
-  // Scenario: the same matching gateway with Nest's own adapter. Expected (a documented limit): the library socket hears the
-  // gateway's broadcast, and a client without a credential is still refused.
+  // Scenario: the same matching gateway with Nest's own adapter. Expected (a documented limit): the library socket hears its
+  // room-less broadcast, a client without a credential is still refused, and the boot error says isolation is not guaranteed.
   it('lets a matching gateway take /rt with the stock adapter', async () => {
-    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    const errors = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     const host = hostGateway({ namespace: /^\/\w+$/ })
     const port = await boot(host, false)
     const client = await open(port, '/rt', 'a')
@@ -223,5 +224,13 @@ describe('a dynamic host namespace and websocket.namespace (e2e)', () => {
 
     expect(heard).toStrictEqual(['a'])
     await expect(open(port, '/rt')).rejects.toThrow('REALTIME_AUTH_FAILED')
+    const missing = errors.mock.calls
+      .map(([line]) => line as { event?: string })
+      .filter((line) => line.event === 'REALTIME_ADAPTER_MISSING')
+    expect(missing.map((line) => lineOf(line))).toStrictEqual([
+      expect.stringContaining(
+        "Isolation from your gateways' namespaces is not guaranteed without RealtimeIoAdapter.",
+      ),
+    ])
   })
 })

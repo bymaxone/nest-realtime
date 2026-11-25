@@ -463,7 +463,7 @@ This section lists the bounds the library applies, what happens when each one is
 
 **`RealtimeIoAdapter` keeps a dynamic host namespace off `websocket.namespace`.** On the application's port and default path, `RealtimeIoAdapter` opens `websocket.namespace` before any gateway joins the server, so a RegExp that matches it serves its other matches and not that one. Otherwise nothing is opened.
 
-**Without `RealtimeIoAdapter`, a RegExp namespace of a host gateway can take `websocket.namespace`.** Nest's own adapter opens the library's namespace as a child of a RegExp that matches it, when that gateway is connected first. The library's authenticator still runs there, and the host's broadcasts and room emits reach the library's clients. Install `RealtimeIoAdapter`.
+**Without `RealtimeIoAdapter`, a RegExp namespace of a host gateway can take `websocket.namespace`.** Nest's own adapter opens the library's namespace as a child of a RegExp that matches it, when that gateway is connected first. The library's authenticator still runs there, and the host's broadcasts without a room, and its room emits, reach the library's clients. Install `RealtimeIoAdapter`.
 
 **One module object holds one `websocket.namespace` until its gateway is connected.** A second application made from the same `forRoot` or `forRootAsync` result while the first has not reached `init`, with another namespace, is refused with `REALTIME_INVALID_OPTIONS`. After the first is connected or closed, another namespace is accepted. A boot that fails while Nest is still creating providers returns no application to close, so that module object can keep its namespace for the process's life. Call `forRoot` once for each application.
 

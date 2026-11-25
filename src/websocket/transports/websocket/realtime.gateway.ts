@@ -223,7 +223,8 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         (socketNamespace(websocket.namespace) === '/'
           ? ''
           : " websocket.namespace is applied without it: the library is served there, and the library's authenticator " +
-            "does not run for the clients of '/' or of any other gateway's namespace."),
+            "does not run for the clients of '/' or of any other gateway's namespace. Isolation from your gateways' " +
+            'namespaces is not guaranteed without RealtimeIoAdapter.'),
     )
   }
 
