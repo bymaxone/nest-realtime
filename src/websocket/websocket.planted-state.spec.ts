@@ -124,7 +124,7 @@ const raw = (
   })
 
 describe('the WebSocket server, with a key planted as connection state', () => {
-  let app: INestApplication
+  let app: INestApplication | undefined
   let server: Server
   let port: number
   const HANDSHAKE = '/socket.io/?EIO=4&transport=polling'
@@ -138,12 +138,13 @@ describe('the WebSocket server, with a key planted as connection state', () => {
     await app.listen(0)
     port = (app.getHttpServer().address() as AddressInfo).port
     // No `cors` option: the Socket.IO server never sets its cors middleware.
-    server = new RealtimeIoAdapter(app).createIOServer(0, {} as never) as Server
+    server = new RealtimeIoAdapter(app as INestApplication).createIOServer(0, {} as never) as Server
     server.on('connection', (socket) => socket.emit('big', 'a'.repeat(6000)))
   })
 
   afterAll(async () => {
-    await app.close()
+    // A setup that failed leaves nothing to close, and closing it would hide the failure behind its own.
+    await app?.close()
     jest.restoreAllMocks()
   })
 
@@ -222,7 +223,7 @@ const freePort = (): Promise<number> =>
   })
 
 describe('the WebSocket server, with a key planted after a client connected', () => {
-  let app: INestApplication
+  let app: INestApplication | undefined
   let server: Server
   let port: number
   let client: ClientSocket | undefined
@@ -248,8 +249,9 @@ describe('the WebSocket server, with a key planted after a client connected', ()
   })
 
   afterAll(async () => {
-    await server.close()
-    await app.close()
+    await server?.close()
+    // A setup that failed leaves nothing to close, and closing it would hide the failure behind its own.
+    await app?.close()
     jest.restoreAllMocks()
   })
 
@@ -369,7 +371,7 @@ describe('the WebSocket server, with a key planted after a client connected', ()
 })
 
 describe('the WebSocket server, with a key planted after a session was recovered', () => {
-  let app: INestApplication
+  let app: INestApplication | undefined
   let server: Server
   let port: number
   let client: ClientSocket | undefined
@@ -401,8 +403,9 @@ describe('the WebSocket server, with a key planted after a session was recovered
   })
 
   afterAll(async () => {
-    await server.close()
-    await app.close()
+    await server?.close()
+    // A setup that failed leaves nothing to close, and closing it would hide the failure behind its own.
+    await app?.close()
     jest.restoreAllMocks()
   })
 
@@ -440,7 +443,7 @@ describe('the WebSocket server, with a key planted after a session was recovered
 const ANY_NAME = ['reconstructor', 'clients', 'zzNotAKnownName'] as const
 
 describe('the WebSocket server, with any key planted outside the standard set', () => {
-  let app: INestApplication
+  let app: INestApplication | undefined
   let server: Server
   let port: number
   let client: ClientSocket | undefined
@@ -468,8 +471,9 @@ describe('the WebSocket server, with any key planted outside the standard set', 
   })
 
   afterAll(async () => {
-    await server.close()
-    await app.close()
+    await server?.close()
+    // A setup that failed leaves nothing to close, and closing it would hide the failure behind its own.
+    await app?.close()
     jest.restoreAllMocks()
   })
 
@@ -500,7 +504,7 @@ describe('the WebSocket server, with any key planted outside the standard set', 
   it.each(ANY_NAME)('refuses to create a server with %s planted', async (name) => {
     const outcome = await whilePlanted({ [name]: SECRET }, async () => {
       try {
-        new RealtimeIoAdapter(app).createIOServer(0, {} as never)
+        new RealtimeIoAdapter(app as INestApplication).createIOServer(0, {} as never)
         return undefined
       } catch (error) {
         return error as Error & { code?: string }
@@ -534,7 +538,7 @@ describe('the WebSocket server, with any key planted outside the standard set', 
     (name) => {
       const outcome = whileOverwrittenSync(name, 1, () => {
         try {
-          new RealtimeIoAdapter(app).createIOServer(0, {} as never)
+          new RealtimeIoAdapter(app as INestApplication).createIOServer(0, {} as never)
           return undefined
         } catch (error) {
           return error as Error & { code?: string }

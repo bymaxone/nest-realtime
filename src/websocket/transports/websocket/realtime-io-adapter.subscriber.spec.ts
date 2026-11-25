@@ -240,6 +240,31 @@ describe('RealtimeIoAdapter subscriber connection', () => {
       expect(unhandled).not.toHaveBeenCalled()
     })
 
+    // Scenario: each of the four commands, alone, fails on its own and its promise is dropped.
+    // Expected: one warning and no unhandled rejection, whichever command it was. Why: the guard
+    // wraps the commands by name, so a command missing from the list is the one that would end the
+    // process, and a case that fails several at once would hide it behind the warning of another.
+    it.each(['subscribe', 'psubscribe', 'unsubscribe', 'punsubscribe'] as const)(
+      'guards %s on its own',
+      async (command) => {
+        const sub = subscriber()
+        sub[command].mockRejectedValue(new Error('Connection is closed.'))
+        installed(sub)
+        const unhandled = jest.fn()
+        process.on('unhandledRejection', unhandled)
+
+        try {
+          void sub[command]('x')
+          await new Promise((resolve) => setImmediate(resolve))
+        } finally {
+          process.off('unhandledRejection', unhandled)
+        }
+
+        expect(unhandled).not.toHaveBeenCalled()
+        expect(warn).toHaveBeenCalledTimes(1)
+      },
+    )
+
     // Scenario: several failures on one connection, with a message that carries a host and a
     // credential. Expected: one warning, naming the error's class and nothing of its message. Why:
     // a dead Redis fails every command, and a connection error's message can hold what must not be

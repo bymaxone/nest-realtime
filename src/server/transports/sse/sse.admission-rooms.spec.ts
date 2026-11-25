@@ -76,6 +76,11 @@ function gate(): { entered: Promise<void>; release: () => void; hook: () => Prom
   }
 }
 
+/** Resolves once `ready` is true, polling every few milliseconds. */
+async function until(ready: () => boolean): Promise<void> {
+  while (!ready()) await new Promise((resolve) => setTimeout(resolve, 5))
+}
+
 describe('SSE: a room an authenticator returns is joined at admission', () => {
   let app: INestApplication
   let port: number
@@ -144,6 +149,17 @@ describe('SSE: a room an authenticator returns is joined at admission', () => {
     await service.emitToRoom(ROOM, 'scoped', { n: 1 })
     await stream.seen('"n":1')
     hold.release()
+  })
+
+  // The metadata `onConnect` receives says which transport the connection came in on.
+  it('hands onConnect a meta that names the transport sse', async () => {
+    const onConnect = jest.fn()
+    await boot(async () => ({ userId: 'u1' }), { onConnect })
+    stream = await openStream(port)
+    await stream.seen('connection:established')
+    await until(() => onConnect.mock.calls.length > 0)
+
+    expect(onConnect.mock.calls[0]?.[0]).toMatchObject({ userId: 'u1', transport: 'sse' })
   })
 
   // Duplicates join once, the registry holds the room, and the original result keeps the list.

@@ -98,14 +98,14 @@ describe('RedisRealtimePubSub', () => {
   // A payload the bus cannot parse is dropped and reported: the log names the code, and a burst is
   // reported once per minute with the count, so a version skew shows without flooding.
   it('warns about malformed payloads once per minute with the count dropped', async () => {
-    const { pubsub, client } = build()
+    const { pubsub, client } = build('test:malformed')
     await pubsub.subscribe(jest.fn())
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const now = jest.spyOn(Date, 'now')
     try {
       now.mockReturnValue(1_000_000)
-      await client.publish('bymax:realtime', '{not json')
-      await client.publish('bymax:realtime', 'also not json')
+      await client.publish('test:malformed', '{not json')
+      await client.publish('test:malformed', 'also not json')
       await new Promise((r) => setTimeout(r, 0))
       expect(warnSpy).toHaveBeenCalledTimes(1)
       expect(warnSpy).toHaveBeenCalledWith(
@@ -117,7 +117,7 @@ describe('RedisRealtimePubSub', () => {
         }),
       )
       now.mockReturnValue(1_000_000 + 60_000)
-      await client.publish('bymax:realtime', 'again')
+      await client.publish('test:malformed', 'again')
       await new Promise((r) => setTimeout(r, 0))
       expect(warnSpy).toHaveBeenCalledTimes(2)
       expect(warnSpy).toHaveBeenLastCalledWith(

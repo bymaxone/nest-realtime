@@ -26,6 +26,7 @@ const PUBLISHER_WAIT_MS = 2_000
 
 const clients: Redis[] = []
 const servers: FakeRespServer[] = []
+const unsubscribers: Array<() => Promise<void>> = []
 
 function client(port: number, extra: Record<string, unknown> = {}): Redis {
   const redis = new Redis({ host: '127.0.0.1', port, retryStrategy: () => 40, ...extra })
@@ -77,7 +78,8 @@ async function subscribeToTheDeadline(
     let booted = false
     const subscribing = pubsub
       .subscribe(() => undefined)
-      .then(() => {
+      .then((unsubscribe) => {
+        unsubscribers.push(unsubscribe)
         booted = true
       })
     // From the line the adapter logs once its subscriber is up to the moment it starts waiting on
@@ -100,6 +102,7 @@ afterEach(async () => {
   // installed would hang the cases after it.
   jest.useRealTimers()
   jest.restoreAllMocks()
+  for (const unsubscribe of unsubscribers.splice(0)) await unsubscribe()
   for (const redis of clients.splice(0)) redis.disconnect()
   for (const fake of servers.splice(0)) await fake.stop()
 })
@@ -116,7 +119,7 @@ describe('RedisRealtimePubSub publishing connection', () => {
     expect(redis.status).toBe('wait')
     const pubsub = new RedisRealtimePubSub({ client: redis })
 
-    await pubsub.subscribe(() => undefined)
+    unsubscribers.push(await pubsub.subscribe(() => undefined))
     await until('the publisher to be connected', () => redis.status === 'ready')
     await until('the instance to report ready', () => pubsub.isSubscribed())
 
@@ -144,7 +147,7 @@ describe('RedisRealtimePubSub publishing connection', () => {
     const redis = client(fake.port)
     const pubsub = new RedisRealtimePubSub({ client: redis })
 
-    await pubsub.subscribe(() => undefined)
+    unsubscribers.push(await pubsub.subscribe(() => undefined))
 
     expect(redis.status).toBe('ready')
     await expect(pubsub.publish(message)).resolves.toBeUndefined()
@@ -170,7 +173,7 @@ describe('RedisRealtimePubSub publishing connection', () => {
     })
     const pubsub = new RedisRealtimePubSub({ client: redis })
 
-    await pubsub.subscribe(() => undefined)
+    unsubscribers.push(await pubsub.subscribe(() => undefined))
 
     expect(redis.status).toBe('end')
     expect(pubsub.isSubscribed()).toBe(false)
