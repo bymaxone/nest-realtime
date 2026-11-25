@@ -4,9 +4,8 @@
  *
  * When `beforeAll` throws, the handle is still `undefined`, and `await app.close()` in `afterAll` throws a
  * TypeError of its own. Jest reports that as an error of the whole suite, not of a test, and a mutation run counts
- * the mutant that broke the setup as a `RuntimeError` instead of a failed row: 128 mutants were counted that way
- * in the cold run on `e13f41b`, all from one spec file. An `afterEach` is not in scope: its error lands on the test
- * that failed already, so the run still counts that mutant as killed.
+ * the mutant that broke the setup as a `RuntimeError` instead of a failed row. An `afterEach` is not in scope: its
+ * error lands on the test that failed already, so the run still counts that mutant as killed.
  *
  * The scan is a source scan, and its blind spots are these. It reads only an `afterAll` whose body is a block, written
  * as an arrow or as a `function` expression, with or without a name or a return type; an arrow whose body is an
