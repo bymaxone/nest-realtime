@@ -250,8 +250,7 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
   // the socket down and reopened it — a reconnect loop that never settles, hammering
   // the server with hundreds of handshakes a second. Primitives make it stable no
   // matter how the caller spells the option.
-  const authTicket = opts.auth?.ticket
-  const authToken = opts.auth?.token
+  const { ticket: authTicket, token: authToken } = opts.auth ?? {}
   const websocketOnly = opts.websocketOnly === true
   const { url, path, enabled } = opts
 
