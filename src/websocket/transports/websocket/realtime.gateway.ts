@@ -3,6 +3,7 @@
  * @layer transport
  */
 import { Inject, Logger, Optional } from '@nestjs/common'
+import type { OnApplicationBootstrap } from '@nestjs/common'
 import type { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from '@nestjs/websockets'
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets'
 import type { Server, Socket } from 'socket.io'
@@ -16,6 +17,7 @@ import {
   REALTIME_OPTIONS_TOKEN,
   RESERVED_EVENT_NAMES,
   parseCookieHeader,
+  realtimeError,
   admitRooms,
   assertIdentityIsNotBlank,
   resolveAuthTenant,
@@ -29,9 +31,20 @@ import type {
   BymaxRealtimeModuleOptions,
 } from '@bymax-one/nest-realtime/internal'
 import { ConnectHookFailure } from './connect-hook-failure'
-import { isRealtimeIoServer } from './realtime-io-adapter'
+import { wantsPolicy } from './origin-policy'
+import { isRealtimeIoServer, policyMismatch } from './realtime-io-adapter'
 import { socketNamespace } from './socket-namespace'
 import { WebSocketTransport } from './websocket.transport'
+
+/** The `websocket` options only `RealtimeIoAdapter` applies; the others reach the library without it. */
+const ADAPTER_OPTIONS: ReadonlySet<string> = new Set([
+  'cors',
+  'websocketOnly',
+  'pingIntervalMs',
+  'pingTimeoutMs',
+  'maxHttpBufferSize',
+  'redisAdapter',
+])
 
 /** The root server a namespace belongs to; a root server has no `server` and is its own root. */
 function rootOf(server: Server): unknown {
@@ -64,7 +77,9 @@ function firstQueryValue(value: string | string[] | undefined): string | undefin
 @WebSocketGateway({
   cors: { origin: false },
 })
-export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway
+  implements OnGatewayInit, OnApplicationBootstrap, OnGatewayConnection, OnGatewayDisconnect
+{
   private readonly logger = new Logger(RealtimeGateway.name)
 
   @WebSocketServer()
@@ -82,6 +97,9 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     @Inject(RealtimeTracing)
     private readonly tracing?: RealtimeTracing,
   ) {}
+
+  /** Set by `afterInit` when the boot has to be refused: it is thrown from `onApplicationBootstrap`. */
+  private adapterRefusal: Error | undefined
 
   /** Identities the handshake middleware resolved, until `handleConnection` takes them. */
   private readonly authenticated = new WeakMap<Socket, AuthenticationResult>()
@@ -201,16 +219,67 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
 
   /** Wire the resolved Socket.IO server to the transport after gateway init. */
   afterInit(server: Server): void {
+    if (typeof (server as { use?: unknown }).use !== 'function') {
+      this.refuseServerWithoutUse()
+      return
+    }
     server.use(this.authenticateHandshake)
     this.transport.setServer(server)
-    if (!isRealtimeIoServer(rootOf(server))) this.reportMissingAdapter()
+    const root = rootOf(server)
+    if (isRealtimeIoServer(root)) this.refuseUnservedPolicy(root)
+    else this.refuseOrReportMissingAdapter()
     this.logger.log('RealtimeGateway initialized')
+  }
+
+  /** Fail the boot `afterInit` refused: a throw from there would surface only after the application is serving. */
+  onApplicationBootstrap(): void {
+    if (this.adapterRefusal !== undefined) throw this.adapterRefusal
+  }
+
+  /** A server without `use` cannot take the handshake authenticator, so no client of it would be authenticated. */
+  private refuseServerWithoutUse(): void {
+    this.adapterRefusal = realtimeError(
+      REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+      'the WebSocket server has no `use` method, so the handshake authenticator cannot be installed. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from "@bymax-one/nest-realtime/websocket".',
+      { who: RealtimeGateway.name },
+    )
+  }
+
+  /**
+   * A server that `RealtimeIoAdapter` did not create has dropped the websocket options. When the origin policy was
+   * asked for, that means no origin check and polling on, so the boot is refused, from `onApplicationBootstrap`
+   * because a throw from `afterInit` reaches an rxjs subscriber and surfaces after the application is serving;
+   * otherwise it is reported.
+   */
+  private refuseOrReportMissingAdapter(): void {
+    if (wantsPolicy(this.options.websocket)) {
+      this.adapterRefusal = realtimeError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        'websocket.allowedOrigins or websocket.websocketOnly is set but RealtimeIoAdapter is not the active WebSocket adapter, so neither would apply. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from "@bymax-one/nest-realtime/websocket".',
+        { who: RealtimeGateway.name },
+      )
+      return
+    }
+    this.reportMissingAdapter()
+  }
+
+  /** Refuse a server that was not built with the origin policy this gateway's registration asks for. */
+  private refuseUnservedPolicy(server: unknown): void {
+    const { websocket } = this.options
+    if (!wantsPolicy(websocket)) return
+    const mismatch = policyMismatch(server, websocket)
+    if (mismatch === undefined) return
+    this.adapterRefusal = realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `registrations in one application share one Socket.IO server, built from one of them, and it does not have this registration's websocket.allowedOrigins or websocket.websocketOnly: ${mismatch}. Call forRoot once, or give every registration the same two.`,
+      { who: RealtimeGateway.name },
+    )
   }
 
   /** Report a server that `RealtimeIoAdapter` did not create: the options the adapter applies are dropped. */
   private reportMissingAdapter(): void {
     const websocket = this.options.websocket ?? {}
-    const configured = Object.keys(websocket).filter((key) => key !== 'namespace')
+    const configured = Object.keys(websocket).filter((key) => ADAPTER_OPTIONS.has(key))
     logEvent(
       this.logger,
       'error',

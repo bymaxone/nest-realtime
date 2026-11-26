@@ -17,6 +17,16 @@ import {
 } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions, QuitableClient } from '@bymax-one/nest-realtime/internal'
 import {
+  POLICY_TRANSPORTS,
+  allowRequestFor,
+  corsAnswersOrigins,
+  refuseHostAllowRequest,
+  refuseSid,
+  listDifference,
+  wantsPolicy,
+} from './origin-policy'
+import type { AllowRequest } from './origin-policy'
+import {
   corsWithOwnNames,
   placeFirst,
   plantedKeyCount,
@@ -73,6 +83,7 @@ type GuardedServer = {
   close: () => Promise<void>
   engine?: {
     middlewares: EngineGuard[]
+    use: (guard: typeof refuseSid) => void
     on: (event: 'connection', listener: (connection: EngineSocket) => void) => void
   }
   of: (name: string) => Namespace
@@ -104,6 +115,22 @@ function installGuards(server: GuardedServer): void {
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
 type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
+
+/** For each server built with an origin policy, its origin list; `undefined` under `websocketOnly` alone. */
+const serverPolicies = new WeakMap<object, readonly string[] | undefined>()
+
+/**
+ * Why `server` does not serve the origin policy `websocket` asks for, or `undefined` when it does. One server is shared
+ * by every registration of an application and is built from one of them, so each gateway has to ask about its own.
+ */
+export function policyMismatch(
+  server: unknown,
+  websocket: BymaxRealtimeModuleOptions['websocket'],
+): string | undefined {
+  const key = server as object
+  if (!serverPolicies.has(key)) return 'the server was built with neither'
+  return listDifference(serverPolicies.get(key), websocket?.allowedOrigins)
+}
 
 /** The commands the Socket.IO Redis adapter sends on its subscriber connection. */
 const ADAPTER_COMMANDS = ['subscribe', 'psubscribe', 'unsubscribe', 'punsubscribe'] as const
@@ -174,8 +201,19 @@ export class RealtimeIoAdapter extends IoAdapter {
       })
     }
     const wsOpts = this.options.websocket ?? {}
+    const policy = wantsPolicy(wsOpts)
+    if (policy) this.refuseConflicts(wsOpts.cors ?? opts?.cors, opts)
     const mergedOpts = serverOptionsWithOwnNames({
       ...opts,
+      ...(policy
+        ? {
+            transports: [...POLICY_TRANSPORTS],
+            allowRequest: allowRequestFor(
+              wsOpts.allowedOrigins,
+              (opts as { allowRequest?: AllowRequest } | undefined)?.allowRequest,
+            ),
+          }
+        : {}),
       cors: corsWithOwnNames(wsOpts.cors ?? opts?.cors),
       pingInterval: wsOpts.pingIntervalMs ?? 25_000,
       pingTimeout: wsOpts.pingTimeoutMs ?? 20_000,
@@ -184,12 +222,9 @@ export class RealtimeIoAdapter extends IoAdapter {
 
     const server = super.createIOServer(port, mergedOpts) as GuardedServer
     installGuards(server)
-    // The library's server is the one of the application's port and default path. Its namespace is opened before any
-    // gateway joins the server: Socket.IO makes a namespace opened later by name a child of a RegExp namespace that
-    // matches it, and that gateway's broadcasts, rooms and handlers would then reach the library's sockets.
-    const namespace = socketNamespace(wsOpts.namespace)
+    if (policy) this.installSidGuard(server)
     const isLibraryServer = port === 0 && opts?.path === undefined
-    if (isLibraryServer && namespace !== '/') server.of(namespace)
+    if (isLibraryServer) this.openLibraryNamespace(server)
 
     if (wsOpts.redisAdapter?.pubClient) {
       try {
@@ -202,8 +237,54 @@ export class RealtimeIoAdapter extends IoAdapter {
     }
 
     realtimeServers.add(server)
+    if (policy) serverPolicies.set(server, wsOpts.allowedOrigins)
     if (isLibraryServer) libraryServers.add(server)
     return server
+  }
+
+  /**
+   * Opens the library's namespace on its server, the one of the application's port and default path, before any gateway
+   * joins it: Socket.IO makes a namespace opened later by name a child of a RegExp namespace that matches it, and that
+   * gateway's broadcasts, rooms and handlers would then reach the library's sockets.
+   */
+  private openLibraryNamespace(server: GuardedServer): void {
+    const namespace = socketNamespace(this.options.websocket?.namespace)
+    if (namespace !== '/') server.of(namespace)
+  }
+
+  /**
+   * Refuses the boot of a policy that two lists would decide: a `cors` that answers origins beside `allowedOrigins`, or
+   * a host `allowRequest` that cannot be called.
+   */
+  private refuseConflicts(cors: unknown, opts: ServerOptions | undefined): void {
+    refuseHostAllowRequest((opts as { allowRequest?: unknown } | undefined)?.allowRequest)
+    if (this.options.websocket?.allowedOrigins !== undefined && corsAnswersOrigins(cors)) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.INVALID_OPTIONS,
+        'websocket.allowedOrigins cannot be set together with a cors.origin other than false, in websocket.cors or in the gateway options',
+        { who: RealtimeIoAdapter.name },
+      )
+    }
+  }
+
+  /**
+   * Installs the guard that refuses a request naming a session, after the request guard and before any middleware the
+   * host adds, which can only be added once this server has been returned. A server whose engine cannot take the guard,
+   * or that has no engine yet, is closed and refused: it would answer requests the policy cannot cover, at once or once
+   * attached.
+   */
+  private installSidGuard(server: GuardedServer): void {
+    if (typeof server.engine?.use !== 'function') {
+      server.close().catch(() => undefined)
+      throw realtimeError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        server.engine === undefined
+          ? 'the websocket origin policy could not be installed: the server has no engine, so one attached later would not be covered'
+          : 'the websocket origin policy could not be installed: the engine has no middleware hook',
+        { who: RealtimeIoAdapter.name },
+      )
+    }
+    server.engine.use(refuseSid)
   }
 
   /**

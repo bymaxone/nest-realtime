@@ -7,6 +7,18 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Added
+
+- **`websocket.allowedOrigins` and `websocket.websocketOnly` refuse a WebSocket handshake from an unlisted origin at the server.**
+  - `allowedOrigins` is a list of 1 to 1,000 origins in the form a browser sends (lowercase scheme, no path, no trailing slash, no wildcard; for `http` and `https` a lowercase host and no default port; an application's own scheme keeps its host as written; `ws`, `wss` and `ftp` are not origins); anything else is refused at boot with `REALTIME_INVALID_OPTIONS` naming the index. The engine refuses an upgrade whose `Origin` is not listed, including `null` and a repeated `Origin`, before a socket exists.
+  - Polling and JSONP are refused, and so is any request carrying a `sid`, so an unlisted origin cannot take over a session whose `sid` it learned. A WebTransport session is closed by engine.io. A host `allowRequest` still runs after the check and can only refuse more; a throw or a rejected promise from it refuses.
+  - `websocketOnly: true` serves the `websocket` transport alone without a list; `allowedOrigins` implies it. `useRealtime` takes `websocketOnly` to open the socket without polling.
+  - An upgrade with no `Origin` is admitted: it comes from a client that is not a browser, so the list bounds browsers, not authentication.
+  - Both options need `RealtimeIoAdapter`: without it the application now refuses to start with `REALTIME_TRANSPORT_UNAVAILABLE` when `allowedOrigins` is set or `websocketOnly` is `true`, and so does a server with no engine. A server with no `use` method is refused with or without them. `allowedOrigins` beside a `cors.origin` other than `false`, in `websocket.cors` or, without it, in the `cors` of the gateway that creates the server, is refused at boot, and so is `allowedOrigins` present with `null` or `undefined`, or `websocketOnly: null`. The SSE endpoint is unchanged; its origin stays `app.enableCors`.
+  - The `REALTIME_ADAPTER_MISSING` message no longer names `emitConnectionEvent` and `maxConnectionsPerUser` as ignored: both apply without the adapter.
+  - Registrations in one application share one Socket.IO server, built from the options of one of them. A registration that sets `allowedOrigins` or `websocketOnly: true` refuses the boot with `REALTIME_INVALID_OPTIONS` unless the server was built with an identical list, the same entries in the same order (or with `websocketOnly` alone when it sets no list). Either of them on a registration with `transport: 'sse'` is refused the same way.
+  - **Apply to a derived backend:** without `allowedOrigins` or `websocketOnly`, the `REALTIME_ADAPTER_MISSING` text changes, and a WebSocket server with no `use` method now refuses the boot. A `websocket` config class whose `allowedOrigins` is a getter returning `undefined`, or a field declared without an initializer and emitted as an own property, counts as the option present with nothing, and refuses the boot: remove the member or give it a list. To use the options, set one, keep `app.useWebSocketAdapter(new RealtimeIoAdapter(app))` in `main.ts`, remove any `cors.origin` and set `websocketOnly: true` in the clients.
+
 ### Changed
 
 - **A host gateway that declares no namespace is now served on `/`, not on `websocket.namespace`.** The adapter no longer returns the library's namespace for every gateway: Nest keeps the root Socket.IO server and the library's gateway alone is bound to `websocket.namespace`. With a namespace other than `/`, the library's authenticator is not called off that namespace, and the adapter logs `REALTIME_GATEWAY_OUTSIDE_NAMESPACE` once at start for `/` on its server. **Migration**, for each gateway that declares no namespace:

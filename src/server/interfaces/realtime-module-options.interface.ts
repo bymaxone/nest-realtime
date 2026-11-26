@@ -95,6 +95,38 @@ export interface WebSocketOptions {
   pingIntervalMs?: number
   pingTimeoutMs?: number
   /**
+   * The origins that may open a WebSocket, each written as a browser sends it: a lowercase scheme, `://`, a host and,
+   * only when it is not the default of `http` (80) or `https` (443), a port. For `http` and `https` the host is a
+   * lowercase name (punycode for an international one) or a canonical address, with no trailing dot; an application's
+   * own scheme keeps its host as written (`capacitor://localhost`, `chrome-extension://<id>`). `ws`, `wss`, `ftp`, a
+   * path, a trailing slash, userinfo, a wildcard, `null` and a default port written out are refused at boot with
+   * `REALTIME_INVALID_OPTIONS`, as are an empty list, one over 1,000 entries and the option present with `null` or
+   * `undefined`. The list is copied once at boot.
+   *
+   * A handshake is admitted only when its `Origin` header equals an entry exactly, without case folding; two `Origin`
+   * headers, which arrive as one joined string, match nothing. An absent `Origin` is admitted on the WebSocket
+   * upgrade, because a browser always sends one, so that header bounds browsers and is not authentication: the
+   * authenticator still decides who the connection is. Setting this implies {@link websocketOnly}, and a request that
+   * carries a `sid`, which can only address a session that already exists, is refused before engine.io reads it.
+   *
+   * It governs the WebSocket handshake only: the SSE endpoint's origin policy stays `app.enableCors`, and the option
+   * is refused with `transport: 'sse'`. The server is built with one `cors`, `websocket.cors` when set and otherwise
+   * that of the gateway that creates it, and a `cors.origin` other than `false` there is refused beside this option;
+   * any other gateway's `cors` is not applied. It needs `RealtimeIoAdapter`: without it the gateway refuses to boot.
+   * Registrations in one application share one server, so each that sets a policy refuses the boot unless the server
+   * was built with an identical list, the same entries in the same order, or with {@link websocketOnly} alone when it
+   * sets no list.
+   */
+  allowedOrigins?: readonly string[]
+  /**
+   * Serve the WebSocket transport only: engine.io's polling transport, including its JSONP form, is not offered, and a
+   * request that carries a `sid` is refused before engine.io reads it. Defaults to `false`, which keeps the polling
+   * fallback. A client then has to connect with the same option (`websocketOnly` on `useRealtime`), or its first
+   * polling request is refused. It needs `RealtimeIoAdapter`: without it the gateway refuses to boot. `true` is refused
+   * with `transport: 'sse'`.
+   */
+  websocketOnly?: boolean
+  /**
    * Connections one user may hold at once; beyond it the OLDEST is closed. Defaults to `5`,
    * the SSE default. `0` switches the bound off.
    */

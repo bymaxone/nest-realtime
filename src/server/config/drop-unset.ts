@@ -48,6 +48,8 @@ const WEBSOCKET_KEYS = {
   maxHttpBufferSize: true,
   pingIntervalMs: true,
   pingTimeoutMs: true,
+  allowedOrigins: true,
+  websocketOnly: true,
   maxConnectionsPerUser: true,
   emitConnectionEvent: true,
   redisAdapter: true,
@@ -102,6 +104,13 @@ const GROUPS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['reauthenticationPolicy', REAUTHENTICATION_NAMES],
 ]
 
+/**
+ * The options of the origin policy, which only `websocket` has: a key the host set to nothing is kept for
+ * validation to refuse, since read as unset it would switch the policy off. Validation takes `websocketOnly: undefined`
+ * as unset, as for any boolean.
+ */
+const POLICY_NAMES: readonly string[] = ['allowedOrigins', 'websocketOnly']
+
 /** The most entries an origin or a methods list may hold: a bound on the copy, not on how many a host may name. */
 const MAX_LIST_ENTRIES = 1000
 
@@ -139,6 +148,9 @@ function snapshotList(list: readonly unknown[], path: string, kinds: string): re
 export const ORIGIN_KINDS =
   'a string, a RegExp, a function, an array of strings and RegExps, or a boolean'
 
+/** What `allowedOrigins` may be, for the refusal of a list that cannot be copied. */
+export const ALLOWED_ORIGINS_KINDS = 'a list of 1 to 1000 origins'
+
 /** The kinds `methods` may be. */
 export const METHODS_KINDS = 'a string or a list of at most 1000 strings'
 
@@ -161,37 +173,43 @@ function includesKey(names: readonly string[], key: string): boolean {
   return apply(includes, names, [key]) as boolean
 }
 
-/** Keep what `source[key]` holds, as `readSet` does for each key. */
+/** Keep what `source[key]` holds; for a key of `keepSet`, also a `null`, or an `undefined` the object has. */
 function readKey(
   kept: Record<string, unknown>,
   source: object,
   key: string,
-  keepWhenSet: string | undefined,
+  keepSet: readonly string[] | undefined,
 ): void {
   const value = readHostKey(source, key)
   if (value !== undefined && value !== null) kept[key] = value
-  else if (key === keepWhenSet && (value === null || hasHostKey(source, key))) kept[key] = value
+  else if (
+    keepSet !== undefined &&
+    includesKey(keepSet, key) &&
+    (value === null || hasHostKey(source, key))
+  )
+    kept[key] = value
 }
 
 /**
- * Read the own keys of `source` and the `known` ones by property access, keeping what holds a value. A key in
- * `keepWhenSet` is also kept when it holds `null`, or `undefined` while the object has the property, however it
- * has it: that is a value the host set to nothing, which validation refuses, not an option left unset. Each key is
- * read once, with the `Object.keys` taken at load and without a `Set` or an iterator, which a host can replace.
+ * Read the own keys of `source` and the `known` ones by property access, keeping what holds a value. A key of `keepSet`,
+ * wherever the object holds it (own, or on its class), is also kept when it holds `null`, or `undefined` while the
+ * object has the property: that is a value the host set to nothing, which validation refuses, not an option left unset.
+ * Each key is read once, with the `Object.keys` taken at load and without a `Set` or an iterator, which a host can
+ * replace.
  */
 function readSet(
   source: object,
   known: readonly string[],
-  keepWhenSet?: string,
+  keepSet?: readonly string[],
 ): Record<string, unknown> {
   const kept: Record<string, unknown> = { __proto__: null }
   const own = keys(source)
   for (let index = 0; index < own.length; index += 1) {
-    readKey(kept, source, own[index] as string, keepWhenSet)
+    readKey(kept, source, own[index] as string, keepSet)
   }
   for (let index = 0; index < known.length; index += 1) {
     const key = known[index] as string
-    if (!includesKey(own, key)) readKey(kept, source, key, keepWhenSet)
+    if (!includesKey(own, key)) readKey(kept, source, key, keepSet)
   }
   return kept
 }
@@ -219,13 +237,22 @@ export function dropUnset<T extends object>(options: T): T {
   for (let index = 0; index < GROUPS.length; index += 1) {
     const entry = GROUPS[index] as readonly [string, readonly string[]]
     const value = kept[entry[0]]
-    if (isPlainObject(value)) kept[entry[0]] = readSet(value, entry[1])
+    if (isPlainObject(value))
+      kept[entry[0]] = readSet(value, entry[1], entry[0] === 'websocket' ? POLICY_NAMES : undefined)
   }
   const websocket = kept.websocket
   if (isPlainObject(websocket)) {
+    const allowed = (websocket as Record<string, unknown>).allowedOrigins
+    if (isArray(allowed)) {
+      ;(websocket as Record<string, unknown>).allowedOrigins = snapshotList(
+        allowed as unknown[],
+        'websocket.allowedOrigins',
+        ALLOWED_ORIGINS_KINDS,
+      )
+    }
     const cors = (websocket as Record<string, unknown>).cors
     if (typeof cors === 'object' && cors !== null) {
-      const read = readSet(cors, CORS_NAMES, 'origin')
+      const read = readSet(cors, CORS_NAMES, ['origin'])
       if (isPlainObject(cors) || holdsAny(read, CORS_NAMES)) {
         for (let index = 0; index < COPIED_LISTS.length; index += 1) {
           const entry = COPIED_LISTS[index] as readonly [string, string]

@@ -332,6 +332,33 @@ describe('useRealtimeWs — enabled, defaults and reconnect', () => {
     expect(mockIo).not.toHaveBeenCalled()
   })
 
+  // Scenario: websocketOnly true, false and unset. Expected: `transports` is passed as ['websocket'] only for true, so a
+  // default client keeps socket.io-client's own order.
+  it.each([
+    [true, ['websocket']],
+    [false, undefined],
+    [undefined, undefined],
+  ])('passes transports for websocketOnly %p', async (websocketOnly, transports) => {
+    renderHook(() =>
+      useRealtimeWs({ url: 'wss://x', ...(websocketOnly !== undefined ? { websocketOnly } : {}) }),
+    )
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    expect(mockIo.mock.calls[0]?.[1]?.transports).toEqual(transports)
+    expect('transports' in (mockIo.mock.calls[0]?.[1] ?? {})).toBe(transports !== undefined)
+  })
+
+  it('reconnects when websocketOnly changes', async () => {
+    const { rerender } = renderHook(
+      ({ websocketOnly }: { websocketOnly: boolean }) =>
+        useRealtimeWs({ url: 'wss://x', websocketOnly }),
+      { initialProps: { websocketOnly: false } },
+    )
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    rerender({ websocketOnly: true })
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(2))
+    expect(mockIo.mock.calls[1]?.[1]?.transports).toEqual(['websocket'])
+  })
+
   it('uses /socket.io as the path when none is given', async () => {
     renderHook(() => useRealtimeWs({ url: 'ws://localhost' }))
     await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))

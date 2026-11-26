@@ -11,7 +11,8 @@ import { isPlainObject, readPlainObject } from '../utils/is-plain-object'
 import { readHostKey } from '../utils/read-host-key'
 import { refuseObject } from '../utils/refuse-object'
 import { realtimeError } from '../utils/realtime-error'
-import { METHODS_KINDS, ORIGIN_KINDS } from './drop-unset'
+import { isCanonicalOrigin } from '../utils/canonical-origin'
+import { ALLOWED_ORIGINS_KINDS, METHODS_KINDS, ORIGIN_KINDS } from './drop-unset'
 
 /** The functions each pluggable piece must have when it is set; what it lacks would fail at its first use. */
 const REQUIRED_FUNCTIONS = {
@@ -142,7 +143,57 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
   assertBoolean('sse.emitConnectionEvent', options.sse?.emitConnectionEvent)
   assertBoolean('websocket.emitConnectionEvent', options.websocket?.emitConnectionEvent)
   assertSseEndpoint('sse.endpoint', options.sse?.endpoint)
+  assertBoolean('websocket.websocketOnly', options.websocket?.websocketOnly)
   assertCors(options.websocket?.cors)
+  assertPolicyServed(options)
+  assertAllowedOrigins(options.websocket)
+}
+
+/** Refuse a policy option on a registration that serves SSE only, where nothing would apply it. */
+function assertPolicyServed(options: BymaxRealtimeModuleOptions): void {
+  const { transport, websocket } = options
+  if (transport !== 'sse' || websocket === undefined) return
+  if ('allowedOrigins' in websocket) refuseUnserved('allowedOrigins')
+  if (websocket.websocketOnly === true) refuseUnserved('websocketOnly')
+}
+
+/** Throw the refusal of a policy option that no handshake of this registration would meet. */
+function refuseUnserved(name: string): never {
+  throw realtimeError(
+    REALTIME_ERROR_CODES.INVALID_OPTIONS,
+    `options.websocket.${name} has no effect with transport 'sse': it governs the WebSocket handshake only, and the SSE endpoint's origin policy is app.enableCors`,
+    { who: 'BymaxRealtimeModule' },
+  )
+}
+
+/**
+ * Refuse an `allowedOrigins` that is not a non-empty list of origins in the spelling a browser sends, and one that is
+ * set beside a `cors.origin` other than `false`: two lists for one decision, of which the stricter would silently
+ * win. An absent one is left alone; one the host set to `undefined` or `null` is refused.
+ */
+function assertAllowedOrigins(websocket: BymaxRealtimeModuleOptions['websocket']): void {
+  const list: unknown = websocket?.allowedOrigins
+  if (websocket === undefined || !('allowedOrigins' in websocket)) return
+  if (!isArray(list) || list.length === 0) {
+    refuse('websocket.allowedOrigins', ALLOWED_ORIGINS_KINDS, list)
+  }
+  for (let index = 0; index < list.length; index += 1) {
+    if (!isCanonicalOrigin(list[index])) {
+      throw realtimeError(
+        REALTIME_ERROR_CODES.INVALID_OPTIONS,
+        `options.websocket.allowedOrigins[${index}] must be an origin as a browser sends it: a lowercase scheme, "://", a host (lowercase for http and https) and a port only when it is not the default of http or https; not ws, wss or ftp, and with no path, trailing slash, userinfo, wildcard or "null"`,
+        { who: 'BymaxRealtimeModule' },
+      )
+    }
+  }
+  const cors = websocket?.cors as { origin?: unknown } | undefined
+  if (cors !== undefined && 'origin' in cors && cors.origin !== false) {
+    throw realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      'options.websocket.allowedOrigins cannot be set together with options.websocket.cors.origin: set one list, or set cors.origin to false',
+      { who: 'BymaxRealtimeModule' },
+    )
+  }
 }
 
 /** Whether an origin entry is one Socket.IO matches by itself: a string, or a RegExp of this realm. */

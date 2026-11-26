@@ -77,6 +77,52 @@ describe('RealtimeGateway', () => {
       expect(message).not.toMatch(/websocket options \(/)
     })
 
+    it.each([
+      ['allowedOrigins', { allowedOrigins: ['https://app.example'] }],
+      ['websocketOnly', { websocketOnly: true }],
+    ])(
+      'refuses the boot when %s is set and the adapter is not RealtimeIoAdapter',
+      async (_name, websocket) => {
+        // Neither option would apply, which leaves polling on and no origin check, so the boot is refused, not logged.
+        // The refusal is thrown from a hook Nest awaits: a throw from afterInit lands in an rxjs subscriber and
+        // surfaces later as an uncaughtException, after the application is already serving.
+        gateway = (await buildModule({ websocket })).get(RealtimeGateway)
+
+        expect(() => gateway.afterInit({ use: jest.fn() } as never)).not.toThrow()
+        expect(() => gateway.onApplicationBootstrap()).toThrow(
+          /REALTIME_TRANSPORT_UNAVAILABLE.*app\.useWebSocketAdapter\(new RealtimeIoAdapter\(app\)\)/,
+        )
+        expect(errorSpy).not.toHaveBeenCalled()
+      },
+    )
+
+    it('rejects app.init() of a real application that sets allowedOrigins without the adapter', async () => {
+      // The unit row above reads the hook; this one reads what a host sees: init rejecting, nothing listening.
+      const moduleRef = await buildModule({
+        websocket: { allowedOrigins: ['https://app.example'] },
+      })
+      const app = moduleRef.createNestApplication({ logger: false })
+      try {
+        await expect(app.init()).rejects.toThrow(/REALTIME_TRANSPORT_UNAVAILABLE/)
+      } finally {
+        await app.close()
+      }
+    })
+
+    it('does not refuse the bootstrap when the options are not asking for the policy', async () => {
+      gateway.afterInit({ use: jest.fn() } as never)
+
+      expect(() => gateway.onApplicationBootstrap()).not.toThrow()
+    })
+
+    it('only logs when websocketOnly is false', async () => {
+      gateway = (await buildModule({ websocket: { websocketOnly: false } })).get(RealtimeGateway)
+
+      expect(() => gateway.afterInit({ use: jest.fn() } as never)).not.toThrow()
+      expect(() => gateway.onApplicationBootstrap()).not.toThrow()
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+    })
+
     /** The whole message, up to what is added for a configured namespace. */
     const missing = (dropped: string): string =>
       'RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options' +
@@ -112,6 +158,76 @@ describe('RealtimeGateway', () => {
     ])('says nothing about the namespace with %s', async (_case, websocket, dropped) => {
       // The library is on '/' then, with every other gateway that declares none.
       expect(await reported(websocket)).toBe(missing(dropped))
+    })
+
+    it('does not list as ignored what is applied without the adapter', async () => {
+      const message = await reported({
+        emitConnectionEvent: false,
+        maxConnectionsPerUser: 2,
+        cors: { origin: 'https://app.example' },
+        pingIntervalMs: 1000,
+        pingTimeoutMs: 1000,
+        maxHttpBufferSize: 10,
+      })
+
+      expect(message).toBe(missing(' (cors, pingIntervalMs, pingTimeoutMs, maxHttpBufferSize)'))
+    })
+
+    it.each([
+      ['no policy', {}],
+      ['the policy', { websocketOnly: true }],
+    ])(
+      'refuses the boot from onApplicationBootstrap when the server has no `use`, with %s',
+      async (_case, websocket) => {
+        // The handshake authenticator cannot be installed on it, and a throw from afterInit would surface only after
+        // the application is serving.
+        gateway = (await buildModule({ websocket })).get(RealtimeGateway)
+
+        expect(() => gateway.afterInit({} as never)).not.toThrow()
+        expect(() => gateway.onApplicationBootstrap()).toThrow(/REALTIME_TRANSPORT_UNAVAILABLE/)
+      },
+    )
+
+    // Scenario: a server with no `use`. Expected: the whole refusal, led by the gateway.
+    it('says what is missing and how to add it when the server has no `use`', async () => {
+      gateway = (await buildModule()).get(RealtimeGateway)
+      gateway.afterInit({} as never)
+
+      expect(() => gateway.onApplicationBootstrap()).toThrow(
+        /^\[RealtimeGateway\] REALTIME_TRANSPORT_UNAVAILABLE: the WebSocket server has no `use` method, so the handshake authenticator cannot be installed\. Add app\.useWebSocketAdapter\(new RealtimeIoAdapter\(app\)\)/,
+      )
+    })
+
+    // Scenario: the policy asked for under another adapter. Expected: the message leads with the gateway.
+    it('names the gateway when it refuses a policy under another adapter', async () => {
+      gateway = (await buildModule({ websocket: { websocketOnly: true } })).get(RealtimeGateway)
+      gateway.afterInit({ use: jest.fn() } as never)
+
+      expect(() => gateway.onApplicationBootstrap()).toThrow(
+        /^\[RealtimeGateway\] REALTIME_TRANSPORT_UNAVAILABLE: /,
+      )
+    })
+
+    // Scenario: websocketOnly is false under another adapter. Expected: it is listed with what is dropped.
+    it('lists a websocketOnly of false among the dropped options', async () => {
+      expect(await reported({ websocketOnly: false })).toBe(missing(' (websocketOnly)'))
+    })
+
+    it('never serves HTTP for an application whose WebSocket server has no `use`', async () => {
+      const app = (await buildModule()).createNestApplication({ logger: false })
+      app.useWebSocketAdapter({
+        create: () => ({}),
+        bindClientConnect: () => undefined,
+        bindMessageHandlers: () => undefined,
+        close: () => undefined,
+        dispose: async () => undefined,
+      } as never)
+      try {
+        await expect(app.listen(0, '127.0.0.1')).rejects.toThrow(/REALTIME_TRANSPORT_UNAVAILABLE/)
+        expect(app.getHttpServer().listening).toBe(false)
+      } finally {
+        await app.close()
+      }
     })
 
     it('says in the README exactly what it logs', () => {

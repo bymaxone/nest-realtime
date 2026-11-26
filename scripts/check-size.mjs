@@ -66,11 +66,16 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     and, 991 B more than the figure above, the table of the built-ins and the symbol-keyed methods and flags of a regular expression the option, validation and admission code call, recorded when the library loads, with the count and the refusal that read it, measured on 2026-11-22)
 //     and the wait under a deadline that the handshake gate, the re-authentication revalidate, the offline-queue replay, the Redis subscribe race and publish, and the SSE registration share, which uses no `Promise` static and no `then` and answers in a box with no prototype, and the check of the baseline and of the prototype chain of what each decision path returns, so that no object or array is handed over before the built-ins and the root prototypes are known to be intact; the figure on the first line is the measure of the whole bundle on 2026-11-24)
 //     and, 104 B more than the figure above (of the websocket bundle, 29 B), measured on 2026-11-24, the pin that gives the promise each public method of the service hands back, and each caller's own await of a method that decides something, its own `constructor`, and the species getter of `Promise` in the table of built-ins,
-//   websocket  9,292 B, 30 B above the 9,262 B measured on 2026-11-25 (the Socket.IO stack, which beyond what
+//   internal also carries the canonical origin check, which refuses an IP host a browser serializes differently, and the boot validation of `websocket.allowedOrigins` and `websocket.websocketOnly`, with their snapshot, so that the list is copied once and refused when it is empty, over 1,000 entries, not in the browser's form, or set beside a `cors.origin`; the whole bundle also includes the wider set of spellings an entry may have and a policy option present with nothing kept for validation to refuse
+//   websocket  (the Socket.IO stack, which beyond what
 //     the entry below lists carries the subclass that writes `websocket.namespace` into the gateway options Nest
 //     reads, the claim of a namespace until the gateway is connected or destroyed, the namespace opened on the
 //     library's server before any gateway joins it, the boot warning for a gateway on '/' with the record of the
-//     library's root server, and the one reading of the configured name)
+//     library's root server, and the one reading of the configured name; and the origin policy: the allow-request
+//     that refuses a request that is not a WebSocket upgrade or whose Origin is not listed, the guard that refuses a
+//     request carrying a sid, their registration with the refusal of an engine that cannot take it, and the
+//     bootstrap-time refusal of a gateway whose adapter is missing while the policy is asked for, of a server with no `use` and
+//     of an engine that is missing; and the refusal of a host `allowRequest` that rejects)
 //   websocket  8,456 B →  8,486 B (the Socket.IO stack alone: the start-up message that names the
 //     fix when `RealtimeIoAdapter` is not installed, the boot error that names the cause when the
 //     Redis adapter cannot be installed, the revocation that rejects when the server is not
@@ -96,6 +101,11 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     the url already carries, before any fragment, and the helpers of the two hooks, which stay
 //     within the 50-line function limit through a context object for 11 members that carries the state
 //     and refs, 333 B, measured on 2026-11-17)
+//     and, 16 B more than the figure above, measured on 2026-11-25: `websocketOnly` on the hook, which opens the socket on the `websocket` transport alone; the budget below is the whole bundle, 2,863 B
+//     and the refusal of `allowedOrigins` and `websocketOnly` under `transport: 'sse'` on the shared runtime, and, on
+//     the WebSocket bundle, the refusal of a gateway whose registration asks for an origin policy the shared server was
+//     not built with, with the wording of how two origin lists differ. internal measures 27,580 B and websocket
+//     10,532 B, measured on 2026-11-26; each budget is 30 B above.
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
@@ -107,15 +117,15 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 26_782 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 9_292 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 27_610 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 10_562 },
   {
     name: 'observability (metrics contributor)',
     path: 'dist/observability/index.mjs',
     brotli: 1_122,
   },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
-  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_847 },
+  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_863 },
 ]
 
 // The Socket.IO stack must not be reachable from anything an SSE application
