@@ -155,23 +155,26 @@ describe.each(GROUPS)('the %s group as a class instance', (group, every) => {
   // Scenario: the group is a class instance whose fields hold nothing, or whose getters return
   // nothing. Expected: every such key is dropped, except the origin-policy options, which validation
   // has to see; a getter that returns a value is kept, because a getter is a property.
-  it.each(Object.keys(every))('drops %s when a field or a getter holds nothing', (key) => {
-    class WithFields {}
-    class WithGetter {}
-    Object.defineProperty(WithGetter.prototype, key, { get: () => undefined, enumerable: false })
-    const withFields = Object.assign(new WithFields(), { [key]: null })
-    const withGetter = new WithGetter()
+  it.each(Object.keys(every))(
+    'drops %s when a field or a getter holds nothing, except an origin-policy option, which it keeps',
+    (key) => {
+      class WithFields {}
+      class WithGetter {}
+      Object.defineProperty(WithGetter.prototype, key, { get: () => undefined, enumerable: false })
+      const withFields = Object.assign(new WithFields(), { [key]: null })
+      const withGetter = new WithGetter()
 
-    for (const instance of [withFields, withGetter]) {
-      const kept = dropUnset({ [group]: instance } as never)[group] as Record<string, unknown>
+      for (const instance of [withFields, withGetter]) {
+        const kept = dropUnset({ [group]: instance } as never)[group] as Record<string, unknown>
 
-      // An origin-policy option set to nothing is kept for validation to read, wherever the class holds it. Only the
-      // websocket group has them.
-      expect(key in kept).toBe(
-        group === 'websocket' && ['allowedOrigins', 'websocketOnly'].includes(key),
-      )
-    }
-  })
+        // An origin-policy option set to nothing is kept for validation to read, wherever the class holds it. Only the
+        // websocket group has them.
+        expect(key in kept).toBe(
+          group === 'websocket' && ['allowedOrigins', 'websocketOnly'].includes(key),
+        )
+      }
+    },
+  )
 
   it('keeps a value that a getter returns', () => {
     class WithGetter {
