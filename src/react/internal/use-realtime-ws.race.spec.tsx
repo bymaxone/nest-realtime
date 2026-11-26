@@ -2,7 +2,7 @@
  * Tests for attempts of `useRealtimeWs` that are superseded or torn down while the import of the client is in flight.
  * @layer react
  *
- * `socket.io-client` is mocked with a fake `io`. The rows change the hook before the import resolves.
+ * `socket.io-client` is mocked with a fake `io`.
  */
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useRealtimeWs } from './use-realtime-ws'
