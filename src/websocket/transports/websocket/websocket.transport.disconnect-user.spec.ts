@@ -78,6 +78,12 @@ describe('WebSocketTransport.disconnectUser', () => {
     const failure = await transport.disconnectUser('u1').catch((error: unknown) => error)
 
     expect(failure).toHaveProperty('code', 'REALTIME_TRANSPORT_UNAVAILABLE')
+    expect(String((failure as Error).message)).toContain(
+      "the revocation of a user's connections could not be sent",
+    )
+    expect(String((failure as Error).cause)).toContain(
+      kind === 'no server' ? 'server not attached' : 'down',
+    )
     expect(String((failure as Error).message)).not.toContain('u1')
   })
 })
@@ -114,7 +120,7 @@ describe('CompositeTransport.disconnectUser', () => {
       .disconnectUser('secret-user')
       .catch((error: unknown) => error)
 
-    expect(failure).toHaveProperty('message', expect.stringContaining('disconnectUser'))
+    expect(failure).toHaveProperty('message', expect.stringContaining('disconnectUser of a user'))
     expect(String((failure as Error).message)).not.toContain('secret-user')
   })
 })
