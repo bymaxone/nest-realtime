@@ -110,17 +110,20 @@ export interface WebSocketOptions {
    * carries a `sid`, which can only address a session that already exists, is refused before engine.io reads it.
    *
    * It governs the WebSocket handshake only: the SSE endpoint's origin policy stays `app.enableCors`, and the option
-   * is refused with `transport: 'sse'`. It cannot be combined with a `websocket.cors.origin` other than `false`, nor
-   * with a `cors.origin` other than `false` on the gateway that creates the server; the `cors` of a later gateway on
-   * it is not applied. It needs `RealtimeIoAdapter`: without it the gateway refuses to boot. Registrations in one
-   * application share one server, so each that sets a policy refuses the boot unless the server has that same one.
+   * is refused with `transport: 'sse'`. The server is built with one `cors`, `websocket.cors` when set and otherwise
+   * that of the gateway that creates it, and a `cors.origin` other than `false` there is refused beside this option;
+   * any other gateway's `cors` is not applied. It needs `RealtimeIoAdapter`: without it the gateway refuses to boot.
+   * Registrations in one application share one server, so each that sets a policy refuses the boot unless the server
+   * was built with an identical list, the same entries in the same order, or with {@link websocketOnly} alone when it
+   * sets no list.
    */
   allowedOrigins?: readonly string[]
   /**
    * Serve the WebSocket transport only: engine.io's polling transport, including its JSONP form, is not offered, and a
    * request that carries a `sid` is refused before engine.io reads it. Defaults to `false`, which keeps the polling
    * fallback. A client then has to connect with the same option (`websocketOnly` on `useRealtime`), or its first
-   * polling request is refused. It needs `RealtimeIoAdapter`: without it the gateway refuses to boot.
+   * polling request is refused. It needs `RealtimeIoAdapter`: without it the gateway refuses to boot. `true` is refused
+   * with `transport: 'sse'`.
    */
   websocketOnly?: boolean
   /**

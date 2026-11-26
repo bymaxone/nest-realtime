@@ -27,17 +27,21 @@ export function wantsPolicy(websocket: BymaxRealtimeModuleOptions['websocket']):
   return websocket?.allowedOrigins !== undefined || websocket?.websocketOnly === true
 }
 
-/** Whether two origin lists are both unset, or hold the same entries in the same order. */
-export function sameList(
-  a: readonly string[] | undefined,
-  b: readonly string[] | undefined,
-): boolean {
-  if (a === undefined || b === undefined) return a === b
-  if (a.length !== b.length) return false
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index] !== b[index]) return false
+/**
+ * How two origin lists differ, for an error that echoes no entry: their lengths, or the first index where they part.
+ * `undefined` when they hold the same entries in the same order. No list counts as one of 0 entries.
+ */
+export function listDifference(
+  built: readonly string[] = [],
+  own: readonly string[] = [],
+): string | undefined {
+  if (built.length !== own.length) {
+    return `the server's list has ${built.length} entries and this registration's has ${own.length}`
   }
-  return true
+  for (let index = 0; index < own.length; index += 1) {
+    if (built[index] !== own[index]) return `the two lists differ first at index ${index}`
+  }
+  return undefined
 }
 
 /**

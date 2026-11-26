@@ -149,7 +149,7 @@ describe('a policy option the host set to nothing', () => {
   })
 })
 
-describe('a list on a registration that serves SSE only', () => {
+describe('a policy option on a registration that serves SSE only', () => {
   // Scenario: `websocket.allowedOrigins` beside `transport: 'sse'`. Expected: refused, since nothing would apply it.
   it('is refused, naming the transport', () => {
     expect(() =>
@@ -168,6 +168,33 @@ describe('a list on a registration that serves SSE only', () => {
         authenticator,
         websocket: { allowedOrigins: [LISTED] },
       } as never),
+    ).not.toThrow()
+  })
+
+  // Scenario: `websocket.websocketOnly: true` beside `transport: 'sse'`. Expected: refused for the same reason.
+  it('refuses websocketOnly, naming it', () => {
+    expect(() =>
+      validateOptions({
+        transport: 'sse',
+        authenticator,
+        websocket: { websocketOnly: true },
+      } as never),
+    ).toThrow(/REALTIME_INVALID_OPTIONS: options\.websocket\.websocketOnly has no effect/)
+  })
+
+  // Scenario: `websocketOnly` that asks for nothing, or a `websocket` group without a policy option. Expected: accepted.
+  it.each([{ websocketOnly: false }, { websocketOnly: undefined }, { namespace: '/rt' }])(
+    'accepts %p',
+    (websocket) => {
+      expect(() =>
+        validateOptions({ transport: 'sse', authenticator, websocket } as never),
+      ).not.toThrow()
+    },
+  )
+
+  it.each(['websocket', 'both'])('accepts websocketOnly with transport %s', (transport) => {
+    expect(() =>
+      validateOptions({ transport, authenticator, websocket: { websocketOnly: true } } as never),
     ).not.toThrow()
   })
 })

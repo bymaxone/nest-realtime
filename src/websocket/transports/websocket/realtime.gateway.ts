@@ -32,7 +32,7 @@ import type {
 } from '@bymax-one/nest-realtime/internal'
 import { ConnectHookFailure } from './connect-hook-failure'
 import { wantsPolicy } from './origin-policy'
-import { isRealtimeIoServer, servesPolicy } from './realtime-io-adapter'
+import { isRealtimeIoServer, policyMismatch } from './realtime-io-adapter'
 import { socketNamespace } from './socket-namespace'
 import { WebSocketTransport } from './websocket.transport'
 
@@ -267,10 +267,12 @@ export class RealtimeGateway
   /** Refuse a server that was not built with the origin policy this gateway's registration asks for. */
   private refuseUnservedPolicy(server: unknown): void {
     const { websocket } = this.options
-    if (!wantsPolicy(websocket) || servesPolicy(server, websocket)) return
+    if (!wantsPolicy(websocket)) return
+    const mismatch = policyMismatch(server, websocket)
+    if (mismatch === undefined) return
     this.adapterRefusal = realtimeError(
       REALTIME_ERROR_CODES.INVALID_OPTIONS,
-      "registrations in one application share one Socket.IO server, built from one of them, and it does not have this registration's websocket.allowedOrigins or websocket.websocketOnly. Call forRoot once, or give every registration the same two.",
+      `registrations in one application share one Socket.IO server, built from one of them, and it does not have this registration's websocket.allowedOrigins or websocket.websocketOnly: ${mismatch}. Call forRoot once, or give every registration the same two.`,
       { who: RealtimeGateway.name },
     )
   }

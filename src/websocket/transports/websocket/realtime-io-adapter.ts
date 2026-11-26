@@ -22,7 +22,7 @@ import {
   corsAnswersOrigins,
   refuseHostAllowRequest,
   refuseSid,
-  sameList,
+  listDifference,
   wantsPolicy,
 } from './origin-policy'
 import type { AllowRequest } from './origin-policy'
@@ -120,15 +120,16 @@ type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
 const serverPolicies = new WeakMap<object, readonly string[] | undefined>()
 
 /**
- * Whether the server was built with exactly the origin policy `websocket` asks for. One server is shared by every
- * registration of an application and is built from one of them, so each gateway has to ask about its own.
+ * Why `server` does not serve the origin policy `websocket` asks for, or `undefined` when it does. One server is shared
+ * by every registration of an application and is built from one of them, so each gateway has to ask about its own.
  */
-export function servesPolicy(
+export function policyMismatch(
   server: unknown,
   websocket: BymaxRealtimeModuleOptions['websocket'],
-): boolean {
+): string | undefined {
   const key = server as object
-  return serverPolicies.has(key) && sameList(serverPolicies.get(key), websocket?.allowedOrigins)
+  if (!serverPolicies.has(key)) return 'the server was built with neither'
+  return listDifference(serverPolicies.get(key), websocket?.allowedOrigins)
 }
 
 /** The commands the Socket.IO Redis adapter sends on its subscriber connection. */

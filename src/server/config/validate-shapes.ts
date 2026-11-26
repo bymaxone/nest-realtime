@@ -145,17 +145,23 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
   assertSseEndpoint('sse.endpoint', options.sse?.endpoint)
   assertBoolean('websocket.websocketOnly', options.websocket?.websocketOnly)
   assertCors(options.websocket?.cors)
-  assertAllowedOriginsServed(options)
+  assertPolicyServed(options)
   assertAllowedOrigins(options.websocket)
 }
 
-/** Refuse an `allowedOrigins` on a registration that serves SSE only, where nothing would apply it. */
-function assertAllowedOriginsServed(options: BymaxRealtimeModuleOptions): void {
-  if (options.transport !== 'sse') return
-  if (options.websocket === undefined || !('allowedOrigins' in options.websocket)) return
+/** Refuse a policy option on a registration that serves SSE only, where nothing would apply it. */
+function assertPolicyServed(options: BymaxRealtimeModuleOptions): void {
+  const { transport, websocket } = options
+  if (transport !== 'sse' || websocket === undefined) return
+  if ('allowedOrigins' in websocket) refuseUnserved('allowedOrigins')
+  if (websocket.websocketOnly === true) refuseUnserved('websocketOnly')
+}
+
+/** Throw the refusal of a policy option that no handshake of this registration would meet. */
+function refuseUnserved(name: string): never {
   throw realtimeError(
     REALTIME_ERROR_CODES.INVALID_OPTIONS,
-    "options.websocket.allowedOrigins has no effect with transport 'sse': it governs the WebSocket handshake only, and the SSE endpoint's origin policy is app.enableCors",
+    `options.websocket.${name} has no effect with transport 'sse': it governs the WebSocket handshake only, and the SSE endpoint's origin policy is app.enableCors`,
     { who: 'BymaxRealtimeModule' },
   )
 }

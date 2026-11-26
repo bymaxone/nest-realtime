@@ -75,23 +75,36 @@ describe('two registrations on one Socket.IO server', () => {
 
   const list = (...allowedOrigins: string[]): Websocket => ({ allowedOrigins })
 
+  const NONE_BUILT = 'the server was built with neither'
+  const count = (server: number, own: number): string =>
+    `the server's list has ${server} entries and this registration's has ${own}`
+  const differAt = (index: number): string => `the two lists differ first at index ${index}`
+
   // Scenario: the registration the server is not built from asks for a policy, or the two ask for different ones.
-  // Expected: the boot is refused, so nothing is served.
+  // Expected: the boot is refused, saying where the two part, so nothing is served.
   it.each([
-    ['a list first, nothing second', list(LISTED), {}],
-    ['websocketOnly first, nothing second', { websocketOnly: true }, {}],
-    ['two lists', list(LISTED), list(OTHER)],
-    ['two lists, swapped', list(OTHER), list(LISTED)],
-    ['a list inside a longer one', list(LISTED), list(LISTED, OTHER)],
-    ['a longer list, then one inside it', list(LISTED, OTHER), list(LISTED)],
-    ['websocketOnly first, a list second', { websocketOnly: true }, list(LISTED)],
-    ['a list first, websocketOnly second', list(LISTED), { websocketOnly: true }],
-  ])('refuses the boot with %s', async (_name, a, b) => {
+    ['a list first, nothing second', list(LISTED), {}, NONE_BUILT],
+    ['websocketOnly first, nothing second', { websocketOnly: true }, {}, NONE_BUILT],
+    ['two lists', list(LISTED), list(OTHER), differAt(0)],
+    ['two lists, swapped', list(OTHER), list(LISTED), differAt(0)],
+    ['the same entries in another order', list(LISTED, OTHER), list(OTHER, LISTED), differAt(0)],
+    ['lists that part at the second entry', list(LISTED, OTHER), list(LISTED, EVIL), differAt(1)],
+    ['a list inside a longer one', list(LISTED), list(LISTED, OTHER), count(2, 1)],
+    ['a longer list, then one inside it', list(LISTED, OTHER), list(LISTED), count(1, 2)],
+    ['websocketOnly first, a list second', { websocketOnly: true }, list(LISTED), count(1, 0)],
+    ['a list first, websocketOnly second', list(LISTED), { websocketOnly: true }, count(0, 1)],
+  ])('refuses the boot with %s', async (_name, a, b, why) => {
     const app = await application(a, b)
 
-    await expect(app.listen(0, '127.0.0.1')).rejects.toThrow(
-      /REALTIME_INVALID_OPTIONS.*share one Socket\.IO server/,
+    const refusal = await app.listen(0, '127.0.0.1').then(
+      () => 'booted',
+      (error: Error) => error.message,
     )
+
+    expect(refusal).toContain('REALTIME_INVALID_OPTIONS')
+    expect(refusal).toContain('share one Socket.IO server')
+    expect(refusal).toContain(why)
+    expect(refusal).not.toContain('example')
   })
 
   // Scenario: both ask for the same list, or only the registration the server is built from asks for one.
