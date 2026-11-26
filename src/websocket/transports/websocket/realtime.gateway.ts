@@ -46,6 +46,9 @@ const ADAPTER_OPTIONS: ReadonlySet<string> = new Set([
   'redisAdapter',
 ])
 
+/** The servers a library gateway already authenticates: Socket.IO gives one object for each namespace of a server. */
+const boundServers = new WeakSet<object>()
+
 /** The root server a namespace belongs to; a root server has no `server` and is its own root. */
 function rootOf(server: Server): unknown {
   return (server as { server?: unknown }).server ?? server
@@ -223,6 +226,11 @@ export class RealtimeGateway
       this.refuseServerWithoutUse()
       return
     }
+    if (boundServers.has(server)) {
+      this.refuseSharedNamespace(server)
+      return
+    }
+    boundServers.add(server)
     server.use(this.authenticateHandshake)
     this.transport.setServer(server)
     const root = rootOf(server)
@@ -241,6 +249,16 @@ export class RealtimeGateway
     this.adapterRefusal = realtimeError(
       REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
       'the WebSocket server has no `use` method, so the handshake authenticator cannot be installed. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from "@bymax-one/nest-realtime/websocket".',
+      { who: RealtimeGateway.name },
+    )
+  }
+
+  /** A second authenticator on one namespace would authenticate each client twice, into two identities. */
+  private refuseSharedNamespace(server: Server): void {
+    const namespace = (server as { name?: string }).name ?? '/'
+    this.adapterRefusal = realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      `two registrations in this application bind the WebSocket namespace '${namespace}', so one client would be authenticated by both and hold two identities. Merge them into one forRoot or forRootAsync call, or give each its own websocket.namespace.`,
       { who: RealtimeGateway.name },
     )
   }

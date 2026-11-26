@@ -108,6 +108,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     10,532 B, measured on 2026-11-26; each budget is 30 B above.
 //     react measures 2,993 B with the guard that closes a socket opened by a superseded attempt, measured on
 //     2026-11-26; its budget is 30 B above.
+//     websocket measures 10,647 B with the refusal of a second registration on one namespace, measured on
+//     2026-11-26; its budget is 30 B above.
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
@@ -120,7 +122,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
   { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 27_610 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 10_562 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 10_677 },
   {
     name: 'observability (metrics contributor)',
     path: 'dist/observability/index.mjs',
