@@ -9,6 +9,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Fixed
 
+- **`useRealtime` sets `error` when the WebSocket handshake fails.**
+  - Before: the hook listened for `error` and not for `connect_error`, so a refused or unreachable handshake left `connected` at `false` and `error` unset.
+  - After: `error` holds the `connect_error`, with its `data` as Socket.IO delivers it, and the next `connect` clears it.
+  - **Apply to a derived backend:** nothing; a client that renders `error` now also shows handshake failures.
 - **`useRealtimeWs` closes a socket that it opens after the hook was disabled, reconnected or unmounted.**
   - Before: the dynamic import of `socket.io-client` could resolve after `enabled` went to `false`, after `reconnect()` started a newer attempt, or after unmount, and the socket then opened was assigned and bound, not closed, so a disabled hook kept a live connection, while a failed stale attempt could set `error`.
   - After: an attempt that is no longer the current one closes the socket it opened without binding it, and reports no error. The current attempt behaves as before.

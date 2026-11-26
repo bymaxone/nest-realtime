@@ -116,6 +116,8 @@ function bindSocket<TEvents extends Record<string, unknown>>(
   })
   socket.on('disconnect', () => sinks.setConnected(false))
   socket.on('error', (e: unknown) => sinks.setError(asError(e)))
+  // Socket.IO reports a failed or refused handshake as `connect_error`, not as `error`.
+  socket.on('connect_error', (e: unknown) => sinks.setError(asError(e)))
   socket.onAny((eventName: string, payload: unknown) => {
     const entry: WsEventEntry<TEvents> = {
       type: eventName as keyof TEvents,
