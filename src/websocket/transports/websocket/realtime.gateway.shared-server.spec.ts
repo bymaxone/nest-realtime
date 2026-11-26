@@ -101,7 +101,7 @@ describe('two registrations on one Socket.IO server', () => {
       (error: Error) => error.message,
     )
 
-    expect(refusal).toContain('REALTIME_INVALID_OPTIONS')
+    expect(refusal).toContain('[RealtimeGateway] REALTIME_INVALID_OPTIONS')
     expect(refusal).toContain('share one Socket.IO server')
     expect(refusal).toContain(why)
     expect(refusal).not.toContain('example')

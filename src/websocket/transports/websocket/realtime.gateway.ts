@@ -39,7 +39,6 @@ import { WebSocketTransport } from './websocket.transport'
 /** The `websocket` options only `RealtimeIoAdapter` applies; the others reach the library without it. */
 const ADAPTER_OPTIONS: ReadonlySet<string> = new Set([
   'cors',
-  'allowedOrigins',
   'websocketOnly',
   'pingIntervalMs',
   'pingTimeoutMs',

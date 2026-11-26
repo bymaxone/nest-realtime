@@ -358,6 +358,20 @@ describe('the origin policy on a real engine.io server', () => {
     expect(await status(booted.port, WS, {})).toBe('101')
   })
 
+  // Scenario: no policy option. Expected: the adapter does not check the host's allowRequest.
+  it('boots with an allowRequest that is not a function when no policy is asked for', async () => {
+    booted = await boot({}, { allowRequest: 'yes' })
+
+    expect(booted.engineTransports).toStrictEqual(['polling', 'websocket'])
+  })
+
+  // Scenario: a list beside a cors.origin the gateway gave. Expected: the message leads with the adapter.
+  it('names the adapter when it refuses a list beside a cors origin', async () => {
+    await expect(boot({ allowedOrigins: [LISTED] }, { cors: { origin: '*' } })).rejects.toThrow(
+      /^\[RealtimeIoAdapter\] REALTIME_INVALID_OPTIONS: /,
+    )
+  })
+
   it('refuses an allowRequest that is not a function', async () => {
     await expect(boot({ websocketOnly: true }, { allowRequest: 'yes' })).rejects.toThrow(
       /allowRequest must be a function/,

@@ -38,10 +38,8 @@ export function listDifference(
   if (built.length !== own.length) {
     return `the server's list has ${built.length} entries and this registration's has ${own.length}`
   }
-  for (let index = 0; index < own.length; index += 1) {
-    if (built[index] !== own[index]) return `the two lists differ first at index ${index}`
-  }
-  return undefined
+  const index = own.findIndex((entry, at) => built[at] !== entry)
+  return index === -1 ? undefined : `the two lists differ first at index ${index}`
 }
 
 /**
@@ -55,12 +53,13 @@ export function corsAnswersOrigins(cors: unknown): boolean {
   return 'origin' in cors && (cors as { origin: unknown }).origin !== false
 }
 
+// Taken at load: a method the host replaces afterwards cannot admit an origin the list does not hold.
+const { apply } = Reflect
+const { includes } = Array.prototype
+
 /** Whether `origin` is one of the entries, compared exactly, with no case folding and no normalisation. */
 function listed(entries: readonly string[], origin: string): boolean {
-  for (let index = 0; index < entries.length; index += 1) {
-    if (entries[index] === origin) return true
-  }
-  return false
+  return apply(includes, entries, [origin]) as boolean
 }
 
 /** Whether the request is the HTTP upgrade of a WebSocket, the only handshake a policy admits. */

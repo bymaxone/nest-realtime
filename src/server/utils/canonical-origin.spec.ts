@@ -116,3 +116,15 @@ describe('isCanonicalOrigin', () => {
     expect(isCanonicalOrigin(value)).toBe(false)
   })
 })
+
+describe('isCanonicalOrigin on the last label of a host', () => {
+  // Scenario: the last label holds digits after letters. Expected: a name, accepted.
+  it.each(['http://web1', 'https://app.server1'])('accepts %s', (origin) => {
+    expect(isCanonicalOrigin(origin)).toBe(true)
+  })
+
+  // Scenario: the last label is a hexadecimal number, which a URL reads as part of an IPv4 address. Expected: refused.
+  it.each(['http://app.0x12', 'http://app.0x'])('refuses %s', (origin) => {
+    expect(isCanonicalOrigin(origin)).toBe(false)
+  })
+})

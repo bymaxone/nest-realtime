@@ -216,10 +216,52 @@ describe('RealtimeIoAdapter on a server that cannot take the sid guard', () => {
     expect(close).toHaveBeenCalledTimes(1)
   })
 
+  // Scenario: the guard cannot be installed. Expected: the message leads with the adapter.
+  it('names the adapter in that refusal', () => {
+    const { adapter } = adapterWith(undefined)
+    expect(() => adapter.createIOServer(undefined as never)).toThrow(
+      /^\[RealtimeIoAdapter\] REALTIME_TRANSPORT_UNAVAILABLE: /,
+    )
+  })
+
   it('registers the guard on an engine that has the hook', () => {
     const use = jest.fn()
     const { adapter } = adapterWith({ middlewares: [jest.fn()], on: jest.fn(), use })
     adapter.createIOServer(3000)
     expect(use).toHaveBeenCalledWith(refuseSid)
+  })
+})
+
+describe('the text of the policy refusals', () => {
+  // Scenario: a request that names a session. Expected: the error engine.io is given says why.
+  it('says why a request with a sid is refused', () => {
+    let refusal: unknown
+    refuseSid({ _query: { sid: 'abc' } } as never, {} as never, (error) => (refusal = error))
+
+    expect((refusal as Error).message).toBe('a websocket-only server does not take a sid')
+  })
+
+  // Scenario: a host allowRequest that cannot be called. Expected: the message leads with the adapter.
+  it('names the adapter for an allowRequest that cannot be called', () => {
+    expect(() => refuseHostAllowRequest('yes')).toThrow(
+      /^\[RealtimeIoAdapter\] REALTIME_INVALID_OPTIONS: /,
+    )
+  })
+})
+
+describe('allowRequestFor after the host replaced Array.prototype.includes', () => {
+  // Scenario: the method answers true for anything, replaced after the library loaded. Expected: still refused.
+  it('refuses an unlisted origin', () => {
+    const policy = allowRequestFor(['https://app.example'], undefined)
+    const answer = jest.fn()
+    const original = Array.prototype.includes
+    Array.prototype.includes = () => true
+    try {
+      policy({ headers: { upgrade: 'websocket', origin: 'https://evil.example' } } as never, answer)
+    } finally {
+      Array.prototype.includes = original
+    }
+
+    expect(answer).toHaveBeenCalledWith('forbidden', false)
   })
 })

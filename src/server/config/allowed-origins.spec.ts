@@ -209,3 +209,19 @@ describe('a policy option on a registration that serves SSE only', () => {
     ).not.toThrow()
   })
 })
+
+describe('the class named by a refusal of a policy option', () => {
+  // Scenario: each refusal of validation. Expected: the message leads with the module that refuses.
+  it.each([
+    ['an option under SSE', { transport: 'sse', websocket: { websocketOnly: true } }],
+    ['an entry that is not an origin', { websocket: { allowedOrigins: ['nope'] } }],
+    [
+      'a list beside cors.origin',
+      { websocket: { allowedOrigins: [LISTED], cors: { origin: LISTED } } },
+    ],
+  ])('is BymaxRealtimeModule for %s', (_case, options) => {
+    expect(() =>
+      validateOptions({ transport: 'websocket', authenticator, ...options } as never),
+    ).toThrow(/^\[BymaxRealtimeModule\] REALTIME_INVALID_OPTIONS: /)
+  })
+})

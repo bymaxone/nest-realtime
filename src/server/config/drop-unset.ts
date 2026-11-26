@@ -178,11 +178,15 @@ function readKey(
   kept: Record<string, unknown>,
   source: object,
   key: string,
-  keepSet: readonly string[],
+  keepSet: readonly string[] | undefined,
 ): void {
   const value = readHostKey(source, key)
   if (value !== undefined && value !== null) kept[key] = value
-  else if (includesKey(keepSet, key) && (value === null || hasHostKey(source, key)))
+  else if (
+    keepSet !== undefined &&
+    includesKey(keepSet, key) &&
+    (value === null || hasHostKey(source, key))
+  )
     kept[key] = value
 }
 
@@ -196,7 +200,7 @@ function readKey(
 function readSet(
   source: object,
   known: readonly string[],
-  keepSet: readonly string[] = [],
+  keepSet?: readonly string[],
 ): Record<string, unknown> {
   const kept: Record<string, unknown> = { __proto__: null }
   const own = keys(source)
@@ -234,7 +238,7 @@ export function dropUnset<T extends object>(options: T): T {
     const entry = GROUPS[index] as readonly [string, readonly string[]]
     const value = kept[entry[0]]
     if (isPlainObject(value))
-      kept[entry[0]] = readSet(value, entry[1], entry[0] === 'websocket' ? POLICY_NAMES : [])
+      kept[entry[0]] = readSet(value, entry[1], entry[0] === 'websocket' ? POLICY_NAMES : undefined)
   }
   const websocket = kept.websocket
   if (isPlainObject(websocket)) {

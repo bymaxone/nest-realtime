@@ -106,7 +106,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     which measures 27,641 B, and the refusal of a gateway whose registration asks for an origin policy the shared
 //     server was not built with on the WebSocket bundle, which measures 10,431 B. The refusal of `websocketOnly`
 //     under SSE and the wording of how two lists differ bring them to 27,677 B and 10,499 B, measured on
-//     2026-11-25; each budget is 30 B above.
+//     2026-11-25. Simplifying the host check, the list comparisons and the unset read brings them to 27,580 B and
+//     10,532 B, measured on 2026-11-26; each budget is 30 B above.
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
@@ -118,8 +119,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 27_707 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 10_529 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 27_610 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 10_562 },
   {
     name: 'observability (metrics contributor)',
     path: 'dist/observability/index.mjs',

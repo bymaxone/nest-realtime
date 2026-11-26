@@ -34,20 +34,11 @@ const DEFAULT_PORT: Readonly<Record<string, string>> = {
 
 /** The host as a browser serializes it: an IPv4 address in four plain decimal parts, an IPv6 address compressed. */
 function isCanonicalHost(host: string): boolean {
-  if (host.startsWith('[')) {
-    try {
-      return new URL(`http://${host}`).host === host
-    } catch {
-      return false
-    }
+  try {
+    return new URL(`http://${host}`).host === host
+  } catch {
+    return false
   }
-  const parts = host.split('.')
-  const last = parts[parts.length - 1] as string
-  if (!/^(?:[0-9]+|0x[0-9a-f]*)$/.test(last)) return true
-  return (
-    parts.length === 4 &&
-    parts.every((part) => String(Number(part)) === part && Number(part) <= 255)
-  )
 }
 
 /**

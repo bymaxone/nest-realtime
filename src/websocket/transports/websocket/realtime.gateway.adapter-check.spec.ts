@@ -188,6 +188,31 @@ describe('RealtimeGateway', () => {
       },
     )
 
+    // Scenario: a server with no `use`. Expected: the whole refusal, led by the gateway.
+    it('says what is missing and how to add it when the server has no `use`', async () => {
+      gateway = (await buildModule()).get(RealtimeGateway)
+      gateway.afterInit({} as never)
+
+      expect(() => gateway.onApplicationBootstrap()).toThrow(
+        /^\[RealtimeGateway\] REALTIME_TRANSPORT_UNAVAILABLE: the WebSocket server has no `use` method, so the handshake authenticator cannot be installed\. Add app\.useWebSocketAdapter\(new RealtimeIoAdapter\(app\)\)/,
+      )
+    })
+
+    // Scenario: the policy asked for under another adapter. Expected: the message leads with the gateway.
+    it('names the gateway when it refuses a policy under another adapter', async () => {
+      gateway = (await buildModule({ websocket: { websocketOnly: true } })).get(RealtimeGateway)
+      gateway.afterInit({ use: jest.fn() } as never)
+
+      expect(() => gateway.onApplicationBootstrap()).toThrow(
+        /^\[RealtimeGateway\] REALTIME_TRANSPORT_UNAVAILABLE: /,
+      )
+    })
+
+    // Scenario: websocketOnly is false under another adapter. Expected: it is listed with what is dropped.
+    it('lists a websocketOnly of false among the dropped options', async () => {
+      expect(await reported({ websocketOnly: false })).toBe(missing(' (websocketOnly)'))
+    })
+
     it('never serves HTTP for an application whose WebSocket server has no `use`', async () => {
       const app = (await buildModule()).createNestApplication({ logger: false })
       app.useWebSocketAdapter({
