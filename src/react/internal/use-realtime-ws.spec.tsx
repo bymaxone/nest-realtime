@@ -129,6 +129,20 @@ describe('useRealtimeWs', () => {
     expect(result.current.error?.message).toBe('string error')
   })
 
+  it('sets error to the connect_error of a refused handshake, and clears it on connect', async () => {
+    // Socket.IO reports a failed or refused handshake as `connect_error`, never as `error`; `data.code` must survive.
+    const refusal = Object.assign(new Error('refused'), {
+      data: { code: 'REALTIME_UNAUTHENTICATED' },
+    })
+    const { result } = renderHook(() => useRealtimeWs({ url: 'ws://localhost' }))
+    await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
+    act(() => trigger('connect_error', refusal))
+    expect(result.current.error).toBe(refusal)
+    expect(result.current.connected).toBe(false)
+    act(() => trigger('connect'))
+    expect(result.current.error).toBeUndefined()
+  })
+
   it('calls socket.disconnect() when the component unmounts', async () => {
     // Cleanup must disconnect the socket to prevent memory / connection leaks.
     const { unmount } = renderHook(() => useRealtimeWs({ url: 'ws://localhost' }))
