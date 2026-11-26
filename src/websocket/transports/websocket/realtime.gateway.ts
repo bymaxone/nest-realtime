@@ -32,7 +32,7 @@ import type {
 } from '@bymax-one/nest-realtime/internal'
 import { ConnectHookFailure } from './connect-hook-failure'
 import { wantsPolicy } from './origin-policy'
-import { isRealtimeIoServer } from './realtime-io-adapter'
+import { isRealtimeIoServer, servesPolicy } from './realtime-io-adapter'
 import { socketNamespace } from './socket-namespace'
 import { WebSocketTransport } from './websocket.transport'
 
@@ -226,7 +226,9 @@ export class RealtimeGateway
     }
     server.use(this.authenticateHandshake)
     this.transport.setServer(server)
-    if (!isRealtimeIoServer(rootOf(server))) this.refuseOrReportMissingAdapter()
+    const root = rootOf(server)
+    if (isRealtimeIoServer(root)) this.refuseUnservedPolicy(root)
+    else this.refuseOrReportMissingAdapter()
     this.logger.log('RealtimeGateway initialized')
   }
 
@@ -260,6 +262,17 @@ export class RealtimeGateway
       return
     }
     this.reportMissingAdapter()
+  }
+
+  /** Refuse a server that was not built with the origin policy this gateway's registration asks for. */
+  private refuseUnservedPolicy(server: unknown): void {
+    const { websocket } = this.options
+    if (!wantsPolicy(websocket) || servesPolicy(server, websocket)) return
+    this.adapterRefusal = realtimeError(
+      REALTIME_ERROR_CODES.INVALID_OPTIONS,
+      "registrations in one application share one Socket.IO server, built from one of them, and it does not have this registration's websocket.allowedOrigins or websocket.websocketOnly. Call forRoot once, or give every registration the same two.",
+      { who: RealtimeGateway.name },
+    )
   }
 
   /** Report a server that `RealtimeIoAdapter` did not create: the options the adapter applies are dropped. */

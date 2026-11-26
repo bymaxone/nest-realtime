@@ -145,7 +145,19 @@ export function validateShapes(options: BymaxRealtimeModuleOptions): void {
   assertSseEndpoint('sse.endpoint', options.sse?.endpoint)
   assertBoolean('websocket.websocketOnly', options.websocket?.websocketOnly)
   assertCors(options.websocket?.cors)
+  assertAllowedOriginsServed(options)
   assertAllowedOrigins(options.websocket)
+}
+
+/** Refuse an `allowedOrigins` on a registration that serves SSE only, where nothing would apply it. */
+function assertAllowedOriginsServed(options: BymaxRealtimeModuleOptions): void {
+  if (options.transport !== 'sse') return
+  if (options.websocket === undefined || !('allowedOrigins' in options.websocket)) return
+  throw realtimeError(
+    REALTIME_ERROR_CODES.INVALID_OPTIONS,
+    "options.websocket.allowedOrigins has no effect with transport 'sse': it governs the WebSocket handshake only, and the SSE endpoint's origin policy is app.enableCors",
+    { who: 'BymaxRealtimeModule' },
+  )
 }
 
 /**

@@ -22,6 +22,7 @@ import {
   corsAnswersOrigins,
   refuseHostAllowRequest,
   refuseSid,
+  sameList,
   wantsPolicy,
 } from './origin-policy'
 import type { AllowRequest } from './origin-policy'
@@ -114,6 +115,21 @@ function installGuards(server: GuardedServer): void {
 
 /** Shape of the lazily-required `@socket.io/redis-adapter` module. */
 type RedisAdapterModule = { createAdapter: typeof CreateAdapterFn }
+
+/** For each server built with an origin policy, its origin list; `undefined` under `websocketOnly` alone. */
+const serverPolicies = new WeakMap<object, readonly string[] | undefined>()
+
+/**
+ * Whether the server was built with exactly the origin policy `websocket` asks for. One server is shared by every
+ * registration of an application and is built from one of them, so each gateway has to ask about its own.
+ */
+export function servesPolicy(
+  server: unknown,
+  websocket: BymaxRealtimeModuleOptions['websocket'],
+): boolean {
+  const key = server as object
+  return serverPolicies.has(key) && sameList(serverPolicies.get(key), websocket?.allowedOrigins)
+}
 
 /** The commands the Socket.IO Redis adapter sends on its subscriber connection. */
 const ADAPTER_COMMANDS = ['subscribe', 'psubscribe', 'unsubscribe', 'punsubscribe'] as const
@@ -220,6 +236,7 @@ export class RealtimeIoAdapter extends IoAdapter {
     }
 
     realtimeServers.add(server)
+    if (policy) serverPolicies.set(server, wsOpts.allowedOrigins)
     if (isLibraryServer) libraryServers.add(server)
     return server
   }

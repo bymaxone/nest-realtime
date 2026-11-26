@@ -27,6 +27,19 @@ export function wantsPolicy(websocket: BymaxRealtimeModuleOptions['websocket']):
   return websocket?.allowedOrigins !== undefined || websocket?.websocketOnly === true
 }
 
+/** Whether two origin lists are both unset, or hold the same entries in the same order. */
+export function sameList(
+  a: readonly string[] | undefined,
+  b: readonly string[] | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b
+  if (a.length !== b.length) return false
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return false
+  }
+  return true
+}
+
 /**
  * Whether a `cors` block could answer an origin other than none: a function, `true`, or an object whose `origin` is
  * set to anything but `false`. A block with no `origin` key, or `origin: false`, which is what the gateway's own

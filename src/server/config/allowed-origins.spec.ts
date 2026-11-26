@@ -148,3 +148,26 @@ describe('a policy option the host set to nothing', () => {
     expect(() => validateOptions(withWebsocket({ websocketOnly: undefined }))).not.toThrow()
   })
 })
+
+describe('a list on a registration that serves SSE only', () => {
+  // Scenario: `websocket.allowedOrigins` beside `transport: 'sse'`. Expected: refused, since nothing would apply it.
+  it('is refused, naming the transport', () => {
+    expect(() =>
+      validateOptions({
+        transport: 'sse',
+        authenticator,
+        websocket: { allowedOrigins: [LISTED] },
+      } as never),
+    ).toThrow(/REALTIME_INVALID_OPTIONS: options\.websocket\.allowedOrigins has no effect/)
+  })
+
+  it.each(['websocket', 'both'])('is accepted with transport %s', (transport) => {
+    expect(() =>
+      validateOptions({
+        transport,
+        authenticator,
+        websocket: { allowedOrigins: [LISTED] },
+      } as never),
+    ).not.toThrow()
+  })
+})

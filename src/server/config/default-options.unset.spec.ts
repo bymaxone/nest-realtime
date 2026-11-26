@@ -165,8 +165,11 @@ describe.each(GROUPS)('the %s group as a class instance', (group, every) => {
     for (const instance of [withFields, withGetter]) {
       const kept = dropUnset({ [group]: instance } as never)[group] as Record<string, unknown>
 
-      // An origin-policy option set to nothing is kept for validation to read, wherever the class holds it.
-      expect(key in kept).toBe(['allowedOrigins', 'websocketOnly'].includes(key))
+      // An origin-policy option set to nothing is kept for validation to read, wherever the class holds it. Only the
+      // websocket group has them.
+      expect(key in kept).toBe(
+        group === 'websocket' && ['allowedOrigins', 'websocketOnly'].includes(key),
+      )
     }
   })
 
@@ -288,5 +291,17 @@ describe('a getter is read once per registration', () => {
       module.get<BymaxRealtimeModuleOptions>(REALTIME_OPTIONS_TOKEN).sse?.maxConnectionsPerUser,
     ).toBe(7)
     expect(reads()).toBe(1)
+  })
+})
+
+describe.each(['sse', 'reauthenticationPolicy'])('a policy name in the %s group', (group) => {
+  // Scenario: a group that has no origin policy holds one of its names set to nothing. Expected: dropped like any key.
+  it.each(['allowedOrigins', 'websocketOnly'])('drops %s set to nothing', (name) => {
+    const kept = dropUnset({ [group]: { [name]: null } } as never) as unknown as Record<
+      string,
+      object
+    >
+
+    expect(name in (kept[group] as object)).toBe(false)
   })
 })

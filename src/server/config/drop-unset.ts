@@ -105,7 +105,7 @@ const GROUPS: ReadonlyArray<readonly [string, readonly string[]]> = [
 ]
 
 /**
- * The options of the origin policy, which only `websocket` has: an own key the host set to nothing is kept for
+ * The options of the origin policy, which only `websocket` has: a key the host set to nothing is kept for
  * validation to refuse, since read as unset it would switch the policy off. Validation takes `websocketOnly: undefined`
  * as unset, as for any boolean.
  */
@@ -233,7 +233,8 @@ export function dropUnset<T extends object>(options: T): T {
   for (let index = 0; index < GROUPS.length; index += 1) {
     const entry = GROUPS[index] as readonly [string, readonly string[]]
     const value = kept[entry[0]]
-    if (isPlainObject(value)) kept[entry[0]] = readSet(value, entry[1], POLICY_NAMES)
+    if (isPlainObject(value))
+      kept[entry[0]] = readSet(value, entry[1], entry[0] === 'websocket' ? POLICY_NAMES : [])
   }
   const websocket = kept.websocket
   if (isPlainObject(websocket)) {

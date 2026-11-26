@@ -109,9 +109,11 @@ export interface WebSocketOptions {
    * authenticator still decides who the connection is. Setting this implies {@link websocketOnly}, and a request that
    * carries a `sid`, which can only address a session that already exists, is refused before engine.io reads it.
    *
-   * It governs the WebSocket handshake only: the SSE endpoint's origin policy stays `app.enableCors`. It cannot be
-   * combined with a `websocket.cors.origin` other than `false`, nor with a gateway `cors.origin` other than `false`,
-   * and it needs `RealtimeIoAdapter`: without it the gateway refuses to boot.
+   * It governs the WebSocket handshake only: the SSE endpoint's origin policy stays `app.enableCors`, and the option
+   * is refused with `transport: 'sse'`. It cannot be combined with a `websocket.cors.origin` other than `false`, nor
+   * with a `cors.origin` other than `false` on the gateway that creates the server; the `cors` of a later gateway on
+   * it is not applied. It needs `RealtimeIoAdapter`: without it the gateway refuses to boot. Registrations in one
+   * application share one server, so each that sets a policy refuses the boot unless the server has that same one.
    */
   allowedOrigins?: readonly string[]
   /**
