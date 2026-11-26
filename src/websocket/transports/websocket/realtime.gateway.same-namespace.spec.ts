@@ -53,7 +53,8 @@ describe('two registrations bound to one namespace', () => {
     ['with and without the slash', 'a', '/a', '/a'],
     ['without and with the slash, swapped', '/a', 'a', '/a'],
   ])('refuses the boot for %s', async (_title, first, second, namespace) => {
-    await expect(boot([register('one', first), register('two', second)])).rejects.toThrow(
+    await expect(boot([register('one', first), register('two', second)])).rejects.toHaveProperty(
+      'message',
       refusal(namespace),
     )
   })
