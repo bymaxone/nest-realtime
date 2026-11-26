@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 // CRITICAL: NO static `import … 'socket.io-client'` in this file.
-// The dynamic import inside `connect` keeps the SSE-only bundle ≤ 4 KiB brotli.
+// The dynamic import inside `openSocket` keeps the SSE-only bundle ≤ 4 KiB brotli.
 // The bundle-integrity check validates this empirically via scripts/check-size.mjs.
 
 /** Authentication credentials forwarded to socket.io-client. */
@@ -148,8 +148,14 @@ async function openSocket(
   })
 }
 
+/** Close a socket whose attempt was superseded or torn down while its import was in flight. */
+function discardSocket(socket: SocketLike): void {
+  socket.removeAllListeners()
+  socket.disconnect()
+}
+
 /**
- * The socket handle of one hook instance, with the calls that tear it down and send through it.
+ * The socket handle of one hook instance, with the calls that hooks make on it.
  *
  * `disposeSocket` and `emit` keep one identity for the life of the component.
  */
@@ -157,15 +163,20 @@ function useSocketHandle(): {
   socketRef: MutableRefObject<unknown>
   disposeSocket: () => void
   emit: (event: string, data: unknown) => void
+  claimAttempt: () => () => boolean
 } {
   // Typed as `unknown` and narrowed via inline casts — avoids a static type import.
   const socketRef = useRef<unknown>(null)
+  // Counts the attempts to open a socket and the teardowns. An attempt whose import resolves after a newer attempt or a
+  // teardown no longer holds the current number, and the socket it opened is closed instead of kept.
+  const attempts = useRef(0)
 
   // Tear down the current socket (remove listeners + disconnect) and clear the ref.
   // Removing listeners first prevents the abandoned socket's `disconnect` handler from
   // mutating state after a new socket has taken its place.
   // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
   const disposeSocket = useCallback(() => {
+    attempts.current++
     const sock = socketRef.current as SocketLike | null
     if (sock) {
       sock.removeAllListeners()
@@ -182,7 +193,36 @@ function useSocketHandle(): {
   }, [])
 
   // Stryker restore ArrayDeclaration
-  return { socketRef, disposeSocket, emit }
+  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
+  const claimAttempt = useCallback((): (() => boolean) => {
+    const mine = ++attempts.current
+    return () => attempts.current === mine
+  }, [])
+
+  // Stryker restore ArrayDeclaration
+
+  return { socketRef, disposeSocket, emit, claimAttempt }
+}
+
+/**
+ * Run `connect` when it changes and tear the socket down on cleanup; returns the call that connects again on demand.
+ *
+ * Cleanup disconnects at most once: `disposeSocket` is idempotent and clears the ref, so a later cleanup never
+ * double-disconnects a live socket.
+ */
+function useConnectionLifecycle(
+  connect: () => Promise<void>,
+  enabled: boolean | undefined,
+  disposeSocket: () => void,
+): () => void {
+  useEffect(() => {
+    void connect()
+    return () => disposeSocket()
+  }, [connect, enabled, disposeSocket])
+
+  return useCallback(() => {
+    void connect()
+  }, [connect])
 }
 
 /**
@@ -205,7 +245,7 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
   const [events, setEvents] = useState<Array<WsEventEntry<TEvents>>>([])
   const [lastEvent, setLastEvent] = useState<WsEventEntry<TEvents> | undefined>(undefined)
   const [error, setError] = useState<Error | undefined>(undefined)
-  const { socketRef, disposeSocket, emit } = useSocketHandle()
+  const { socketRef, disposeSocket, emit, claimAttempt } = useSocketHandle()
 
   // Depend on the credential VALUES, never on the `auth` object identity. A consumer
   // that writes `auth={{ token }}` inline builds a new object on every render; keying
@@ -213,8 +253,7 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
   // the socket down and reopened it — a reconnect loop that never settles, hammering
   // the server with hundreds of handshakes a second. Primitives make it stable no
   // matter how the caller spells the option.
-  const authTicket = opts.auth?.ticket
-  const authToken = opts.auth?.token
+  const { ticket: authTicket, token: authToken } = opts.auth ?? {}
   const websocketOnly = opts.websocketOnly === true
   const { url, path, enabled } = opts
 
@@ -224,25 +263,28 @@ export function useRealtimeWs<TEvents extends Record<string, unknown>>(
     // the previous connection or leaves stale listeners mutating state.
     disposeSocket()
     setConnected(false)
+    const wanted = claimAttempt()
     try {
       const socket = await openSocket(url, path, authTicket, authToken, websocketOnly)
+      if (!wanted()) return discardSocket(socket)
       socketRef.current = socket
       bindSocket(socket, { setConnected, setError, setEvents, setLastEvent })
     } catch (e) {
-      setError(asError(e))
+      if (wanted()) setError(asError(e))
     }
-  }, [enabled, url, authTicket, authToken, path, websocketOnly, disposeSocket, socketRef])
+  }, [
+    enabled,
+    url,
+    authTicket,
+    authToken,
+    path,
+    websocketOnly,
+    disposeSocket,
+    socketRef,
+    claimAttempt,
+  ])
 
-  useEffect(() => {
-    void connect()
-    // Unmount cleanup disconnects exactly once — `disposeSocket` is idempotent and
-    // clears the ref, so a later cleanup never double-disconnects a live socket.
-    return () => disposeSocket()
-  }, [connect, enabled, disposeSocket])
-
-  const reconnect = useCallback(() => {
-    void connect()
-  }, [connect])
+  const reconnect = useConnectionLifecycle(connect, enabled, disposeSocket)
 
   return { connected, events, lastEvent, error, emit, reconnect }
 }

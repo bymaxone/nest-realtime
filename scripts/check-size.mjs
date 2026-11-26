@@ -106,6 +106,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     the WebSocket bundle, the refusal of a gateway whose registration asks for an origin policy the shared server was
 //     not built with, with the wording of how two origin lists differ. internal measures 27,580 B and websocket
 //     10,532 B, measured on 2026-11-26; each budget is 30 B above.
+//     react measures 2,993 B with the guard that closes a socket opened by a superseded attempt, measured on
+//     2026-11-26; its budget is 30 B above.
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
@@ -125,7 +127,7 @@ const BUDGETS = [
     brotli: 1_122,
   },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 520 },
-  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 2_863 },
+  { name: 'react (hooks + provider, SSE-only base)', path: 'dist/react/index.mjs', brotli: 3_023 },
 ]
 
 // The Socket.IO stack must not be reachable from anything an SSE application
