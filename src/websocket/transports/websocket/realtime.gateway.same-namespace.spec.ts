@@ -59,7 +59,7 @@ describe('two registrations bound to one namespace', () => {
     )
   })
 
-  // Scenario: two registrations on two namespaces. Expected: the application boots, as before.
+  // Scenario: two registrations on two namespaces. Expected: the application boots.
   it('boots with one registration on each of two namespaces', async () => {
     await expect(boot([register('one', '/a'), register('two', '/b')])).resolves.toBeUndefined()
   })
