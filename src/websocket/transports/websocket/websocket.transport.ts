@@ -454,6 +454,36 @@ export class WebSocketTransport implements ITransport {
   }
 
   /**
+   * Disconnect every WebSocket connection of a user, on every node.
+   *
+   * The sockets this node holds are closed directly, and the adapter closes the room
+   * `user:{userId}`, which reaches the sockets other nodes hold.
+   *
+   * @throws {Error} `REALTIME_TRANSPORT_UNAVAILABLE` when no server is attached or the
+   *   fan-out throws: the revocation did not leave this node.
+   */
+  async disconnectUser(userId: string, _reason?: string): Promise<void> {
+    assertBuiltinsIntact()
+    const server = this.server
+    // The message names no user: an id can identify a person.
+    const refusal = (error: unknown): Error =>
+      unavailableError(
+        REALTIME_ERROR_CODES.TRANSPORT_UNAVAILABLE,
+        WebSocketTransport.name,
+        `the revocation of a user's connections could not be sent`,
+        error,
+      )
+    if (!server) throw refusal(new Error('server not attached'))
+    try {
+      for (const { connectionId } of this.connections.byUser(userId, 'websocket'))
+        this.localSockets()?.get(connectionId)?.disconnect(true)
+      server.in(`${ROOM_PREFIXES.USER}:${userId}`).disconnectSockets(true)
+    } catch (error) {
+      throw refusal(error)
+    }
+  }
+
+  /**
    * Take a place for a connection before it is authenticated.
    *
    * @throws ConnectionLimitError when the instance already holds `maxConnections`.

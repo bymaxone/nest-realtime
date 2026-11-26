@@ -286,9 +286,10 @@ const EXEMPT: Record<string, readonly Site[]> = {
     ['await registering', 'the registration promise, shielded and absorbed where it was made'],
   ],
   'server/transports/sse/sse.transport.ts': [
-    ['Promise.all', 'shutdown: waits for every connection to be cut'],
+    ['Promise.all', 'shutdown and a user revocation: waits for every connection to be cut'],
     ['.catch(', 'logs a disconnect that failed; the connection is already being closed'],
-    ['await Promise.all', 'shutdown above'],
+    ['await Promise.all', 'the cut above'],
+    ['await closed', 'started gave it its own constructor'],
     ['await append', 'started gave it its own constructor'],
     ['await publish', 'started gave it its own constructor'],
     ['await runHook', 'a lifecycle hook whose failure is logged, never decided on'],

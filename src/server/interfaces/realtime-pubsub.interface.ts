@@ -6,7 +6,8 @@
 /** A single cross-instance fan-out message. */
 export interface RealtimePubSubMessage {
   /** Operation type. */
-  readonly op: 'emitToUser' | 'emitToTenant' | 'emitToRoom' | 'broadcast' | 'disconnect'
+  readonly op:
+    'emitToUser' | 'emitToTenant' | 'emitToRoom' | 'broadcast' | 'disconnect' | 'disconnectUser'
   /** Operation arguments — the concrete shape is narrowed per `op` at the call site. */
   readonly args: unknown
   /** Instance id that originated the message (used to avoid echo). */

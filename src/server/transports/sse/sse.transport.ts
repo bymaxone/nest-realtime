@@ -153,9 +153,15 @@ export class SseTransport implements ITransport {
     // hooks hang. Awaited so that the hooks that do settle finish within the shutdown window (RxJS
     // finalize cannot await an async callback). disconnectLocal removes the record first, so the
     // stream's own finalize cleanup is then a harmless no-op.
-    await Promise.all(
-      this.connections.allByTransport('sse').map((conn) => this.disconnectLocal(conn.connectionId)),
-    )
+    await shielded(this.cutAll(this.connections.allByTransport('sse')))
+  }
+
+  /** Cut every connection given at once, so that no hook delays the next cut. */
+  private async cutAll(
+    records: ReadonlyArray<{ readonly connectionId: string }>,
+    reason?: string,
+  ): Promise<void> {
+    await Promise.all(records.map((conn) => this.disconnectLocal(conn.connectionId, reason)))
   }
 
   /** The same teardown, for a caller that runs only this hook; it finds nothing left to close. */
@@ -459,19 +465,49 @@ export class SseTransport implements ITransport {
       await shielded(this.disconnectLocal(connectionId, reason))
       return
     }
+    await shielded(this.publishRevocation('disconnect', { connectionId, reason }, connectionId))
+  }
+
+  /**
+   * Disconnect every SSE connection of a user, here and on the other instances.
+   *
+   * The local streams are cut and the revocation is published without either waiting for the
+   * other, so a slow `onDisconnect` hook cannot keep a stream open elsewhere. Rejects with
+   * `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the publish.
+   */
+  async disconnectUser(userId: string, reason?: string): Promise<void> {
+    assertBuiltinsIntact()
+    const closed = started(() => this.disconnectUserLocal(userId, reason))
+    // The message names no user: an id can identify a person.
+    await shielded(
+      this.publishRevocation('disconnectUser', { userId, reason }, "a user's connections"),
+    )
+    await closed
+  }
+
+  /**
+   * Tear down the SSE streams this instance holds for a user (no publish).
+   *
+   * @internal Invoked by `disconnectUser` and by RealtimePubSubSubscriber for a remote revocation.
+   */
+  async disconnectUserLocal(userId: string, reason?: string): Promise<void> {
+    assertBuiltinsIntact()
+    await shielded(this.cutAll(this.connections.byUser(userId, 'sse'), reason))
+  }
+
+  /** Hand a revocation to the bus, rejecting when it did not take it. */
+  private async publishRevocation(
+    op: 'disconnect' | 'disconnectUser',
+    args: object,
+    subject: string,
+  ): Promise<void> {
     try {
-      await awaitable(
-        this.pubsub.publish({
-          op: 'disconnect',
-          args: { connectionId, reason },
-          origin: this.instanceId,
-        }),
-      )
+      await awaitable(this.pubsub.publish({ op, args, origin: this.instanceId }))
     } catch (error) {
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
         SseTransport.name,
-        `the revocation of ${connectionId} could not be published`,
+        `the revocation of ${subject} could not be published`,
         error,
       )
     }

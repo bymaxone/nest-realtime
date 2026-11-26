@@ -177,6 +177,18 @@ export class CompositeTransport implements ITransport {
   }
 
   /**
+   * Disconnect every connection of a user, on both transports. Rejects when either one could not.
+   */
+  async disconnectUser(userId: string, reason?: string): Promise<void> {
+    await awaitable(
+      this.settleBoth('disconnectUser', 'a user', [
+        () => this.sse.disconnectUser(userId, reason),
+        () => this.ws.disconnectUser(userId, reason),
+      ]),
+    )
+  }
+
+  /**
    * Run a per-connection operation on both transports and reject if either failed.
    *
    * One failure is rethrown as it is; both are reported together under

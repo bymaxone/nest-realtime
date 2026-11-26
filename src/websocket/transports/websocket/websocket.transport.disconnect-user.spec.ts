@@ -24,6 +24,8 @@ function build(attached = true) {
       ip: '127.0.0.1',
       userAgent: undefined,
       connectedAt: new Date(),
+      subject: null,
+      close$: null,
       originalAuth: { userId, tenantId: undefined, roles: undefined, metadata: undefined },
     })
   }

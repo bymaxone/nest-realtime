@@ -12,7 +12,7 @@ import type { ITransport } from '../interfaces/transport.interface'
 import { RealtimeMetricsTally } from '../observability/realtime-metrics-tally'
 import { assertBuiltinsIntact } from '../utils/builtin-baseline'
 import { callHostMethod } from '../utils/read-host-key'
-import { refuseReservedRoom, requireRoomName } from '../utils/reserved-room'
+import { refuseReservedRoom, requireRoomName, requireUserId } from '../utils/reserved-room'
 import { awaitable, shielded } from '../utils/within-deadline'
 
 /**
@@ -145,6 +145,34 @@ export class RealtimeService {
       assertBuiltinsIntact()
       await awaitable(this.transport.disconnect(connectionId, reason))
       // Counted here, once, because under `'both'` the composite asks each transport to close the id.
+      this.tally?.evicted('revoked')
+    })
+  }
+
+  /**
+   * Force-disconnect every connection of a user, on every instance (e.g. on logout).
+   *
+   * Resolves once the user's connections here are closed and the revocation has been handed to
+   * the bus, or to the Socket.IO adapter, for the other instances. A connection still being
+   * authenticated when the call is made is not covered, so revoke the credential first.
+   *
+   * @throws {Error} `REALTIME_AUTH_FAILED` when `userId` is not a non-empty string,
+   *   `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the revocation, or
+   *   `REALTIME_TRANSPORT_UNAVAILABLE` when the transport fails. A connection may still be
+   *   open: retry.
+   *
+   * @example
+   * ```ts
+   * await sessions.revokeAll(userId)
+   * await realtime.disconnectUser(userId, 'logout')
+   * ```
+   */
+  disconnectUser(userId: string, reason?: string): Promise<void> {
+    return this.pinned(async () => {
+      assertBuiltinsIntact()
+      requireUserId('disconnectUser', userId)
+      await awaitable(this.transport.disconnectUser(userId, reason))
+      // One for each call, as in `disconnect`: the connections other instances close are not known here.
       this.tally?.evicted('revoked')
     })
   }
