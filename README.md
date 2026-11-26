@@ -475,7 +475,7 @@ This section lists the bounds the library applies, what happens when each one is
 
 **Some connections keep `app.close()` pending.** Authenticated WebSocket and polling clients, a client whose authenticator never answers, and a polling request whose answer is never read do not. A connection that finished the upgrade and then answers nothing is waited for until its close times out, about 30 seconds with the installed `ws`. A TCP connection that sent nothing, or part of a request, is not one the Socket.IO engine knows, and close waits for the peer. This holds with or without `websocket.namespace`. `NestFactory.create(AppModule, { forceCloseConnections: true })` ends them at once on the application's port; it does not reach the server of a gateway on a port of its own.
 
-**A gateway in a module loaded with `LazyModuleLoader` after the application started is not wired.** Nest connects gateways at start only, so a client reaches the Socket.IO server but no handler of that gateway runs. This is Nest's behavior and the library does not change it.
+**A gateway in a module loaded with `LazyModuleLoader` after the application started is not wired.** Nest connects gateways at start only, so no handler of that gateway runs. This is Nest's behavior and the library does not change it. A registration loaded that way does not have its `websocket.allowedOrigins` or `websocket.websocketOnly` applied either, and the load does not refuse: set them on a registration the application starts with.
 
 ### When a dependency fails
 

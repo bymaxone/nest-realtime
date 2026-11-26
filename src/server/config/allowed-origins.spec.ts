@@ -161,6 +161,17 @@ describe('a policy option on a registration that serves SSE only', () => {
     ).toThrow(/REALTIME_INVALID_OPTIONS: options\.websocket\.allowedOrigins has no effect/)
   })
 
+  // Scenario: the key is there and holds `undefined`. Expected: the refusal for SSE, not the one about the list's kind.
+  it('refuses an own allowedOrigins of undefined for the transport', () => {
+    expect(() =>
+      validateOptions({
+        transport: 'sse',
+        authenticator,
+        websocket: { allowedOrigins: undefined },
+      } as never),
+    ).toThrow(/REALTIME_INVALID_OPTIONS: options\.websocket\.allowedOrigins has no effect/)
+  })
+
   it.each(['websocket', 'both'])('is accepted with transport %s', (transport) => {
     expect(() =>
       validateOptions({

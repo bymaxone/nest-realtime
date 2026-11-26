@@ -104,9 +104,9 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     and, 16 B more than the figure above, measured on 2026-11-25: `websocketOnly` on the hook, which opens the socket on the `websocket` transport alone; the budget below is the whole bundle, 2,863 B
 //     and, measured on 2026-11-25, the refusal of `allowedOrigins` under `transport: 'sse'` on the shared runtime,
 //     which measures 27,641 B, and the refusal of a gateway whose registration asks for an origin policy the shared
-//     server was not built with on the WebSocket bundle, which measures 10,431 B; each budget is 30 B above
-//     The refusal of `websocketOnly` under SSE and the wording of how two lists differ bring them to 27,677 B and
-//     10,499 B, measured on 2026-11-25; each budget is again 30 B above.
+//     server was not built with on the WebSocket bundle, which measures 10,431 B. The refusal of `websocketOnly`
+//     under SSE and the wording of how two lists differ bring them to 27,677 B and 10,499 B, measured on
+//     2026-11-25; each budget is 30 B above.
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
