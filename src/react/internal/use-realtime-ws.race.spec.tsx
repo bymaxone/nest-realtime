@@ -1,13 +1,8 @@
 /**
- * Tests for the WebSocket branch hook `useRealtimeWs`.
+ * Tests for attempts of `useRealtimeWs` that are superseded or torn down while the import of the client is in flight.
  * @layer react
  *
- * `socket.io-client` is mocked with a fake `io`, so tests trigger the socket's events themselves.
- * `io` is called with the url and `withCredentials: true`; `connected` is true after the `connect` event.
- * An `onAny` event sets `lastEvent`, and the events array is capped at 100.
- * `emit` reaches the socket, and unmount calls `socket.disconnect()`.
- * `reconnect()` disconnects the previous socket once. `io` is not called while `enabled` is false.
- * An empty `auth` object is omitted, and an equal inline `auth` object does not reopen the socket.
+ * `socket.io-client` is mocked with a fake `io`. The rows change the hook before the import resolves.
  */
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useRealtimeWs } from './use-realtime-ws'
@@ -42,6 +37,8 @@ function makeFreshSocket() {
 // --------------------------------------------------------------------------
 
 beforeEach(() => {
+  mockSocket.on.mockReset()
+  mockSocket.onAny.mockReset()
   mockSocket.emit.mockReset()
   mockSocket.removeAllListeners.mockReset()
   mockSocket.disconnect.mockReset()
@@ -63,13 +60,14 @@ describe('race: disabled while the import is in flight', () => {
     expect(mockSocket.disconnect).toHaveBeenCalled()
   })
 
-  it('R2 disconnects that socket at the latest when the host unmounts', async () => {
-    const { rerender, unmount } = render()
-    rerender({ enabled: false })
+  it('R2 closes, unbound, the socket opened after the host unmounted with the hook still enabled', async () => {
+    const { unmount } = render()
+    unmount()
     await waitFor(() => expect(mockIo).toHaveBeenCalledTimes(1))
     await act(async () => {})
-    unmount()
-    expect(mockSocket.disconnect).toHaveBeenCalled()
+    expect(mockSocket.disconnect).toHaveBeenCalledTimes(1)
+    expect(mockSocket.on).not.toHaveBeenCalled()
+    expect(mockSocket.onAny).not.toHaveBeenCalled()
   })
 
   it('R3 keeps the socket of the newest attempt and closes the one an older import opened', async () => {

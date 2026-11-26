@@ -193,10 +193,13 @@ function useSocketHandle(): {
   }, [])
 
   // Stryker restore ArrayDeclaration
+  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
   const claimAttempt = useCallback((): (() => boolean) => {
     const mine = ++attempts.current
     return () => attempts.current === mine
   }, [])
+
+  // Stryker restore ArrayDeclaration
 
   return { socketRef, disposeSocket, emit, claimAttempt }
 }
