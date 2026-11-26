@@ -47,6 +47,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 - **Config classes.** `allowedOrigins` and `websocketOnly` are read wherever the `websocket` object holds them: a key, a field or a getter on its class. `allowedOrigins` that is there and holds `null` or `undefined`, and `websocketOnly: null`, refuse the boot with `REALTIME_INVALID_OPTIONS`. A config class that declares `allowedOrigins` and fills it from a variable that is not set everywhere has to leave the key out instead, for example `...(origins && { allowedOrigins: origins })`.
 - **Host gateways without a namespace**, when `websocket.namespace` is not `/`: their clients connect to `/`, and the library's authenticator no longer covers them. Follow the migration under "Changed".
 - **A server with no `use` method** is now refused at boot with `REALTIME_TRANSPORT_UNAVAILABLE`.
+- **A host gateway that declares `/`**, on the application's port and default path, when `websocket.namespace` is not `/`: the library no longer authenticates it, and its `handleConnection` and `handleDisconnect` no longer run for the library's clients. Authenticate it yourself or give it the namespace of `websocket.namespace`.
+- **`websocket.namespace` without `RealtimeIoAdapter`** is now applied: move the library's clients to that namespace. A client of `/` reaches your gateways there without the library's authenticator.
+- **A `RealtimeGateway` provider replaced with a subclass** serves the library on `/`. Under `RealtimeIoAdapter`, `websocket.namespace` is then open with no gateway and without authentication.
+- **A subclass of `RealtimeIoAdapter`** that overrides or calls `create` gets `IoAdapter`'s.
 - **Several `forRoot` registrations in one application** share one Socket.IO server. A registration that sets a list or `websocketOnly` that the server was not built with refuses the boot; give every registration the same two, or call `forRoot` once.
 - **`allowedOrigins` or `websocketOnly: true` with `transport: 'sse'`** refuses the boot: remove it from that registration.
 
