@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.38] - 2026-11-26
+
 ### Added
 
 - **`websocket.allowedOrigins` and `websocket.websocketOnly` refuse a WebSocket handshake from an unlisted origin at the server.**
@@ -38,6 +40,15 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 - **`app.close()` closes the HTTP server of a gateway that listens on its own port, and no longer waits for an open client when `websocket.namespace` is set.** Nest held a namespace, which has no `close()`, so the root server stayed open. A client whose handshake is still pending no longer keeps it open either. Connections that still can, and the `forceCloseConnections` remedy, are in the README, "Known limits".
 - **A class that extends `RealtimeIoAdapter` compiles when the application has two copies of `socket.io`.** `@nestjs/platform-socket.io` pins `socket.io` exactly, so a plain install of a newer 4.x patch makes two copies, and the adapter's re-declared `create` failed with TS2416 under `skipLibCheck: false`. `pnpm check:runtime` compiles a consumer with one copy and with two.
 - **`@types/react` is an optional peer dependency of any version**, because the `./react` declarations import types from `react`. An application on the types of React 18 that uses only the server entry points installs as before.
+
+### Apply to a derived backend
+
+- **Origin policy (new, off by default).** Nothing changes until `websocket.allowedOrigins` or `websocket.websocketOnly` is set. To use it, set the option, keep `app.useWebSocketAdapter(new RealtimeIoAdapter(app))` in `main.ts`, remove any `cors.origin` and set `websocketOnly: true` in the clients.
+- **Config classes.** `allowedOrigins` and `websocketOnly` are read wherever the `websocket` object holds them: a key, a field or a getter on its class. `allowedOrigins` that is there and holds `null` or `undefined`, and `websocketOnly: null`, refuse the boot with `REALTIME_INVALID_OPTIONS`, unlike other options, for which nothing means unset. A config class that declares `allowedOrigins` and fills it from a variable that is not set everywhere has to leave the key out instead, for example `...(origins && { allowedOrigins: origins })`.
+- **Host gateways without a namespace**, when `websocket.namespace` is not `/`: their clients connect to `/`, and the library's authenticator no longer covers them. Follow the migration under "Changed".
+- **A server with no `use` method** is now refused at boot with `REALTIME_TRANSPORT_UNAVAILABLE`.
+- **Several `forRoot` registrations in one application** share one Socket.IO server. A registration that sets a list or `websocketOnly` that the server was not built with refuses the boot; give every registration the same two, or call `forRoot` once.
+- **`allowedOrigins` or `websocketOnly: true` with `transport: 'sse'`** refuses the boot: remove it from that registration.
 
 ## [1.2.37] - 2026-11-25
 
@@ -1530,7 +1541,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.37...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.38...HEAD
+[1.2.38]: https://github.com/bymaxone/nest-realtime/compare/v1.2.37...v1.2.38
 [1.2.37]: https://github.com/bymaxone/nest-realtime/compare/v1.2.36...v1.2.37
 [1.2.36]: https://github.com/bymaxone/nest-realtime/compare/v1.2.35...v1.2.36
 [1.2.35]: https://github.com/bymaxone/nest-realtime/compare/v1.2.34...v1.2.35
