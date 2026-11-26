@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.38] - 2026-11-26
+
 ### Added
 
 - **`websocket.allowedOrigins` and `websocket.websocketOnly` refuse a WebSocket handshake from an unlisted origin at the server.**
@@ -28,7 +30,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
   - To keep it behind the library's authenticator, give it the namespace of `websocket.namespace`.
 - **A host gateway that declares `/`, on the application's port and default path, is no longer authenticated by the library when `websocket.namespace` is another namespace.** A gateway that declares `/` was authenticated by the library's authenticator before; it no longer is. Authenticate it yourself or give it the namespace of `websocket.namespace`. Its `handleConnection` and `handleDisconnect` also ran for the library's clients and no longer do, so a disconnect it makes in `handleConnection` no longer applies to them.
 - **`websocket.namespace` is applied without `RealtimeIoAdapter` too.** With Nest's own adapter the library is served on the namespace and a client of `/` reaches your gateways there without the library's authenticator. The `REALTIME_ADAPTER_MISSING` line no longer lists `namespace` among the ignored options and says this. Without the adapter, a host gateway whose RegExp namespace matches `websocket.namespace` can take it, and its broadcasts then reach the library's clients; the library's authenticator still runs. The line says that isolation is not guaranteed.
-- **`RealtimeIoAdapter` no longer overrides `create`.** A subclass that overrides or calls it uses `IoAdapter`'s.
+- **`RealtimeIoAdapter` no longer overrides `create`.** A subclass that calls `super.create` gets `IoAdapter`'s.
 - **One module object instantiated twice with different `websocket.namespace` values, before the first gateway is connected, is refused** with `REALTIME_INVALID_OPTIONS`. This covers `forRoot` with replaced options and `forRootAsync`, whose factory may answer differently. Once the first application is connected or closed, another namespace is accepted. `createApplicationContext` connects no gateway, so a second context with another namespace is refused until the first is closed. A boot that fails while Nest is still creating providers can leave the namespace held.
 - **Replacing the `RealtimeGateway` provider with a subclass of the exported class serves the library on `/`.** Under `RealtimeIoAdapter`, `websocket.namespace` is then still open with no gateway on it, and a client connects there without authentication.
 
@@ -38,6 +40,21 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 - **`app.close()` closes the HTTP server of a gateway that listens on its own port, and no longer waits for an open client when `websocket.namespace` is set.** Nest held a namespace, which has no `close()`, so the root server stayed open. A client whose handshake is still pending no longer keeps it open either. Connections that still can, and the `forceCloseConnections` remedy, are in the README, "Known limits".
 - **A class that extends `RealtimeIoAdapter` compiles when the application has two copies of `socket.io`.** `@nestjs/platform-socket.io` pins `socket.io` exactly, so a plain install of a newer 4.x patch makes two copies, and the adapter's re-declared `create` failed with TS2416 under `skipLibCheck: false`. `pnpm check:runtime` compiles a consumer with one copy and with two.
 - **`@types/react` is an optional peer dependency of any version**, because the `./react` declarations import types from `react`. An application on the types of React 18 that uses only the server entry points installs as before.
+
+### Apply to a derived backend
+
+- **Origin policy (new, off by default).** Nothing changes until `websocket.allowedOrigins` or `websocket.websocketOnly` is set. To use it, set the option, keep `app.useWebSocketAdapter(new RealtimeIoAdapter(app))` in `main.ts`, remove any `cors.origin` and set `websocketOnly: true` in the clients. The policy covers the whole server, so the clients of your own gateways on it have to follow it too.
+- **Config classes.** `allowedOrigins` and `websocketOnly` are read wherever the `websocket` object holds them: a key, a field or a getter on its class. `allowedOrigins` that is there and holds `null` or `undefined`, and `websocketOnly: null`, refuse the boot with `REALTIME_INVALID_OPTIONS`. A config class that declares `allowedOrigins` and fills it from a variable that is not set everywhere has to leave the key out instead, for example `...(origins && { allowedOrigins: origins })`.
+- **Host gateways without a namespace**, when `websocket.namespace` is not `/`: their clients connect to `/`, and the library's authenticator no longer covers them. Follow the migration under "Changed".
+- **A server with no `use` method** is now refused at boot with `REALTIME_TRANSPORT_UNAVAILABLE`. The `REALTIME_ADAPTER_MISSING` log text changed too.
+- **A host gateway that declares `/`**, on the application's port and default path, when `websocket.namespace` is not `/`: the library no longer authenticates it, and its `handleConnection` and `handleDisconnect` no longer run for the library's clients. Authenticate it yourself or give it the namespace of `websocket.namespace`.
+- **`websocket.namespace` without `RealtimeIoAdapter`** is now applied: move the library's clients to that namespace. A client of `/` reaches your gateways there without the library's authenticator. A host gateway whose RegExp namespace matches `websocket.namespace` can take it: use `RealtimeIoAdapter`.
+- **A `RealtimeGateway` provider replaced with a subclass** serves the library on `/`. Under `RealtimeIoAdapter`, `websocket.namespace` is then open with no gateway and without authentication.
+- **A subclass of `RealtimeIoAdapter`** that calls `super.create` now gets `IoAdapter`'s.
+- **One module object instantiated twice with different `websocket.namespace` values** before the first gateway is connected refuses the boot with `REALTIME_INVALID_OPTIONS`. `createApplicationContext` connects no gateway: close the first context before creating one with another namespace.
+- **Room-less broadcasts** no longer cross between `/` and the library when `websocket.namespace` is not `/`: emit through the library's service to reach its clients.
+- **Several `forRoot` registrations in one application** share one Socket.IO server. A registration that sets a list or `websocketOnly` that the server was not built with refuses the boot; give every registration the same two, or call `forRoot` once.
+- **`allowedOrigins` or `websocketOnly: true` with `transport: 'sse'`** refuses the boot: remove it from that registration.
 
 ## [1.2.37] - 2026-11-25
 
@@ -1530,7 +1547,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.37...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.38...HEAD
+[1.2.38]: https://github.com/bymaxone/nest-realtime/compare/v1.2.37...v1.2.38
 [1.2.37]: https://github.com/bymaxone/nest-realtime/compare/v1.2.36...v1.2.37
 [1.2.36]: https://github.com/bymaxone/nest-realtime/compare/v1.2.35...v1.2.36
 [1.2.35]: https://github.com/bymaxone/nest-realtime/compare/v1.2.34...v1.2.35
