@@ -12,7 +12,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 - **Two registrations bound to one WebSocket namespace refuse the boot.**
   - Before: both booted, and one client was authenticated by both and held both identities.
   - After: the boot is refused with `REALTIME_INVALID_OPTIONS`, naming the namespace.
-  - **Apply to a derived backend:** an application that boots today with a duplicate namespace stops booting; merge the registrations.
+  - **Apply to a derived backend:** an application that boots today with a duplicate namespace stops booting; merge the registrations. With an adapter that shares one `Server` between applications, a later application binding the same namespace is also refused.
 - **`useRealtime` sets `error` when the WebSocket handshake fails.**
   - Before: the hook listened for `error` and not for `connect_error`, so a refused or unreachable handshake left `connected` at `false` and `error` unset.
   - After: `error` holds the `connect_error`, with its `data` as Socket.IO delivers it, and the next `connect` clears it.
