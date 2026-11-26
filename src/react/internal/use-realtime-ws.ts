@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 // CRITICAL: NO static `import … 'socket.io-client'` in this file.
-// The dynamic import inside `connect` keeps the SSE-only bundle ≤ 4 KiB brotli.
+// The dynamic import inside `openSocket` keeps the SSE-only bundle ≤ 4 KiB brotli.
 // The bundle-integrity check validates this empirically via scripts/check-size.mjs.
 
 /** Authentication credentials forwarded to socket.io-client. */
@@ -155,7 +155,7 @@ function discardSocket(socket: SocketLike): void {
 }
 
 /**
- * The socket handle of one hook instance, with the calls that tear it down and send through it.
+ * The socket handle of one hook instance, with the calls that hooks make on it.
  *
  * `disposeSocket` and `emit` keep one identity for the life of the component.
  */
@@ -204,7 +204,7 @@ function useSocketHandle(): {
 /**
  * Run `connect` when it changes and tear the socket down on cleanup; returns the call that connects again on demand.
  *
- * Cleanup disconnects exactly once: `disposeSocket` is idempotent and clears the ref, so a later cleanup never
+ * Cleanup disconnects at most once: `disposeSocket` is idempotent and clears the ref, so a later cleanup never
  * double-disconnects a live socket.
  */
 function useConnectionLifecycle(

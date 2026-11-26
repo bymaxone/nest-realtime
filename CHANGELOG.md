@@ -9,8 +9,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Fixed
 
-- **`useRealtimeWs` closes a socket that its import opens after the hook was disabled, reconnected or unmounted.**
-  - Before: the dynamic import of `socket.io-client` could resolve after `enabled` went to `false`, after `reconnect()` started a newer attempt, or after unmount. The socket it then opened was assigned and bound, and nothing closed it, so a disabled hook kept a live connection, and a failed stale attempt could set `error`.
+- **`useRealtimeWs` closes a socket that it opens after the hook was disabled, reconnected or unmounted.**
+  - Before: the dynamic import of `socket.io-client` could resolve after `enabled` went to `false`, after `reconnect()` started a newer attempt, or after unmount, and the socket then opened was assigned and bound, not closed, so a disabled hook kept a live connection, while a failed stale attempt could set `error`.
   - After: an attempt that is no longer the current one closes the socket it opened without binding it, and reports no error. The current attempt behaves as before.
   - **Apply to a derived backend:** nothing; this is client-side and changes no option or wire behaviour.
 
