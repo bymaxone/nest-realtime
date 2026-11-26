@@ -89,7 +89,9 @@ describe('RealtimeService.disconnectUser', () => {
 
     await expect(service.disconnectUser(userId as string)).rejects.toHaveProperty(
       'message',
-      expect.stringContaining('disconnectUser: `userId` must be a non-empty string'),
+      expect.stringContaining(
+        '[RealtimeService] REALTIME_AUTH_FAILED: disconnectUser: `userId` must be a non-empty string',
+      ),
     )
     expect(publish).not.toHaveBeenCalled()
     expect(evicted).not.toHaveBeenCalled()
