@@ -3,6 +3,7 @@
  * @layer application
  */
 import 'reflect-metadata'
+import { Logger } from '@nestjs/common'
 import { build, addConn } from '../../../test/fixtures/sse/transport-harness'
 import { RealtimePubSubSubscriber } from '../pubsub/realtime-pubsub-subscriber'
 import { RealtimeMetricsTally } from '../observability/realtime-metrics-tally'
@@ -125,5 +126,34 @@ describe('RealtimeService.disconnectUser', () => {
     expect(connections.byUser('u1')).toEqual([])
     expect(onDisconnect.mock.calls[0]?.[0]).toHaveProperty('reason', 'logout')
     expect(publish).not.toHaveBeenCalled()
+  })
+
+  // Scenario: the teardown a remote revocation asks for fails. Expected: one warning with its
+  // code and the error, and no user id on the line.
+  it('logs a remote user disconnect that failed, without the user id', async () => {
+    const { transport, publish, subscribe } = build()
+    jest.spyOn(transport, 'disconnectUserLocal').mockRejectedValue(new Error('close boom'))
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const bus = { publish, subscribe } as never
+      await new RealtimePubSubSubscriber(bus, 'inst-1', transport).onModuleInit()
+      const handle = subscribe.mock.calls[0][0] as (message: unknown) => void
+
+      handle({ op: 'disconnectUser', args: { userId: 'secret-user' }, origin: 'inst-2' })
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(warn.mock.calls).toEqual([
+        [
+          expect.objectContaining({
+            event: 'REALTIME_DISCONNECT_FAILED',
+            message: 'Remote disconnect of a user failed',
+            err: expect.objectContaining({ message: 'close boom' }),
+          }),
+        ],
+      ])
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('secret-user')
+    } finally {
+      warn.mockRestore()
+    }
   })
 })
