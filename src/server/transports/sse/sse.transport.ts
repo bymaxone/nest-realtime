@@ -488,7 +488,7 @@ export class SseTransport implements ITransport {
   /**
    * Tear down the SSE streams this instance holds for a user (no publish).
    *
-   * @internal Invoked by `disconnectUser` and by RealtimePubSubSubscriber for a remote revocation.
+   * @internal
    */
   async disconnectUserLocal(userId: string, reason?: string): Promise<void> {
     assertBuiltinsIntact()
@@ -516,7 +516,7 @@ export class SseTransport implements ITransport {
   /**
    * Deliver an event to a user's local SSE connections and update the replay buffer.
    *
-   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * @internal Application code
    * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
    */
   emitToUserLocal(userId: string, event: string, data: unknown, id: string): void {
@@ -530,7 +530,7 @@ export class SseTransport implements ITransport {
   /**
    * Deliver an event to all local SSE connections for a tenant.
    *
-   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * @internal Application code
    * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
    * @remarks Events sent via tenant/room/broadcast are NOT written to the per-user replay
    * buffer or offline queue — only emitToUser populates per-user replay/offline state.
@@ -545,7 +545,7 @@ export class SseTransport implements ITransport {
   /**
    * Deliver an event to all local SSE connections that joined the given room.
    *
-   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * @internal Application code
    * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
    * @remarks Events sent via tenant/room/broadcast are NOT written to the per-user replay
    * buffer or offline queue — only emitToUser populates per-user replay/offline state.
@@ -564,7 +564,7 @@ export class SseTransport implements ITransport {
   /**
    * Deliver an event to all local SSE connections.
    *
-   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * @internal Application code
    * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
    * @remarks Events sent via tenant/room/broadcast are NOT written to the per-user replay
    * buffer or offline queue — only emitToUser populates per-user replay/offline state.
@@ -579,7 +579,7 @@ export class SseTransport implements ITransport {
   /**
    * Tear down a locally-owned SSE stream, then clean up (no re-publish).
    *
-   * @internal Invoked only by RealtimePubSubSubscriber for remote re-emit; application code
+   * @internal Application code
    * must call the public emitToUser/emitToTenant/emitToRoom/broadcast/disconnect to preserve cross-instance delivery.
    */
   async disconnectLocal(connectionId: string, reason?: string): Promise<void> {
