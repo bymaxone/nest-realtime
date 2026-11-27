@@ -251,6 +251,7 @@ describe('RedisRealtimePubSub', () => {
           new Error("Stream isn't writeable and enableOfflineQueue options is false"),
         ),
       on: jest.fn(),
+      status: 'reconnecting',
     }
     const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
@@ -270,6 +271,8 @@ describe('RedisRealtimePubSub', () => {
       // The rejection is the connection failing, which was just reported: it is not also a refusal.
       await new Promise((resolve) => setImmediate(resolve))
       expect(warn).toHaveBeenCalledTimes(1)
+      // The connection is not ready, so its `ready` sends the next SUBSCRIBE: none is sent here.
+      expect(sub.subscribe).toHaveBeenCalledTimes(1)
     } finally {
       warn.mockRestore()
     }

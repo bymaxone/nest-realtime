@@ -223,6 +223,8 @@ describe('RedisRealtimePubSub: a server that does not answer', () => {
       warnings().some((line) => line.startsWith('the server refused the subscription')),
     )
     expect(pubsub.isSubscribed()).toBe(false)
+    // Long enough for a SUBSCRIBE sent again to reach the server.
+    await new Promise((resolve) => setTimeout(resolve, 100))
     expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(1)
   })
 })
