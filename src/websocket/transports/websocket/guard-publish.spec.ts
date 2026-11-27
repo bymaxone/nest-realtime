@@ -161,4 +161,27 @@ describe('RealtimeIoAdapter rejected publishes', () => {
       message: expect.stringContaining('1 (Error)'),
     })
   })
+
+  // Scenario: a rejection whose class cannot be read or is not text. Expected: reported as `Error`,
+  // since a throw in the handler would be the unhandled rejection it is there to prevent.
+  it.each([
+    [
+      'throws on read',
+      {
+        get constructor(): never {
+          throw new Error('trap')
+        },
+      },
+    ],
+    ['is not text', { constructor: { name: Symbol('name') } }],
+  ])('reports a rejection whose class %s', async (_label, failure) => {
+    const publisher = publisherFor(failing(failure))
+
+    await publisher.publish().catch(() => undefined)
+    await turn()
+
+    expect(warn.mock.calls[0]?.[0]).toMatchObject({
+      message: expect.stringContaining('1 (Error)'),
+    })
+  })
 })

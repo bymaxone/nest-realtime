@@ -112,7 +112,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     2026-11-26; its budget is 30 B above.
 //     internal measures 27,787 B and websocket 10,759 B with the per-user disconnect, measured on
 //     2026-11-26; each budget is 30 B above.
-//     internal measures 27,823 B, websocket 11,042 B and observability 1,165 B with the handling, the count and the
+//     internal measures 27,823 B, websocket 11,085 B and observability 1,165 B with the handling, the count and the
 //     windowed report of a rejected Redis adapter publish, measured on 2026-11-26; each budget is 30 B above.
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
@@ -126,7 +126,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
   { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 27_853 },
-  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 11_072 },
+  { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 11_115 },
   {
     name: 'observability (metrics contributor)',
     path: 'dist/observability/index.mjs',

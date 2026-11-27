@@ -140,7 +140,13 @@ const ADAPTER_COMMANDS = ['subscribe', 'psubscribe', 'unsubscribe', 'punsubscrib
 
 /** The class of what a Redis command rejected with: its message can carry the host or a credential. */
 function kindOf(error: unknown): string {
-  return (Object(error).constructor?.name as string | undefined) ?? 'Error'
+  try {
+    const name = Object(error).constructor?.name as unknown
+    return typeof name === 'string' ? name : 'Error'
+  } catch {
+    // The value refused the read; this runs in rejection handlers, where a throw is unhandled.
+    return 'Error'
+  }
 }
 
 const realtimeServers = new WeakSet<object>()
