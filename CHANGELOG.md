@@ -10,7 +10,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Fixed
 
 - **SSE: the boot no longer waits forever for a Redis that takes the connection and never answers.**
-  - Before: with `RedisRealtimePubSub`, an application against such a server did not finish booting. ioredis raises no error and no close there, and bounds the wait only when `commandTimeout` is set.
+  - Before: with `RedisRealtimePubSub` and ioredis's default timeouts, an application against such a server did not finish booting. ioredis raises no error and no close there.
   - After: `subscribe` waits 2,000 ms for the answer to the SUBSCRIBE, and the boot goes on with the instance not subscribed, as for an unreachable Redis. With the wait for the publishing client, the boot can take about 4 seconds longer than a healthy one.
   - **Apply to a derived backend:** keep `isPubSubReady()` in the readiness probe. A refusal that arrives after 2,000 ms is now logged and does not fail the boot.
 - **WebSocket: `onDisconnect` receives the reason a connection was closed with.**

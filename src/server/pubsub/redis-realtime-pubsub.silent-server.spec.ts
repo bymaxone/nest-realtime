@@ -6,6 +6,7 @@
 import type { Socket } from 'node:net'
 import { Logger } from '@nestjs/common'
 import Redis from 'ioredis'
+import type { RedisOptions } from 'ioredis'
 import { FakeRespServer, healthyRedis, pushed } from '../../../test/fixtures/fake-resp-server'
 import { lineWithError } from '../../../test/support/log-lines'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
@@ -38,8 +39,8 @@ async function holding(holds: (command: readonly string[]) => boolean) {
   return { fake, answer }
 }
 
-function bus(port: number): RedisRealtimePubSub {
-  const redis = new Redis({ host: '127.0.0.1', port, retryStrategy: () => 40 })
+function bus(port: number, extra: RedisOptions = {}): RedisRealtimePubSub {
+  const redis = new Redis({ host: '127.0.0.1', port, retryStrategy: () => 40, ...extra })
   redis.on('error', () => undefined)
   clients.push(redis)
   return new RedisRealtimePubSub({ client: redis })
@@ -154,6 +155,20 @@ describe('RedisRealtimePubSub: a server that does not answer', () => {
 
     expect(pubsub.isSubscribed()).toBe(true)
     fake.respond(healthyRedis)
+  })
+
+  // Scenario: the client's commandTimeout rejects the unanswered SUBSCRIBE, and the server then
+  // recovers. Expected, and a known limit: nothing sends it again, so the instance stays unready.
+  it('does not send again a SUBSCRIBE that commandTimeout rejected', async () => {
+    const { fake, answer } = await holding((command) => command[0] === 'SUBSCRIBE')
+    const pubsub = bus(fake.port, { commandTimeout: 300 })
+    unsubscribers.push(await pubsub.subscribe(jest.fn()))
+
+    answer()
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    expect(pubsub.isSubscribed()).toBe(false)
+    expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(1)
   })
 
   // Scenario: the late answer to SUBSCRIBE is a refusal. Expected: it is logged, and the instance

@@ -17,7 +17,7 @@ import { windowedReport } from '../utils/windowed-report'
 import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
 import { absorbed, firstOf, shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 
-/** The shortest time between two reports of dropped malformed payloads. */
+/** The window of the report of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
 
 /**
@@ -35,8 +35,8 @@ const CANNOT_PUBLISH: ReadonlySet<string> = new Set([
 
 /**
  * How long subscribing waits for the first SUBSCRIBE to be answered. A server that takes the
- * connection and says nothing raises neither an error nor a close, and ioredis waits for it with no
- * bound, so past this the boot goes on unsubscribed.
+ * connection and says nothing raises neither an error nor a close, and ioredis by default waits
+ * with no bound, so past this the boot goes on unsubscribed.
  */
 const SUBSCRIBE_WAIT_MS = 2_000
 
@@ -73,14 +73,14 @@ export interface RedisRealtimePubSubOptions {
  * `SUBSCRIBE` (a lazily-duplicated clone). The subscriber clone is created on
  * the first `subscribe()` call and quit on the last `unsubscribe()`.
  *
- * Messages are JSON-encoded. A malformed payload is dropped and counted, and the count is
- * reported at most once a minute.
+ * Messages are JSON-encoded. A malformed payload is dropped, counted and reported.
  *
  * Whether this instance hears the other instances is a state, `isSubscribed()`, that follows the
- * subscriber connection for the life of the process. `subscribe()` fails when the server answers
- * with an error reply (a wrong password, a missing permission), which no retry can fix; when the
- * server cannot be reached, or has not answered in {@link SUBSCRIBE_WAIT_MS}, it resolves and the
- * instance stays unsubscribed until a SUBSCRIBE is confirmed. Each change of that state is logged once, not once per retry.
+ * subscriber connection for the life of the process. `subscribe()` fails when the server answers in
+ * time with an error reply (a wrong password, a missing permission), which no retry can fix; when
+ * the server cannot be reached, or has not answered in {@link SUBSCRIBE_WAIT_MS}, it resolves and
+ * the instance stays unsubscribed until a SUBSCRIBE is confirmed. Each change of that state is
+ * logged once, not once per retry.
  *
  * @example
  * ```ts
@@ -107,7 +107,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   #subInit: Promise<Redis> | null = null
   private readonly handlers = new Set<(message: RealtimePubSubMessage) => void>()
   private readonly logger = new Logger(RedisRealtimePubSub.name)
-  /** Payloads dropped as unparsable, counted and reported once for each window. */
+  /** Payloads dropped as unparsable, counted between reports. */
   private readonly malformed = windowedReport(
     () => 0,
     (count) => {
@@ -217,7 +217,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * Lazily creates the single shared subscribe client on first call; returns an async
    * unsubscribe that quits the client when the last handler is removed. Concurrent
    * subscribe calls are idempotent — only one client is ever created. Malformed
-   * payloads are dropped, and reported at most once a minute with their count.
+   * payloads are dropped and reported with their count.
    *
    * If the subscriber client cannot be created (e.g. Redis temporarily unavailable),
    * the handler registration is rolled back and the cached init promise is cleared so
@@ -284,7 +284,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     })
     let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
-    // An error reply is the server's answer and reaches the caller as the SUBSCRIBE's rejection;
+    // An error reply in time is the server's answer and reaches the caller as the rejection;
     // anything else, an error or a close with no error at all, is the connection failing, which
     // ioredis retries on its own.
     let unanswered: NodeJS.Timeout | undefined
@@ -316,7 +316,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   }
 
   /**
-   * Settles the boot against the first SUBSCRIBE. An error reply is the server refusing, which
+   * Settles the boot against the first SUBSCRIBE. An error reply in time is the server refusing, which
    * fails the boot; any other failure, an error event or a close or a rejection that is not an
    * error reply, or no answer in time, lets the boot go on unready.
    */
