@@ -44,7 +44,7 @@ afterEach(() => {
 describe('messages the subscriber cannot act on', () => {
   /*
    * Given a message with no known op, repeated inside one window
-   * When the window passes and another arrives
+   * When the window passes with nothing else
    * Then one line was written for the first, and one more counts the rest
    */
   it('reports an unknown op once for each window, with the count', async () => {
@@ -55,16 +55,15 @@ describe('messages the subscriber cannot act on', () => {
     expect(warn).toHaveBeenCalledTimes(1)
 
     jest.advanceTimersByTime(WINDOW_MS)
-    deliver({ op: 'nope', origin: 'other' })
 
     expect(warn).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenLastCalledWith(
       expect.objectContaining({
         event: 'REALTIME_PUBSUB_DROPPED',
-        count: 3,
+        count: 2,
         last: 'unknown op',
         message:
-          'Pub/sub dropped 3 message(s) it could not act on since the last report (last: unknown op)',
+          'Pub/sub dropped 2 message(s) it could not act on since the last report (last: unknown op)',
       }),
     )
   })

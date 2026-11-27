@@ -146,25 +146,16 @@ describe('OfflineQueueDeliveryService: the read is bounded', () => {
       }),
     )
 
-    jest.advanceTimersByTime(8_999)
-    const later = read(service)
-    await jest.advanceTimersByTimeAsync(1_000)
-    await later.pending
-    expect(warn).toHaveBeenCalledTimes(1)
-    const next = read(service)
-    await jest.advanceTimersByTimeAsync(1_000)
-    await next.pending
+    // Nothing else happens: the four folded in are written when the window ends.
+    await jest.advanceTimersByTimeAsync(10_000)
 
     expect(warn).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenLastCalledWith(
       expect.objectContaining({
         event: 'REALTIME_RECONNECTS_GIVEN_UP',
-        count: 6,
-        message: expect.stringContaining('reconnects given up on since the last report: 6,'),
+        count: 4,
+        message: expect.stringContaining('reconnects given up on since the last report: 4,'),
       }),
-    )
-    expect(warn).toHaveBeenLastCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('did not answer in 1000 ms') }),
     )
   })
 

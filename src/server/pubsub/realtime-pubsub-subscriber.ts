@@ -91,6 +91,8 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
       }
       this.unsubscribe = null
     }
+    // After the unsubscribe, so that what it was still handed is counted in.
+    this.dropped.stop()
   }
 
   /**

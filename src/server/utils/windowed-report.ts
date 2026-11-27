@@ -6,30 +6,52 @@
 /** How long a report stays quiet after it was written. */
 export const REPORT_WINDOW_MS = 10_000
 
+/** Folds one occurrence in, and writes what is waiting when stopped. */
+export interface WindowedReport<T> {
+  /** Counts one occurrence in (`add` returns the accumulator with it) and reports when due. */
+  (add: (accumulated: T) => T): void
+  /** Writes what is waiting for its window, at once, and drops the timer. For shutdown. */
+  stop(): void
+}
+
 /**
  * Accumulates what happened since the last report and hands it to `emit` at most once for each
- * window. The first occurrence reports at once; later ones are folded into the next report, so the
- * line that finally appears carries everything that was left out.
+ * window. The first occurrence reports at once; later ones are folded into one report that is
+ * written when the window ends, whether or not anything else happens. The timer that does so does
+ * not keep the process alive.
  *
  * @typeParam T - What is accumulated: a number, or a record of counts.
  * @param fresh - The empty accumulator; called again after every report so none is shared.
  * @param emit - Writes one report from what was accumulated.
- * @returns The function that folds one occurrence in (`add` returns the accumulator with it counted
- *   in) and reports when the window has passed.
  */
 export function windowedReport<T>(
   fresh: () => T,
   emit: (accumulated: T) => void,
-): (add: (accumulated: T) => T) => void {
+): WindowedReport<T> {
   let startedAt = Number.NEGATIVE_INFINITY
   let pending = fresh()
-  return (add) => {
-    pending = add(pending)
-    const now = performance.now()
-    if (now - startedAt < REPORT_WINDOW_MS) return
-    startedAt = now
+  let timer: NodeJS.Timeout | undefined
+  const write = (): void => {
+    clearTimeout(timer)
+    timer = undefined
+    startedAt = performance.now()
     const accumulated = pending
     pending = fresh()
     emit(accumulated)
   }
+  const report = (add: (accumulated: T) => T): void => {
+    pending = add(pending)
+    const left = startedAt + REPORT_WINDOW_MS - performance.now()
+    if (left <= 0) {
+      write()
+    } else if (timer === undefined) {
+      timer = setTimeout(write, left)
+      timer.unref()
+    }
+  }
+  // A timer is armed exactly while something is waiting.
+  report.stop = (): void => {
+    if (timer !== undefined) write()
+  }
+  return report
 }

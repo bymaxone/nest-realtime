@@ -128,7 +128,7 @@ describe('ConnectionAdmission', () => {
     afterEach(() => jest.useRealTimers())
 
     // One line for each ten seconds: the refusals between two lines are counted in the second.
-    it('reports the refusals of a window in the first line after it, counting each one', () => {
+    it('reports the refusals of a window when it ends, counting each one', () => {
       const { admission } = build(1)
       admission.admit()
       for (let i = 0; i < 5; i += 1) expect(() => admission.admit()).toThrow(ConnectionLimitError)
@@ -146,12 +146,11 @@ describe('ConnectionAdmission', () => {
       expect(() => admission.admit()).toThrow(ConnectionLimitError)
       expect(warn).toHaveBeenCalledTimes(1)
       jest.advanceTimersByTime(1)
-      expect(() => admission.admit()).toThrow(ConnectionLimitError)
 
       expect(warn).toHaveBeenCalledTimes(2)
       expect(warn).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('refused since the last report: 6,'),
+          message: expect.stringContaining('refused since the last report: 5,'),
         }),
       )
     })
@@ -194,6 +193,8 @@ describe('ConnectionAdmission', () => {
 
       for (let i = 0; i < 3; i += 1) admission.admit()
       expect(() => admission.admit()).toThrow(ConnectionLimitError)
+      // The refusal report holds the one timer there is; shutdown drops it.
+      admission.onApplicationShutdown()
       expect(jest.getTimerCount()).toBe(0)
     })
 

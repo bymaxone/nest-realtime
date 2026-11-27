@@ -40,7 +40,11 @@ function build(attached = true) {
     },
   }
   const transport = Object.create(WebSocketTransport.prototype) as WebSocketTransport
-  Object.assign(transport, { connections, server: attached ? server : undefined })
+  Object.assign(transport, {
+    connections,
+    server: attached ? server : undefined,
+    revokedWith: new WeakMap(),
+  })
   return { transport, server, chain, mine, theirs }
 }
 
@@ -122,5 +126,49 @@ describe('CompositeTransport.disconnectUser', () => {
 
     expect(failure).toHaveProperty('message', expect.stringContaining('disconnectUser of a user'))
     expect(String((failure as Error).message)).not.toContain('secret-user')
+  })
+})
+
+describe('the reason of a WebSocket revocation', () => {
+  /** The same, with sockets that report their close the way the gateway does, and a hook to watch. */
+  function closing() {
+    const built = build()
+    const onDisconnect = jest.fn()
+    Object.assign(built.transport, {
+      hooks: { onDisconnect },
+      options: {},
+      rooms: { leaveAll: jest.fn() },
+      logger: { error: jest.fn() },
+    })
+    built.mine.disconnect.mockImplementation(() => {
+      void built.transport.unregisterSocket('s1', 'CLIENT_DISCONNECT')
+    })
+    const reasons = (): unknown[] => onDisconnect.mock.calls.map(([meta]) => meta.reason)
+    return { ...built, reasons }
+  }
+
+  // Scenario: a revocation with a reason closes a socket held here. Expected: onDisconnect gets
+  // that reason, as on SSE, and not the one the close itself reports.
+  it.each([
+    ['disconnectUser', 'u1'],
+    ['disconnect', 's1'],
+  ] as const)('reaches onDisconnect from %s', async (method, target) => {
+    const { transport, reasons } = closing()
+
+    await transport[method](target, 'logout')
+
+    expect(reasons()).toEqual(['logout'])
+  })
+
+  // Scenario: a revocation with no reason. Expected: the socket's own CLIENT_DISCONNECT stands.
+  it.each([
+    ['disconnectUser', 'u1'],
+    ['disconnect', 's1'],
+  ] as const)('stays CLIENT_DISCONNECT from %s without one', async (method, target) => {
+    const { transport, reasons } = closing()
+
+    await transport[method](target)
+
+    expect(reasons()).toEqual(['CLIENT_DISCONNECT'])
   })
 })
