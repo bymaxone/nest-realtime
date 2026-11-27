@@ -6,7 +6,6 @@
 import type { Socket } from 'node:net'
 import { Logger } from '@nestjs/common'
 import Redis from 'ioredis'
-import type { RedisOptions } from 'ioredis'
 import { FakeRespServer, healthyRedis, pushed } from '../../../test/fixtures/fake-resp-server'
 import { lineWithError } from '../../../test/support/log-lines'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
@@ -39,7 +38,7 @@ async function holding(holds: (command: readonly string[]) => boolean) {
   return { fake, answer }
 }
 
-function bus(port: number, extra: RedisOptions = {}): RedisRealtimePubSub {
+function bus(port: number, extra: { commandTimeout?: number } = {}): RedisRealtimePubSub {
   const redis = new Redis(port, '127.0.0.1', { retryStrategy: () => 40, ...extra })
   redis.on('error', () => undefined)
   clients.push(redis)
