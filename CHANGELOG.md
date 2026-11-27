@@ -14,7 +14,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
   - After: a socket of the instance that closes it reports that reason, as on SSE. One closed by another instance through the adapter still reports `CLIENT_DISCONNECT`.
   - **Apply to a derived backend:** an `onDisconnect` that treats `CLIENT_DISCONNECT` as every WebSocket close must accept the other reasons.
 - **A burst of refusals or failures is logged to its end.**
-  - Before: `REALTIME_CONNECTIONS_REFUSED`, `REALTIME_HANDSHAKES_REFUSED`, `REALTIME_RECONNECTS_GIVEN_UP`, `REALTIME_PUBSUB_DROPPED` and `REALTIME_ADAPTER_PUBLISH_FAILED` counted what followed a line only into the next one, so a burst that nothing followed was never written.
+  - Before: `REALTIME_CONNECTIONS_REFUSED`, `REALTIME_HANDSHAKES_REFUSED`, `REALTIME_RECONNECTS_GIVEN_UP`, `REALTIME_PUBSUB_DROPPED` (not the Redis bus's own line for a malformed payload) and `REALTIME_ADAPTER_PUBLISH_FAILED` counted what followed a line only into the next one, so a burst that nothing followed was never written.
   - After: it is written when the ten-second window ends, or when the application closes. The timer does not keep the process alive.
   - **Apply to a derived backend:** nothing to change; a line can now appear up to ten seconds after the last event it counts.
 - **WebSocket: an instance no longer stops hearing the others because of the options of `redisAdapter.pubClient`.**
