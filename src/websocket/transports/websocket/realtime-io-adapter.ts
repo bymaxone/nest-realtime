@@ -142,7 +142,7 @@ const ADAPTER_COMMANDS = ['subscribe', 'psubscribe', 'unsubscribe', 'punsubscrib
  * What the subscriber connection does not take from the host client. The adapter sends each
  * SUBSCRIBE once and never again, so one that is refused locally, dropped after a number of
  * retries or not restored after a reconnect leaves this instance deaf to the others: it queues
- * while there is no connection, waits for as long as that takes, and is restored on reconnect.
+ * while there is no connection, waits while the client keeps reconnecting, and is restored then.
  * `disconnectTimeout` is how long ioredis lets a socket close after `disconnect()`; a closed
  * connection has nothing left to clear it, so the default would hold the process for it.
  */

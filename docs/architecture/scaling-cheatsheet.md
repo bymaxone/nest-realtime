@@ -32,8 +32,8 @@ app.useWebSocketAdapter(new RealtimeIoAdapter(app))
 
 The `RealtimeIoAdapter` calls `pubClient.duplicate()` internally to create the
 subscriber client — you only need to pass one Redis connection. The subscriber takes
-that client's options, except that it always queues while disconnected, retries without
-a limit and resubscribes after a reconnect.
+that client's options, with overrides so that your queueing, per-request retry and
+resubscribe settings cannot lose its SUBSCRIBE.
 
 ## Sticky sessions — mandatory for polling fallback
 
