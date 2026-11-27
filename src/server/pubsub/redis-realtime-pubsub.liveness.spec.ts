@@ -184,6 +184,62 @@ describe('RedisRealtimePubSub: the PING watch of the subscriber', () => {
     expect(count('SUBSCRIBE')).toBe(3)
   })
 
+  // Scenario: the host's retryStrategy gives up, and the server freezes. Without the watch the
+  // connection would stay open and heal, so replacing it must not end the subscriber. Expected: one
+  // new connection, after the probe's interval, and subscribed again once the server answers.
+  it('replaces a silent connection although retryStrategy has given up', async () => {
+    const { fake, pubsub, count } = await subscribedBus({ retryStrategy: () => null })
+    const handshakes = count('HELLO')
+    const thaw = freeze(fake)
+
+    await probeOnce()
+    await jest.advanceTimersByTimeAsync(PROBE_DEADLINE_MS)
+    await until('the miss', () => !pubsub.isSubscribed())
+    await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS)
+    await until('the new connection', () => count('HELLO') === handshakes + 1)
+    thaw()
+
+    await until('the subscription', () => pubsub.isSubscribed())
+  })
+
+  // Scenario: the same host, and the server closes the connection that replaced the silent one,
+  // after it was ready. Expected: that close is not the probe's, so the host's strategy decides.
+  it('lets retryStrategy end the subscriber on a close that follows a recovery', async () => {
+    const { fake, pubsub, count } = await subscribedBus({ retryStrategy: () => null })
+    const thaw = freeze(fake)
+    await probeOnce()
+    await jest.advanceTimersByTimeAsync(PROBE_DEADLINE_MS)
+    await until('the miss', () => !pubsub.isSubscribed())
+    await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS)
+    thaw()
+    await until('the subscription', () => pubsub.isSubscribed())
+    const handshakes = count('HELLO')
+
+    for (const socket of fake.sockets) socket.destroy()
+    await until('the close', () => !pubsub.isSubscribed())
+    await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS * 2)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(count('HELLO')).toBe(handshakes)
+  })
+
+  // Scenario: the last handler unsubscribes while that reconnect is waiting. Expected: it is
+  // dropped, so nothing connects afterwards and no timer is left behind.
+  it('drops the pending reconnect on unsubscribe', async () => {
+    const { fake, pubsub, unsubscribe, count } = await subscribedBus({ retryStrategy: () => null })
+    const handshakes = count('HELLO')
+    freeze(fake)
+    await probeOnce()
+    await jest.advanceTimersByTimeAsync(PROBE_DEADLINE_MS)
+    await until('the miss', () => !pubsub.isSubscribed())
+
+    await unsubscribe()
+    await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS * 2)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(count('HELLO')).toBe(handshakes)
+  })
+
   // Scenario: the last handler unsubscribes with a PING unanswered. Expected: the interval is
   // cleared and no silence is reported afterwards.
   it('stops watching on unsubscribe', async () => {

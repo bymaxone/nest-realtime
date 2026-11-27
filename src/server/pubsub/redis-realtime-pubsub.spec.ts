@@ -237,6 +237,7 @@ describe('RedisRealtimePubSub', () => {
       disconnectTimeout: 1,
       enableAutoPipelining: false,
       enableOfflineQueue: true,
+      retryStrategy: expect.any(Function),
     })
   })
 

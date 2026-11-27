@@ -16,7 +16,7 @@ import { unavailableError } from '../utils/unavailable-error'
 import { windowedReport } from '../utils/windowed-report'
 import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
 import { absorbed, firstOf, shielded, unboxed, withinDeadline } from '../utils/within-deadline'
-import { PROBE_DEADLINE_MS, watchLiveness } from './watch-liveness'
+import { PROBE_DEADLINE_MS, PROBE_INTERVAL_MS, watchLiveness } from './watch-liveness'
 
 /** The window of the report of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
@@ -135,6 +135,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   readonly #retired = new WeakSet<Redis>()
   /** What stops the PING watch of each subscriber connection. */
   readonly #unwatch = new WeakMap<Redis, () => void>()
+  /** Connections the watch replaced and that have not been ready since. */
+  readonly #silenced = new WeakSet<Redis>()
   /** The reason of the refusal last logged, until the instance next subscribes, so a repeat adds no line. */
   #lastRefusal: string | undefined
 
@@ -284,12 +286,19 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // flight worth waiting for.
     // Auto-pipelining is off: a pipeline lost with its connection is never completed when the host
     // does not resend, and no later PING would be written.
-    return this.#pub.duplicate({
+    // The host's `retryStrategy` decides as before, except while the watch is replacing a silent
+    // connection: giving up there would end a subscriber that an open connection would have kept.
+    const sub: Redis = this.#pub.duplicate({
       autoResubscribe: false,
       disconnectTimeout: 1,
       enableAutoPipelining: false,
       enableOfflineQueue: true,
+      retryStrategy: (times: number) => {
+        const delay = this.#pub.options.retryStrategy?.(times)
+        return typeof delay === 'number' || !this.#silenced.has(sub) ? delay : PROBE_INTERVAL_MS
+      },
     })
+    return sub
   }
 
   private async createSubscriber(): Promise<Redis> {
@@ -323,6 +332,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // After a reconnect the subscription is gone with the old connection; subscribing again is
     // what restores it, and its answer is what confirms it.
     sub.on('ready', () => {
+      this.#silenced.delete(sub)
       if (attached) this.confirm(sub)
     })
     try {
@@ -394,6 +404,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   /** The connection is open and silent: nothing else would close it. `ready` subscribes the next. */
   private replace(sub: Redis): void {
     this.markDown(`no answer to PING within ${PROBE_DEADLINE_MS} ms`)
+    this.#silenced.add(sub)
     sub.disconnect(true)
   }
 
