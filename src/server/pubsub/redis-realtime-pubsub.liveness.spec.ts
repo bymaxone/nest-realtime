@@ -223,6 +223,53 @@ describe('RedisRealtimePubSub: the PING watch of the subscriber', () => {
     expect(count('HELLO')).toBe(handshakes)
   })
 
+  // Scenario: the same host, and the server closes the first connection, which the probe never
+  // replaced. Expected: the host's strategy ends the subscriber, with no connection afterwards.
+  it('lets retryStrategy end the first connection, which the probe never replaced', async () => {
+    const duplicates = jest.spyOn(Redis.prototype, 'duplicate')
+    const { fake, count } = await subscribedBus({ retryStrategy: () => null })
+    const sub = duplicates.mock.results[0]?.value as Redis
+    const handshakes = count('HELLO')
+
+    for (const socket of fake.sockets) socket.destroy()
+    await until('the end', () => sub.status === 'end')
+    await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS * 2)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(count('HELLO')).toBe(handshakes)
+  })
+
+  // Scenario: the same host, and the subscriber is closed during a replacement, while the 10 s
+  // retry is waiting or while the new connection is not ready. Expected: nothing connects again.
+  it.each([
+    ['disconnect', 'waiting'],
+    ['quit', 'waiting'],
+    ['disconnect', 'connecting'],
+    ['quit', 'connecting'],
+  ] as const)('stops on %s() during a replacement (%s)', async (close, phase) => {
+    const duplicates = jest.spyOn(Redis.prototype, 'duplicate')
+    const { fake, count } = await subscribedBus({ retryStrategy: () => null })
+    const sub = duplicates.mock.results[0]?.value as Redis
+    const before = count('HELLO')
+    freeze(fake)
+    await probeOnce()
+    await jest.advanceTimersByTimeAsync(PROBE_DEADLINE_MS)
+    await until('the miss', () => sub.status === 'reconnecting')
+    if (phase === 'connecting') {
+      await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS)
+      await until('the new connection', () => count('HELLO') === before + 1)
+    }
+    const handshakes = count('HELLO')
+
+    if (close === 'quit') await expect(sub.quit()).resolves.toBe('OK')
+    else sub.disconnect()
+    await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS * 3)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(count('HELLO')).toBe(handshakes)
+    if (phase === 'connecting') expect(sub.status).toBe('end')
+  })
+
   // Scenario: the last handler unsubscribes while that reconnect is waiting. Expected: it is
   // dropped, so nothing connects afterwards and no timer is left behind.
   it('drops the pending reconnect on unsubscribe', async () => {
