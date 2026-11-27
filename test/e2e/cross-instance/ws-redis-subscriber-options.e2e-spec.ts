@@ -1,6 +1,7 @@
 /**
- * @fileoverview WebSocket fan-out through `@socket.io/redis-adapter` against a real Redis, with host
- * clients whose options the subscriber duplicate must not take. Needs `REDIS_URL`.
+ * @fileoverview WebSocket fan-out through `@socket.io/redis-adapter` against a real Redis: delivery
+ * with host client options the subscriber duplicate must not take, after a late start and a
+ * reconnect, and a close while the SUBSCRIBE is still queued. Needs `REDIS_URL`.
  * @layer e2e
  */
 import 'reflect-metadata'

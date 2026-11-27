@@ -11,6 +11,7 @@
  */
 import Redis from 'ioredis'
 import { Logger } from '@nestjs/common'
+import { disconnectWithoutTimer } from '../../../test/support/disconnect-without-timer'
 import { FakeRespServer, healthyRedis, pushed } from '../../../test/fixtures/fake-resp-server'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 
@@ -81,11 +82,9 @@ async function closedPort(): Promise<number> {
 
 afterEach(async () => {
   for (const unsubscribe of retire.splice(0)) await unsubscribe()
-  // A client that has ended has nothing left to disconnect, and disconnecting it would arm the very
-  // timer these cases look for. A publisher that is waiting to reconnect cannot be given a short
-  // timeout, since the subscriber would inherit it and the cases would prove nothing; its timer
-  // outlives the file by two seconds and a Jest worker does not mind.
-  for (const redis of clients.splice(0)) if (redis.status !== 'end') redis.disconnect()
+  // A publisher is not given a short disconnect timeout: the subscriber duplicates its options, and
+  // these cases must fail if the adapter stops setting its own. Its timer is kept off the loop.
+  for (const redis of clients.splice(0)) if (redis.status !== 'end') disconnectWithoutTimer(redis)
   for (const fake of servers.splice(0)) await fake.stop()
 })
 

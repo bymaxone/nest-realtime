@@ -41,7 +41,7 @@ const config: Config = {
     '^@bymax-one/nest-realtime/react$': '<rootDir>/react/index.ts',
   },
   maxWorkers: '50%',
-  passWithNoTests: true,
+  passWithNoTests: process.env['CI'] !== 'true',
   clearMocks: true,
   restoreMocks: true,
   collectCoverage: false,
