@@ -16,6 +16,7 @@ import { unavailableError } from '../utils/unavailable-error'
 import { windowedReport } from '../utils/windowed-report'
 import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
 import { absorbed, firstOf, shielded, unboxed, withinDeadline } from '../utils/within-deadline'
+import { PROBE_DEADLINE_MS, watchLiveness } from './watch-liveness'
 
 /** The window of the report of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
@@ -82,6 +83,10 @@ export interface RedisRealtimePubSubOptions {
  * the instance stays unsubscribed until a SUBSCRIBE is confirmed. Each change of that state is
  * logged once, not once per retry.
  *
+ * A subscriber connection that stops answering without closing raises no event, so while it is ready
+ * it is sent a PING every 10 s; one left unanswered for 5 s marks the instance unsubscribed and
+ * replaces the connection.
+ *
  * @example
  * ```ts
  * const redis = new Redis(process.env.REDIS_URL)
@@ -128,6 +133,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   #outageLogged = false
   /** Connections closed on purpose, whose `close` is not an outage and says nothing of a successor. */
   readonly #retired = new WeakSet<Redis>()
+  /** What stops the PING watch of each subscriber connection. */
+  readonly #unwatch = new WeakMap<Redis, () => void>()
   /** The reason of the refusal last logged, until the instance next subscribes, so a repeat adds no line. */
   #lastRefusal: string | undefined
 
@@ -241,7 +248,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {
         this.#subInit = null
-        this.#retired.add(sub)
+        this.retire(sub)
         const connected = this.#subscribed
         this.#subscribed = false
         this.malformed.stop()
@@ -264,10 +271,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     return this.#subInit
   }
 
-  private async createSubscriber(): Promise<Redis> {
-    this.#outageLogged = false
-    this.#lastRefusal = undefined
-    this.connectLazyClient()
+  /** The publishing client's duplicate, with the options this connection depends on. */
+  private duplicateForSubscribing(): Redis {
     // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
     // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it. The offline queue
     // is forced on, whatever the host client chose: the first SUBSCRIBE is issued before the
@@ -277,11 +282,22 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // `close`, which a subscriber that has ended, or is waiting to reconnect, no longer has coming,
     // so the default would keep the process alive that long. A retired subscriber has nothing in
     // flight worth waiting for.
-    const sub = this.#pub.duplicate({
+    // The host's `commandTimeout` is dropped: this connection has its own bounds, and a rejected
+    // SUBSCRIBE would never be confirmed by its late answer, nor a PING get its whole deadline.
+    const inherited: object = { commandTimeout: undefined }
+    return this.#pub.duplicate({
+      ...inherited,
       autoResubscribe: false,
       disconnectTimeout: 1,
       enableOfflineQueue: true,
     })
+  }
+
+  private async createSubscriber(): Promise<Redis> {
+    this.#outageLogged = false
+    this.#lastRefusal = undefined
+    this.connectLazyClient()
+    const sub = this.duplicateForSubscribing()
     let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
     // An error reply in time is the server's answer and reaches the caller as the rejection;
@@ -301,6 +317,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         if (!this.#retired.has(sub)) this.markDown('connection closed')
       })
     })
+    this.#unwatch.set(
+      sub,
+      watchLiveness(sub, () => this.replace(sub)),
+    )
     // After a reconnect the subscription is gone with the old connection; subscribing again is
     // what restores it, and its answer is what confirms it.
     sub.on('ready', () => {
@@ -355,7 +375,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         )
       }
     } catch (err) {
-      this.#retired.add(sub)
+      this.retire(sub)
       sub.disconnect()
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
@@ -364,6 +384,18 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         err,
       )
     }
+  }
+
+  /** A subscriber closed on purpose: its `close` is no outage and it is not watched again. */
+  private retire(sub: Redis): void {
+    this.#retired.add(sub)
+    this.#unwatch.get(sub)?.()
+  }
+
+  /** The connection is open and silent: nothing else would close it. `ready` subscribes the next. */
+  private replace(sub: Redis): void {
+    this.markDown(`no answer to PING within ${PROBE_DEADLINE_MS} ms`)
+    sub.disconnect(true)
   }
 
   private confirm(sub: Redis): void {

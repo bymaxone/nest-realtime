@@ -55,7 +55,7 @@ export const EXPECTED = {
     'src/shared/index.ts',
     'src/react/index.ts',
   ],
-  shipped: 102,
+  shipped: 103,
 } as const
 
 /** Shipped files that are data, not TypeScript, copied by `tsup.config.ts`. This library ships none. */
