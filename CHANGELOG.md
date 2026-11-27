@@ -11,7 +11,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 - **SSE: an instance whose subscriber connection falls silent no longer reports itself ready for ever.**
   - Before: with `RedisRealtimePubSub`, a connection that stopped answering without closing raised no event, and `isPubSubReady()` stayed true while the instance heard nothing.
-  - After: the subscriber is sent a `PING` every 10 s; with no answer in 5 s the instance is not subscribed and the connection is replaced. Your client's `commandTimeout` is lifted from the subscriber while it is ready, and auto-pipelining is off on it. The client that publishes is not changed.
+  - After: the subscriber is sent a `PING` every 10 s; with no answer in 5 s the instance is not subscribed and the connection is replaced. With `commandTimeout` on your client, a first SUBSCRIBE it rejected was never confirmed; it is now sent once more. Your client's `commandTimeout` is lifted from the subscriber while it is ready, and auto-pipelining is off on it. The client that publishes is not changed.
   - **Apply to a derived backend:** a Redis frozen for more than a few seconds can now turn the readiness probe false and reconnect the subscriber. A user who may not run `PING` is not affected: an error reply counts as an answer.
 - **SSE: the boot no longer waits forever for a Redis that takes the connection and never answers.**
   - Before: with `RedisRealtimePubSub` and ioredis's default timeouts, an application against such a server did not finish booting. ioredis raises no error and no close there.

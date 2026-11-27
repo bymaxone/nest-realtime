@@ -370,7 +370,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         // connection's `ready` has already fired and so sends no SUBSCRIBE of its own.
         first.then(
           () => this.confirmedBy(sub),
-          (err: unknown) => this.refused(err),
+          (err: unknown) => this.unconfirmed(sub, err),
         )
       }
     } catch (err) {
@@ -402,6 +402,17 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       () => this.confirmedBy(sub),
       (err: unknown) => this.refused(err),
     )
+  }
+
+  /**
+   * The first SUBSCRIBE failed after the boot went on. On a ready connection only the host's
+   * `commandTimeout`, armed before `ready`, does that, and no `ready` is coming to send another.
+   */
+  private unconfirmed(sub: Redis, err: unknown): void {
+    this.refused(err)
+    if ((err as { name?: unknown } | null)?.name !== 'ReplyError' && sub.status === 'ready') {
+      this.confirm(sub)
+    }
   }
 
   /** A confirmation can arrive on a subscriber that was retired while the answer was on its way. */

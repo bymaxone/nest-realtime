@@ -142,19 +142,29 @@ describe('RedisRealtimePubSub: a server that does not answer', () => {
     expect(pubsub.isSubscribed()).toBe(false)
   })
 
-  // Scenario: the client's commandTimeout rejects the unanswered first SUBSCRIBE of a ready
-  // connection, and the server then recovers. Expected, and a known limit: nothing sends it again,
-  // so the instance stays unready.
-  it('does not send again a first SUBSCRIBE that commandTimeout rejected', async () => {
+  // Scenario: the host's client has a commandTimeout shorter than the server's silence. Expected:
+  // it does not apply to the subscriber, so the late answer to its one SUBSCRIBE still counts.
+  it("subscribes on a late answer whatever the host's commandTimeout", async () => {
     const { fake, answer } = await holding((command) => command[0] === 'SUBSCRIBE')
     const pubsub = bus(fake.port, { commandTimeout: 300 })
     unsubscribers.push(await pubsub.subscribe(jest.fn()))
+    expect(pubsub.isSubscribed()).toBe(false)
 
     answer()
-    await new Promise((resolve) => setTimeout(resolve, 500))
 
-    expect(pubsub.isSubscribed()).toBe(false)
-    expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(1)
+    await until('the subscription', () => pubsub.isSubscribed())
+  })
+
+  // Scenario: the client's commandTimeout rejects the first SUBSCRIBE of a ready connection while
+  // the server is still silent. Expected: it is sent once more, and not a third time.
+  it('sends a first SUBSCRIBE that commandTimeout rejected once more', async () => {
+    const { fake } = await holding((command) => command[0] === 'SUBSCRIBE')
+    const pubsub = bus(fake.port, { commandTimeout: 300 })
+    unsubscribers.push(await pubsub.subscribe(jest.fn()))
+
+    await new Promise((resolve) => setTimeout(resolve, 800))
+
+    expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(2)
   })
 
   // Scenario: after a reconnect the SUBSCRIBE is answered later than the host's commandTimeout.
@@ -213,5 +223,6 @@ describe('RedisRealtimePubSub: a server that does not answer', () => {
       warnings().some((line) => line.startsWith('the server refused the subscription')),
     )
     expect(pubsub.isSubscribed()).toBe(false)
+    expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(1)
   })
 })
