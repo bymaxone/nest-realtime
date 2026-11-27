@@ -10,7 +10,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Added
 
 - **`RealtimeService.disconnectUser(userId, reason?)` closes every connection of a user, on every instance.**
-  - SSE publishes a new bus message, `op: 'disconnectUser'`; WebSocket closes the room `user:{userId}` through the adapter. It rejects with `REALTIME_PUBSUB_UNAVAILABLE` or `REALTIME_TRANSPORT_UNAVAILABLE` when the revocation could not be sent.
+  - SSE publishes a new bus message, `op: 'disconnectUser'`; WebSocket closes the room `user:{userId}` through the adapter. It rejects with `REALTIME_PUBSUB_UNAVAILABLE` or `REALTIME_TRANSPORT_UNAVAILABLE` when the revocation could not be sent. `@socket.io/redis-adapter` does not wait for its own publish, so on WebSocket a publish that fails there is not reported, by `disconnect` or `disconnectUser`.
   - A connection still being authenticated is not covered: revoke the credential before the call.
   - **Apply to a derived backend:** a logout can call it. An instance on an earlier version drops the new message with a warning, so finish a rolling deploy before relying on it. A custom `IRealtimePubSub` that validates or switches on `op` must carry `'disconnectUser'`. `ITransport` and the `op` union of the bus message gain a member, so an implementation of `ITransport` has to add `disconnectUser`.
 

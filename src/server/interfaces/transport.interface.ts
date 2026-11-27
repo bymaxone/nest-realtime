@@ -22,6 +22,7 @@
  *   async joinRoom() {}
  *   async leaveRoom() {}
  *   async disconnect() {}
+ *   async disconnectUser() {}
  * }
  * ```
  */
