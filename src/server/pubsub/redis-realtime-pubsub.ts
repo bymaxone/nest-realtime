@@ -56,6 +56,15 @@ const PUBLISHER_WAIT_MS = 2_000
  */
 const PUBLISH_WAIT_MS = 2_000
 
+/**
+ * The retry delay of a replacement whose host's `sentinelRetryStrategy` gives up: ioredis's own cap
+ * for that strategy. ioredis does not clear that wait on `disconnect()`, so it stays short.
+ */
+const SENTINEL_RETRY_MS = 1_000
+
+/** The subscriber's `sentinelCommandTimeout` when the host sets none: ioredis has no default. */
+const SENTINEL_COMMAND_TIMEOUT_MS = 5_000
+
 /** The events that name a status other than connecting: each ends a first connection attempt. */
 const CONNECTION_OVER = ['ready', 'close', 'reconnecting', 'end'] as const
 
@@ -286,22 +295,36 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // flight worth waiting for.
     // Auto-pipelining is off: a pipeline lost with its connection is never completed when the host
     // does not resend, and no later PING would be written.
-    // The host's `retryStrategy` decides as before, except while the watch is replacing a silent
+    // The host's retry strategies decide as before, except while the watch is replacing a silent
     // connection: giving up there would end a subscriber that an open connection would have kept.
+    // The two Sentinel options are inert without Sentinel. With no command timeout, a Sentinel that
+    // accepts and never answers holds a replacement in `connecting`, even after `disconnect()`.
     const sub: Redis = this.#pub.duplicate({
       autoResubscribe: false,
       disconnectTimeout: 1,
       enableAutoPipelining: false,
       enableOfflineQueue: true,
-      retryStrategy: (times: number) => {
-        const host = this.#pub.options
-        // ioredis takes anything else, which an untyped host can pass, as "do not reconnect".
-        const delay =
-          typeof host.retryStrategy === 'function' ? host.retryStrategy(times) : undefined
-        return typeof delay === 'number' || !this.#silenced.has(sub) ? delay : PROBE_INTERVAL_MS
-      },
+      sentinelCommandTimeout:
+        this.#pub.options?.sentinelCommandTimeout ?? SENTINEL_COMMAND_TIMEOUT_MS,
+      retryStrategy: (times: number) =>
+        this.retryDelay('retryStrategy', times, sub, PROBE_INTERVAL_MS),
+      sentinelRetryStrategy: (times: number) =>
+        this.retryDelay('sentinelRetryStrategy', times, sub, SENTINEL_RETRY_MS),
     })
     return sub
+  }
+
+  /** The delay the host's strategy gives, or `held` where it gives none to a replacement of `sub`. */
+  private retryDelay(
+    name: 'retryStrategy' | 'sentinelRetryStrategy',
+    times: number,
+    sub: Redis,
+    held: number,
+  ): number | void | null {
+    const host = this.#pub.options
+    // ioredis takes anything else, which an untyped host can pass, as "do not retry".
+    const delay = typeof host[name] === 'function' ? host[name](times) : undefined
+    return typeof delay === 'number' || !this.#silenced.has(sub) ? delay : held
   }
 
   private async createSubscriber(): Promise<Redis> {
