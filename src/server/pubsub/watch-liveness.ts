@@ -19,16 +19,35 @@ function ask(client: Redis, answered: () => void, gaveUp: () => void): void {
 }
 
 /**
+ * The host's `commandTimeout` would cut a PING's deadline short, so it is lifted while the client is
+ * ready. The handshake keeps it: there it is what recycles a connection that never answers.
+ */
+function commandTimeoutOf(client: Redis): { lift: () => void; restore: () => void } {
+  let bound: number | undefined
+  return {
+    lift: () => {
+      bound ??= client.options.commandTimeout
+      delete client.options.commandTimeout
+    },
+    restore: () => {
+      if (bound !== undefined) client.options.commandTimeout = bound
+    },
+  }
+}
+
+/**
  * From each `ready` to the next `close`, sends a PING every {@link PROBE_INTERVAL_MS}, one at a
  * time, and calls `silent` when one gets no answer in {@link PROBE_DEADLINE_MS} or the client gives
- * up on it. An error reply is an answer. Neither timer keeps the process alive. Returns the function
- * that stops the watch for good.
+ * up on it. An error reply is an answer. Neither timer keeps the process alive. The client's
+ * `commandTimeout` is lifted for the same span, so register this before any other `ready` listener
+ * that sends a command. Returns the function that stops the watch for good.
  */
 export function watchLiveness(client: Redis, silent: () => void): () => void {
   let pending: object | undefined
   let deadline: NodeJS.Timeout | undefined
   let interval: NodeJS.Timeout | undefined
   let stopped = false
+  const timeout = commandTimeoutOf(client)
   const forget = (): void => {
     pending = undefined
     clearTimeout(deadline)
@@ -60,10 +79,14 @@ export function watchLiveness(client: Redis, silent: () => void): () => void {
   client.on('ready', () => {
     if (stopped) return
     rest()
+    timeout.lift()
     interval = setInterval(probe, PROBE_INTERVAL_MS)
     interval.unref()
   })
-  client.on('close', rest)
+  client.on('close', () => {
+    rest()
+    timeout.restore()
+  })
   return () => {
     stopped = true
     rest()

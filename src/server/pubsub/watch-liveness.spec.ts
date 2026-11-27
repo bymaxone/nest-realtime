@@ -10,9 +10,9 @@ import type { Redis } from 'ioredis'
 import { PROBE_DEADLINE_MS, PROBE_INTERVAL_MS, watchLiveness } from './watch-liveness'
 
 /** A client double: `ping` returns what the test gives it, and its events are raised by hand. */
-function client(ping: () => Promise<unknown>) {
+function client(ping: () => Promise<unknown>, options: { commandTimeout?: number } = {}) {
   const events = new EventEmitter()
-  const double = Object.assign(events, { ping: jest.fn(ping) })
+  const double = Object.assign(events, { ping: jest.fn(ping), options })
   return {
     double,
     redis: double as unknown as Redis,
@@ -71,7 +71,7 @@ describe('watchLiveness', () => {
     expect(double.ping).toHaveBeenCalledTimes(2)
   })
 
-  // Scenario: the client gives up on the PING itself (commandTimeout). Expected: silence, without
+  // Scenario: the client gives up on the PING itself (its retries ran out). Expected: silence, without
   // waiting for the deadline.
   it("counts the client's own rejection as silence", async () => {
     const { silent } = watching(() => Promise.reject(errorNamed('Error')))
@@ -79,6 +79,31 @@ describe('watchLiveness', () => {
     await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS + 1)
 
     expect(silent).toHaveBeenCalledTimes(1)
+  })
+
+  // Scenario: the client has a commandTimeout. Expected: lifted while ready, even over a repeated
+  // ready, and back for the next handshake.
+  it("lifts the client's commandTimeout from ready to close", () => {
+    const { double, redis, ready, close } = client(never, { commandTimeout: 300 })
+    watchLiveness(redis, jest.fn())
+    expect(double.options.commandTimeout).toBe(300)
+
+    ready()
+    ready()
+    expect(double.options).not.toHaveProperty('commandTimeout')
+    close()
+
+    expect(double.options.commandTimeout).toBe(300)
+  })
+
+  // Scenario: the client has no commandTimeout. Expected: none appears.
+  it('adds no commandTimeout to a client without one', () => {
+    const { double, ready, close } = watching(never)
+
+    close()
+    ready()
+
+    expect(double.options).not.toHaveProperty('commandTimeout')
   })
 
   // Scenario: the client has not become ready. Expected: no timer at all.

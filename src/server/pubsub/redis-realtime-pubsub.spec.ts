@@ -226,16 +226,16 @@ describe('RedisRealtimePubSub', () => {
 
   // The subscriber is the adapter's own connection: it keeps its offline queue so the first
   // SUBSCRIBE can wait for the connection whatever the host client was built with, it leaves the
-  // re-subscribing to the adapter, and it takes no command timeout from the host.
-  it('duplicates the host client with the offline queue on, and ioredis resubscribe and command timeout off', async () => {
+  // re-subscribing to the adapter, without auto-pipelining.
+  it('duplicates the host client with the offline queue on, and ioredis resubscribe and pipelining off', async () => {
     const sub = { subscribe: jest.fn().mockResolvedValue(undefined), on: jest.fn() }
     const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
     const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
     await pubsub.subscribe(jest.fn())
     expect(pub.duplicate).toHaveBeenCalledWith({
-      commandTimeout: undefined,
       autoResubscribe: false,
       disconnectTimeout: 1,
+      enableAutoPipelining: false,
       enableOfflineQueue: true,
     })
   })

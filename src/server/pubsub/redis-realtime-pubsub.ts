@@ -282,13 +282,12 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // `close`, which a subscriber that has ended, or is waiting to reconnect, no longer has coming,
     // so the default would keep the process alive that long. A retired subscriber has nothing in
     // flight worth waiting for.
-    // The host's `commandTimeout` is dropped: this connection has its own bounds, and a rejected
-    // SUBSCRIBE would never be confirmed by its late answer, nor a PING get its whole deadline.
-    const inherited: object = { commandTimeout: undefined }
+    // Auto-pipelining is off: a pipeline lost with its connection is never completed when the host
+    // does not resend, and no later PING would be written.
     return this.#pub.duplicate({
-      ...inherited,
       autoResubscribe: false,
       disconnectTimeout: 1,
+      enableAutoPipelining: false,
       enableOfflineQueue: true,
     })
   }

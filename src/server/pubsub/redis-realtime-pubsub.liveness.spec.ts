@@ -6,6 +6,7 @@
 import type { Socket } from 'node:net'
 import { Logger } from '@nestjs/common'
 import Redis from 'ioredis'
+import type { RedisOptions } from 'ioredis'
 import { FakeRespServer, healthyRedis } from '../../../test/fixtures/fake-resp-server'
 import type { RespHandler } from '../../../test/fixtures/fake-resp-server'
 import { lineWithError } from '../../../test/support/log-lines'
@@ -46,7 +47,7 @@ async function until(what: string, condition: () => boolean): Promise<void> {
 }
 
 /** A subscribed bus on a fake server, and what the server has seen. */
-async function subscribedBus(options: { autoResubscribe?: boolean; commandTimeout?: number } = {}) {
+async function subscribedBus(options: Partial<RedisOptions> = {}) {
   const fake = new FakeRespServer()
   await fake.start()
   servers.push(fake)
@@ -125,6 +126,29 @@ describe('RedisRealtimePubSub: the PING watch of the subscriber', () => {
     expect(count('HELLO')).toBe(handshakes)
     expect(pubsub.isSubscribed()).toBe(true)
     expect(warnings()).toEqual([])
+  })
+
+  // Scenario: the host auto-pipelines and does not resend, and a connection closes with a PING in
+  // flight. Expected: the next connection's PING is written, so that connection is kept.
+  it('keeps the next connection after one closed with a PING in flight, under auto-pipelining', async () => {
+    const { fake, pubsub, count } = await subscribedBus({
+      enableAutoPipelining: true,
+      autoResendUnfulfilledCommands: false,
+    })
+    const thaw = freeze(fake)
+    await probeOnce()
+    await jest.advanceTimersByTimeAsync(PROBE_DEADLINE_MS + 100)
+    thaw()
+    await until('the new subscription', () => pubsub.isSubscribed())
+    const handshakes = count('HELLO')
+    const pings = count('PING')
+
+    await probeOnce()
+    await jest.advanceTimersByTimeAsync(PROBE_DEADLINE_MS + 100)
+
+    expect(count('PING')).toBeGreaterThan(pings)
+    expect(count('HELLO')).toBe(handshakes)
+    expect(pubsub.isSubscribed()).toBe(true)
   })
 
   // Scenario: the server freezes for far longer than the interval and the deadline, then answers
