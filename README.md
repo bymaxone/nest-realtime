@@ -473,6 +473,10 @@ pubClient.publish = ((...args: Parameters<typeof send>) => {
 }) as typeof pubClient.publish
 ```
 
+**A SUBSCRIBE the Redis server refuses only warns.** When the adapter's subscriber is refused, such as by an ACL without the permission, the application still boots, logs `REALTIME_ADAPTER_COMMAND_FAILED`, and that instance does not receive what the others emit over WebSocket. Watch for that event, and grant the Redis user the subscribe commands.
+
+**An ioredis `Cluster` as `redisAdapter.pubClient` does not get the subscriber's overrides.** `Cluster.duplicate()` takes startup nodes as its first argument, not options, so the subscriber runs with the cluster client's own options, and the library's guarantees about a subscriber that queues, retries and resubscribes do not apply to it.
+
 **A host gateway that declares the same namespace as `websocket.namespace` shares it with the library's gateway.** It runs its handlers for the library's connections, and what the library does to its own connections, such as revoking, capping or denying them, is not something that gateway can opt out of. Give a host gateway a namespace of its own unless it is meant to receive from those clients.
 
 **A host gateway on another namespace is outside the library.** A gateway that declares no namespace, or `/`, is served on `/`. When `websocket.namespace` is set to something other than `/`, the library's authenticator is not called for it and the library's rooms are not reachable from it; the adapter logs `REALTIME_GATEWAY_OUTSIDE_NAMESPACE` once at start for one on its server. When `websocket.namespace` is unset, empty or `/`, such a gateway shares `/` with the library's gateway.
