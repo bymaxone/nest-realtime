@@ -83,9 +83,9 @@ export interface RedisRealtimePubSubOptions {
  * the instance stays unsubscribed until a SUBSCRIBE is confirmed. Each change of that state is
  * logged once, not once per retry.
  *
- * A subscriber connection that stops answering without closing raises no event, so while it is ready
- * it is sent a PING every 10 s; one left unanswered for 5 s marks the instance unsubscribed and
- * replaces the connection.
+ * A subscriber connection that stops answering without closing raises no event, so
+ * {@link watchLiveness} PINGs it while it is ready; an unanswered PING marks the instance
+ * unsubscribed and replaces the connection.
  *
  * @example
  * ```ts

@@ -58,7 +58,7 @@ async function subscribedBus(options: { autoResubscribe?: boolean; commandTimeou
   const unsubscribe = await pubsub.subscribe(jest.fn())
   unsubscribers.push(unsubscribe)
   const count = (name: string): number => fake.seen.filter(([word]) => word === name).length
-  // The first SUBSCRIBE is sent while the connection is not ready yet, and `ready` sends another.
+  // The fake clock holds back nextTick, so `ready` arrives after the first confirmation and sends another.
   await until('the subscription', () => count('SUBSCRIBE') === 2 && pubsub.isSubscribed())
   return { fake, pubsub, unsubscribe, count }
 }
