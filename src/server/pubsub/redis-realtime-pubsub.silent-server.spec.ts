@@ -142,32 +142,72 @@ describe('RedisRealtimePubSub: a server that does not answer', () => {
     expect(pubsub.isSubscribed()).toBe(false)
   })
 
-  // Scenario: a subscribed connection stops answering and stays open. Expected, and a known limit:
-  // nothing notices, so the instance still reports itself subscribed.
-  it('does not notice a subscribed connection that falls silent', async () => {
-    const { fake } = await holding(() => false)
-    const pubsub = bus(fake.port)
-    unsubscribers.push(await pubsub.subscribe(jest.fn()))
-
-    fake.respond(() => null)
-    await new Promise((resolve) => setTimeout(resolve, 2_500))
-
-    expect(pubsub.isSubscribed()).toBe(true)
-    fake.respond(healthyRedis)
-  })
-
-  // Scenario: the client's commandTimeout rejects the unanswered SUBSCRIBE, and the server then
-  // recovers. Expected, and a known limit: nothing sends it again, so the instance stays unready.
-  it('does not send again a SUBSCRIBE that commandTimeout rejected', async () => {
+  // Scenario: the host's client has a commandTimeout shorter than the server's silence. Expected:
+  // the SUBSCRIBE it rejects is sent again, so the server's late answer still counts.
+  it("subscribes on a late answer whatever the host's commandTimeout", async () => {
     const { fake, answer } = await holding((command) => command[0] === 'SUBSCRIBE')
     const pubsub = bus(fake.port, { commandTimeout: 300 })
     unsubscribers.push(await pubsub.subscribe(jest.fn()))
+    expect(pubsub.isSubscribed()).toBe(false)
 
     answer()
+
+    await until('the subscription', () => pubsub.isSubscribed())
+  })
+
+  // Scenario: the client's commandTimeout rejects the first SUBSCRIBE of a ready connection while
+  // the server is still silent. Expected: it is sent once more, and not a third time.
+  it('sends a first SUBSCRIBE that commandTimeout rejected once more', async () => {
+    const { fake } = await holding((command) => command[0] === 'SUBSCRIBE')
+    const pubsub = bus(fake.port, { commandTimeout: 300 })
+    unsubscribers.push(await pubsub.subscribe(jest.fn()))
+
+    await new Promise((resolve) => setTimeout(resolve, 800))
+
+    expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(2)
+  })
+
+  // Scenario: after a reconnect the SUBSCRIBE is answered later than the host's commandTimeout.
+  // Expected: the timeout does not apply to a ready connection, so the late answer counts.
+  it("takes a late answer after a reconnect whatever the host's commandTimeout", async () => {
+    let held: Socket | undefined
+    let holds = false
+    const fake = new FakeRespServer((command, socket) => {
+      if (!holds || command[0] !== 'SUBSCRIBE') return healthyRedis(command, socket)
+      held = socket
+      return null
+    })
+    await fake.start()
+    servers.push(fake)
+    const pubsub = bus(fake.port, { commandTimeout: 300 })
+    unsubscribers.push(await pubsub.subscribe(jest.fn()))
+    holds = true
+    for (const socket of fake.sockets) socket.destroy()
+    await until('the held SUBSCRIBE', () => held !== undefined)
     await new Promise((resolve) => setTimeout(resolve, 500))
 
-    expect(pubsub.isSubscribed()).toBe(false)
-    expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(1)
+    held?.write(String(healthyRedis(['SUBSCRIBE', 'bymax:realtime'], held)))
+
+    await until('the subscription', () => pubsub.isSubscribed())
+  })
+
+  // Scenario: the subscriber's first connection is accepted and never answers its handshake, and
+  // the host's client has a commandTimeout. Expected: the timeout still bounds the handshake, so
+  // ioredis opens another connection and that one subscribes.
+  it("recycles a silent handshake under the host's commandTimeout", async () => {
+    const { fake } = await holding(() => false)
+    const pubsub = bus(fake.port, { commandTimeout: 300 })
+    // The publishing client connects first, so the next HELLO is the subscriber's.
+    await until('the publishing client', () => clients.at(-1)?.status === 'ready')
+    let silent: unknown
+    fake.respond((command, socket) => {
+      if (command[0] === 'HELLO') silent ??= socket
+      return socket === silent ? null : healthyRedis(command, socket)
+    })
+
+    unsubscribers.push(await pubsub.subscribe(jest.fn()))
+
+    await until('the subscription', () => pubsub.isSubscribed())
   })
 
   // Scenario: the late answer to SUBSCRIBE is a refusal. Expected: it is logged, and the instance
@@ -183,5 +223,8 @@ describe('RedisRealtimePubSub: a server that does not answer', () => {
       warnings().some((line) => line.startsWith('the server refused the subscription')),
     )
     expect(pubsub.isSubscribed()).toBe(false)
+    // Long enough for a SUBSCRIBE sent again to reach the server.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(fake.seen.filter((command) => command[0] === 'SUBSCRIBE')).toHaveLength(1)
   })
 })

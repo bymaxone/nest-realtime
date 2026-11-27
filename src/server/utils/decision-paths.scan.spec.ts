@@ -257,6 +257,12 @@ const EXEMPT: Record<string, readonly Site[]> = {
       'the subscribe confirmation, awaited after it was shielded and absorbed by the negotiation',
     ],
   ],
+  'server/pubsub/watch-liveness.ts': [
+    [
+      '.then(',
+      'the answer to the PING decides whether the connection is replaced: availability, not identity or admission',
+    ],
+  ],
   'server/utils/quit-within.ts': [
     ['newPromise', 'the shutdown bound for a client close; the answer is not read'],
     ['.then(', 'closes a client on shutdown; the answer is not read'],

@@ -225,9 +225,9 @@ describe('RedisRealtimePubSub', () => {
   })
 
   // The subscriber is the adapter's own connection: it keeps its offline queue so the first
-  // SUBSCRIBE can wait for the connection whatever the host client was built with, and it leaves
-  // the re-subscribing to the adapter.
-  it('duplicates the host client with the offline queue on and ioredis resubscribe off', async () => {
+  // SUBSCRIBE can wait for the connection whatever the host client was built with, it leaves the
+  // re-subscribing to the adapter, without auto-pipelining.
+  it('duplicates the host client with the offline queue on, and ioredis resubscribe and pipelining off', async () => {
     const sub = { subscribe: jest.fn().mockResolvedValue(undefined), on: jest.fn() }
     const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
     const pubsub = new RedisRealtimePubSub({ client: pub as unknown as Redis })
@@ -235,7 +235,11 @@ describe('RedisRealtimePubSub', () => {
     expect(pub.duplicate).toHaveBeenCalledWith({
       autoResubscribe: false,
       disconnectTimeout: 1,
+      enableAutoPipelining: false,
       enableOfflineQueue: true,
+      sentinelCommandTimeout: 5_000,
+      retryStrategy: expect.any(Function),
+      sentinelRetryStrategy: expect.any(Function),
     })
   })
 
@@ -250,6 +254,7 @@ describe('RedisRealtimePubSub', () => {
           new Error("Stream isn't writeable and enableOfflineQueue options is false"),
         ),
       on: jest.fn(),
+      status: 'reconnecting',
     }
     const pub = { duplicate: jest.fn().mockReturnValue(sub), status: 'ready' }
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
@@ -269,6 +274,8 @@ describe('RedisRealtimePubSub', () => {
       // The rejection is the connection failing, which was just reported: it is not also a refusal.
       await new Promise((resolve) => setImmediate(resolve))
       expect(warn).toHaveBeenCalledTimes(1)
+      // The connection is not ready, so its `ready` sends the next SUBSCRIBE: none is sent here.
+      expect(sub.subscribe).toHaveBeenCalledTimes(1)
     } finally {
       warn.mockRestore()
     }

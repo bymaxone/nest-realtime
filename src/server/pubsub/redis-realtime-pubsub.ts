@@ -16,6 +16,7 @@ import { unavailableError } from '../utils/unavailable-error'
 import { windowedReport } from '../utils/windowed-report'
 import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
 import { absorbed, firstOf, shielded, unboxed, withinDeadline } from '../utils/within-deadline'
+import { PROBE_DEADLINE_MS, PROBE_INTERVAL_MS, watchLiveness } from './watch-liveness'
 
 /** The window of the report of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
@@ -55,6 +56,15 @@ const PUBLISHER_WAIT_MS = 2_000
  */
 const PUBLISH_WAIT_MS = 2_000
 
+/**
+ * The retry delay of a replacement whose host's `sentinelRetryStrategy` gives up: ioredis's own cap
+ * for that strategy. ioredis does not clear that wait on `disconnect()`, so it stays short.
+ */
+const SENTINEL_RETRY_MS = 1_000
+
+/** The subscriber's `sentinelCommandTimeout` when the host sets none: ioredis has no default. */
+const SENTINEL_COMMAND_TIMEOUT_MS = 5_000
+
 /** The events that name a status other than connecting: each ends a first connection attempt. */
 const CONNECTION_OVER = ['ready', 'close', 'reconnecting', 'end'] as const
 
@@ -81,6 +91,10 @@ export interface RedisRealtimePubSubOptions {
  * the server cannot be reached, or has not answered in {@link SUBSCRIBE_WAIT_MS}, it resolves and
  * the instance stays unsubscribed until a SUBSCRIBE is confirmed. Each change of that state is
  * logged once, not once per retry.
+ *
+ * A subscriber connection that stops answering without closing raises no event, so
+ * {@link watchLiveness} PINGs it while it is ready; an unanswered PING marks the instance
+ * unsubscribed and replaces the connection.
  *
  * @example
  * ```ts
@@ -128,6 +142,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   #outageLogged = false
   /** Connections closed on purpose, whose `close` is not an outage and says nothing of a successor. */
   readonly #retired = new WeakSet<Redis>()
+  /** What stops the PING watch of each subscriber connection. */
+  readonly #unwatch = new WeakMap<Redis, () => void>()
+  /** Connections the watch replaced and that have not been ready since. */
+  readonly #silenced = new WeakSet<Redis>()
   /** The reason of the refusal last logged, until the instance next subscribes, so a repeat adds no line. */
   #lastRefusal: string | undefined
 
@@ -241,7 +259,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.handlers.delete(handler)
       if (this.handlers.size === 0) {
         this.#subInit = null
-        this.#retired.add(sub)
+        this.retire(sub)
         const connected = this.#subscribed
         this.#subscribed = false
         this.malformed.stop()
@@ -264,10 +282,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     return this.#subInit
   }
 
-  private async createSubscriber(): Promise<Redis> {
-    this.#outageLogged = false
-    this.#lastRefusal = undefined
-    this.connectLazyClient()
+  /** The publishing client's duplicate, with the options this connection depends on. */
+  private duplicateForSubscribing(): Redis {
     // ioredis's own replay after a reconnect has no handler for a refusal, which would surface
     // as an unhandled rejection; the SUBSCRIBE sent on `ready` below replaces it. The offline queue
     // is forced on, whatever the host client chose: the first SUBSCRIBE is issued before the
@@ -277,11 +293,45 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // `close`, which a subscriber that has ended, or is waiting to reconnect, no longer has coming,
     // so the default would keep the process alive that long. A retired subscriber has nothing in
     // flight worth waiting for.
-    const sub = this.#pub.duplicate({
+    // Auto-pipelining is off: a pipeline lost with its connection is never completed when the host
+    // does not resend, and no later PING would be written.
+    // The host's retry strategies decide as before, except while the watch is replacing a silent
+    // connection: giving up there would end a subscriber that an open connection would have kept.
+    // The two Sentinel options are inert without Sentinel. With no command timeout, a Sentinel that
+    // accepts and never answers holds a replacement in `connecting`, even after `disconnect()`.
+    const sub: Redis = this.#pub.duplicate({
       autoResubscribe: false,
       disconnectTimeout: 1,
+      enableAutoPipelining: false,
       enableOfflineQueue: true,
+      sentinelCommandTimeout:
+        this.#pub.options?.sentinelCommandTimeout ?? SENTINEL_COMMAND_TIMEOUT_MS,
+      retryStrategy: (times: number) =>
+        this.retryDelay('retryStrategy', times, sub, PROBE_INTERVAL_MS),
+      sentinelRetryStrategy: (times: number) =>
+        this.retryDelay('sentinelRetryStrategy', times, sub, SENTINEL_RETRY_MS),
     })
+    return sub
+  }
+
+  /** The delay the host's strategy gives, or `held` where it gives none to a replacement of `sub`. */
+  private retryDelay(
+    name: 'retryStrategy' | 'sentinelRetryStrategy',
+    times: number,
+    sub: Redis,
+    held: number,
+  ): number | void | null {
+    const host = this.#pub.options
+    // ioredis takes anything else, which an untyped host can pass, as "do not retry".
+    const delay = typeof host[name] === 'function' ? host[name](times) : undefined
+    return typeof delay === 'number' || !this.#silenced.has(sub) ? delay : held
+  }
+
+  private async createSubscriber(): Promise<Redis> {
+    this.#outageLogged = false
+    this.#lastRefusal = undefined
+    this.connectLazyClient()
+    const sub = this.duplicateForSubscribing()
     let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
     // An error reply in time is the server's answer and reaches the caller as the rejection;
@@ -301,9 +351,14 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         if (!this.#retired.has(sub)) this.markDown('connection closed')
       })
     })
+    this.#unwatch.set(
+      sub,
+      watchLiveness(sub, () => this.replace(sub)),
+    )
     // After a reconnect the subscription is gone with the old connection; subscribing again is
     // what restores it, and its answer is what confirms it.
     sub.on('ready', () => {
+      this.#silenced.delete(sub)
       if (attached) this.confirm(sub)
     })
     try {
@@ -351,11 +406,11 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         // connection's `ready` has already fired and so sends no SUBSCRIBE of its own.
         first.then(
           () => this.confirmedBy(sub),
-          (err: unknown) => this.refused(err),
+          (err: unknown) => this.unconfirmed(sub, err),
         )
       }
     } catch (err) {
-      this.#retired.add(sub)
+      this.retire(sub)
       sub.disconnect()
       throw unavailableError(
         REALTIME_ERROR_CODES.PUBSUB_UNAVAILABLE,
@@ -366,11 +421,35 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     }
   }
 
+  /** A subscriber closed on purpose: its `close` is no outage and it is not watched again. */
+  private retire(sub: Redis): void {
+    this.#retired.add(sub)
+    this.#unwatch.get(sub)?.()
+  }
+
+  /** The connection is open and silent: nothing else would close it. `ready` subscribes the next. */
+  private replace(sub: Redis): void {
+    this.markDown(`no answer to PING within ${PROBE_DEADLINE_MS} ms`)
+    this.#silenced.add(sub)
+    sub.disconnect(true)
+  }
+
   private confirm(sub: Redis): void {
     sub.subscribe(this.channel).then(
       () => this.confirmedBy(sub),
       (err: unknown) => this.refused(err),
     )
+  }
+
+  /**
+   * The first SUBSCRIBE failed after the boot went on. On a ready connection only the host's
+   * `commandTimeout`, armed before `ready`, does that, and no `ready` is coming to send another.
+   */
+  private unconfirmed(sub: Redis, err: unknown): void {
+    this.refused(err)
+    if ((err as { name?: unknown } | null)?.name !== 'ReplyError' && sub.status === 'ready') {
+      this.confirm(sub)
+    }
   }
 
   /** A confirmation can arrive on a subscriber that was retired while the answer was on its way. */
