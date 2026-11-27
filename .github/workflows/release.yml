@@ -125,7 +125,8 @@ jobs:
       - name: Verify (typecheck, lint, test, build, and the gates that read dist/)
         # `pnpm verify` is the repository's own gates on the source tree and the build. It includes
         # `size`, `check:published`, `check:surface` and `check:api`, which read `dist/` and cannot read a
-        # tarball; the tarball step below proves its `dist/` is this one.
+        # tarball; the tarball step below proves its `dist/` is this one. It builds from clean, and the
+        # pack step runs no lifecycle script, so what this step builds is what is packed.
         run: pnpm verify
 
       - name: Extract the release notes
@@ -142,9 +143,9 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/package"
           mkdir -p "$out"
-          # `npm pack` runs prepack/prepare, so the build that goes into the tarball happens here. The
-          # file is found, not parsed out of npm's output, which a lifecycle script can also write to.
-          npm pack --pack-destination "$out" > "$RUNNER_TEMP/pack.log" 2>&1 || { cat "$RUNNER_TEMP/pack.log"; exit 1; }
+          # The build that goes into the tarball already ran in the verify step, so no lifecycle script
+          # runs here. The file is found, not parsed out of npm's output.
+          npm pack --ignore-scripts --pack-destination "$out" > "$RUNNER_TEMP/pack.log" 2>&1 || { cat "$RUNNER_TEMP/pack.log"; exit 1; }
           set -- "$out"/*.tgz
           if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
             echo "::error title=release::Packing must produce exactly one tarball."
