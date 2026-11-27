@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.39] - 2026-11-26
+
 ### Added
 
 - **`RealtimeService.disconnectUser(userId, reason?)` closes every connection of a user, on every instance.**
@@ -1573,7 +1575,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.38...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.39...HEAD
+[1.2.39]: https://github.com/bymaxone/nest-realtime/compare/v1.2.38...v1.2.39
 [1.2.38]: https://github.com/bymaxone/nest-realtime/compare/v1.2.37...v1.2.38
 [1.2.37]: https://github.com/bymaxone/nest-realtime/compare/v1.2.36...v1.2.37
 [1.2.36]: https://github.com/bymaxone/nest-realtime/compare/v1.2.35...v1.2.36
