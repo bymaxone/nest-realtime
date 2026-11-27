@@ -3,7 +3,7 @@
  * @layer utils
  */
 
-/** How long a report stays quiet after it was written. */
+/** How long a report stays quiet after it was written, unless its caller says otherwise. */
 export const REPORT_WINDOW_MS = 10_000
 
 /** Folds one occurrence in, and writes what is waiting when stopped. */
@@ -23,10 +23,12 @@ export interface WindowedReport<T> {
  * @typeParam T - What is accumulated: a number, or a record of counts.
  * @param fresh - The empty accumulator; called again after every report so none is shared.
  * @param emit - Writes one report from what was accumulated.
+ * @param windowMs - The window, in milliseconds.
  */
 export function windowedReport<T>(
   fresh: () => T,
   emit: (accumulated: T) => void,
+  windowMs: number = REPORT_WINDOW_MS,
 ): WindowedReport<T> {
   let startedAt = Number.NEGATIVE_INFINITY
   let pending = fresh()
@@ -41,7 +43,7 @@ export function windowedReport<T>(
   }
   const report = (add: (accumulated: T) => T): void => {
     pending = add(pending)
-    const left = startedAt + REPORT_WINDOW_MS - performance.now()
+    const left = startedAt + windowMs - performance.now()
     if (left <= 0) {
       write()
     } else if (timer === undefined) {

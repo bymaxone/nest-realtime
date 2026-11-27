@@ -243,7 +243,10 @@ const EXEMPT: Record<string, readonly Site[]> = {
       'the unreachable operand of the subscribe negotiation: resolved with a box it makes, read only through firstOf',
     ],
     ['Promise.resolve', 'returns at once when the connection is already up; carries no value'],
-    ['.catch(', 'a refusal after boot marks the bus unsubscribed and logs; it admits nothing'],
+    [
+      '.then(',
+      'a late answer to the boot SUBSCRIBE marks the bus up or logs the refusal: availability state, not identity or admission',
+    ],
     [
       '.then(',
       'a confirmation after boot marks the bus up or refused: availability state, not identity or admission',

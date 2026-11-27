@@ -13,10 +13,11 @@ import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
+import { windowedReport } from '../utils/windowed-report'
 import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
 import { absorbed, firstOf, shielded, unboxed, withinDeadline } from '../utils/within-deadline'
 
-/** The shortest time between two reports of dropped malformed payloads. */
+/** The window of the report of dropped malformed payloads. */
 const MALFORMED_REPORT_INTERVAL_MS = 60_000
 
 /**
@@ -31,6 +32,13 @@ const CANNOT_PUBLISH: ReadonlySet<string> = new Set([
   'close',
   'end',
 ])
+
+/**
+ * How long subscribing waits for the first SUBSCRIBE to be answered. A server that takes the
+ * connection and says nothing raises neither an error nor a close, and ioredis by default waits
+ * with no bound, so past this the boot goes on unsubscribed.
+ */
+const SUBSCRIBE_WAIT_MS = 2_000
 
 /**
  * How long subscribing waits for the publishing client's first connection. The wait only spares a
@@ -65,14 +73,14 @@ export interface RedisRealtimePubSubOptions {
  * `SUBSCRIBE` (a lazily-duplicated clone). The subscriber clone is created on
  * the first `subscribe()` call and quit on the last `unsubscribe()`.
  *
- * Messages are JSON-encoded. A malformed payload is dropped and counted, and the count is
- * reported at most once a minute.
+ * Messages are JSON-encoded. A malformed payload is dropped, counted and reported.
  *
  * Whether this instance hears the other instances is a state, `isSubscribed()`, that follows the
- * subscriber connection for the life of the process. `subscribe()` fails when the server answers
- * with an error reply (a wrong password, a missing permission), which no retry can fix; when the
- * server cannot be reached it resolves at once and the instance stays unsubscribed until a
- * connection succeeds. Each change of that state is logged once, not once per retry.
+ * subscriber connection for the life of the process. `subscribe()` fails when the server answers in
+ * time with an error reply (a wrong password, a missing permission), which no retry can fix; when
+ * the server cannot be reached, or has not answered in {@link SUBSCRIBE_WAIT_MS}, it resolves and
+ * the instance stays unsubscribed until a SUBSCRIBE is confirmed. Each change of that state is
+ * logged once, not once per retry.
  *
  * @example
  * ```ts
@@ -99,9 +107,20 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   #subInit: Promise<Redis> | null = null
   private readonly handlers = new Set<(message: RealtimePubSubMessage) => void>()
   private readonly logger = new Logger(RedisRealtimePubSub.name)
-  /** Payloads dropped as unparsable since the last report, and when that report was made. */
-  private malformedDropped = 0
-  private malformedReportedAt = 0
+  /** Payloads dropped as unparsable, counted between reports. */
+  private readonly malformed = windowedReport(
+    () => 0,
+    (count) => {
+      logEvent(
+        this.logger,
+        'warn',
+        'REALTIME_PUBSUB_DROPPED',
+        `dropped ${count} malformed payload(s) since the last report`,
+        { count, last: 'malformed' },
+      )
+    },
+    MALFORMED_REPORT_INTERVAL_MS,
+  )
   /** Whether the subscriber connection holds a confirmed SUBSCRIBE right now. */
   #subscribed = false
   /** Whether the current outage has been logged, so a retry loop adds no line. */
@@ -198,7 +217,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * Lazily creates the single shared subscribe client on first call; returns an async
    * unsubscribe that quits the client when the last handler is removed. Concurrent
    * subscribe calls are idempotent — only one client is ever created. Malformed
-   * payloads are dropped, and reported at most once a minute with their count.
+   * payloads are dropped and reported with their count.
    *
    * If the subscriber client cannot be created (e.g. Redis temporarily unavailable),
    * the handler registration is rolled back and the cached init promise is cleared so
@@ -225,6 +244,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         this.#retired.add(sub)
         const connected = this.#subscribed
         this.#subscribed = false
+        this.malformed.stop()
         try {
           // QUIT queues behind a connection that never came up and would never answer, and on one
           // that stopped answering it never settles: closing waits for it only up to a bound.
@@ -264,10 +284,15 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     })
     let attached = false
     sub.on('message', (_ch: string, payload: string) => this.dispatch(payload))
-    // An error reply is the server's answer and reaches the caller as the SUBSCRIBE's rejection;
+    // An error reply in time is the server's answer and reaches the caller as the rejection;
     // anything else, an error or a close with no error at all, is the connection failing, which
     // ioredis retries on its own.
+    let unanswered: NodeJS.Timeout | undefined
     const unreachableFirst = new Promise<{ readonly unreachable: unknown }>((resolve) => {
+      unanswered = setTimeout(() => {
+        resolve({ unreachable: new Error(`no answer to SUBSCRIBE within ${SUBSCRIBE_WAIT_MS} ms`) })
+      }, SUBSCRIBE_WAIT_MS)
+      unanswered.unref()
       sub.on('error', (err: Error) => {
         if (err.name !== 'ReplyError') resolve({ unreachable: err })
       })
@@ -281,15 +306,19 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     sub.on('ready', () => {
       if (attached) this.confirm(sub)
     })
-    await shielded(this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst))
+    try {
+      await shielded(this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst))
+    } finally {
+      clearTimeout(unanswered)
+    }
     attached = true
     return sub
   }
 
   /**
-   * Settles the boot against the first SUBSCRIBE. An error reply is the server refusing, which
+   * Settles the boot against the first SUBSCRIBE. An error reply in time is the server refusing, which
    * fails the boot; any other failure, an error event or a close or a rejection that is not an
-   * error reply, is the connection failing, which lets the boot go on unready.
+   * error reply, or no answer in time, lets the boot go on unready.
    */
   private async negotiate(
     sub: Redis,
@@ -318,8 +347,12 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         this.markUp()
       } else {
         this.markDown(undefined, outcome.unreachable)
-        // A confirmation needs no handler here: the connection's first `ready` sends its own.
-        first.catch((err: unknown) => this.refused(err))
+        // The server may still answer this SUBSCRIBE. Its confirmation counts where the
+        // connection's `ready` has already fired and so sends no SUBSCRIBE of its own.
+        first.then(
+          () => this.confirmedBy(sub),
+          (err: unknown) => this.refused(err),
+        )
       }
     } catch (err) {
       this.#retired.add(sub)
@@ -335,9 +368,14 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
 
   private confirm(sub: Redis): void {
     sub.subscribe(this.channel).then(
-      () => this.markUp(),
+      () => this.confirmedBy(sub),
       (err: unknown) => this.refused(err),
     )
+  }
+
+  /** A confirmation can arrive on a subscriber that was retired while the answer was on its way. */
+  private confirmedBy(sub: Redis): void {
+    if (!this.#retired.has(sub)) this.markUp()
   }
 
   /** A server that was reached and refused the SUBSCRIBE after boot: it stays unsubscribed. */
@@ -384,37 +422,18 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     )
   }
 
-  /**
-   * Count a payload dropped as unparsable and report the count at most once per minute, so a
-   * producer on an incompatible version is visible without flooding the log.
-   */
-  private reportMalformed(): void {
-    this.malformedDropped++
-    const now = Date.now()
-    if (now - this.malformedReportedAt < MALFORMED_REPORT_INTERVAL_MS) return
-    logEvent(
-      this.logger,
-      'warn',
-      'REALTIME_PUBSUB_DROPPED',
-      `dropped ${this.malformedDropped} malformed payload(s) since the last report`,
-      { count: this.malformedDropped, last: 'malformed' },
-    )
-    this.malformedDropped = 0
-    this.malformedReportedAt = now
-  }
-
   private dispatch(payload: string): void {
     let msg: RealtimePubSubMessage
     try {
       const parsed: unknown = JSON.parse(payload)
       // Valid JSON that is not an object has no op to act on; a handler would be handed `null`.
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        this.reportMalformed()
+        this.malformed((count) => count + 1)
         return
       }
       msg = parsed as RealtimePubSubMessage
     } catch {
-      this.reportMalformed()
+      this.malformed((count) => count + 1)
       return
     }
     for (const h of this.handlers) {

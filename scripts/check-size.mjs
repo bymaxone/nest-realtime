@@ -118,6 +118,8 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     client, measured on 2026-11-27; its budget is 30 B above.
 //     internal measures 27,921 B and websocket 11,187 B with the report written at the end of its window and at
 //     shutdown, and the revocation reason on WebSocket, measured on 2026-11-27; each budget is 30 B above.
+//     internal measures 27,972 B with the bound on the first SUBSCRIBE's answer and the end of a burst of
+//     malformed payloads, measured on 2026-11-27; its budget is 30 B above.
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
 // root imports the shared runtime rather than inlining it: two bundles, one
@@ -129,7 +131,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 27_951 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 28_002 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 11_217 },
   {
     name: 'observability (metrics contributor)',

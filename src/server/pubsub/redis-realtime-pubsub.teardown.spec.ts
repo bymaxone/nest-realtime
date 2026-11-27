@@ -115,7 +115,7 @@ describe('RedisRealtimePubSub retiring a subscriber that has no open socket', ()
   })
 
   // Scenario: the server refuses the SUBSCRIBE of a subscriber that is connected. Expected: it is
-  // still disconnected, which starts the one timer that its socket's close then clears. Why: the
+  // still disconnected, which starts the timer that its socket's close then clears. Why: the
   // shorter timer must not mean a subscriber is left connected, and this shows the count sees
   // ioredis's timer at all.
   it('still disconnects a subscriber that has a connection', async () => {
@@ -130,7 +130,7 @@ describe('RedisRealtimePubSub retiring a subscriber that has no open socket', ()
       new RedisRealtimePubSub({ client: redis }).subscribe(jest.fn()),
     )
 
-    expect(delays).toHaveLength(1)
+    expect(delays).toEqual([2_000, 1])
     await reached(subs[0] as Redis, 'end')
   })
 })

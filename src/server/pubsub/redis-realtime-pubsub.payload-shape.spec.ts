@@ -26,7 +26,6 @@ describe('a payload that parses to something other than an object', () => {
       const handler = jest.fn()
       await pubsub.subscribe(handler)
       const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-      const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000)
       try {
         await client.publish('bymax:realtime', payload)
         await new Promise((resolve) => setTimeout(resolve, 0))
@@ -41,7 +40,6 @@ describe('a payload that parses to something other than an object', () => {
           }),
         )
       } finally {
-        now.mockRestore()
         warn.mockRestore()
       }
     },
