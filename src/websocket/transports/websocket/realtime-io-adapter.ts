@@ -197,13 +197,13 @@ export class RealtimeIoAdapter extends IoAdapter {
   private reportedOutside = false
   private readonly tally: RealtimeMetricsTally | undefined
   private readonly publishFailures = windowedReport(
-    () => ({ count: 0, last: 'Error' }),
+    (): { count: number; last?: string } => ({ count: 0 }),
     ({ count, last }) => {
       logEvent(
         this.adapterLogger,
         'warn',
         'REALTIME_ADAPTER_PUBLISH_FAILED',
-        `Redis adapter publishes failed since the last report: ${count} (${last}); other instances may not ` +
+        `Redis adapter publishes failed since the last report: ${count} (${String(last)}); other instances may not ` +
           'have received those messages',
         { count },
       )
