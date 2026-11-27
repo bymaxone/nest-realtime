@@ -40,7 +40,7 @@ async function holding(holds: (command: readonly string[]) => boolean) {
 }
 
 function bus(port: number, extra: RedisOptions = {}): RedisRealtimePubSub {
-  const redis = new Redis({ host: '127.0.0.1', port, retryStrategy: () => 40, ...extra })
+  const redis = new Redis(port, '127.0.0.1', { retryStrategy: () => 40, ...extra })
   redis.on('error', () => undefined)
   clients.push(redis)
   return new RedisRealtimePubSub({ client: redis })
