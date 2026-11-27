@@ -22,6 +22,7 @@
  *   async joinRoom() {}
  *   async leaveRoom() {}
  *   async disconnect() {}
+ *   async disconnectUser() {}
  * }
  * ```
  */
@@ -49,6 +50,9 @@ export interface ITransport {
 
   /** Disconnect a specific connection (e.g. on auth revocation). */
   disconnect(connectionId: string, reason?: string): Promise<void>
+
+  /** Force-disconnect every connection of a user. */
+  disconnectUser(userId: string, reason?: string): Promise<void>
 
   /** Lifecycle hook — called on NestJS bootstrap. */
   onModuleInit?(): Promise<void>

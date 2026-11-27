@@ -89,4 +89,24 @@ describe('Cross-instance fan-out', () => {
     await a.shutdown()
     await b.shutdown()
   })
+
+  // A per-user disconnect from A closes that user's streams on both instances and no one else's.
+  it('disconnectUser from A closes the streams of one user on A and on B', async () => {
+    const { instances } = createTestInstances(2)
+    const [a, b] = instances as [(typeof instances)[0], (typeof instances)[0]]
+    await a.subscriber.onModuleInit()
+    await b.subscriber.onModuleInit()
+
+    a.addConnection('c-here', 'u1')
+    b.addConnection('c-there', 'u1')
+    b.addConnection('c-other', 'u2')
+    await a.transport.disconnectUser('u1')
+
+    await waitFor(() => b.transport.getConnection('c-there') === undefined)
+    expect(a.transport.getConnection('c-here')).toBeUndefined()
+    expect(b.transport.getConnection('c-other')).toBeDefined()
+
+    await a.shutdown()
+    await b.shutdown()
+  })
 })

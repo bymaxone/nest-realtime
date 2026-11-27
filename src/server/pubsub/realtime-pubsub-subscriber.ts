@@ -44,6 +44,10 @@ interface DisconnectArgs {
   connectionId: string
   reason?: string
 }
+interface DisconnectUserArgs {
+  userId: string
+  reason?: string
+}
 
 /**
  * Subscribes to the pub/sub bus on startup and dispatches remote messages to
@@ -137,6 +141,9 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
         case 'disconnect':
           this.closeLocal(msg.args as DisconnectArgs)
           break
+        case 'disconnectUser':
+          this.closeUserLocal(msg.args as DisconnectUserArgs)
+          break
         default: {
           msg.op satisfies never
           this.drop('unknown op')
@@ -147,17 +154,26 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
     }
   }
 
-  /** Close a connection another instance asked this one to close; the handler is synchronous, so a rejection is handled here. */
+  /** Close a connection another instance asked this one to close. */
   private closeLocal(a: DisconnectArgs): void {
-    Promise.resolve(this.sse.disconnectLocal(a.connectionId, a.reason)).catch((err: unknown) => {
-      logEvent(
-        this.logger,
-        'warn',
-        'REALTIME_DISCONNECT_FAILED',
-        'Remote disconnect failed',
-        { connectionId: a.connectionId },
-        err,
-      )
+    this.closing(this.sse.disconnectLocal(a.connectionId, a.reason), 'Remote disconnect failed', {
+      connectionId: a.connectionId,
+    })
+  }
+
+  /** The same for every connection of a user. The line carries no user id. */
+  private closeUserLocal(a: DisconnectUserArgs): void {
+    this.closing(
+      this.sse.disconnectUserLocal(a.userId, a.reason),
+      'Remote disconnect of a user failed',
+      {},
+    )
+  }
+
+  /** Log a teardown that failed; the handler is synchronous, so a rejection is handled here. */
+  private closing(task: Promise<void>, summary: string, fields: { connectionId?: string }): void {
+    Promise.resolve(task).catch((err: unknown) => {
+      logEvent(this.logger, 'warn', 'REALTIME_DISCONNECT_FAILED', summary, fields, err)
     })
   }
 

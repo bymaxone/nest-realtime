@@ -39,7 +39,7 @@ The default transport is **Server-Sent Events**: browser-native, plain HTTP, no 
 
 ### Why nest-realtime?
 
-- **🎯 One API, any transport** — `emitToUser`, `emitToTenant`, `emitToRoom`, `broadcast`, and `disconnect` behave identically on SSE, WebSocket, or both. Migrating between transports changes a config line, not your call sites.
+- **🎯 One API, any transport** — `emitToUser`, `emitToTenant`, `emitToRoom`, `broadcast`, `disconnect`, and `disconnectUser` behave identically on SSE, WebSocket, or both. Migrating between transports changes a config line, not your call sites.
 - **📡 SSE first, and that is the point** — SSE reconnects natively, replays through `Last-Event-ID`, and traverses proxies as ordinary HTTP. Most apps only push server → client, and for those WebSocket is a dependency you pay for without using.
 - **🔌 Auth stays yours** — The library never verifies a JWT, never imports an auth package. You implement `IConnectionAuthenticator`; cookie, ticket, and bearer patterns are all supported. This is enforced structurally, not by convention.
 - **🏢 Multi-tenant by construction** — Every connection auto-joins `user:{id}` and, when present, `tenant:{id}`. Tenant scoping is a room convention, not an afterthought bolted onto a chat library.
@@ -457,6 +457,8 @@ This section lists the bounds the library applies, what happens when each one is
 
 ### Known limits
 
+**A WebSocket revocation can resolve although its cross-node publish failed.** `@socket.io/redis-adapter` does not wait for its own publish, so `disconnect` and `disconnectUser` can resolve when it failed, and sockets on other nodes may stay connected.
+
 **A host gateway that declares the same namespace as `websocket.namespace` shares it with the library's gateway.** It runs its handlers for the library's connections, and what the library does to its own connections, such as revoking, capping or denying them, is not something that gateway can opt out of. Give a host gateway a namespace of its own unless it is meant to receive from those clients.
 
 **A host gateway on another namespace is outside the library.** A gateway that declares no namespace, or `/`, is served on `/`. When `websocket.namespace` is set to something other than `/`, the library's authenticator is not called for it and the library's rooms are not reachable from it; the adapter logs `REALTIME_GATEWAY_OUTSIDE_NAMESPACE` once at start for one on its server. When `websocket.namespace` is unset, empty or `/`, such a gateway shares `/` with the library's gateway.
@@ -602,7 +604,7 @@ The package runs **inside** your NestJS application as a dynamic module — not 
 
 ### Cross-Instance Emit Flow
 
-An emit delivers locally **and** publishes once. Every other instance's subscriber re-emits through local-only paths (`emitToUserLocal`, …), so a message is never republished and cannot loop. Connection revocation crosses instances as an `op: 'disconnect'` message on the same channel.
+An emit delivers locally **and** publishes once. Every other instance's subscriber re-emits through local-only paths (`emitToUserLocal`, …), so a message is never republished and cannot loop. Connection revocation crosses instances as an `op: 'disconnect'` message on the same channel, and the revocation of a user as `op: 'disconnectUser'`.
 
 Sizing guidance and adapter trade-offs are in [docs/architecture/scaling-cheatsheet.md](./docs/architecture/scaling-cheatsheet.md).
 
@@ -704,7 +706,7 @@ When integrating `@bymax-one/nest-realtime` in production, verify each of the fo
 | Credential validation | Delegated entirely to your `IConnectionAuthenticator`                                              |
 | Auth library imports  | None: an ESLint rule fails lint on a string literal naming an auth package in `src`                |
 | Tenant isolation      | Room-scoped (`tenant:{id}`), resolved from the authenticated result                                |
-| Connection revocation | `disconnect(connectionId)`, cross-instance; rejects if it cannot reach it                          |
+| Connection revocation | `disconnect(connectionId)` and `disconnectUser(userId)`, cross-instance; reject on failures seen   |
 | Credential expiry     | Interval re-authentication; a failure drops the connection, after an event if `onFailure: 'event'` |
 | Connection flooding   | FIFO eviction per user: oldest closed, new admitted, never a 429                                   |
 | SSE transport headers | `X-Accel-Buffering: no` and `Cache-Control: no-cache, no-transform`                                |
@@ -771,10 +773,13 @@ The unified emit API. Identical on every transport.
 | `joinRoom(connectionId, roomId)`      | Add a connection to a room                |
 | `leaveRoom(connectionId, roomId)`     | Remove a connection from a room           |
 | `disconnect(connectionId, reason?)`   | Revoke a connection, cross-instance aware |
+| `disconnectUser(userId, reason?)`     | Revoke every connection of a user         |
 
 All methods return `Promise<void>`.
 
 **Revocation is never best-effort.** `disconnect(connectionId)` resolves once the connection was closed on this instance or the revocation was handed to the bus (`IRealtimePubSub`). It **rejects**, with `error.code` set to a `RealtimeErrorCode`, when it could not: `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the publish (`RedisRealtimePubSub` refuses at once while its Redis client is not ready, and after 2,000 ms when the client is ready but the server does not answer), `REALTIME_TRANSPORT_UNAVAILABLE` when the WebSocket server is not attached or its fan-out throws. Branch on the code, not the message; the error is Nest's `ServiceUnavailableException` (HTTP `503`) with `code` set, so a controller that lets it escape answers `503` with the generic body (see "What a client is told"). `error.message` and `error.cause` are not enumerable, so `JSON.stringify(error)` carries the generic response and the `code` only; `error.stack` and `util.inspect(error)` still carry the text of the driver or the broker, which belongs in your server logs and nowhere a client reads. A rejection means the connection may still be connected, so retry.
+
+**Logout: `disconnectUser`.** `disconnectUser(userId)` closes the user's connections on this instance and hands the revocation to the others, over the bus on SSE and through the Socket.IO adapter on WebSocket, and rejects with `disconnect`'s codes or `REALTIME_AUTH_FAILED`. It closes the connections that are registered when each instance handles it: a handshake still being authenticated is not covered, and a client may reconnect at once, so revoke the credential first. A WebSocket revocation can resolve although its cross-node publish failed (see [Known limits](#known-limits)). The offline queue and the replay buffer are not cleared. `bymax_realtime_evictions_total{reason="revoked"}` counts one per resolved call, however many it closed.
 
 **Emits are at-most-once.** `emitToUser`, `emitToTenant`, `emitToRoom` and `broadcast` **resolve even when the publish to the other instances failed**; that failure is logged with `REALTIME_PUBSUB_UNAVAILABLE` and passed to the `onDeliveryFailure` hook, which is where to count it. An offline queue that could not keep an event for a user who is offline here is reported the same way, since another instance may have delivered it live; a failure on one transport of `'both'` is only logged. An emit rejects only when the event has no delivery path left: for `emitToUser`, the user is offline here, the queue failed, and the bus failed or cannot reach another instance (the default in-memory bus); with `'both'`, a failure on both transports rejects with `REALTIME_TRANSPORT_UNAVAILABLE`. A rejected emit is not proof that no client received it, so retry only where a duplicate is acceptable.
 

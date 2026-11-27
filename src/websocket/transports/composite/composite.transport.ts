@@ -39,7 +39,7 @@ interface Outcomes {
  * A failure of one is logged as a warning and the call resolves; a failure of both
  * rejects.
  *
- * `joinRoom`, `leaveRoom`, and `disconnect` ask both transports and settle both: each
+ * `joinRoom`, `leaveRoom`, `disconnect` and `disconnectUser` ask both transports and settle both: each
  * transport acts only on a connection it holds, and a connection neither holds is handed
  * to the bus (SSE) and the adapter (WebSocket) for the instance that does. A failure of
  * either one rejects the call, because a revocation or a room change that did not happen
@@ -177,7 +177,19 @@ export class CompositeTransport implements ITransport {
   }
 
   /**
-   * Run a per-connection operation on both transports and reject if either failed.
+   * Disconnect every connection of a user, on both transports. Rejects when either one could not.
+   */
+  async disconnectUser(userId: string, reason?: string): Promise<void> {
+    await awaitable(
+      this.settleBoth('disconnectUser', 'a user', [
+        () => this.sse.disconnectUser(userId, reason),
+        () => this.ws.disconnectUser(userId, reason),
+      ]),
+    )
+  }
+
+  /**
+   * Run an operation on both transports and reject if either failed.
    *
    * One failure is rethrown as it is; both are reported together under
    * `REALTIME_TRANSPORT_UNAVAILABLE`, with every reason in `cause`.

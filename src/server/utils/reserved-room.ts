@@ -58,6 +58,22 @@ export function requireRoomName(operation: string, roomId: unknown): asserts roo
 }
 
 /**
+ * Refuse a user id that is not a non-empty string: it names the room `user:{userId}`.
+ *
+ * @param operation - The public call that was made.
+ * @param userId - The user id it was given.
+ * @throws Error carrying `REALTIME_AUTH_FAILED` when `userId` is not a non-empty string.
+ */
+export function requireUserId(operation: string, userId: unknown): asserts userId is string {
+  if (typeof userId === 'string' && userId.length > 0) return
+  throw realtimeError(
+    REALTIME_ERROR_CODES.AUTH_FAILED,
+    `${operation}: \`userId\` must be a non-empty string, got ${describeShape(userId)}`,
+    { who: 'RealtimeService' },
+  )
+}
+
+/**
  * Refuse a room name the library composes, for a call that would put a connection in it or take
  * it out. The message names the operation, the field and the prefix, never the room id, which is
  * the caller's input.
