@@ -175,7 +175,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * publish in time, not that it was not delivered: the command was already written to the socket
    * and Redis can still process it when it answers, so a message can arrive after its caller was
    * told it failed. The command also stays queued in the client until the server answers or the
-   * connection drops, and ioredis sends it again on the next connection by default;
+   * connection drops, and ioredis can send it again on the next connection by default;
    * `commandTimeout` on the host's ioredis client is what rejects the command itself.
    */
   async publish(message: RealtimePubSubMessage): Promise<void> {

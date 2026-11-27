@@ -34,7 +34,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Changed
 
-- **README: Known limits and the failure table state more of what happens.** A publish Redis did not answer can be sent again by ioredis after a reconnect; slow Sentinels end a subscriber whose `sentinelRetryStrategy` gives up; two `forRoot` registrations have one namespace opened in advance; and `forceCloseConnections: true` changes what the shutdown closes.
+- **README: Known limits, the failure table and the shutdown order state more of what happens.** A publish Redis did not answer can be sent again by ioredis after a reconnect; slow Sentinels end a subscriber whose `sentinelRetryStrategy` gives up, outside a liveness replacement; two `forRoot` registrations have one namespace opened in advance; and `forceCloseConnections: true` changes what the shutdown closes.
 
 ## [1.2.39] - 2026-11-27
 

@@ -82,8 +82,8 @@ async function closedPort(): Promise<number> {
 
 afterEach(async () => {
   for (const unsubscribe of retire.splice(0)) await unsubscribe()
-  // A publisher that is waiting to reconnect cannot be given a short disconnect timeout, since the
-  // subscriber would inherit it and the cases would prove nothing, so its timer is kept off the loop.
+  // A publisher is not given a short disconnect timeout: the subscriber duplicates its options, and
+  // these cases must fail if the adapter stops setting its own. Its timer is kept off the loop.
   for (const redis of clients.splice(0)) if (redis.status !== 'end') disconnectWithoutTimer(redis)
   for (const fake of servers.splice(0)) await fake.stop()
 })

@@ -1,7 +1,7 @@
 /**
  * @fileoverview Disconnects an ioredis client at the end of a test without leaving its disconnect
- * timer behind. ioredis arms one on every `disconnect()` and clears it when the stream closes, so a
- * stream that has already closed keeps it, and Jest, for two seconds.
+ * timer behind. On `disconnect()` ioredis arms one for the client's stream and clears it when the
+ * stream closes, so a stream that has already closed keeps it, and Jest, waiting.
  * @layer test
  */
 import type Redis from 'ioredis'
