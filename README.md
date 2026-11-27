@@ -473,7 +473,7 @@ pubClient.publish = ((...args: Parameters<typeof send>) => {
 }) as typeof pubClient.publish
 ```
 
-**A SUBSCRIBE the Redis server refuses only warns.** When the adapter's subscriber is refused, such as by an ACL without the permission, the application still boots, logs `REALTIME_ADAPTER_COMMAND_FAILED`, and that instance may not receive what the others emit over WebSocket. Watch for that event, and grant the Redis user the subscribe commands.
+**A SUBSCRIBE the Redis server refuses only warns.** When the adapter's subscriber is refused, such as by an ACL without the permission, the application still boots, logs `REALTIME_ADAPTER_COMMAND_FAILED`, and that instance may not receive what the others emit over WebSocket. Watch for that event, and grant the Redis user the subscribe commands and the adapter's channels.
 
 **An ioredis `Cluster` as `redisAdapter.pubClient` does not get the subscriber's overrides.** `Cluster.duplicate()` takes startup nodes as its first argument, not options, so none of them are applied, and the library's guarantees about a subscriber that queues, retries and resubscribes do not apply to it.
 

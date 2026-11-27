@@ -11,7 +11,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 - **WebSocket: an instance no longer stops hearing the others because of the options of `redisAdapter.pubClient`.**
   - The adapter's subscriber is a duplicate of your client, and it took options under which its SUBSCRIBE was lost: with `enableOfflineQueue: false`, no cross-instance delivery even with Redis healthy; with a finite `maxRetriesPerRequest`, none when Redis was unreachable at boot for longer than the retries; with `autoResubscribe: false`, none after a reconnect. The only trace was one `REALTIME_ADAPTER_COMMAND_FAILED` warning at most.
-  - The duplicate now sets `enableOfflineQueue: true`, `maxRetriesPerRequest: null`, `autoResubscribe: true` and `autoResendUnfulfilledCommands: true`. Your client is not changed.
+  - The duplicate now sets `enableOfflineQueue: true`, `maxRetriesPerRequest: null`, `autoResubscribe: true` and `autoResendUnfulfilledCommands: true`. Your client is not changed. An ioredis `Cluster` client does not get these overrides (see Known limits in the README).
   - **Apply to a derived backend:** nothing to change; upgrade and restart.
 
 ## [1.2.39] - 2026-11-27
