@@ -10,12 +10,16 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Added
 
 - **`RealtimeService.disconnectUser(userId, reason?)` closes every connection of a user, on every instance.**
-  - SSE publishes a new bus message, `op: 'disconnectUser'`; WebSocket closes the room `user:{userId}` through the adapter. It rejects with `REALTIME_PUBSUB_UNAVAILABLE` or `REALTIME_TRANSPORT_UNAVAILABLE` when the revocation could not be sent. `@socket.io/redis-adapter` does not wait for its own publish, so on WebSocket a publish that fails there is not reported, by `disconnect` or `disconnectUser`.
+  - SSE publishes a new bus message, `op: 'disconnectUser'`; WebSocket closes the room `user:{userId}` through the adapter. It rejects with `REALTIME_PUBSUB_UNAVAILABLE` or `REALTIME_TRANSPORT_UNAVAILABLE` when the revocation could not be sent. `@socket.io/redis-adapter` does not wait for its own publish, so on WebSocket `disconnect` and `disconnectUser` are not told of a publish that fails there.
   - A connection still being authenticated is not covered: revoke the credential before the call.
   - **Apply to a derived backend:** a logout can call it. An instance on an earlier version drops the new message with a warning, so finish a rolling deploy before relying on it. A custom `IRealtimePubSub` that validates or switches on `op` must carry `'disconnectUser'`. `ITransport` and the `op` union of the bus message gain a member, so an implementation of `ITransport` has to add `disconnectUser`.
 
 ### Fixed
 
+- **A rejected publish of the Socket.IO Redis adapter no longer ends the process.**
+  - Before: with `websocket.redisAdapter`, an emit or a revocation whose publish Redis rejected was an unhandled rejection, which ends a Node process under its default settings.
+  - After: the library handles it, logs `REALTIME_ADAPTER_PUBLISH_FAILED` at most once each ten seconds and counts it in `bymax_realtime_adapter_publish_failures_total`. The call still resolves, and your `pubClient` is not changed.
+  - **Apply to a derived backend:** nothing; alert on the new counter or log event. A `createAdapter` you install yourself needs its own handler (README, Known limits).
 - **Two registrations bound to one WebSocket namespace refuse the boot.**
   - Before: both booted, and one client was authenticated by both and held both identities.
   - After: the boot is refused with `REALTIME_INVALID_OPTIONS`, naming the namespace.

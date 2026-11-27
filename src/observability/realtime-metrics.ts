@@ -43,6 +43,23 @@ function countedBy<K extends string>(
   })
 }
 
+/** A counter with no label, read from the tally on every scrape after a reset. */
+function total(
+  registry: MetricsRegistry,
+  spec: { readonly name: string; readonly help: string; readonly read: () => number },
+): void {
+  const { read } = spec
+  new Counter({
+    name: spec.name,
+    help: spec.help,
+    registers: [registry],
+    collect(): void {
+      this.reset()
+      this.inc(read())
+    },
+  })
+}
+
 /**
  * Registers the realtime collectors on the registry the scrape endpoint serves.
  *
@@ -101,14 +118,15 @@ export class RealtimeMetrics implements IMetricsContributor {
       keys: TALLY_TRANSPORTS,
       read: () => tally.snapshot().emitted,
     })
-    new Counter({
+    total(registry, {
       name: 'bymax_realtime_slow_consumer_drops_total',
       help: 'Connections cut since start for not reading what they were sent.',
-      registers: [registry],
-      collect(): void {
-        this.reset()
-        this.inc(tally.snapshot().slowConsumerDrops)
-      },
+      read: () => tally.snapshot().slowConsumerDrops,
+    })
+    total(registry, {
+      name: 'bymax_realtime_adapter_publish_failures_total',
+      help: 'Publishes of the Socket.IO Redis adapter rejected since start.',
+      read: () => tally.snapshot().adapterPublishFailures,
     })
   }
 }

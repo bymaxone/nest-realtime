@@ -14,6 +14,8 @@ import {
   REALTIME_ERROR_CODES,
   REALTIME_OPTIONS_TOKEN,
   realtimeError,
+  RealtimeMetricsTally,
+  windowedReport,
 } from '@bymax-one/nest-realtime/internal'
 import type { BymaxRealtimeModuleOptions, QuitableClient } from '@bymax-one/nest-realtime/internal'
 import {
@@ -26,6 +28,7 @@ import {
   wantsPolicy,
 } from './origin-policy'
 import type { AllowRequest } from './origin-policy'
+import { guardPublish } from './guard-publish'
 import {
   corsWithOwnNames,
   placeFirst,
@@ -135,6 +138,17 @@ export function policyMismatch(
 /** The commands the Socket.IO Redis adapter sends on its subscriber connection. */
 const ADAPTER_COMMANDS = ['subscribe', 'psubscribe', 'unsubscribe', 'punsubscribe'] as const
 
+/** The class of what a Redis command rejected with: its message can carry the host or a credential. */
+function kindOf(error: unknown): string {
+  try {
+    const name = Object(error).constructor?.name as unknown
+    return typeof name === 'string' ? name : 'Error'
+  } catch {
+    // The value refused the read; this runs in rejection handlers, where a throw is unhandled.
+    return 'Error'
+  }
+}
+
 const realtimeServers = new WeakSet<object>()
 
 /** The servers of an application's port and default path, which is where the library's gateway listens. */
@@ -181,10 +195,25 @@ export class RealtimeIoAdapter extends IoAdapter {
   /** The subscriber connections this adapter opened for the Redis adapter, closed with it. */
   private readonly subscribers = new Set<QuitableClient>()
   private reportedOutside = false
+  private readonly tally: RealtimeMetricsTally | undefined
+  private readonly publishFailures = windowedReport(
+    (): { count: number; last?: string } => ({ count: 0 }),
+    ({ count, last }) => {
+      logEvent(
+        this.adapterLogger,
+        'warn',
+        'REALTIME_ADAPTER_PUBLISH_FAILED',
+        `Redis adapter publishes failed since the last report: ${count} (${String(last)}); other instances may not ` +
+          'have received those messages',
+        { count },
+      )
+    },
+  )
 
   constructor(app: INestApplicationContext) {
     super(app)
     this.options = app.get<BymaxRealtimeModuleOptions>(REALTIME_OPTIONS_TOKEN)
+    this.tally = app.get<RealtimeMetricsTally | undefined>(RealtimeMetricsTally)
   }
 
   /**
@@ -341,7 +370,7 @@ export class RealtimeIoAdapter extends IoAdapter {
         Promise.resolve(pending).catch((err: unknown) => {
           if (reported) return
           reported = true
-          const kind = (Object(err).constructor?.name as string | undefined) ?? 'Error'
+          const kind = kindOf(err)
           logEvent(
             this.adapterLogger,
             'warn',
@@ -352,6 +381,12 @@ export class RealtimeIoAdapter extends IoAdapter {
         return pending
       }
     }
+  }
+
+  /** Counts one rejected publish of the Redis adapter and reports it, at most once for each window. */
+  private publishFailed(error: unknown): void {
+    this.tally?.adapterPublishFailed()
+    this.publishFailures(({ count }) => ({ count: count + 1, last: kindOf(error) }))
   }
 
   /**
@@ -369,7 +404,8 @@ export class RealtimeIoAdapter extends IoAdapter {
       sub = pub.duplicate({ disconnectTimeout: 1 }) as QuitableClient
       this.subscribers.add(sub)
       this.guardCommands(sub)
-      server.adapter(createAdapter(pub as never, sub as never))
+      const publisher = guardPublish(pubClient as object, (error) => this.publishFailed(error))
+      server.adapter(createAdapter(publisher as never, sub as never))
     } catch (err) {
       // A connection opened for an adapter that failed to install has no owner left to close it.
       if (sub !== undefined) {

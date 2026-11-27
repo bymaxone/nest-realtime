@@ -28,7 +28,7 @@ describe('observability providers in a host module', () => {
     }).compile()
     const registry = new Registry()
     module.get(RealtimeMetrics).registerMetrics(registry)
-    expect((await registry.getMetricsAsJSON()).length).toBe(5)
+    expect((await registry.getMetricsAsJSON()).length).toBe(6)
     await expect(module.get(RealtimePubSubHealthIndicator).check()).resolves.toEqual({
       status: 'up',
     })

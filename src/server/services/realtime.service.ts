@@ -155,8 +155,8 @@ export class RealtimeService {
    * Resolves once the user's connections here are closed and the revocation has been handed to
    * the bus, or to the Socket.IO adapter, for the other instances. A connection still being
    * authenticated when the call is made is not covered, so revoke the credential first.
-   * `@socket.io/redis-adapter` does not wait for its own publish, so a publish that fails there
-   * is not reported.
+   * `@socket.io/redis-adapter` does not wait for its own publish, so the call is not told of a
+   * publish that fails there.
    *
    * @throws {Error} `REALTIME_AUTH_FAILED` when `userId` is not a non-empty string,
    *   `REALTIME_PUBSUB_UNAVAILABLE` when the bus refuses the revocation, or
