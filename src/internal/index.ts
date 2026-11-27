@@ -66,6 +66,9 @@ export { SseSubscriptionHandler } from '../server/transports/sse/sse-subscriptio
 export { SseTransport } from '../server/transports/sse/sse.transport'
 export { createSseController } from '../server/factories/sse-controller.factory'
 
+// One report for each window, shared with the WebSocket entry's adapter.
+export { windowedReport } from '../server/utils/windowed-report'
+
 // Counts the transports keep for the optional observability entry.
 export {
   EVICTION_REASONS,

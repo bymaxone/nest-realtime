@@ -138,7 +138,7 @@ const resolveAll = async (label, dynamicModule) => {
 }
 
 // The optional entry must resolve what it injects from the one shared runtime: registered as plain providers
-// of a host module it boots, publishes its five collectors and reports its indicator up. A second copy of the
+// of a host module it boots, publishes its six collectors and reports its indicator up. A second copy of the
 // shared runtime makes the boot fail with an unresolved dependency, as it does for the tokens above.
 const observabilityBoots = async () => {
   class Host {}
@@ -151,7 +151,7 @@ const observabilityBoots = async () => {
     const registry = new prom.Registry()
     app.get(obs.RealtimeMetrics).registerMetrics(registry)
     const names = (await registry.getMetricsAsJSON()).map((metric) => metric.name)
-    if (names.length !== 5) return 'expected five collectors, found ' + names.length
+    if (names.length !== 6) return 'expected six collectors, found ' + names.length
     const health = await app.get(obs.RealtimePubSubHealthIndicator).check()
     return health.status === 'up' ? '' : 'the indicator reported ' + health.status + ' on a healthy bus'
   } finally {

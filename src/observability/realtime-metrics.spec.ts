@@ -79,6 +79,9 @@ describe('RealtimeMetrics', () => {
       'transport=websocket': 0,
     })
     expect(await samples(registry, 'bymax_realtime_slow_consumer_drops_total')).toEqual({ '': 0 })
+    expect(await samples(registry, 'bymax_realtime_adapter_publish_failures_total')).toEqual({
+      '': 0,
+    })
   })
 
   // Scenario: connections open and close. Expected: the gauge reads the registry at scrape time.
@@ -153,6 +156,7 @@ describe('RealtimeMetrics', () => {
     const { registry } = build()
     const all = await registry.getMetricsAsJSON()
     expect(all.map((m) => m.name).sort()).toEqual([
+      'bymax_realtime_adapter_publish_failures_total',
       'bymax_realtime_connections',
       'bymax_realtime_connections_refused_total',
       'bymax_realtime_events_emitted_total',

@@ -304,6 +304,10 @@ const EXEMPT: Record<string, readonly Site[]> = {
       'the call was started by `started`, which gave it its own constructor, so the await reads no slot',
     ],
   ],
+  'websocket/transports/websocket/guard-publish.ts': [
+    ['Promise.resolve', 'attaches the handler to a publish the Redis adapter never awaits'],
+    ['.catch(', 'reports a rejected publish; the promise handed back still rejects'],
+  ],
   'websocket/transports/websocket/realtime-io-adapter.ts': [
     ['.catch(', 'closes a server whose boot failed; the boot error is what is thrown'],
     [

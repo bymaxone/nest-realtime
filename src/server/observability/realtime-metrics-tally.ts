@@ -39,6 +39,7 @@ export class RealtimeMetricsTally {
   readonly #evicted = zeroed(EVICTION_REASONS)
   readonly #emitted = zeroed(TALLY_TRANSPORTS)
   #slowConsumerDrops = 0
+  #adapterPublishFailures = 0
 
   /** A handshake was refused for `reason`. */
   refused(reason: RefusalReason): void {
@@ -60,18 +61,25 @@ export class RealtimeMetricsTally {
     this.#slowConsumerDrops += 1
   }
 
+  /** A publish of the Socket.IO Redis adapter was rejected. */
+  adapterPublishFailed(): void {
+    this.#adapterPublishFailures += 1
+  }
+
   /** The counts so far, as copies. */
   snapshot(): {
     readonly refused: Readonly<Record<RefusalReason, number>>
     readonly evicted: Readonly<Record<EvictionReason, number>>
     readonly emitted: Readonly<Record<TallyTransport, number>>
     readonly slowConsumerDrops: number
+    readonly adapterPublishFailures: number
   } {
     return {
       refused: { ...this.#refused },
       evicted: { ...this.#evicted },
       emitted: { ...this.#emitted },
       slowConsumerDrops: this.#slowConsumerDrops,
+      adapterPublishFailures: this.#adapterPublishFailures,
     }
   }
 }

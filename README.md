@@ -104,7 +104,7 @@ One package, several entry points — import only what your app needs:
 
 The package also exposes `@bymax-one/nest-realtime/internal`. It is **not public API** and carries no compatibility promise — it is the shared runtime the two server subpaths import so that a service registered through one and injected through the other is the same class. Import the four above; nothing you need is only there.
 
-These names from `./internal`, none of them API and none with a compatibility promise, are grouped below. Composition: `composeForRoot`, `composeForRootAsync`, `TransportRegistration`, `TransportWiring` and `sseWiring`. Shared services: `EventIdGenerator`, `ReauthenticationService`, `AuthenticationGate`, `AuthenticationUnavailableError`, `ConnectionAdmission`, `ConnectionLimitError`, `UNBOUNDED_TICKET`, `AdmissionTicket`, `OfflineQueueDeliveryService`, `EventReplayBuffer`, `HeartbeatService`, `SseSubscriptionHandler`, `createSseController`, `RoomRegistry`, `SseTransport` and `RealtimePubSubSubscriber`. Observability seams: `RealtimeMetricsTally`, `REFUSAL_REASONS`, `EVICTION_REASONS`, `TALLY_TRANSPORTS`, `RefusalReason`, `EvictionReason`, `TallyTransport`, `RealtimeTracing`, `RealtimeSpanName`, `RealtimeSpanAttributes`, `logEvent`, `REALTIME_LOG_EVENTS`, `RealtimeLogEvent` and `LogFields`. Utilities: `DEFAULT_HOOK_TIMEOUT_MS`, `assertIdentityIsNotBlank`, `resolveAuthTenant`, `admitRooms`, `assertBuiltinsIntact`, `replacedBuiltinCount`, `returnable`, `awaitable`, `shielded`, `started`, `describeError`, `callHostMethod`, `hostMethod`, `readHostKey`, `quitWithin`, `QuitableClient`, `runHook`, `unavailableError`, `refuseReservedRoom`, `requireRoomName`, `realtimeError`, `CodedError`, `reportDeliveryFailure` and `parseCookieHeader`.
+These names from `./internal`, none of them API and none with a compatibility promise, are grouped below. Composition: `composeForRoot`, `composeForRootAsync`, `TransportRegistration`, `TransportWiring` and `sseWiring`. Shared services: `EventIdGenerator`, `ReauthenticationService`, `AuthenticationGate`, `AuthenticationUnavailableError`, `ConnectionAdmission`, `ConnectionLimitError`, `UNBOUNDED_TICKET`, `AdmissionTicket`, `OfflineQueueDeliveryService`, `EventReplayBuffer`, `HeartbeatService`, `SseSubscriptionHandler`, `createSseController`, `RoomRegistry`, `SseTransport` and `RealtimePubSubSubscriber`. Observability seams: `RealtimeMetricsTally`, `REFUSAL_REASONS`, `EVICTION_REASONS`, `TALLY_TRANSPORTS`, `RefusalReason`, `EvictionReason`, `TallyTransport`, `RealtimeTracing`, `RealtimeSpanName`, `RealtimeSpanAttributes`, `windowedReport`, `logEvent`, `REALTIME_LOG_EVENTS`, `RealtimeLogEvent` and `LogFields`. Utilities: `DEFAULT_HOOK_TIMEOUT_MS`, `assertIdentityIsNotBlank`, `resolveAuthTenant`, `admitRooms`, `assertBuiltinsIntact`, `replacedBuiltinCount`, `returnable`, `awaitable`, `shielded`, `started`, `describeError`, `callHostMethod`, `hostMethod`, `readHostKey`, `quitWithin`, `QuitableClient`, `runHook`, `unavailableError`, `refuseReservedRoom`, `requireRoomName`, `realtimeError`, `CodedError`, `reportDeliveryFailure` and `parseCookieHeader`.
 
 ---
 
@@ -457,7 +457,21 @@ This section lists the bounds the library applies, what happens when each one is
 
 ### Known limits
 
-**A WebSocket revocation can resolve although its cross-node publish failed.** `@socket.io/redis-adapter` does not wait for its own publish, so `disconnect` and `disconnectUser` can resolve when it failed, and sockets on other nodes may stay connected.
+**A WebSocket call can resolve although its cross-node publish failed.** `@socket.io/redis-adapter` does not wait for its own publish, so an emit, `disconnect` or `disconnectUser` can resolve when it failed: other nodes may miss the event, and their sockets may stay connected. With `websocket.redisAdapter` the library handles the rejection, logs `REALTIME_ADAPTER_PUBLISH_FAILED` and counts it in `bymax_realtime_adapter_publish_failures_total`.
+
+**A Redis adapter you install yourself is not covered.** A rejected publish there is an unhandled rejection, which ends a Node process unless the application handles `unhandledRejection`. Handle it on the client before you pass it to `createAdapter`:
+
+```ts
+import { Redis } from 'ioredis'
+
+const pubClient = new Redis()
+const send = pubClient.publish.bind(pubClient)
+pubClient.publish = ((channel: string | Buffer, message: string | Buffer) => {
+  const sent = send(channel, message)
+  sent.catch((error: unknown) => console.warn('adapter publish failed', error))
+  return sent
+}) as typeof pubClient.publish
+```
 
 **A host gateway that declares the same namespace as `websocket.namespace` shares it with the library's gateway.** It runs its handlers for the library's connections, and what the library does to its own connections, such as revoking, capping or denying them, is not something that gateway can opt out of. Give a host gateway a namespace of its own unless it is meant to receive from those clients.
 
@@ -521,13 +535,14 @@ import {
 export class ObservabilityModule {}
 ```
 
-| Metric                                     | Type    | Labels                                                     | Meaning                                                                                                                                                                                   |
-| ------------------------------------------ | ------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bymax_realtime_connections`               | gauge   | `transport` = `sse`, `websocket`                           | Connections open on this instance now.                                                                                                                                                    |
-| `bymax_realtime_connections_refused_total` | counter | `reason` = `limit`, `unauthorized`, `unavailable`, `error` | Handshakes refused since start; `error` is one that failed with an unexpected error (a 500); a connection that `onConnectFailure: 'close'` closes was admitted first, and is not counted. |
-| `bymax_realtime_evictions_total`           | counter | `reason` = `per_user_cap`, `slow_consumer`, `revoked`      | Connections closed by the library or by a revocation.                                                                                                                                     |
-| `bymax_realtime_events_emitted_total`      | counter | `transport` = `sse`, `websocket`                           | Emit calls handled on this instance, not deliveries: a call with no recipient counts, and under `'both'` each transport counts it.                                                        |
-| `bymax_realtime_slow_consumer_drops_total` | counter | none                                                       | Connections cut for not reading what they were sent.                                                                                                                                      |
+| Metric                                          | Type    | Labels                                                     | Meaning                                                                                                                                                                                   |
+| ----------------------------------------------- | ------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bymax_realtime_connections`                    | gauge   | `transport` = `sse`, `websocket`                           | Connections open on this instance now.                                                                                                                                                    |
+| `bymax_realtime_connections_refused_total`      | counter | `reason` = `limit`, `unauthorized`, `unavailable`, `error` | Handshakes refused since start; `error` is one that failed with an unexpected error (a 500); a connection that `onConnectFailure: 'close'` closes was admitted first, and is not counted. |
+| `bymax_realtime_evictions_total`                | counter | `reason` = `per_user_cap`, `slow_consumer`, `revoked`      | Connections closed by the library or by a revocation.                                                                                                                                     |
+| `bymax_realtime_events_emitted_total`           | counter | `transport` = `sse`, `websocket`                           | Emit calls handled on this instance, not deliveries: a call with no recipient counts, and under `'both'` each transport counts it.                                                        |
+| `bymax_realtime_slow_consumer_drops_total`      | counter | none                                                       | Connections cut for not reading what they were sent.                                                                                                                                      |
+| `bymax_realtime_adapter_publish_failures_total` | counter | none                                                       | Publishes of the Socket.IO Redis adapter that were rejected.                                                                                                                              |
 
 A label is one of the values listed and never an id, a tenant or a user. A revocation is counted on the instance that was asked to make it, once it has closed the connection or handed the request to the bus.
 
@@ -559,6 +574,7 @@ A label is one of the values listed and never an id, a tenant or a user. A revoc
 | `REALTIME_ADAPTER_MISSING`             | error       | `RealtimeIoAdapter` is not the active WebSocket adapter.                            | none                                                                     |
 | `REALTIME_GATEWAY_OUTSIDE_NAMESPACE`   | warn        | Another gateway is on `/`, the library elsewhere.                                   | none                                                                     |
 | `REALTIME_ADAPTER_COMMAND_FAILED`      | warn        | A command of the Redis adapter's subscriber failed (once for each connection).      | none                                                                     |
+| `REALTIME_ADAPTER_PUBLISH_FAILED`      | warn        | Publishes of the Redis adapter were rejected (windowed).                            | `count`                                                                  |
 | `REALTIME_COMPOSITE_PARTIAL_FAILURE`   | warn        | One of the two transports failed an emit under `transport: 'both'`.                 | `op`                                                                     |
 | `REALTIME_SERVER_NOT_ATTACHED`         | warn        | An emit was made before the WebSocket server was attached (once).                   | `op`                                                                     |
 
