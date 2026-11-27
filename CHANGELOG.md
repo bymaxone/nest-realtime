@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.40] - 2026-11-27
+
 ### Fixed
 
 - **SSE: an instance whose subscriber connection falls silent no longer reports itself ready for ever.**
@@ -29,6 +31,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
   - The adapter's subscriber is a duplicate of your client, and it took options under which its SUBSCRIBE was lost: with `enableOfflineQueue: false`, no cross-instance delivery even with Redis healthy; with a finite `maxRetriesPerRequest`, none when Redis was unreachable at boot for longer than the retries; with `autoResubscribe: false`, none after a reconnect. The only trace was one `REALTIME_ADAPTER_COMMAND_FAILED` warning at most.
   - The duplicate now sets `enableOfflineQueue: true`, `maxRetriesPerRequest: null`, `autoResubscribe: true` and `autoResendUnfulfilledCommands: true`. Your client is not changed. An ioredis `Cluster` client does not get these overrides (see Known limits in the README).
   - **Apply to a derived backend:** nothing to change; upgrade and restart.
+
+### Changed
+
+- **README: Known limits and the failure table state more of what happens.** A publish Redis did not answer can be sent again by ioredis after a reconnect; slow Sentinels end a subscriber whose `sentinelRetryStrategy` gives up; two `forRoot` registrations have one namespace opened in advance; and `forceCloseConnections: true` changes what the shutdown closes.
 
 ## [1.2.39] - 2026-11-27
 
@@ -1598,7 +1604,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.39...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.40...HEAD
+[1.2.40]: https://github.com/bymaxone/nest-realtime/compare/v1.2.39...v1.2.40
 [1.2.39]: https://github.com/bymaxone/nest-realtime/compare/v1.2.38...v1.2.39
 [1.2.38]: https://github.com/bymaxone/nest-realtime/compare/v1.2.37...v1.2.38
 [1.2.37]: https://github.com/bymaxone/nest-realtime/compare/v1.2.36...v1.2.37

@@ -6,6 +6,7 @@
 import Redis from 'ioredis'
 import { createTestInstances } from '../../../test/e2e/helpers/create-test-instance'
 import { FakeRespServer } from '../../../test/fixtures/fake-resp-server'
+import { disconnectWithoutTimer } from '../../../test/support/disconnect-without-timer'
 import { settlesInThisTurn } from '../../../test/support/settles-in-this-turn'
 import type { RealtimePubSubMessage } from '../interfaces/realtime-pubsub.interface'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
@@ -30,7 +31,7 @@ async function until(what: string, condition: () => boolean, ms = 1_500): Promis
 }
 
 afterEach(async () => {
-  for (const redis of clients.splice(0)) redis.disconnect()
+  for (const redis of clients.splice(0)) disconnectWithoutTimer(redis)
   for (const fake of servers.splice(0)) await fake.stop()
 })
 

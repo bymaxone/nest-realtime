@@ -50,7 +50,7 @@ export function listDifference(
 export function corsAnswersOrigins(cors: unknown): boolean {
   if (typeof cors === 'function' || cors === true) return true
   if (typeof cors !== 'object' || cors === null) return false
-  return 'origin' in cors && (cors as { origin: unknown }).origin !== false
+  return 'origin' in cors && cors.origin !== false
 }
 
 // Taken at load: a method the host replaces afterwards cannot admit an origin the list does not hold.
@@ -87,7 +87,7 @@ async function askHost(
     answer(message, success)
   }
   try {
-    await awaitable(Reflect.apply(host, self, [request, once]) as unknown)
+    await awaitable(Reflect.apply(host, self, [request, once]))
   } catch {
     once('forbidden', false)
   }

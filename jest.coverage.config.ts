@@ -12,7 +12,7 @@ import type { Config } from 'jest'
 const config: Config = {
   rootDir: '.',
   maxWorkers: '50%',
-  passWithNoTests: true,
+  passWithNoTests: process.env['CI'] !== 'true',
   clearMocks: true,
   restoreMocks: true,
   collectCoverage: true,

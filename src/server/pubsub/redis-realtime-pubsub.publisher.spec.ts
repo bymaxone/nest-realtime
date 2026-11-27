@@ -7,6 +7,7 @@
 import type { Socket } from 'node:net'
 import { Logger } from '@nestjs/common'
 import Redis from 'ioredis'
+import { disconnectWithoutTimer } from '../../../test/support/disconnect-without-timer'
 import { FakeRespServer, healthyRedis } from '../../../test/fixtures/fake-resp-server'
 import { settlesInThisTurn } from '../../../test/support/settles-in-this-turn'
 import type { SettledOrPending } from '../../../test/support/settles-in-this-turn'
@@ -103,7 +104,7 @@ afterEach(async () => {
   jest.useRealTimers()
   jest.restoreAllMocks()
   for (const unsubscribe of unsubscribers.splice(0)) await unsubscribe()
-  for (const redis of clients.splice(0)) redis.disconnect()
+  for (const redis of clients.splice(0)) disconnectWithoutTimer(redis)
   for (const fake of servers.splice(0)) await fake.stop()
 })
 
@@ -172,6 +173,11 @@ describe('RedisRealtimePubSub publishing connection', () => {
       retryStrategy: () => null,
     })
     const pubsub = new RedisRealtimePubSub({ client: redis })
+    // ioredis disconnects each sentinel client it asked, here on a stream already closed, so the
+    // timer that arms is never cleared: it is kept off the event loop. `afterEach` restores it.
+    jest.useFakeTimers({
+      doNotFake: ['clearTimeout', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask'],
+    })
 
     unsubscribers.push(await pubsub.subscribe(() => undefined))
 
