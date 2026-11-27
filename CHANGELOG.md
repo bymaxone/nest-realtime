@@ -7,12 +7,14 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.39] - 2026-11-27
+
 ### Added
 
 - **`RealtimeService.disconnectUser(userId, reason?)` closes every connection of a user, on every instance.**
   - SSE publishes a new bus message, `op: 'disconnectUser'`; WebSocket closes the room `user:{userId}` through the adapter. It rejects with `REALTIME_PUBSUB_UNAVAILABLE` or `REALTIME_TRANSPORT_UNAVAILABLE` when the revocation could not be sent. `@socket.io/redis-adapter` does not wait for its own publish, so on WebSocket `disconnect` and `disconnectUser` are not told of a publish that fails there.
   - A connection still being authenticated is not covered: revoke the credential before the call.
-  - **Apply to a derived backend:** a logout can call it. An instance on an earlier version drops the new message with a warning, so finish a rolling deploy before relying on it. A custom `IRealtimePubSub` that validates or switches on `op` must carry `'disconnectUser'`. `ITransport` and the `op` union of the bus message gain a member, so an implementation of `ITransport` has to add `disconnectUser`.
+  - **Apply to a derived backend:** a logout can call it. Upgrade every instance before relying on `disconnectUser`: a 1.2.38 instance drops the new op (`REALTIME_PUBSUB_DROPPED`), so its SSE streams for that user stay open while the call resolves. A custom `IRealtimePubSub` that validates or switches on `op` must carry `'disconnectUser'`. `ITransport` and the `op` union of the bus message gain a member, so an implementation of `ITransport` has to add `disconnectUser`.
 
 ### Fixed
 
@@ -1573,7 +1575,8 @@ First published release.
   rather than by the manual sweep that raised the NestJS floors — that sweep
   asked about NestJS and never put the same question to the other ten peers.
 
-[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.38...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-realtime/compare/v1.2.39...HEAD
+[1.2.39]: https://github.com/bymaxone/nest-realtime/compare/v1.2.38...v1.2.39
 [1.2.38]: https://github.com/bymaxone/nest-realtime/compare/v1.2.37...v1.2.38
 [1.2.37]: https://github.com/bymaxone/nest-realtime/compare/v1.2.36...v1.2.37
 [1.2.36]: https://github.com/bymaxone/nest-realtime/compare/v1.2.35...v1.2.36

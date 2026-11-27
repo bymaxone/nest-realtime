@@ -466,8 +466,8 @@ import { Redis } from 'ioredis'
 
 const pubClient = new Redis()
 const send = pubClient.publish.bind(pubClient)
-pubClient.publish = ((channel: string | Buffer, message: string | Buffer) => {
-  const sent = send(channel, message)
+pubClient.publish = ((...args: Parameters<typeof send>) => {
+  const sent = send(...args)
   sent.catch((error: unknown) => console.warn('adapter publish failed', error))
   return sent
 }) as typeof pubClient.publish

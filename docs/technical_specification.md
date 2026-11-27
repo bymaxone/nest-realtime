@@ -100,7 +100,7 @@ For the predominant SaaS use cases (server-push notifications, live dashboards, 
 
 ### 1.6 Design principles
 
-1. **Transport-agnostic server-side API** — `RealtimeService` exposes `emitToUser`, `emitToTenant`, `emitToRoom`, `broadcast`, `joinRoom`, `leaveRoom`, and `disconnect`. Works identically with SSE, WS, or both simultaneously.
+1. **Transport-agnostic server-side API** — `RealtimeService` exposes `emitToUser`, `emitToTenant`, `emitToRoom`, `broadcast`, `joinRoom`, `leaveRoom`, `disconnect`, and `disconnectUser`. Works identically with SSE, WS, or both simultaneously.
 2. **Auth inversion** — the lib never imports `@bymax-one/nest-auth` or `@nestjs/jwt`. Consumer plugs in `IConnectionAuthenticator` (interface). Works with nest-auth (recommended), custom JWT, ticket pattern, or any strategy.
 3. **SSE first, WS opt-in** — defaults favor the most common case (server→client push). WebSocket is enabled explicitly.
 4. **Tree-shakeable frontend** — `useRealtime` detects SSE vs WS via URL scheme; `socket.io-client` is an optional peer dep loaded dynamically.
@@ -113,13 +113,13 @@ For the predominant SaaS use cases (server-push notifications, live dashboards, 
 
 #### Core (always active)
 
-| Component                  | Responsibility                                                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `RealtimeService`          | Unified API (`emitToUser`, `emitToTenant`, `emitToRoom`, `broadcast`, `joinRoom`, `leaveRoom`, `disconnect`) |
-| `RoomRegistry`             | Internal tracking of `Map<roomId, Set<connectionId>>`                                                        |
-| `ConnectionRegistry`       | Internal tracking of active connections with metadata (userId, tenantId, transport)                          |
-| `IConnectionAuthenticator` | Required interface — consumer implements                                                                     |
-| `EventIdGenerator`         | Generates monotonic IDs for `Last-Event-ID` and correlation                                                  |
+| Component                  | Responsibility                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `RealtimeService`          | Unified API (`emitToUser`, `emitToTenant`, `emitToRoom`, `broadcast`, `joinRoom`, `leaveRoom`, `disconnect`, `disconnectUser`) |
+| `RoomRegistry`             | Internal tracking of `Map<roomId, Set<connectionId>>`                                                                          |
+| `ConnectionRegistry`       | Internal tracking of active connections with metadata (userId, tenantId, transport)                                            |
+| `IConnectionAuthenticator` | Required interface — consumer implements                                                                                       |
+| `EventIdGenerator`         | Generates monotonic IDs for `Last-Event-ID` and correlation                                                                    |
 
 #### SSE Transport (default — opt-out via `transport: 'websocket'`)
 
@@ -871,6 +871,9 @@ export interface ITransport {
   /** Disconnect a specific connection (e.g., on auth revocation). */
   disconnect(connectionId: string, reason?: string): Promise<void>
 
+  /** Disconnect every connection of a user, on every instance. */
+  disconnectUser(userId: string, reason?: string): Promise<void>
+
   /** Lifecycle — called on NestJS bootstrap. */
   onModuleInit?(): Promise<void>
 
@@ -1033,7 +1036,7 @@ export interface IConnectionLifecycleHooks {
 ```typescript
 export interface RealtimePubSubMessage {
   /** Operation type. */
-  op: 'emitToUser' | 'emitToTenant' | 'emitToRoom' | 'broadcast' | 'disconnect'
+  op: 'emitToUser' | 'emitToTenant' | 'emitToRoom' | 'broadcast' | 'disconnect' | 'disconnectUser'
   /** Operation arguments — shape depends on op. */
   args: unknown
   /** Instance ID that originated the message (avoid echo). */
@@ -1042,7 +1045,8 @@ export interface RealtimePubSubMessage {
 
 /**
  * Shape of `RealtimePubSubMessage.args` for the emit ops, used by the §6.1
- * subscriber dispatch. The `disconnect` op instead carries `{ connectionId, reason }`.
+ * subscriber dispatch. The `disconnect` op instead carries `{ connectionId, reason }`,
+ * and `disconnectUser` carries `{ userId, reason }`.
  */
 export interface EmitArgs {
   userId?: string
@@ -1272,6 +1276,11 @@ export class SseTransport implements ITransport {
           this.disconnectLocal(a.connectionId, a.reason)
           break
         }
+        case 'disconnectUser': {
+          const a = m.args as { userId: string; reason?: string }
+          this.disconnectUserLocal(a.userId, a.reason)
+          break
+        }
       }
     })
   }
@@ -1319,6 +1328,18 @@ export class SseTransport implements ITransport {
       return
     }
     await this.pubsub.publish({ op: 'disconnect', args: { connectionId, reason }, origin: '' })
+  }
+
+  // Every connection of a user: close the ones here, and publish ONCE for the other instances.
+  async disconnectUser(userId: string, reason?: string): Promise<void> {
+    this.disconnectUserLocal(userId, reason)
+    await this.pubsub.publish({ op: 'disconnectUser', args: { userId, reason }, origin: '' })
+  }
+
+  disconnectUserLocal(userId: string, reason?: string): void {
+    for (const conn of this.connections.byUser(userId, 'sse')) {
+      this.disconnectLocal(conn.connectionId, reason)
+    }
   }
 
   // Local-only close (no re-publish — a relaying receiver must not re-broadcast).
@@ -1467,6 +1488,11 @@ export class WebSocketTransport implements ITransport {
     // close sockets on this node — breaking cross-instance revocation (§8.4).
     this.server.in(connectionId).disconnectSockets(true)
   }
+
+  async disconnectUser(userId: string, _reason?: string): Promise<void> {
+    // Every socket joined `user:{userId}` at the handshake, so the adapter closes them on all nodes.
+    this.server.in(`user:${userId}`).disconnectSockets(true)
+  }
 }
 ```
 
@@ -1571,6 +1597,13 @@ export class RealtimeService {
    */
   disconnect(connectionId: string, reason?: string): Promise<void> {
     return this.transport.disconnect(connectionId, reason)
+  }
+
+  /**
+   * Force-disconnect every connection of a user, on every instance (e.g., logout everywhere).
+   */
+  disconnectUser(userId: string, reason?: string): Promise<void> {
+    return this.transport.disconnectUser(userId, reason)
   }
 }
 ```
@@ -1768,6 +1801,13 @@ In a multi-instance environment, if the connection is not owned by the instance 
 
 - **SSE:** `disconnect()` publishes `{ op: 'disconnect', args: { connectionId, reason } }` on `IRealtimePubSub`; the owning instance's subscriber invokes `disconnectLocal()` (a non-publishing close — see §6.1). This `op:'disconnect'` producer/consumer is what makes this guarantee real.
 - **WebSocket:** `disconnect()` calls `this.server.in(connectionId).disconnectSockets(true)`, which `@socket.io/redis-adapter` broadcasts to all nodes (no separate pub/sub op needed).
+
+To close every connection of a user, call `disconnectUser(userId, reason?)`:
+
+- **SSE:** closes the connections of that user on this instance and publishes `{ op: 'disconnectUser', args: { userId, reason } }`, so each other instance closes its own.
+- **WebSocket:** closes the room `user:{userId}` through the adapter. `@socket.io/redis-adapter` does not wait for its own publish, so the call is not told of a publish that fails there.
+
+The call rejects with `REALTIME_PUBSUB_UNAVAILABLE` or `REALTIME_TRANSPORT_UNAVAILABLE` when the revocation could not be sent. A connection still being authenticated is not covered: revoke the credential before the call.
 
 ---
 
@@ -2306,18 +2346,19 @@ In WebSocket, client → server reserved events:
 
 ## 14. Error Code Catalog
 
-| Code                               | When                                                                         | HTTP / WS code                                                                                                                          |
-| ---------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `REALTIME_INVALID_OPTIONS`         | Malformed config at initialization                                           | Throws                                                                                                                                  |
-| `REALTIME_NO_AUTHENTICATOR`        | `authenticator` not provided                                                 | Throws                                                                                                                                  |
-| `REALTIME_AUTH_FAILED`             | `authenticator.authenticate` returned null                                   | 401 (SSE) / disconnect (WS)                                                                                                             |
-| `REALTIME_REAUTHENTICATION_FAILED` | Periodic re-check failed                                                     | Disconnect with reason                                                                                                                  |
-| `REALTIME_TOO_MANY_CONNECTIONS`    | User exceeded `maxConnectionsPerUser` → **oldest connection evicted (FIFO)** | Oldest SSE stream closed / WS socket disconnected with this reason (the **new** connection is admitted, never 429'd)                    |
-| `REALTIME_INVALID_TICKET`          | Ticket expired/used/non-existent                                             | 401 — surfaced only if the authenticator distinguishes it; the §5.2 ticket example returns `null`, which maps to `REALTIME_AUTH_FAILED` |
-| `REALTIME_PUBSUB_UNAVAILABLE`      | Pub/sub configured but failed to connect                                     | Warn log; lib degrades to single-instance                                                                                               |
-| `REALTIME_REDIS_ADAPTER_FAILED`    | `websocket.redisAdapter` is set but the Socket.IO Redis adapter cannot be installed | Throws at bootstrap; an unreachable Redis does not fail the boot                                                                        |
-| `REALTIME_PAYLOAD_TOO_LARGE`       | Event exceeds `maxHttpBufferSize`                                            | Dropped + log                                                                                                                           |
-| `REALTIME_REPLAY_BUFFER_MISS`      | `Last-Event-ID` not in the buffer (gap)                                      | Replay via `IOfflineQueueStorage` if configured; otherwise the gap is unrecoverable and events before the buffer window are lost        |
+| Code                               | When                                                                                               | HTTP / WS code                                                                                                                          |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `REALTIME_INVALID_OPTIONS`         | Malformed config at initialization                                                                 | Throws                                                                                                                                  |
+| `REALTIME_NO_AUTHENTICATOR`        | `authenticator` not provided                                                                       | Throws                                                                                                                                  |
+| `REALTIME_AUTH_FAILED`             | `authenticator.authenticate` returned null                                                         | 401 (SSE) / disconnect (WS)                                                                                                             |
+| `REALTIME_REAUTHENTICATION_FAILED` | Periodic re-check failed                                                                           | Disconnect with reason                                                                                                                  |
+| `REALTIME_TOO_MANY_CONNECTIONS`    | User exceeded `maxConnectionsPerUser` → **oldest connection evicted (FIFO)**                       | Oldest SSE stream closed / WS socket disconnected with this reason (the **new** connection is admitted, never 429'd)                    |
+| `REALTIME_INVALID_TICKET`          | Ticket expired/used/non-existent                                                                   | 401 — surfaced only if the authenticator distinguishes it; the §5.2 ticket example returns `null`, which maps to `REALTIME_AUTH_FAILED` |
+| `REALTIME_PUBSUB_UNAVAILABLE`      | Pub/sub configured but failed to connect                                                           | Warn log; lib degrades to single-instance                                                                                               |
+| `REALTIME_REDIS_ADAPTER_FAILED`    | `websocket.redisAdapter` is set but the Socket.IO Redis adapter cannot be installed                | Throws at bootstrap; an unreachable Redis does not fail the boot                                                                        |
+| `REALTIME_TRANSPORT_UNAVAILABLE`   | A transport cannot take a handshake or deliver a call, or the WebSocket guards cannot be installed | Rejects, is only reported, or refuses boot; a refused handshake gets an HTTP error status (SSE) or a failed connection (WS)             |
+| `REALTIME_PAYLOAD_TOO_LARGE`       | Event exceeds `maxHttpBufferSize`                                                                  | Dropped + log                                                                                                                           |
+| `REALTIME_REPLAY_BUFFER_MISS`      | `Last-Event-ID` not in the buffer (gap)                                                            | Replay via `IOfflineQueueStorage` if configured; otherwise the gap is unrecoverable and events before the buffer window are lost        |
 
 ---
 

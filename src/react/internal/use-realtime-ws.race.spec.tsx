@@ -46,7 +46,7 @@ beforeEach(() => {
   mockIo.mockReturnValue(mockSocket)
 })
 
-describe('race: disabled while the import is in flight', () => {
+describe('race: an attempt overtaken or failing around the import', () => {
   const render = () =>
     renderHook(({ enabled }) => useRealtimeWs({ url: 'ws://localhost', enabled }), {
       initialProps: { enabled: true },

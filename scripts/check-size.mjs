@@ -23,7 +23,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // Budgets are at or above the measured brotli sizes of the bundles as they ship, comments stripped
 // by `scripts/strip-bundle-comments.mjs` (run by `pnpm build`). The margin differs per bundle and can
 // be none, so a change that grows a bundle raises its budget in the same change, with its own
-// measurement and reason. Each line is the measured size, then the budget:
+// measurement and reason. The current budgets are the ones in `BUDGETS`.
 //   server       247 B →    265 B (a re-export facade over the shared runtime)
 //   internal  26,752 B → 26,782 B (the bulk of an SSE install: the route guard that authenticates
 //     before the SSE response is committed, the handling that keeps an error's message out of the
@@ -94,7 +94,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     and, 414 B in all, the refusal of a server run while `Object.prototype` holds a key outside the standard names or a standard name that was changed or was not the built-in of a clean realm at load, in boot, per request and per packet, with the own keys of the decoder subclass, measured on 2026-11-22)
 //     and, 188 B more than the figure above, the clean-realm functions the guard's helpers call (the unshift that puts the request guard first, the keys and the definition of an own key, the check that it ended up first and the refusal of a server where it did not), the body of the 500 written as text, and the construction of that realm inside a try, measured on 2026-11-22)
 //     and, 200 B more than the figure above, the count of the replaced built-ins and of the symbol keys in the guard and the check before each join of a room and each send, measured on 2026-11-22)
-//   observability  1,092 B → 1,122 B (the metrics contributor and the pub/sub health indicator: five collectors read from the tally and the registry, the
+//   observability  1,092 B → 1,122 B (the metrics contributor and the pub/sub health indicator: six collectors read from the tally and the registry, the
 //     entry nobody installs unless they publish metrics, so it carries no weight for anyone else)
 //   shared       519 B →    520 B (types and constants, including the slow-consumer reason)
 //   react      2,817 B →  2,847 B (the resume parameter: the last event id the hook saw, replacing one
