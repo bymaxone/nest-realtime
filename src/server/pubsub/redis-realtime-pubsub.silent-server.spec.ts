@@ -143,7 +143,7 @@ describe('RedisRealtimePubSub: a server that does not answer', () => {
   })
 
   // Scenario: the host's client has a commandTimeout shorter than the server's silence. Expected:
-  // it does not apply to the subscriber, so the late answer to its one SUBSCRIBE still counts.
+  // the SUBSCRIBE it rejects is sent again, so the server's late answer still counts.
   it("subscribes on a late answer whatever the host's commandTimeout", async () => {
     const { fake, answer } = await holding((command) => command[0] === 'SUBSCRIBE')
     const pubsub = bus(fake.port, { commandTimeout: 300 })
