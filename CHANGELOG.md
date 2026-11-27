@@ -9,6 +9,14 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Fixed
 
+- **WebSocket: `onDisconnect` receives the reason a connection was closed with.**
+  - Before: `disconnect(connectionId, reason)`, `disconnectUser(userId, reason)` and an eviction over `maxConnectionsPerUser` all reported `CLIENT_DISCONNECT`.
+  - After: a socket of the instance that closes it reports that reason, as on SSE. One closed by another instance through the adapter still reports `CLIENT_DISCONNECT`.
+  - **Apply to a derived backend:** an `onDisconnect` that treats `CLIENT_DISCONNECT` as every WebSocket close must accept the other reasons.
+- **A burst of refusals or failures is logged to its end.**
+  - Before: `REALTIME_CONNECTIONS_REFUSED`, `REALTIME_HANDSHAKES_REFUSED`, `REALTIME_RECONNECTS_GIVEN_UP`, `REALTIME_PUBSUB_DROPPED` (not the Redis bus's own line for a malformed payload) and `REALTIME_ADAPTER_PUBLISH_FAILED` counted what followed a line only into the next one, so a burst that nothing followed was never written.
+  - After: it is written when the ten-second window ends, or when the application closes. The timer does not keep the process alive.
+  - **Apply to a derived backend:** nothing to change; a line can now appear up to ten seconds after the last event it counts.
 - **WebSocket: an instance no longer stops hearing the others because of the options of `redisAdapter.pubClient`.**
   - The adapter's subscriber is a duplicate of your client, and it took options under which its SUBSCRIBE was lost: with `enableOfflineQueue: false`, no cross-instance delivery even with Redis healthy; with a finite `maxRetriesPerRequest`, none when Redis was unreachable at boot for longer than the retries; with `autoResubscribe: false`, none after a reconnect. The only trace was one `REALTIME_ADAPTER_COMMAND_FAILED` warning at most.
   - The duplicate now sets `enableOfflineQueue: true`, `maxRetriesPerRequest: null`, `autoResubscribe: true` and `autoResendUnfulfilledCommands: true`. Your client is not changed. An ioredis `Cluster` client does not get these overrides (see Known limits in the README).

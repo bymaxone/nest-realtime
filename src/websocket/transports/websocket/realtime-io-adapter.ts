@@ -363,6 +363,7 @@ export class RealtimeIoAdapter extends IoAdapter {
     const closing = [...this.subscribers].map((sub) => quitWithin(sub))
     this.subscribers.clear()
     await Promise.allSettled(closing)
+    this.publishFailures.stop()
   }
 
   /**

@@ -2,6 +2,7 @@
  * @fileoverview Delivers missed offline-queue events on reconnect.
  * @layer application
  */
+import type { OnApplicationShutdown } from '@nestjs/common'
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import {
   REALTIME_HOOKS_TOKEN,
@@ -62,7 +63,7 @@ export class OfflineQueueTimeoutError extends Error {
  * get a no-op service (returns `[]`).
  */
 @Injectable()
-export class OfflineQueueDeliveryService {
+export class OfflineQueueDeliveryService implements OnApplicationShutdown {
   private readonly logger = new Logger(OfflineQueueDeliveryService.name)
   private readonly timeoutMs: number
   private readonly maxPending: number
@@ -278,6 +279,11 @@ export class OfflineQueueDeliveryService {
       if (err instanceof OfflineQueueTimeoutError) this.countTimeout()
       throw err
     }
+  }
+
+  /** Writes the reconnects given up on that are still waiting for their window. */
+  onApplicationShutdown(): void {
+    this.timeouts.stop()
   }
 
   /** Count a timeout, and log at most one line for each window, so a hung queue cannot flood the log. */

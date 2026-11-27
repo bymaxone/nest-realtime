@@ -66,6 +66,8 @@ export class WebSocketTransport implements ITransport {
   /** Nullable until the gateway's afterInit wires the instance. */
   private server: Server | null = null
   private warnedUnattached = false
+  /** The reason each connection being revoked was given, for the `onDisconnect` that follows. */
+  private readonly revokedWith = new WeakMap<object, string | undefined>()
   /** Set once shutdown begins; a handshake that arrives from then on is refused. */
   #shuttingDown = false
 
@@ -297,12 +299,14 @@ export class WebSocketTransport implements ITransport {
    * computed `durationMs`.
    *
    * @param connectionId - The Socket.IO socket `id` of the disconnected connection.
-   * @param reason - Optional reason string forwarded to the `onDisconnect` hook.
+   * @param reason - Forwarded to the `onDisconnect` hook, unless a revocation recorded its own.
    */
   async unregisterSocket(connectionId: string, reason?: string): Promise<void> {
     const record = this.connections.unregister(connectionId)
     if (!record) return
     this.rooms.leaveAll(connectionId)
+    // The reason of a revocation outranks the one the socket's own close reports.
+    reason = this.revokedWith.get(record) ?? reason
     const disconnectMeta = {
       connectionId,
       userId: record.userId,
@@ -417,18 +421,19 @@ export class WebSocketTransport implements ITransport {
    * Force-disconnect a specific connection — adapter-aware, so revocation works
    * across nodes.
    *
-   * A socket local to this node is closed directly as a fast path. Regardless,
+   * A socket local to this node is closed directly as a fast path, and its `onDisconnect`
+   * receives `reason`; one closed on another node reports `CLIENT_DISCONNECT`. Regardless,
    * `disconnectSockets` is broadcast to the connection's `connection:{id}` room:
    * under `@socket.io/redis-adapter` this fans out to remote nodes, so a
    * connection pinned to another instance is still force-closed. The local socket
    * has already left the room by then, so the broadcast does not double-close it.
    *
    * @param connectionId - The socket `id` of the connection to disconnect.
-   * @param _reason - Optional reason string (unused at the Socket.IO level; passed to `unregisterSocket`).
+   * @param reason - What `onDisconnect` receives for a socket held here.
    * @throws {Error} `REALTIME_TRANSPORT_UNAVAILABLE` when no server is attached or the
    *   fan-out throws: the revocation did not leave this node.
    */
-  async disconnect(connectionId: string, _reason?: string): Promise<void> {
+  async disconnect(connectionId: string, reason?: string): Promise<void> {
     assertBuiltinsIntact()
     const server = this.server
     if (!server) {
@@ -440,8 +445,7 @@ export class WebSocketTransport implements ITransport {
       )
     }
     try {
-      const local = this.localSockets()?.get(connectionId)
-      if (local) local.disconnect(true)
+      this.close(connectionId, reason)
       server.in(`${CONNECTION_ROOM_PREFIX}:${connectionId}`).disconnectSockets(true)
     } catch (error) {
       throw unavailableError(
@@ -457,12 +461,13 @@ export class WebSocketTransport implements ITransport {
    * Disconnect every WebSocket connection of a user, on every node.
    *
    * The sockets this node holds are closed directly, and the adapter closes the room
-   * `user:{userId}`, which reaches the sockets other nodes hold.
+   * `user:{userId}`, which reaches the sockets other nodes hold. `onDisconnect` receives
+   * `reason` for the sockets held here; on other nodes it receives `CLIENT_DISCONNECT`.
    *
    * @throws {Error} `REALTIME_TRANSPORT_UNAVAILABLE` when no server is attached or the
    *   fan-out throws: the revocation did not leave this node.
    */
-  async disconnectUser(userId: string, _reason?: string): Promise<void> {
+  async disconnectUser(userId: string, reason?: string): Promise<void> {
     assertBuiltinsIntact()
     const server = this.server
     // The message names no user: an id can identify a person.
@@ -476,11 +481,20 @@ export class WebSocketTransport implements ITransport {
     if (!server) throw refusal(new Error('server not attached'))
     try {
       for (const { connectionId } of this.connections.byUser(userId, 'websocket'))
-        this.localSockets()?.get(connectionId)?.disconnect(true)
+        this.close(connectionId, reason)
       server.in(`${ROOM_PREFIXES.USER}:${userId}`).disconnectSockets(true)
     } catch (error) {
       throw refusal(error)
     }
+  }
+
+  /** Close the socket of this node, if it holds one, noting why for its `onDisconnect`. */
+  private close(connectionId: string, reason: string | undefined): void {
+    const socket = this.localSockets()?.get(connectionId)
+    if (!socket) return
+    const record = this.connections.get(connectionId)
+    if (record) this.revokedWith.set(record, reason)
+    socket.disconnect(true)
   }
 
   /**

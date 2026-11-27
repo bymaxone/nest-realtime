@@ -2,6 +2,7 @@
  * @fileoverview The bound on how many connections one instance holds, on both transports together.
  * @layer application
  */
+import type { OnApplicationShutdown } from '@nestjs/common'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { REALTIME_OPTIONS_TOKEN } from '../constants/injection-tokens.constants'
@@ -65,7 +66,7 @@ export const UNBOUNDED_TICKET: AdmissionTicket = freeze({
  * someone asks for room, which is when it matters.
  */
 @Injectable()
-export class ConnectionAdmission {
+export class ConnectionAdmission implements OnApplicationShutdown {
   private readonly logger = new Logger(ConnectionAdmission.name)
   private readonly max: number
   private readonly holdMs: number
@@ -132,6 +133,11 @@ export class ConnectionAdmission {
       if (until > now) break
       this.held.delete(place)
     }
+  }
+
+  /** Writes the refusals still waiting for their window. */
+  onApplicationShutdown(): void {
+    this.refusals.stop()
   }
 
   /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */

@@ -3,6 +3,7 @@
  * how many calls can be waiting at once.
  * @layer application
  */
+import type { OnApplicationShutdown } from '@nestjs/common'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { REALTIME_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import {
@@ -55,7 +56,7 @@ export class AuthenticationUnavailableError extends Error {
  * not given a new call for every handshake while the abandoned ones stay open against it.
  */
 @Injectable()
-export class AuthenticationGate {
+export class AuthenticationGate implements OnApplicationShutdown {
   private readonly logger = new Logger(AuthenticationGate.name)
   private readonly maxPending: number
   private readonly timeoutMs: number
@@ -142,6 +143,11 @@ export class AuthenticationGate {
       },
     })
     return unboxed(decided)
+  }
+
+  /** Writes the refusals still waiting for their window. */
+  onApplicationShutdown(): void {
+    this.refusals.stop()
   }
 
   /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */

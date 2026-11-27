@@ -4,6 +4,7 @@
  * @layer utils
  */
 import { REPORT_WINDOW_MS, windowedReport } from './windowed-report'
+import type { WindowedReport } from './windowed-report'
 
 beforeEach(() => {
   jest.useFakeTimers()
@@ -14,7 +15,7 @@ afterEach(() => {
 })
 
 /** A counter whose reports are collected. */
-function counter(): { report: (add: (n: number) => number) => void; reports: number[] } {
+function counter(): { report: WindowedReport<number>; reports: number[] } {
   const reports: number[] = []
   const report = windowedReport(
     () => 0,
@@ -54,10 +55,10 @@ describe('windowedReport', () => {
 
   /*
    * Given occurrences left out during a window
-   * When the first one after the window is recorded
-   * Then one report carries all of them, the late one included
+   * When the window passes and another occurrence follows
+   * Then what was left out is written at the boundary, and the later one waits for its own window
    */
-  it('folds what was left out into the next report, at the boundary of the window', () => {
+  it('writes what was left out at the boundary of the window', () => {
     const { report, reports } = counter()
     report((count) => count + 1)
     jest.advanceTimersByTime(REPORT_WINDOW_MS - 1)
@@ -67,7 +68,9 @@ describe('windowedReport', () => {
     jest.advanceTimersByTime(1)
     report((count) => count + 1)
 
-    expect(reports).toEqual([1, 3])
+    expect(reports).toEqual([1, 2])
+    jest.advanceTimersByTime(REPORT_WINDOW_MS)
+    expect(reports).toEqual([1, 2, 1])
   })
 
   /*
@@ -103,5 +106,94 @@ describe('windowedReport', () => {
 
     expect(handed).toEqual([{ a: 1 }, { a: 1 }])
     expect(handed[0]).not.toBe(handed[1])
+  })
+
+  /*
+   * Given a burst that ends inside a window
+   * When the window passes with no later occurrence
+   * Then the rest of the burst is written once, and an empty window after it writes nothing
+   */
+  it('writes the tail of a burst that nothing follows', () => {
+    const { report, reports } = counter()
+    report((count) => count + 1)
+    jest.advanceTimersByTime(4_000)
+    report((count) => count + 1)
+    report((count) => count + 1)
+
+    jest.advanceTimersByTime(REPORT_WINDOW_MS - 4_000 - 1)
+    expect(reports).toEqual([1])
+    jest.advanceTimersByTime(1)
+    expect(reports).toEqual([1, 2])
+    jest.advanceTimersByTime(3 * REPORT_WINDOW_MS)
+
+    expect(reports).toEqual([1, 2])
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  /*
+   * Given a window that passed without its timer having run, as on a blocked event loop
+   * When an occurrence arrives
+   * Then one report carries it with what was left out, and the timer is dropped
+   */
+  it('writes once when an occurrence arrives before an overdue timer', () => {
+    const now = jest.spyOn(performance, 'now').mockReturnValue(0)
+    const { report, reports } = counter()
+    report((count) => count + 1)
+    report((count) => count + 1)
+
+    now.mockReturnValue(REPORT_WINDOW_MS)
+    report((count) => count + 1)
+
+    expect(reports).toEqual([1, 2])
+    expect(jest.getTimerCount()).toBe(0)
+    now.mockRestore()
+  })
+
+  /*
+   * Given occurrences waiting for the window to pass
+   * When the report is stopped, as at shutdown
+   * Then they are written at once, no timer stays, and stopping again writes nothing
+   */
+  it('writes what is waiting when stopped, once', () => {
+    const { report, reports } = counter()
+    report((count) => count + 1)
+    report((count) => count + 1)
+
+    report.stop()
+    report.stop()
+
+    expect(reports).toEqual([1, 1])
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  /*
+   * Given a report with nothing waiting
+   * When it is stopped
+   * Then nothing is written
+   */
+  it('writes nothing when stopped with nothing waiting', () => {
+    const { report, reports } = counter()
+    report((count) => count + 1)
+
+    report.stop()
+
+    expect(reports).toEqual([1])
+  })
+
+  /*
+   * Given occurrences waiting for the window to pass
+   * When the timer is armed
+   * Then it does not keep the process alive
+   */
+  it('arms a timer that does not keep the process alive', () => {
+    jest.useRealTimers()
+    const armed = jest.spyOn(globalThis, 'setTimeout')
+    const { report } = counter()
+    report((count) => count + 1)
+    report((count) => count + 1)
+
+    expect((armed.mock.results[0]?.value as NodeJS.Timeout).hasRef()).toBe(false)
+    report.stop()
+    armed.mockRestore()
   })
 })
