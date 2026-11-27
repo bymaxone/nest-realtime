@@ -294,7 +294,10 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       enableAutoPipelining: false,
       enableOfflineQueue: true,
       retryStrategy: (times: number) => {
-        const delay = this.#pub.options.retryStrategy?.(times)
+        const host = this.#pub.options
+        // ioredis takes anything else, which an untyped host can pass, as "do not reconnect".
+        const delay =
+          typeof host.retryStrategy === 'function' ? host.retryStrategy(times) : undefined
         return typeof delay === 'number' || !this.#silenced.has(sub) ? delay : PROBE_INTERVAL_MS
       },
     })

@@ -86,6 +86,12 @@ async function probeOnce(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 30))
 }
 
+/** Client options under which ioredis does not reconnect; an untyped host can pass any value. */
+const GIVES_UP: Array<[string, Partial<RedisOptions>]> = [
+  ['a retryStrategy that returns null', { retryStrategy: () => null }],
+  ['retryStrategy: false', { retryStrategy: false as unknown as null }],
+]
+
 const refuses =
   (error: string): RespHandler =>
   (command, socket) =>
@@ -187,8 +193,8 @@ describe('RedisRealtimePubSub: the PING watch of the subscriber', () => {
   // Scenario: the host's retryStrategy gives up, and the server freezes. Without the watch the
   // connection would stay open and heal, so replacing it must not end the subscriber. Expected: one
   // new connection, after the probe's interval, and subscribed again once the server answers.
-  it('replaces a silent connection although retryStrategy has given up', async () => {
-    const { fake, pubsub, count } = await subscribedBus({ retryStrategy: () => null })
+  it.each(GIVES_UP)('replaces a silent connection with %s', async (_label, given) => {
+    const { fake, pubsub, count } = await subscribedBus(given)
     const handshakes = count('HELLO')
     const thaw = freeze(fake)
 
@@ -225,9 +231,9 @@ describe('RedisRealtimePubSub: the PING watch of the subscriber', () => {
 
   // Scenario: the same host, and the server closes the first connection, which the probe never
   // replaced. Expected: the host's strategy ends the subscriber, with no connection afterwards.
-  it('lets retryStrategy end the first connection, which the probe never replaced', async () => {
+  it.each(GIVES_UP)('ends the first connection, never replaced, with %s', async (_label, given) => {
     const duplicates = jest.spyOn(Redis.prototype, 'duplicate')
-    const { fake, count } = await subscribedBus({ retryStrategy: () => null })
+    const { fake, count } = await subscribedBus(given)
     const sub = duplicates.mock.results[0]?.value as Redis
     const handshakes = count('HELLO')
 
