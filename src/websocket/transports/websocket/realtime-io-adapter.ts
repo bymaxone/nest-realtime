@@ -138,6 +138,22 @@ export function policyMismatch(
 /** The commands the Socket.IO Redis adapter sends on its subscriber connection. */
 const ADAPTER_COMMANDS = ['subscribe', 'psubscribe', 'unsubscribe', 'punsubscribe'] as const
 
+/**
+ * What the subscriber connection does not take from the host client. The adapter sends each
+ * SUBSCRIBE once and never again, so one that is refused locally, dropped after a number of
+ * retries or not restored after a reconnect leaves this instance deaf to the others: it queues
+ * while there is no connection, waits for as long as that takes, and is restored on reconnect.
+ * `disconnectTimeout` is how long ioredis lets a socket close after `disconnect()`; a closed
+ * connection has nothing left to clear it, so the default would hold the process for it.
+ */
+const SUBSCRIBER_OVERRIDES = {
+  autoResendUnfulfilledCommands: true,
+  autoResubscribe: true,
+  disconnectTimeout: 1,
+  enableOfflineQueue: true,
+  maxRetriesPerRequest: null,
+} as const
+
 /** The class of what a Redis command rejected with: its message can carry the host or a credential. */
 function kindOf(error: unknown): string {
   try {
@@ -399,9 +415,7 @@ export class RealtimeIoAdapter extends IoAdapter {
     try {
       const { createAdapter } = require('@socket.io/redis-adapter') as RedisAdapterModule
       const pub = pubClient as { duplicate: (overrides: object) => unknown }
-      // `disconnectTimeout` is how long ioredis lets a socket close after `disconnect()`; a closed
-      // connection has nothing left to clear it, so the default would hold the process for it.
-      sub = pub.duplicate({ disconnectTimeout: 1 }) as QuitableClient
+      sub = pub.duplicate(SUBSCRIBER_OVERRIDES) as QuitableClient
       this.subscribers.add(sub)
       this.guardCommands(sub)
       const publisher = guardPublish(pubClient as object, (error) => this.publishFailed(error))
