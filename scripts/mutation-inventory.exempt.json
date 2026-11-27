@@ -78,5 +78,9 @@
   {
     "file": "src/spec-teardown-guard.spec.ts",
     "reason": "Scans the repository's spec files as text for a teardown that closes a handle without a guard. It imports only node:fs and node:path and no mutated source, so no mutant can be attributed to it."
+  },
+  {
+    "file": "src/release-workflow.spec.ts",
+    "reason": "Reads .github/workflows/release.yml and package.json to pin the release steps. It imports no mutated source."
   }
 ]

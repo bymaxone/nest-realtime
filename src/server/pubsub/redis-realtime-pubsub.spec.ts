@@ -101,7 +101,7 @@ describe('RedisRealtimePubSub', () => {
     const { pubsub, client } = build('test:malformed')
     await pubsub.subscribe(jest.fn())
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-    const now = jest.spyOn(Date, 'now')
+    const now = jest.spyOn(performance, 'now')
     try {
       now.mockReturnValue(1_000_000)
       await client.publish('test:malformed', '{not json')
