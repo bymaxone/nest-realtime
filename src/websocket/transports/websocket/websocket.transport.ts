@@ -299,7 +299,7 @@ export class WebSocketTransport implements ITransport {
    * computed `durationMs`.
    *
    * @param connectionId - The Socket.IO socket `id` of the disconnected connection.
-   * @param reason - Optional reason string forwarded to the `onDisconnect` hook.
+   * @param reason - Forwarded to the `onDisconnect` hook, unless a revocation recorded its own.
    */
   async unregisterSocket(connectionId: string, reason?: string): Promise<void> {
     const record = this.connections.unregister(connectionId)

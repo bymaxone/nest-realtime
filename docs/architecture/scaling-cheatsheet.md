@@ -34,7 +34,7 @@ The `RealtimeIoAdapter` calls `pubClient.duplicate()` internally to create the
 subscriber client — you only need to pass one Redis connection. The subscriber takes
 that client's options, with overrides so that your queueing, per-request retry and
 resubscribe settings cannot lose its SUBSCRIBE. An ioredis `Cluster` is the exception:
-its `duplicate()` takes no options there, so none of the overrides is applied.
+its `duplicate()` takes startup nodes where the overrides are passed, so none of them is applied.
 
 ## Sticky sessions — mandatory for polling fallback
 

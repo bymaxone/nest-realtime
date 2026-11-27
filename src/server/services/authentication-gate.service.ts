@@ -145,12 +145,12 @@ export class AuthenticationGate implements OnApplicationShutdown {
     return unboxed(decided)
   }
 
-  /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */
   /** Writes the refusals still waiting for their window. */
   onApplicationShutdown(): void {
     this.refusals.stop()
   }
 
+  /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */
   private refuse(reason: 'saturated' | 'timeout'): void {
     this.refusals((refused) => ({ ...refused, [reason]: refused[reason] + 1 }))
   }

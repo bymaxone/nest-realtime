@@ -135,12 +135,12 @@ export class ConnectionAdmission implements OnApplicationShutdown {
     }
   }
 
-  /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */
   /** Writes the refusals still waiting for their window. */
   onApplicationShutdown(): void {
     this.refusals.stop()
   }
 
+  /** Count a refusal, and log at most one line for each window, so an attack cannot flood the log. */
   private refuse(): void {
     this.refusals((count) => count + 1)
   }

@@ -1,5 +1,5 @@
 /**
- * @fileoverview A count that is logged at most once for each window, so a flood cannot flood the log.
+ * @fileoverview A count that is logged once for a window and once at shutdown, so a flood cannot flood the log.
  * @layer utils
  */
 
@@ -16,7 +16,7 @@ export interface WindowedReport<T> {
 
 /**
  * Accumulates what happened since the last report and hands it to `emit` at most once for each
- * window. The first occurrence reports at once; later ones are folded into one report that is
+ * window, except that `stop` writes at once. The first occurrence reports at once; later ones are folded into one report that is
  * written when the window ends, whether or not anything else happens. The timer that does so does
  * not keep the process alive.
  *
