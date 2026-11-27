@@ -459,7 +459,7 @@ This section lists the bounds the library applies, what happens when each one is
 
 **A WebSocket call can resolve although its cross-node publish failed.** `@socket.io/redis-adapter` does not wait for its own publish, so an emit, `disconnect` or `disconnectUser` can resolve when it failed: other nodes may miss the event, and their sockets may stay connected. With `websocket.redisAdapter` the library handles the rejection, logs `REALTIME_ADAPTER_PUBLISH_FAILED` and counts it in `bymax_realtime_adapter_publish_failures_total`.
 
-**A Redis adapter you install yourself is not covered.** A rejected publish there is an unhandled rejection, which ends a Node process unless the application handles `unhandledRejection`. Handle it on the client before you pass it to `createAdapter`:
+**A Redis adapter you install yourself is not covered.** A rejected publish of its `createAdapter` is an unhandled rejection, which ends a Node process unless the application handles `unhandledRejection`. Handle it on the client before you pass it to `createAdapter`:
 
 ```ts
 import { Redis } from 'ioredis'

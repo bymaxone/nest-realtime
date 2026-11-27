@@ -19,7 +19,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 - **A rejected publish of the Socket.IO Redis adapter no longer ends the process.**
   - Before: with `websocket.redisAdapter`, an emit or a revocation whose publish Redis rejected was an unhandled rejection, which ends a Node process under its default settings.
   - After: the library handles it, logs `REALTIME_ADAPTER_PUBLISH_FAILED` at most once each ten seconds and counts it in `bymax_realtime_adapter_publish_failures_total`. The call still resolves, and your `pubClient` is not changed.
-  - **Apply to a derived backend:** nothing; alert on the new counter or log event. An adapter you install yourself needs its own handler (README, Known limits).
+  - **Apply to a derived backend:** nothing; alert on the new counter or log event. A `createAdapter` you install yourself needs its own handler (README, Known limits).
 - **Two registrations bound to one WebSocket namespace refuse the boot.**
   - Before: both booted, and one client was authenticated by both and held both identities.
   - After: the boot is refused with `REALTIME_INVALID_OPTIONS`, naming the namespace.
