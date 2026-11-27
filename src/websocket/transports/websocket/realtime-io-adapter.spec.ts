@@ -136,7 +136,13 @@ describe('RealtimeIoAdapter', () => {
     )
     adapter.createIOServer(3000)
 
-    expect(pubClient.duplicate).toHaveBeenCalledWith({ disconnectTimeout: 1 })
+    expect(pubClient.duplicate).toHaveBeenCalledWith({
+      autoResendUnfulfilledCommands: true,
+      autoResubscribe: true,
+      disconnectTimeout: 1,
+      enableOfflineQueue: true,
+      maxRetriesPerRequest: null,
+    })
     expect(server.adapter).toHaveBeenCalled()
   })
 

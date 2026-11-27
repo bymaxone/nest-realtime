@@ -334,7 +334,7 @@ bootstrap()
 RealtimeIoAdapter is not the active WebSocket adapter, so the websocket options are ignored and the gateway CORS stays closed (origin: false): browsers on another origin cannot connect. Add app.useWebSocketAdapter(new RealtimeIoAdapter(app)) in main.ts, importing it from '@bymax-one/nest-realtime/websocket'.
 ```
 
-With `redisAdapter`, the adapter registers `@socket.io/redis-adapter` and calls `pubClient.duplicate()` for the subscriber. That connection is the library's: it is closed when the application closes, and a QUIT that Redis does not answer within two seconds is dropped, so a Redis that stopped answering cannot hold the shutdown. Your `pubClient` is never closed or changed. If it cannot be installed (the package is missing, the client has no `duplicate()`), the boot fails with `REALTIME_REDIS_ADAPTER_FAILED` instead of serving a single instance; a Redis that is merely unreachable does not fail the boot. Socket.IO's polling fallback needs sticky sessions even then — see [docs/architecture/scaling-cheatsheet.md](./docs/architecture/scaling-cheatsheet.md). On the frontend, a `ws://` or `wss://` `url` selects WebSocket in `RealtimeProvider`. Replay through `Last-Event-ID` and the offline queue are SSE features: a WebSocket connection has neither.
+With `redisAdapter`, the adapter registers `@socket.io/redis-adapter` and calls `pubClient.duplicate()` for the subscriber. That connection is the library's: it is closed when the application closes, and a QUIT that Redis does not answer within two seconds is dropped, so a Redis that stopped answering cannot hold the shutdown. Your `pubClient` is never closed or changed. The duplicate takes your client's options, with overrides (`SUBSCRIBER_OVERRIDES`) so that your queueing, per-request retry and resubscribe settings cannot lose its SUBSCRIBE; a `Cluster` client and a refused SUBSCRIBE are the exceptions (see [Known limits](#known-limits)). If it cannot be installed (the package is missing, the client has no `duplicate()`), the boot fails with `REALTIME_REDIS_ADAPTER_FAILED` instead of serving a single instance; a Redis that is merely unreachable does not fail the boot. Socket.IO's polling fallback needs sticky sessions even then — see [docs/architecture/scaling-cheatsheet.md](./docs/architecture/scaling-cheatsheet.md). On the frontend, a `ws://` or `wss://` `url` selects WebSocket in `RealtimeProvider`. Replay through `Last-Event-ID` and the offline queue are SSE features: a WebSocket connection has neither.
 
 ---
 
@@ -472,6 +472,10 @@ pubClient.publish = ((...args: Parameters<typeof send>) => {
   return sent
 }) as typeof pubClient.publish
 ```
+
+**A SUBSCRIBE the Redis server refuses only warns.** When the adapter's subscriber is refused, such as by an ACL without the permission, the application still boots, logs `REALTIME_ADAPTER_COMMAND_FAILED`, and that instance may not receive what the others emit over WebSocket. Watch for that event, and grant the Redis user the subscribe commands and the adapter's channels.
+
+**An ioredis `Cluster` as `redisAdapter.pubClient` does not get the subscriber's overrides.** `Cluster.duplicate()` takes startup nodes as its first argument, not options, so none of them are applied, and the library's guarantees about a subscriber that queues, retries and resubscribes do not apply to it.
 
 **A host gateway that declares the same namespace as `websocket.namespace` shares it with the library's gateway.** It runs its handlers for the library's connections, and what the library does to its own connections, such as revoking, capping or denying them, is not something that gateway can opt out of. Give a host gateway a namespace of its own unless it is meant to receive from those clients.
 
