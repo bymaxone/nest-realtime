@@ -47,7 +47,7 @@ async function until(what: string, condition: () => boolean): Promise<void> {
 }
 
 /** A subscribed bus on a fake server, and what the server has seen. */
-async function subscribedBus(options: Partial<RedisOptions> = {}) {
+async function subscribedBus(options: Partial<RedisOptions> | { retryStrategy: unknown } = {}) {
   const fake = new FakeRespServer()
   await fake.start()
   servers.push(fake)
@@ -87,9 +87,9 @@ async function probeOnce(): Promise<void> {
 }
 
 /** Client options under which ioredis does not reconnect; an untyped host can pass any value. */
-const GIVES_UP: Array<[string, Partial<RedisOptions>]> = [
+const GIVES_UP: Array<[string, { retryStrategy: unknown }]> = [
   ['a retryStrategy that returns null', { retryStrategy: () => null }],
-  ['retryStrategy: false', { retryStrategy: false as unknown as null }],
+  ['retryStrategy: false', { retryStrategy: false }],
 ]
 
 const refuses =
@@ -234,7 +234,7 @@ describe('RedisRealtimePubSub: the PING watch of the subscriber', () => {
   it.each(GIVES_UP)('ends the first connection, never replaced, with %s', async (_label, given) => {
     const duplicates = jest.spyOn(Redis.prototype, 'duplicate')
     const { fake, count } = await subscribedBus(given)
-    const sub = duplicates.mock.results[0]?.value as Redis
+    const sub: Redis = duplicates.mock.results[0]?.value
     const handshakes = count('HELLO')
 
     for (const socket of fake.sockets) socket.destroy()
@@ -255,7 +255,7 @@ describe('RedisRealtimePubSub: the PING watch of the subscriber', () => {
   ] as const)('stops on %s() during a replacement (%s)', async (close, phase) => {
     const duplicates = jest.spyOn(Redis.prototype, 'duplicate')
     const { fake, count } = await subscribedBus({ retryStrategy: () => null })
-    const sub = duplicates.mock.results[0]?.value as Redis
+    const sub: Redis = duplicates.mock.results[0]?.value
     const before = count('HELLO')
     freeze(fake)
     await probeOnce()
