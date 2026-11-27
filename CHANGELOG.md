@@ -7,7 +7,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
-## [1.2.39] - 2026-11-26
+## [1.2.39] - 2026-11-27
 
 ### Added
 
