@@ -14,7 +14,7 @@ import type { Config } from 'jest'
 const config: Config = {
   rootDir: '.',
   maxWorkers: '50%',
-  passWithNoTests: process.env['CI'] !== 'true',
+  passWithNoTests: false,
   clearMocks: true,
   restoreMocks: true,
   projects: [

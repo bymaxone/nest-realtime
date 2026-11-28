@@ -35,7 +35,7 @@ const config: Config = {
   },
   testTimeout: 15_000,
   maxWorkers: '50%',
-  passWithNoTests: process.env['CI'] !== 'true',
+  passWithNoTests: false,
   clearMocks: true,
   restoreMocks: true,
 }

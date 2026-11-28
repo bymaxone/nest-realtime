@@ -60,7 +60,7 @@ const ts = createRequire(join(ROOT, 'package.json'))('typescript')
  * read from the built declaration file so it cannot drift from `dist/`. */
 function publicImports() {
   const entry = join(ROOT, 'dist', 'server', 'index.d.ts')
-  const program = ts.createProgram({ rootNames: [entry], options: { skipLibCheck: true } })
+  const program = ts.createProgram({ rootNames: [entry], options: {} })
   const checker = program.getTypeChecker()
   const source = program.getSourceFile(entry)
   const moduleSymbol = source && checker.getSymbolAtLocation(source)
@@ -573,8 +573,8 @@ function scaffoldConsumer() {
   )
   // The names a snippet uses without introducing them, typed for real so a call
   // made through one is checked instead of silently resolving to `any`. Copied as
-  // `.ts`: the repository's `skipLibCheck` would skip a `.d.ts`, and a stale import
-  // in the prelude would then turn its types into `any` without an error.
+  // `.ts`, so it is checked whatever `skipLibCheck` says: a stale import in the
+  // prelude would otherwise turn its types into `any` without an error.
   copyFileSync(join(ROOT, 'scripts', 'readme-prelude.d.ts'), join(GATE_DIR, 'prelude.ts'))
 }
 

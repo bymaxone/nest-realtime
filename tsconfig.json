@@ -19,7 +19,7 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "declaration": true,
     "sourceMap": false,
     "baseUrl": ".",
