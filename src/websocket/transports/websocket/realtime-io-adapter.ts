@@ -367,34 +367,43 @@ export class RealtimeIoAdapter extends IoAdapter {
   }
 
   /**
-   * Handles the rejection of the subscriber commands the Socket.IO Redis adapter sends and never
-   * awaits. Its `subscribe` at boot and its `unsubscribe` at close discard their promises, so a
-   * command that fails, as every pending one does when the connection is closed or gives up,
-   * would be an unhandled rejection that ends the process.
+   * Guards the subscriber the Socket.IO Redis adapter is given, for as long as it exists.
    *
-   * Each command still returns its own promise, so anything that awaits it sees the rejection; a
-   * handler is attached beside it. The failure is logged once per connection, by its class only: the
-   * message of a connection error can carry the host or a credential.
+   * The adapter removes its own `error` listener when it closes, and ioredis prints the raw error
+   * of a client that has none, so one is attached here and never removed.
+   *
+   * The adapter's `subscribe` at boot and its `unsubscribe` at close also discard their promises, so
+   * a command that fails, as every pending one does when the connection is closed or gives up,
+   * would be an unhandled rejection that ends the process. Each command still returns its own
+   * promise, so anything that awaits it sees the rejection; a handler is attached beside it.
+   *
+   * A connection error and a failed command are each logged once per connection, by class only: the
+   * message of such an error can carry the host or a credential.
    */
-  private guardCommands(sub: QuitableClient): void {
+  private guardSubscriber(sub: QuitableClient): void {
+    const reported = new Set<string>()
+    const report = (what: 'command' | 'connection', error: unknown): void => {
+      if (reported.has(what)) return
+      reported.add(what)
+      const kind = kindOf(error)
+      logEvent(
+        this.adapterLogger,
+        'warn',
+        'REALTIME_ADAPTER_COMMAND_FAILED',
+        `Redis adapter subscriber ${what} failed (${kind})`,
+      )
+    }
+    const events = sub as unknown as {
+      on?: (event: 'error', listener: (error: unknown) => void) => void
+    }
+    events.on?.('error', (error) => report('connection', error))
     const commands = sub as unknown as Record<string, ((...args: unknown[]) => unknown) | undefined>
-    let reported = false
     for (const name of ADAPTER_COMMANDS) {
       const original = commands[name]
       if (original === undefined) continue
       commands[name] = (...args: unknown[]) => {
         const pending = original.apply(sub, args)
-        Promise.resolve(pending).catch((err: unknown) => {
-          if (reported) return
-          reported = true
-          const kind = kindOf(err)
-          logEvent(
-            this.adapterLogger,
-            'warn',
-            'REALTIME_ADAPTER_COMMAND_FAILED',
-            `Redis adapter subscriber command failed (${kind})`,
-          )
-        })
+        Promise.resolve(pending).catch((error: unknown) => report('command', error))
         return pending
       }
     }
@@ -418,7 +427,7 @@ export class RealtimeIoAdapter extends IoAdapter {
       const pub = pubClient as { duplicate: (overrides: object) => unknown }
       sub = pub.duplicate(SUBSCRIBER_OVERRIDES) as QuitableClient
       this.subscribers.add(sub)
-      this.guardCommands(sub)
+      this.guardSubscriber(sub)
       const publisher = guardPublish(pubClient as object, (error) => this.publishFailed(error))
       server.adapter(createAdapter(publisher as never, sub as never))
     } catch (err) {
