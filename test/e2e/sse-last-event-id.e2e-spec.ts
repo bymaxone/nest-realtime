@@ -8,10 +8,10 @@
  * reaches the offline queue as it would from the header, the header wins when both are sent, and an
  * id that is not believed (too long, or not one string) is read as no id at all.
  */
-import type { INestApplication } from '@nestjs/common'
-import { Test } from '@nestjs/testing'
 import { get } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import type { INestApplication } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
 import { BymaxRealtimeModule } from '../../src/server/realtime.module'
 import type {
   IOfflineQueueStorage,

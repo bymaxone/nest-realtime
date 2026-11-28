@@ -7,11 +7,11 @@
  * refused while that gateway still waits.
  */
 import 'reflect-metadata'
+import type { AddressInfo } from 'node:net'
 import type { DynamicModule, INestApplication } from '@nestjs/common'
 import { Logger, Module } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
-import type { AddressInfo } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
@@ -82,9 +82,9 @@ describe('one module object and websocket.namespace (e2e)', () => {
     })
     clients.push(socket)
     const before = authenticated
-    await new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
       socket.once('connect', resolve)
-      socket.once('connect_error', resolve)
+      socket.once('connect_error', () => resolve())
     })
     return socket.connected && authenticated === before + 1
   }

@@ -57,7 +57,8 @@ export class TicketAuthenticator implements IConnectionAuthenticator {
    */
   async authenticate(ctx: ConnectionAuthContext): Promise<AuthenticationResult | null> {
     const ticketId = ctx.query['ticket']
-    if (!ticketId) return null
+    // A repeated query key arrives as an array, which is not a ticket.
+    if (typeof ticketId !== 'string' || ticketId === '') return null
 
     const entry = this.store.get(ticketId)
     if (!entry) return null

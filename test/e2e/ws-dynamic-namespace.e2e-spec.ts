@@ -7,6 +7,7 @@
  * server is its own, whichever gateway Nest connects first; a server of another port or path is left to its gateways.
  */
 import 'reflect-metadata'
+import type { AddressInfo } from 'node:net'
 import type { INestApplication, Type } from '@nestjs/common'
 import { Logger } from '@nestjs/common'
 import {
@@ -17,7 +18,6 @@ import {
 } from '@nestjs/websockets'
 import type { OnGatewayConnection } from '@nestjs/websockets'
 import { Test } from '@nestjs/testing'
-import type { AddressInfo } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import type { Server, Socket } from 'socket.io'

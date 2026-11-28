@@ -2,9 +2,9 @@
  * @fileoverview Helper for cross-instance e2e tests — wires two in-process transport instances.
  * @layer e2e
  */
+import { randomUUID } from 'node:crypto'
 import { Subject } from 'rxjs'
 import type { MessageEvent } from '@nestjs/common'
-import { randomUUID } from 'node:crypto'
 import { AuthenticationGate } from '../../../src/server/services/authentication-gate.service'
 import { ConnectionRegistry } from '../../../src/server/services/connection-registry.service'
 import { RoomRegistry } from '../../../src/server/services/room-registry.service'

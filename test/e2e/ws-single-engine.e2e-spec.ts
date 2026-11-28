@@ -8,12 +8,12 @@
  * process. The tests drive a real Nest application with real Socket.IO clients.
  */
 import 'reflect-metadata'
+import { connect as netConnect } from 'node:net'
+import type { AddressInfo } from 'node:net'
 import type { INestApplication, Type } from '@nestjs/common'
 import { Logger } from '@nestjs/common'
 import { WebSocketGateway } from '@nestjs/websockets'
 import { Test } from '@nestjs/testing'
-import { connect as netConnect } from 'node:net'
-import type { AddressInfo } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'

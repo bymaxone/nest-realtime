@@ -3,9 +3,9 @@
  * @layer e2e
  */
 import 'reflect-metadata'
+import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import type { AddressInfo } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
@@ -32,7 +32,7 @@ afterEach(async () => {
 })
 
 /** Boot an application that records what `onDisconnect` is told, and say how to join it. */
-async function boot(options: Partial<BymaxRealtimeModuleOptions>): Promise<{
+async function boot(options: Partial<Omit<BymaxRealtimeModuleOptions, 'transport'>>): Promise<{
   reasons: unknown[]
   connect: (user: string) => Promise<ClientSocket>
 }> {

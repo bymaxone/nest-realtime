@@ -9,12 +9,12 @@
  * first.
  */
 import 'reflect-metadata'
-import type { INestApplication } from '@nestjs/common'
-import { Logger } from '@nestjs/common'
-import { Test } from '@nestjs/testing'
 import { readFile } from 'node:fs/promises'
 import type { AddressInfo } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
+import type { INestApplication } from '@nestjs/common'
+import { Logger } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import type { IConnectionAuthenticator } from '../../src/server/interfaces/connection-authenticator.interface'
@@ -24,7 +24,7 @@ import { RealtimeIoAdapter } from '../../src/websocket/transports/websocket/real
 /** Await what a real authenticator awaits before it decides: a timer tick and a file read. */
 async function doIo(): Promise<void> {
   await sleep(0)
-  await readFile(__filename)
+  await readFile('package.json')
   await sleep(25)
 }
 

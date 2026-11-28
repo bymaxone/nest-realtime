@@ -9,6 +9,8 @@
  * has to be decided in the guard, as authentication is. Every case runs both ways; the interceptor
  * variant is the one that fails when the read is made inside the route.
  */
+import { get } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { Injectable } from '@nestjs/common'
 import type {
   CallHandler,
@@ -18,8 +20,6 @@ import type {
 } from '@nestjs/common'
 import { APP_INTERCEPTOR } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
-import { get } from 'node:http'
-import type { AddressInfo } from 'node:net'
 import request from 'supertest'
 import { BymaxRealtimeModule } from '../../src/server/realtime.module'
 import { ConnectionRegistry } from '../../src/server/services/connection-registry.service'

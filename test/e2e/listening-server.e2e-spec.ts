@@ -10,10 +10,10 @@
  *   installed supertest; if a release stops doing it, the control fails and the helper can go.
  * Mocks: none. A one-route Nest application on ephemeral ports.
  */
+import { Server as NetServer } from 'node:net'
 import { Controller, Get } from '@nestjs/common'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { Server as NetServer } from 'node:net'
 import request from 'supertest'
 import { listeningServer } from '../support/listening-server'
 

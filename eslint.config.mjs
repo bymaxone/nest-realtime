@@ -1,6 +1,6 @@
 import tsParser from '@typescript-eslint/parser'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
-import importPlugin from 'eslint-plugin-import'
+import importPlugin from 'eslint-plugin-import-x'
 import security from 'eslint-plugin-security'
 import reactHooks from 'eslint-plugin-react-hooks'
 import prettierRecommended from 'eslint-plugin-prettier/recommended'
@@ -23,7 +23,7 @@ export default [
     ignores: ['dist/**', 'coverage/**', 'reports/**', '.stryker-tmp/**', 'node_modules/**'],
   },
   {
-    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    files: ['src/**/*.ts', 'src/**/*.tsx', 'test/**/*.ts', 'test/**/*.tsx'],
     languageOptions: {
       parser: tsParser,
       ecmaVersion: 2022,
@@ -31,11 +31,14 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
-      import: importPlugin,
+      'import-x': importPlugin,
       security,
     },
     settings: {
-      'import/resolver': {
+      // Without the TypeScript settings the plugin does not parse an imported `.ts` file, and
+      // `no-cycle` sees no edge to follow.
+      ...importPlugin.flatConfigs.typescript.settings,
+      'import-x/resolver': {
         typescript: { project: './tsconfig.json' },
         node: true,
       },
@@ -58,15 +61,15 @@ export default [
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
       ],
       'no-console': 'error',
-      'import/order': [
+      'import-x/order': [
         'error',
         {
           groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
           'newlines-between': 'never',
         },
       ],
-      'import/no-duplicates': 'error',
-      'import/no-cycle': 'error',
+      'import-x/no-duplicates': 'error',
+      'import-x/no-cycle': 'error',
       // Map/object index access is pervasive in the internal registries and is not
       // user-controlled object injection; the noisy heuristic is disabled in favor
       // of the type system and targeted review.
@@ -135,6 +138,21 @@ export default [
         'error',
         { max: 50, skipBlankLines: false, skipComments: false, IIFEs: true },
       ],
+    },
+  },
+  // Node.js scripts: plain ESM, no TypeScript parser needed.
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { ecmaVersion: 2022, sourceType: 'module' },
+    plugins: { security },
+    rules: {
+      'no-eval': 'error',
+      'no-new-func': 'error',
+      'no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
+      'security/detect-object-injection': 'warn',
     },
   },
   prettierRecommended,

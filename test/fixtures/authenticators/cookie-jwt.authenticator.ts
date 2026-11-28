@@ -60,8 +60,8 @@ export class CookieJwtAuthenticator implements IConnectionAuthenticator {
       const payload = verify(token, this.secret, { algorithms: ['HS256'] }) as JwtPayload
       return {
         userId: payload.sub,
-        tenantId: payload.tid,
-        roles: payload.roles,
+        ...(payload.tid === undefined ? {} : { tenantId: payload.tid }),
+        ...(payload.roles === undefined ? {} : { roles: payload.roles }),
       }
     } catch {
       // Expired, malformed, or wrong-key tokens are all treated as unauthenticated.
