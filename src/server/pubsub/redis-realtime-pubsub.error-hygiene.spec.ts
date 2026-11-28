@@ -193,4 +193,45 @@ describe('RedisRealtimePubSub error hygiene', () => {
     expect(rejection).toMatchObject({ name: 'Error', message: 'the Redis client failed' })
     expectNoValues(rejection)
   })
+
+  // A refusal the library raises about what the client returned is the library's, not the client's.
+  it.each([
+    [
+      'a Proxy',
+      () => new Proxy({}, {}),
+      { code: 'REALTIME_TRANSPORT_UNAVAILABLE', message: expect.stringContaining('a Proxy') },
+    ],
+    [
+      'a promise that cannot carry the engine constructor',
+      () => Object.preventExtensions(Promise.resolve(1)),
+      { name: 'TypeError', message: expect.stringContaining('cannot carry the engine') },
+    ],
+  ])('keeps its own refusal when the client returns %s', async (_label, result, refusal) => {
+    client = new Redis({ lazyConnect: true })
+    const fake = { status: 'ready', publish: jest.fn(result) }
+    const rejection = await new RedisRealtimePubSub({ client: fake as unknown as Redis })
+      .publish({ op: 'emit' } as never)
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+    expect(rejection).toMatchObject(refusal)
+  })
+
+  // A client that throws instead of returning a promise raised a client error all the same.
+  it('reduces an error the client throws synchronously', async () => {
+    client = new Redis({ lazyConnect: true })
+    const publish = jest.fn(() => {
+      throw new Error(`refused ${PASSWORD}`)
+    })
+    const fake = { status: 'ready', publish }
+    const rejection = await new RedisRealtimePubSub({ client: fake as unknown as Redis })
+      .publish({ op: 'emit' } as never)
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+    expect(rejection).toMatchObject({ name: 'Error', message: 'the Redis client failed' })
+    expectNoValues(rejection)
+  })
 })

@@ -14,8 +14,15 @@ import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
 import { windowedReport } from '../utils/windowed-report'
-import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
-import { absorbed, firstOf, shielded, unboxed, withinDeadline } from '../utils/within-deadline'
+import { assertBuiltinsIntact, isBuiltinsRefusal, returnable } from '../utils/builtin-baseline'
+import {
+  absorbed,
+  awaitable,
+  firstOf,
+  shielded,
+  unboxed,
+  withinDeadline,
+} from '../utils/within-deadline'
 import { redisFailure } from './redis-failure'
 import { PROBE_DEADLINE_MS, PROBE_INTERVAL_MS, watchLiveness } from './watch-liveness'
 
@@ -185,7 +192,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.connectLazyClient()
       throw this.cannotPublish(`the Redis client is ${status}`)
     }
-    const sent = this.#pub.publish(this.channel, JSON.stringify(message))
+    // Outside the try below: what `awaitable` refuses is the library's own refusal.
+    const sent = awaitable(this.sendToChannel(JSON.stringify(message)))
     let expired: Error | undefined
     try {
       await withinDeadline(sent, PUBLISH_WAIT_MS, {
@@ -195,8 +203,18 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         },
       })
     } catch (error) {
-      if (error === expired) throw error
       // A refusal of the library's own is not the client's, and keeps its text.
+      if (error === expired || isBuiltinsRefusal(error)) throw error
+      assertBuiltinsIntact()
+      throw redisFailure(error)
+    }
+  }
+
+  /** The PUBLISH itself; a client that throws instead of returning a promise is reduced too. */
+  private sendToChannel(payload: string): Promise<unknown> {
+    try {
+      return this.#pub.publish(this.channel, payload)
+    } catch (error) {
       assertBuiltinsIntact()
       throw redisFailure(error)
     }
