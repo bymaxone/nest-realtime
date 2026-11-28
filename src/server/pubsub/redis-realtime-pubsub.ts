@@ -20,6 +20,7 @@ import {
   awaitable,
   firstOf,
   shielded,
+  started,
   unboxed,
   withinDeadline,
 } from '../utils/within-deadline'
@@ -193,16 +194,23 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       throw this.cannotPublish(`the Redis client is ${status}`)
     }
     const payload = JSON.stringify(message)
-    const sent = awaitable(fromClient(() => this.#pub.publish(this.channel, payload)))
+    const answer = awaitable(fromClient(() => this.#pub.publish(this.channel, payload)))
     // What this wait rejects with is the library's own or already reduced: it is not inspected.
-    await withinDeadline(this.published(sent), PUBLISH_WAIT_MS, {
+    await withinDeadline(this.published(answer), PUBLISH_WAIT_MS, {
       timeoutError: () =>
         this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`),
     })
   }
 
-  /** What PUBLISH settled with; the client's rejection comes out reduced. */
-  private async published(sent: unknown): Promise<void> {
+  /**
+   * Awaits what PUBLISH answered, after the built-ins are checked; the client's rejection comes
+   * out reduced.
+   */
+  private async published(answer: unknown): Promise<void> {
+    // Its rejection is read now, so that a refusal on the next line leaves none unhandled.
+    const sent = started(() => answer)
+    // Before the await, which reads the `then` of a result that is not a promise.
+    assertBuiltinsIntact()
     try {
       // Already pinned or refused by the caller: this call changes nothing about it.
       await awaitable(sent)

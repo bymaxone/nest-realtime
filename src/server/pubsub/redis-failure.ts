@@ -3,8 +3,8 @@
  * @layer infrastructure
  *
  * A log, a rejection or a hook is given a message the library wrote, never the client's
- * own text. What the client raised is read here and nowhere else, since reading it can run
- * code of its own.
+ * own text. Reading what the client raised can run code of its own, so the reads made here
+ * are guarded.
  */
 import { assertBuiltinsIntact } from '../utils/builtin-baseline'
 import { NativeError } from '../utils/captured-builtins'

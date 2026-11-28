@@ -297,7 +297,7 @@ describe('RedisRealtimePubSub with a client that raises anything', () => {
 
   const turn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
 
-  // No property of the rejection is read on the way out, whatever the read would do.
+  // The reads of the rejection are guarded, and nothing it answers is forwarded beyond a matched code.
   it.each([
     ['throws on every read', hostile],
     ['answers yes to every read', () => new Proxy({}, { get: () => true })],
@@ -392,5 +392,44 @@ describe('RedisRealtimePubSub with a client that raises anything', () => {
     await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS + 10)
     expect(silent).toHaveBeenCalledTimes(1)
     stop()
+  })
+
+  // A `then` planted on the root prototype during the client call answers for an awaited object
+  // that has none of its own. The publish is refused, whatever shape the client's result has.
+  const thenable = { then: jest.fn() }
+  it.each([
+    ['a plain object', (): unknown => ({})],
+    ['a thenable', (): unknown => thenable],
+    ['a promise that resolves', (): unknown => Promise.resolve(1)],
+    ['a promise that rejects', (): unknown => Promise.reject(new Error('from the client'))],
+  ])('refuses a publish whose result is %s once a then is planted', async (_shape, result) => {
+    thenable.then.mockClear()
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    const publish = jest.fn(() => {
+      const answer = result()
+      Object.defineProperty(Object.prototype, 'then', {
+        configurable: true,
+        get() {
+          Reflect.deleteProperty(Object.prototype, 'then')
+          return (resolve: (value: unknown) => void) => resolve(undefined)
+        },
+      })
+      return answer
+    })
+    let work: Promise<unknown>
+    try {
+      work = busOver(fakeClient({ publish })).publish({ op: 'emit' } as never)
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'then')
+    }
+
+    await expect(settled(work)).resolves.toMatchObject({
+      code: 'REALTIME_TRANSPORT_UNAVAILABLE',
+    })
+    await turn()
+    process.off('unhandledRejection', unhandled)
+    expect(unhandled).not.toHaveBeenCalled()
+    expect(thenable.then).not.toHaveBeenCalled()
   })
 })
