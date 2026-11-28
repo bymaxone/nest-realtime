@@ -16,6 +16,7 @@ import { unavailableError } from '../utils/unavailable-error'
 import { windowedReport } from '../utils/windowed-report'
 import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
 import { absorbed, firstOf, shielded, unboxed, withinDeadline } from '../utils/within-deadline'
+import { redisFailure } from './redis-failure'
 import { PROBE_DEADLINE_MS, PROBE_INTERVAL_MS, watchLiveness } from './watch-liveness'
 
 /** The window of the report of dropped malformed payloads. */
@@ -185,10 +186,20 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       throw this.cannotPublish(`the Redis client is ${status}`)
     }
     const sent = this.#pub.publish(this.channel, JSON.stringify(message))
-    await withinDeadline(sent, PUBLISH_WAIT_MS, {
-      timeoutError: () =>
-        this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`),
-    })
+    let expired: Error | undefined
+    try {
+      await withinDeadline(sent, PUBLISH_WAIT_MS, {
+        timeoutError: () => {
+          expired = this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`)
+          return expired
+        },
+      })
+    } catch (error) {
+      if (error === expired) throw error
+      // A refusal of the library's own is not the client's, and keeps its text.
+      assertBuiltinsIntact()
+      throw redisFailure(error)
+    }
   }
 
   /**
@@ -344,7 +355,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       }, SUBSCRIBE_WAIT_MS)
       unanswered.unref()
       sub.on('error', (err: Error) => {
-        if (err.name !== 'ReplyError') resolve({ unreachable: err })
+        if (err.name !== 'ReplyError') resolve({ unreachable: redisFailure(err) })
       })
       sub.on('close', () => {
         resolve({ unreachable: new Error() })
@@ -391,9 +402,9 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
             await first
             return 'subscribed' as const
           } catch (err) {
-            if ((err as Error).name === 'ReplyError') throw err
+            if ((err as Error).name === 'ReplyError') throw redisFailure(err)
             // The last statement before an object return, which asks the object for a `then`.
-            return returnable({ unreachable: err })
+            return returnable({ unreachable: redisFailure(err) })
           }
         })(),
       )
@@ -472,7 +483,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       'REALTIME_PUBSUB_UNAVAILABLE',
       'the server refused the subscription',
       {},
-      err,
+      redisFailure(err),
     )
   }
 

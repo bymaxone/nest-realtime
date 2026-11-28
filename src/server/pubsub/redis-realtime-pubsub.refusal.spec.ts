@@ -81,8 +81,8 @@ describe('a refusal of the SUBSCRIBE', () => {
       // Either answer can arrive first; each reason is logged once.
       const lines = refusedLines(warn)
       expect(lines).toHaveLength(2)
-      expect(lines.filter((line) => line.includes('NOPERM revoked'))).toHaveLength(1)
-      expect(lines.filter((line) => line.includes('WRONGPASS rotated'))).toHaveLength(1)
+      expect(lines.filter((line) => line.includes('replied NOPERM'))).toHaveLength(1)
+      expect(lines.filter((line) => line.includes('replied WRONGPASS'))).toHaveLength(1)
     } finally {
       warn.mockRestore()
     }
