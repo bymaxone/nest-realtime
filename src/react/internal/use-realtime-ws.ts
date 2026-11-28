@@ -176,8 +176,7 @@ function useSocketHandle(): {
   // Tear down the current socket (remove listeners + disconnect) and clear the ref.
   // Removing listeners first prevents the abandoned socket's `disconnect` handler from
   // mutating state after a new socket has taken its place.
-  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
-  const disposeSocket = useCallback(() => {
+  const [disposeSocket] = useState(() => () => {
     attempts.current++
     const sock = socketRef.current as SocketLike | null
     if (sock) {
@@ -185,23 +184,17 @@ function useSocketHandle(): {
       sock.disconnect()
     }
     socketRef.current = null
-  }, [])
+  })
 
-  // Stryker restore ArrayDeclaration
-  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
-  const emit = useCallback((event: string, data: unknown): void => {
+  const [emit] = useState(() => (event: string, data: unknown): void => {
     const sock = socketRef.current as SocketLike | null
     sock?.emit(event, data)
-  }, [])
+  })
 
-  // Stryker restore ArrayDeclaration
-  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds; measured by running the React specs with a one-element list
-  const claimAttempt = useCallback((): (() => boolean) => {
+  const [claimAttempt] = useState(() => (): (() => boolean) => {
     const mine = ++attempts.current
     return () => attempts.current === mine
-  }, [])
-
-  // Stryker restore ArrayDeclaration
+  })
 
   return { socketRef, disposeSocket, emit, claimAttempt }
 }

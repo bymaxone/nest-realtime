@@ -20,7 +20,7 @@
  * compatibility — this module accesses `EventSource` and React state.
  */
 'use client'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { PRESENCE_EVENT_NAMES, RESERVED_EVENT_NAMES } from '../../shared'
 import { nextBackoff, validDelay } from './backoff'
@@ -198,31 +198,26 @@ function useSseStreamState<TEvents extends Record<string, unknown>>(
   // recovered, closing a healthy `EventSource` and losing the `Last-Event-ID` state
   // the browser keeps per object. Called before arming a new timer, on a successful
   // open, and on teardown.
-  // Stryker disable ArrayDeclaration: equivalent — a `useCallback` whose dependency list is constant keeps one identity for the life of the component, whatever the list holds, and so does a `useMemo` whose only dependency is that callback; measured by running the React specs with a one-element list for the callback and an empty list for the memo
-  const clearReconnectTimer = useCallback(() => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-  }, [])
-
-  const context = useMemo(
-    () => ({
-      setConnected,
-      setError,
-      setReconnectAttempts,
-      setEvents,
-      setLastEvent,
-      sourceRef,
-      reconnectMsRef,
-      attemptsRef,
-      timerRef,
-      lastIdRef,
-      clearReconnectTimer,
-    }),
-    [clearReconnectTimer],
-  )
-  // Stryker restore ArrayDeclaration
+  // State and not `useCallback` or `useMemo`: React documents those as a performance hint it may
+  // discard, and the handlers of an open stream hold this object.
+  const [context] = useState<SseStreamContext<TEvents>>(() => ({
+    setConnected,
+    setError,
+    setReconnectAttempts,
+    setEvents,
+    setLastEvent,
+    sourceRef,
+    reconnectMsRef,
+    attemptsRef,
+    timerRef,
+    lastIdRef,
+    clearReconnectTimer: () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    },
+  }))
   return { view: { connected, events, lastEvent, error, reconnectAttempts }, context }
 }
 

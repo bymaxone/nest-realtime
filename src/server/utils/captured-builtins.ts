@@ -33,8 +33,10 @@ export const apply = Reflect.apply
 /** `Object.keys` as it was when the library was imported. */
 export const keys = Object.keys
 
-/** `Object.prototype.toString` as it was when the library was imported. */
-export const objectToString = Object.prototype.toString
+/** The type tag of a value, by `Object.prototype.toString` as it was when the library was imported. */
+export const typeTag: (value: unknown) => string = Function.prototype.call.bind(
+  Object.prototype.toString,
+)
 
 /** `Array.prototype.includes` as it was when the library was imported. */
 export const includes = Array.prototype.includes
