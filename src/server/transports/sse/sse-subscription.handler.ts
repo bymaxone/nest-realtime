@@ -541,8 +541,7 @@ export class SseSubscriptionHandler {
         void this.offlineDelivery?.acknowledge(p.resolvedAuth.userId, p.queueEvents)
       }
       this.activateConnection(p, subscriber)
-      // Stryker disable next-line ArrowFunction: equivalent — `subscribePipeline` ends in `.subscribe(subscriber)`, and RxJS registers that source subscription as a teardown of `subscriber` itself, so closing the outer one already unwinds the inner. Verified by removing this teardown: the merged subject loses its observer either way. It stays because the ownership should be explicit and must not depend on that linkage
-      return () => inner.unsubscribe()
+      return inner
     })
   }
 

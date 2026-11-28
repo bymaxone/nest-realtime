@@ -50,10 +50,7 @@ function peerAddress(remoteAddress: string | undefined): string {
  * The result is at most 45 characters: header entries carry no zone and the peer's is cut.
  */
 export function resolveClientAddress(request: ClientAddressSource): string {
-  // Stryker disable next-line ArrayDeclaration: a substituted default is not an address, so it is skipped and the result is unchanged
-  const hops = request.ips ?? []
-  for (const candidate of [request.ip, ...hops]) {
-    if (isHeaderAddress(candidate)) return candidate
-  }
-  return peerAddress(request.socket?.remoteAddress)
+  if (isHeaderAddress(request.ip)) return request.ip
+  const hop = request.ips?.find(isHeaderAddress)
+  return hop ?? peerAddress(request.socket?.remoteAddress)
 }

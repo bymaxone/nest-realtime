@@ -147,8 +147,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   /** Whether the subscriber connection holds a confirmed SUBSCRIBE right now. */
   #subscribed = false
   /** Whether the current outage has been logged, so a retry loop adds no line. */
-  // Stryker disable next-line BooleanLiteral: equivalent — createSubscriber sets it before any use
-  #outageLogged = false
+  #outageLogged?: boolean
   /** Connections closed on purpose, whose `close` is not an outage and says nothing of a successor. */
   readonly #retired = new WeakSet<Redis>()
   /** What stops the PING watch of each subscriber connection. */

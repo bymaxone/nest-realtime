@@ -101,16 +101,15 @@ export class RealtimePubSubSubscriber implements OnModuleInit, OnApplicationShut
    * failure. The op and the failure's message can echo what whoever publishes to the channel
    * wrote, so neither is ever written.
    */
-  private readonly dropped = windowedReport(
-    // Stryker disable next-line StringLiteral: equivalent — a report is only written after a drop, and every drop sets `last` first
-    () => ({ count: 0, last: 'none' }),
+  private readonly dropped = windowedReport<{ count: number; last?: string }>(
+    () => ({ count: 0 }),
     ({ count, last }) => {
       logEvent(
         this.logger,
         'warn',
         'REALTIME_PUBSUB_DROPPED',
         `Pub/sub dropped ${count} message(s) it could not act on since the last report (last: ${last})`,
-        { count, last },
+        { count, last: String(last) },
       )
     },
   )
