@@ -8,11 +8,11 @@
  * engine knows and keeps `app.close()` pending. `forceCloseConnections` ends all three: README, "Known limits".
  */
 import 'reflect-metadata'
+import { connect as netConnect, Socket as NetSocket } from 'node:net'
+import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { connect as netConnect } from 'node:net'
-import type { AddressInfo, Socket as NetSocket } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
@@ -29,13 +29,19 @@ const SETTLE_MS = 5_000
 const CLOSE_TIMEOUT_MS = 40_000
 const PENDING = Symbol('pending')
 
+/** Ends a client of either kind: a raw socket is destroyed, a Socket.IO client is closed. */
+function drop(socket: ClientSocket | NetSocket): void {
+  if (socket instanceof NetSocket) socket.destroy()
+  else socket.close()
+}
+
 describe('app.close() with an open client (e2e)', () => {
   let app: INestApplication | undefined
   const sockets: Array<ClientSocket | NetSocket> = []
 
   beforeEach(() => void jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined))
   afterEach(async () => {
-    for (const socket of sockets.splice(0)) socket.destroy()
+    for (const socket of sockets.splice(0)) drop(socket)
     await app?.close()
     app = undefined
     jest.restoreAllMocks()
@@ -85,7 +91,7 @@ describe('app.close() with an open client (e2e)', () => {
       reconnection: false,
     })
     sockets.push(socket)
-    await new Promise((resolve) =>
+    await new Promise<void>((resolve) =>
       wait ? socket.once('connect', resolve) : setTimeout(resolve, 300),
     )
   }
@@ -142,7 +148,7 @@ describe('app.close() with an open client (e2e)', () => {
     app = undefined
 
     expect(await within(closing, SETTLE_MS)).toBe(PENDING)
-    for (const socket of sockets.splice(0)) socket.destroy()
+    for (const socket of sockets.splice(0)) drop(socket)
     expect(await within(closing, SETTLE_MS)).toBe('closed')
   })
 

@@ -10,6 +10,8 @@
  * differ: the user has no connection and no replay ring on this instance, so the event goes to the
  * queue only, after the first read and before the connection is registered to receive it live.
  */
+import { get } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { Inject, Injectable } from '@nestjs/common'
 import type {
   CallHandler,
@@ -19,8 +21,6 @@ import type {
 } from '@nestjs/common'
 import { APP_INTERCEPTOR } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
-import { get } from 'node:http'
-import type { AddressInfo } from 'node:net'
 import { BymaxRealtimeModule } from '../../src/server/realtime.module'
 import type {
   IOfflineQueueStorage,

@@ -3,9 +3,9 @@
  * @layer e2e
  */
 import 'reflect-metadata'
+import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import type { AddressInfo } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
@@ -30,9 +30,9 @@ function makeAuthenticator(result: AuthenticationResult | null = null): IConnect
         // Validate bearer token
         const authHeader = ctx.headers['authorization']
         if (authHeader?.startsWith('Bearer ')) {
-          const token = authHeader.slice(7)
-          if (token === 'valid-token') return { userId: 'token-user', tenantId: 'tenant-1' }
-          return null
+          return authHeader === 'Bearer valid-token'
+            ? { userId: 'token-user', tenantId: 'tenant-1' }
+            : null
         }
         return result
       },

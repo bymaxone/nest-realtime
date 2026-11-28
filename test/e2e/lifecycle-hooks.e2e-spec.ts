@@ -2,13 +2,16 @@
  * @fileoverview End-to-end tests for connection lifecycle hooks via SseSubscriptionHandler.
  * @layer e2e
  */
+import { randomUUID } from 'node:crypto'
 import { UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
-import { randomUUID } from 'node:crypto'
 import { Subject } from 'rxjs'
 import type { Request, Response } from 'express'
 import { SseSubscriptionHandler } from '../../src/server/transports/sse/sse-subscription.handler'
-import type { SseTransport } from '../../src/server/transports/sse/sse.transport'
+import type {
+  SseTransport,
+  RegisterSseConnectionParams,
+} from '../../src/server/transports/sse/sse.transport'
 import type { HeartbeatService } from '../../src/server/transports/sse/heartbeat.service'
 import type { BymaxRealtimeModuleOptions } from '../../src/server/interfaces/realtime-module-options.interface'
 import type { IConnectionLifecycleHooks } from '../../src/server/interfaces/connection-lifecycle-hooks.interface'
@@ -17,7 +20,6 @@ import type {
   AuthenticationResult,
   IConnectionAuthenticator,
 } from '../../src/server/interfaces/connection-authenticator.interface'
-import type { RegisterSseConnectionParams } from '../../src/server/transports/sse/sse.transport'
 
 const FIXED_AUTH: AuthenticationResult = { userId: 'u1', tenantId: 't1', roles: ['user'] }
 
@@ -32,7 +34,7 @@ function mkRecord(id = randomUUID(), userId = 'u1'): ConnectionRecord {
     connectedAt: new Date(),
     subject: new Subject<MessageEvent>(),
     close$: new Subject<void>(),
-    originalAuth: { userId, tenantId: 't1', roles: undefined },
+    originalAuth: { userId, tenantId: 't1', roles: undefined, metadata: undefined },
   }
 }
 

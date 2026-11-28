@@ -3,9 +3,11 @@
  * @layer test-fixture
  */
 import { randomUUID } from 'node:crypto'
+import type {
+  AuthenticationResult,
+  ConnectionAuthContext,
+} from '../../../src/server/interfaces/connection-authenticator.interface'
 import { TicketAuthenticator } from './ticket.authenticator'
-import type { AuthenticationResult } from '../../../src/server/interfaces/connection-authenticator.interface'
-import type { ConnectionAuthContext } from '../../../src/server/interfaces/connection-authenticator.interface'
 
 const AUTH: AuthenticationResult = { userId: 'u1', tenantId: 't1', roles: ['user'] }
 

@@ -8,8 +8,8 @@
  * under load (`EADDRNOTAVAIL`). A server that is already listening is left alone by supertest, so
  * one listener serves every request until the application is closed.
  */
-import type { INestApplication } from '@nestjs/common'
 import type { Server } from 'node:http'
+import type { INestApplication } from '@nestjs/common'
 
 /**
  * Starts `app` listening on a port of its own, once, and returns its HTTP server for supertest.

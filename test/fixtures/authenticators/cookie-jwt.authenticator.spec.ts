@@ -3,8 +3,8 @@
  * @layer test-fixture
  */
 import { sign } from 'jsonwebtoken'
-import { CookieJwtAuthenticator } from './cookie-jwt.authenticator'
 import type { ConnectionAuthContext } from '../../../src/server/interfaces/connection-authenticator.interface'
+import { CookieJwtAuthenticator } from './cookie-jwt.authenticator'
 
 const SECRET = 'test-secret'
 

@@ -2,11 +2,10 @@
  * @fileoverview End-to-end tests for offline queue delivery on reconnect.
  * @layer e2e
  */
-import type { MessageEvent } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
-import { firstValueFrom, toArray } from 'rxjs'
+import type { MessageEvent } from '@nestjs/common'
+import { firstValueFrom, toArray, Subject } from 'rxjs'
 import { take } from 'rxjs/operators'
-import { Subject } from 'rxjs'
 import type { Request, Response } from 'express'
 import { SseSubscriptionHandler } from '../../src/server/transports/sse/sse-subscription.handler'
 import type { SseTransport } from '../../src/server/transports/sse/sse.transport'
@@ -36,7 +35,7 @@ function mkRecord(userId = 'oq-u1'): ConnectionRecord {
     connectedAt: new Date(),
     subject: new Subject<MessageEvent>(),
     close$: new Subject<void>(),
-    originalAuth: { userId, tenantId: 't1', roles: undefined },
+    originalAuth: { userId, tenantId: 't1', roles: undefined, metadata: undefined },
   }
 }
 

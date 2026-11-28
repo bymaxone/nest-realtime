@@ -2,9 +2,11 @@
  * @fileoverview Unit tests for the bearer-header authenticator fixture (WebSocket only).
  * @layer test-fixture
  */
+import type {
+  AuthenticationResult,
+  ConnectionAuthContext,
+} from '../../../src/server/interfaces/connection-authenticator.interface'
 import { BearerAuthenticator } from './bearer.authenticator'
-import type { AuthenticationResult } from '../../../src/server/interfaces/connection-authenticator.interface'
-import type { ConnectionAuthContext } from '../../../src/server/interfaces/connection-authenticator.interface'
 
 const AUTH: AuthenticationResult = { userId: 'u1', tenantId: 't1', roles: ['user'] }
 

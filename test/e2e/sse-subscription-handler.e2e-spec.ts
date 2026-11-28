@@ -2,10 +2,10 @@
  * @fileoverview End-to-end tests: SseSubscriptionHandler with the three auth fixtures.
  * @layer e2e
  */
+import { randomUUID } from 'node:crypto'
 import { UnauthorizedException } from '@nestjs/common'
 import type { MessageEvent } from '@nestjs/common'
 import { sign } from 'jsonwebtoken'
-import { randomUUID } from 'node:crypto'
 import type { Observable } from 'rxjs'
 import { Subject } from 'rxjs'
 import type { Request, Response } from 'express'
@@ -32,7 +32,7 @@ function mkRecord(userId = 'u1'): ConnectionRecord {
     connectedAt: new Date(),
     subject: new Subject<MessageEvent>(),
     close$: new Subject<void>(),
-    originalAuth: { userId, tenantId: 't1', roles: undefined },
+    originalAuth: { userId, tenantId: 't1', roles: undefined, metadata: undefined },
   }
 }
 
@@ -40,7 +40,8 @@ function mkTransport(authenticator: BymaxRealtimeModuleOptions['authenticator'])
   const record = mkRecord()
   return {
     admit: jest.fn(() => ({ release: jest.fn(), renew: jest.fn() })),
-    authenticate: (ctx) => authenticator.authenticate(ctx),
+    authenticate: (ctx: Parameters<SseTransport['authenticate']>[0]) =>
+      authenticator.authenticate(ctx),
     registerConnection: jest.fn().mockResolvedValue(undefined),
     unregisterConnection: jest.fn().mockResolvedValue(undefined),
     disconnect: jest.fn().mockResolvedValue(undefined),

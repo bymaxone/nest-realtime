@@ -4,8 +4,6 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "noEmit": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
     "importHelpers": true,
     "sourceMap": true,
     "emitDecoratorMetadata": false,

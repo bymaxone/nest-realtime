@@ -7,11 +7,11 @@
  * tests drive a real Nest application with a real Socket.IO client.
  */
 import 'reflect-metadata'
+import type { AddressInfo } from 'node:net'
+import { setTimeout as sleep } from 'node:timers/promises'
 import type { INestApplication } from '@nestjs/common'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import type { AddressInfo } from 'node:net'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import type { IConnectionLifecycleHooks } from '../../src/server/interfaces/connection-lifecycle-hooks.interface'
@@ -19,23 +19,6 @@ import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-webso
 import { RealtimeIoAdapter } from '../../src/websocket/transports/websocket/realtime-io-adapter'
 
 jest.setTimeout(20_000)
-
-/** `names` planted on `Object.prototype` with `value` while `run` runs; they are taken away again when it settles. */
-async function planted(
-  names: readonly string[],
-  value: () => void,
-  run: () => Promise<void>,
-): Promise<void> {
-  const root = Object.prototype as unknown as Record<string, unknown>
-  for (const name of names) {
-    Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
-  }
-  try {
-    await run()
-  } finally {
-    for (const name of names) delete root[name]
-  }
-}
 
 /** Each of `values` planted on `Object.prototype` while `run` runs; they are taken away again when it settles. */
 async function plantedValues(

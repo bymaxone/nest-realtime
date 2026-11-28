@@ -6,18 +6,18 @@
  * rooms, and closing the application closes every server it opened. The tests drive a real Nest application with real clients.
  */
 import 'reflect-metadata'
+import { connect as netConnect } from 'node:net'
+import type { AddressInfo } from 'node:net'
 import type { INestApplication, Type } from '@nestjs/common'
-import { Logger } from '@nestjs/common'
+import { Logger, Module } from '@nestjs/common'
 import { SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets'
 import type { OnGatewayConnection } from '@nestjs/websockets'
 import { LazyModuleLoader } from '@nestjs/core'
-import { Module } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { connect as netConnect } from 'node:net'
-import type { AddressInfo } from 'node:net'
 import { io as ioClient } from 'socket.io-client'
 import type { Socket as ClientSocket } from 'socket.io-client'
 import type { Server } from 'socket.io'
+import type { IConnectionAuthenticator } from '../../src/server/interfaces/connection-authenticator.interface'
 import { BymaxRealtimeWebSocketModule } from '../../src/websocket/realtime-websocket.module'
 import { RealtimeIoAdapter } from '../../src/websocket/transports/websocket/realtime-io-adapter'
 import { freePort } from '../support/free-port'
@@ -74,10 +74,10 @@ describe('root server binding (e2e)', () => {
     jest.restoreAllMocks()
   })
 
-  const authenticator = {
-    authenticate: async (ctx: { handshake?: { query?: Record<string, string> } }) => {
+  const authenticator: IConnectionAuthenticator = {
+    authenticate: async () => {
       authenticated.push('call')
-      return { userId: `u${authenticated.length}`, ctx: undefined }
+      return { userId: `u${authenticated.length}` }
     },
   }
 

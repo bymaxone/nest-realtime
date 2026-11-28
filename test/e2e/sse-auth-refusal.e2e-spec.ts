@@ -12,6 +12,10 @@
  * not in a guard. The tests drive a real Nest application over real HTTP with authenticators that
  * do what a session or revocation lookup does: await a timer and a file read, then decide.
  */
+import { readFile } from 'node:fs/promises'
+import { get } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { Injectable } from '@nestjs/common'
 import type {
   CallHandler,
@@ -21,10 +25,6 @@ import type {
 } from '@nestjs/common'
 import { APP_INTERCEPTOR } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
-import { readFile } from 'node:fs/promises'
-import { get } from 'node:http'
-import type { AddressInfo } from 'node:net'
-import { setTimeout as sleep } from 'node:timers/promises'
 import request from 'supertest'
 import type { IConnectionAuthenticator } from '../../src/server/interfaces/connection-authenticator.interface'
 import { BymaxRealtimeModule } from '../../src/server/realtime.module'
@@ -35,7 +35,7 @@ const ENDPOINT = '/realtime/sse'
 /** Await what a real authenticator awaits before it decides: a timer tick and a file read. */
 async function doIo(): Promise<void> {
   await sleep(0)
-  await readFile(__filename)
+  await readFile('package.json')
   await sleep(25)
 }
 

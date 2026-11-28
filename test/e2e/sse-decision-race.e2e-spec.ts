@@ -6,11 +6,11 @@
  * through `Promise.race`, `Promise.resolve` or `then`, a host-side replacement of one of them admits the connection as
  * whoever it names. Over real HTTP, an authenticator that refuses must still get a 401 with each of them replaced.
  */
-import type { INestApplication } from '@nestjs/common'
-import { Test } from '@nestjs/testing'
 import { get } from 'node:http'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { Test } from '@nestjs/testing'
+import type { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { BymaxRealtimeModule } from '../../src/server/realtime.module'
 import { FORGED_BUILTINS, withPromiseForged } from '../support/forged-promise'

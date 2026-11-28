@@ -5,11 +5,11 @@
  * @layer e2e
  */
 import 'reflect-metadata'
+import { connect, createServer } from 'node:net'
+import type { AddressInfo, Server, Socket } from 'node:net'
 import { Logger } from '@nestjs/common'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { connect, createServer } from 'node:net'
-import type { AddressInfo, Server, Socket } from 'node:net'
 import Redis from 'ioredis'
 import type { RedisOptions } from 'ioredis'
 import { io as ioClient } from 'socket.io-client'
@@ -26,7 +26,17 @@ const sockets: ClientSocket[] = []
 const apps: INestApplication[] = []
 const proxies: { close: () => void }[] = []
 
-function client(url: string, extra: RedisOptions = {}): Redis {
+/** The client options the scenarios set. */
+type Extra = Pick<
+  RedisOptions,
+  | 'autoResubscribe'
+  | 'commandTimeout'
+  | 'enableOfflineQueue'
+  | 'lazyConnect'
+  | 'maxRetriesPerRequest'
+>
+
+function client(url: string, extra: Extra = {}): Redis {
   const redis = new Redis(url, { retryStrategy: () => 50, ...extra })
   redis.on('error', () => undefined)
   clients.push(redis)
@@ -140,7 +150,7 @@ describe('Redis adapter subscriber with a host client’s options', () => {
     ['ioredis defaults', {}],
     ['enableOfflineQueue false', { enableOfflineQueue: false }],
     ['lazyConnect with enableOfflineQueue false', { lazyConnect: true, enableOfflineQueue: false }],
-  ])('delivers across instances (%s)', async (_label, options: RedisOptions) => {
+  ])('delivers across instances (%s)', async (_label, options: Extra) => {
     const pubA = client(REDIS_URL, options)
     const pubB = client(REDIS_URL, options)
     for (const pub of [pubA, pubB]) {
@@ -158,7 +168,7 @@ describe('Redis adapter subscriber with a host client’s options', () => {
   it.each([
     ['maxRetriesPerRequest 1', { maxRetriesPerRequest: 1 }],
     ['commandTimeout 100', { commandTimeout: 100 }],
-  ])('delivers once Redis comes up after boot (%s)', async (_label, options: RedisOptions) => {
+  ])('delivers once Redis comes up after boot (%s)', async (_label, options: Extra) => {
     const proxy = await redisProxy()
     const a = await instance(client(REDIS_URL))
     const b = await instance(client(proxy.url, options))

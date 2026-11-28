@@ -2,10 +2,10 @@
  * @fileoverview End-to-end tests for Last-Event-ID reconnection replay.
  * @layer e2e
  */
-import type { MessageEvent } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
-import { firstValueFrom, toArray } from 'rxjs'
-import { take } from 'rxjs/operators'
+import { Subject } from 'rxjs'
+import type { Observable } from 'rxjs'
+import type { MessageEvent } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import { SseSubscriptionHandler } from '../../src/server/transports/sse/sse-subscription.handler'
 import type { SseTransport } from '../../src/server/transports/sse/sse.transport'
@@ -16,12 +16,10 @@ import type {
   IConnectionAuthenticator,
 } from '../../src/server/interfaces/connection-authenticator.interface'
 import type { ConnectionRecord } from '../../src/server/services/connection-registry.service'
-import type { RegisterSseConnectionParams } from '../../src/server/transports/sse/sse.transport'
 
 const FIXED_AUTH: AuthenticationResult = { userId: 'replay-u1', tenantId: 't1', roles: [] }
 
 function mkRecord(userId = 'replay-u1'): ConnectionRecord {
-  const { Subject } = require('rxjs') as typeof import('rxjs')
   return {
     connectionId: randomUUID(),
     userId,
@@ -32,7 +30,7 @@ function mkRecord(userId = 'replay-u1'): ConnectionRecord {
     connectedAt: new Date(),
     subject: new Subject<MessageEvent>(),
     close$: new Subject<void>(),
-    originalAuth: { userId, tenantId: 't1', roles: undefined },
+    originalAuth: { userId, tenantId: 't1', roles: undefined, metadata: undefined },
   }
 }
 
@@ -80,7 +78,7 @@ function mkOptions(): BymaxRealtimeModuleOptions {
 }
 
 /** Collect synchronous emissions from a stream (unsubscribes immediately after). */
-function collectSync(stream: import('rxjs').Observable<MessageEvent>): MessageEvent[] {
+function collectSync(stream: Observable<MessageEvent>): MessageEvent[] {
   const events: MessageEvent[] = []
   const sub = stream.subscribe((e) => events.push(e))
   sub.unsubscribe()
@@ -139,9 +137,9 @@ describe('Last-Event-ID replay — integration', () => {
   // Replay events are delivered in their original buffered order.
   it('preserves the original buffered order of replay events', async () => {
     const replay: MessageEvent[] = [
-      { id: 'a', type: 'order', data: 1 },
-      { id: 'b', type: 'order', data: 2 },
-      { id: 'c', type: 'order', data: 3 },
+      { id: 'a', type: 'order', data: { position: 1 } },
+      { id: 'b', type: 'order', data: { position: 2 } },
+      { id: 'c', type: 'order', data: { position: 3 } },
     ]
     const record = mkRecord()
     const transport = mkTransport(FIXED_AUTH, record, replay)
