@@ -9,6 +9,7 @@ import { Logger } from '@nestjs/common'
 import { Redis } from 'ioredis'
 import { FakeRespServer, healthyRedis } from '../../../test/fixtures/fake-resp-server'
 import type { RespHandler } from '../../../test/fixtures/fake-resp-server'
+import { redisFailure } from './redis-failure'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
 import { PROBE_INTERVAL_MS, watchLiveness } from './watch-liveness'
 
@@ -431,5 +432,30 @@ describe('RedisRealtimePubSub with a client that raises anything', () => {
     process.off('unhandledRejection', unhandled)
     expect(unhandled).not.toHaveBeenCalled()
     expect(thenable.then).not.toHaveBeenCalled()
+  })
+})
+
+// The code is taken only where it is the whole code: an upper-case word that opens a reply, or a
+// `code` that is a system code from end to end.
+describe('redisFailure, what counts as a code', () => {
+  it.each([
+    [
+      'an upper-case word further on in a reply',
+      { name: 'ReplyError', message: 'user SECRET is refused' },
+      'the Redis server replied with an error',
+    ],
+    [
+      'a reply that is only the code',
+      { name: 'ReplyError', message: 'LOADING' },
+      'the Redis server replied LOADING',
+    ],
+    ['a code that only ends like a system code', { code: 'x_ESECRET' }, 'the Redis client failed'],
+    [
+      'a code that only starts like a system code',
+      { code: 'ECONNRESET: detail' },
+      'the Redis client failed',
+    ],
+  ])('reads %s', (_case, raised, message) => {
+    expect(redisFailure(raised).message).toBe(message)
   })
 })
