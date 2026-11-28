@@ -195,7 +195,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@bymax-one/nest-core": "1.6.15",
+    "@bymax-one/nest-core": "1.6.23",
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
