@@ -158,8 +158,9 @@ describe('RedisRealtimePubSub', () => {
     expect(received).toHaveLength(1)
   })
 
-  // The outage line carries what the connection raised as the error itself, not as text: ioredis wraps a refused
-  // connect in an error that can have a code and no message, or a message and no code, or neither.
+  // The outage line carries an error under `err`, built by the library: ioredis wraps a refused connect in
+  // an error that can have a code and no message, or a message and no code, or neither. Only a system
+  // code is kept of it.
   it.each([
     [
       'a code and a message',
@@ -189,7 +190,12 @@ describe('RedisRealtimePubSub', () => {
         event: 'REALTIME_PUBSUB_UNAVAILABLE',
         message:
           'not subscribed. Remote events and revocations will not reach this instance until it subscribes again',
-        err: raised,
+        err: expect.objectContaining({
+          message:
+            'code' in fields && typeof fields.code === 'string'
+              ? `the Redis client failed (${fields.code})`
+              : 'the Redis client failed',
+        }),
       })
     } finally {
       warn.mockRestore()
@@ -266,9 +272,7 @@ describe('RedisRealtimePubSub', () => {
         expect.objectContaining({
           message:
             'not subscribed. Remote events and revocations will not reach this instance until it subscribes again',
-          err: expect.objectContaining({
-            message: "Stream isn't writeable and enableOfflineQueue options is false",
-          }),
+          err: expect.objectContaining({ message: 'the Redis client failed' }),
         }),
       )
       // The rejection is the connection failing, which was just reported: it is not also a refusal.
@@ -579,7 +583,9 @@ describe('RedisRealtimePubSub', () => {
     // First subscribe fails — must reject and not leave the handler registered.
     const refusal = await pubsub.subscribe(handler).catch((error: unknown) => error)
     expect((refusal as Error).message).not.toContain('redis down')
-    expect(((refusal as Error).cause as Error).message).toBe('redis down')
+    expect(((refusal as Error).cause as Error).message).toBe(
+      'the Redis server replied with an error',
+    )
     // The failed subscriber is closed, not left retrying in the background.
     expect(failingSub.disconnect).toHaveBeenCalledTimes(1)
 

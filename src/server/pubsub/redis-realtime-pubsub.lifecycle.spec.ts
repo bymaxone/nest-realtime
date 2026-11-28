@@ -50,10 +50,11 @@ function traced<A extends unknown[]>(body: (...args: A) => Promise<void>) {
   }
 }
 
-/** The line the adapter logs for a refusal whose server message is `message`. */
-const refusalLine = (message: string): string => `the server refused the subscription ${message}`
+/** The line the adapter logs for a refusal with the reply code `code`. */
+const refusalLine = (code: string): string =>
+  `the server refused the subscription the Redis server replied ${code}`
 
-/** The warnings mentioning `token`. Waits and assertions name their own server message, because
+/** The warnings mentioning `token`. Waits and assertions name their own reply code, because
  * the logger spy is shared and another test's line must not satisfy them. */
 const linesAbout = (warn: jest.SpyInstance, token: string): string[] =>
   warn.mock.calls.map((call) => lineWithError(call[0])).filter((line) => line.includes(token))
@@ -502,11 +503,11 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       )
       await fake.start()
       servers.push(fake)
-      await until('the refusal to be reported', () => linesAbout(warn, 'revoked later').length > 0)
+      await until('the refusal to be reported', () => linesAbout(warn, 'replied NOPERM').length > 0)
       // A second line would come from a second SUBSCRIBE answered after the first.
       await new Promise((resolve) => setTimeout(resolve, 300))
       expect(pubsub.isSubscribed()).toBe(false)
-      expect(linesAbout(warn, 'revoked later')).toEqual([refusalLine('NOPERM revoked later')])
+      expect(linesAbout(warn, 'replied NOPERM')).toEqual([refusalLine('NOPERM')])
     }),
   )
 
@@ -520,14 +521,14 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       const pubsub = new RedisRealtimePubSub({ client: client(fake.port) })
       await subscribe(pubsub)
       behave(fake, (command, socket) =>
-        command[0] === 'SUBSCRIBE' ? '-NOPERM acl changed\r\n' : healthyRedis(command, socket),
+        command[0] === 'SUBSCRIBE' ? '-NOAUTH acl changed\r\n' : healthyRedis(command, socket),
       )
       // A refusal logged by another test's instance after its teardown must not satisfy this wait.
-      new Logger('RedisRealtimePubSub').warn(refusalLine('NOPERM revoked later'))
+      new Logger('RedisRealtimePubSub').warn(refusalLine('NOPERM'))
       fake.drop()
-      await until('the refusal to be reported', () => linesAbout(warn, 'acl changed').length > 0)
+      await until('the refusal to be reported', () => linesAbout(warn, 'replied NOAUTH').length > 0)
       expect(pubsub.isSubscribed()).toBe(false)
-      expect(linesAbout(warn, 'acl changed')).toEqual([refusalLine('NOPERM acl changed')])
+      expect(linesAbout(warn, 'replied NOAUTH')).toEqual([refusalLine('NOAUTH')])
     }),
   )
 
@@ -545,7 +546,10 @@ describe('RedisRealtimePubSub subscriber lifecycle', () => {
       )
       await fake.start()
       servers.push(fake)
-      await until('the refusal to be reported', () => linesAbout(warn, 'rotated').length > 0)
+      await until(
+        'the refusal to be reported',
+        () => linesAbout(warn, 'replied WRONGPASS').length > 0,
+      )
       expect(pubsub.isSubscribed()).toBe(false)
       behave(fake, healthyRedis)
       await until('the instance to report subscribed', () => pubsub.isSubscribed())
