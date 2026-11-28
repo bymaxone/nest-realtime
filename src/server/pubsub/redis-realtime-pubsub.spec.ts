@@ -192,7 +192,7 @@ describe('RedisRealtimePubSub', () => {
           'not subscribed. Remote events and revocations will not reach this instance until it subscribes again',
         err: expect.objectContaining({
           message:
-            typeof fields.code === 'string'
+            'code' in fields && typeof fields.code === 'string'
               ? `the Redis client failed (${fields.code})`
               : 'the Redis client failed',
         }),
