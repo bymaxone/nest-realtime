@@ -15,6 +15,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
   - Before: the error the Redis client raised was passed on as it was.
   - After: Redis client errors are reduced to the reply code with a fixed message; the client's message, cause and command are no longer forwarded. This is what a `publish` rejection, `onDeliveryFailure`, the `cause` of a refused boot and `err` in the log hold. An error reply keeps the name `ReplyError`; of a connection error only a system code such as `ECONNRESET` is kept.
   - **Apply to a derived backend:** code that reads the Redis client's message or `command` from these errors reads the reply code from the message instead, for example `the Redis server replied OOM`.
+- **WebSocket: error hygiene on the Redis adapter's subscriber.**
+  - Before: the connection the library creates for the adapter had no `error` listener of its own, so ioredis could print its raw errors.
+  - After: the library listens for as long as the connection exists and logs the first connection error as `REALTIME_ADAPTER_COMMAND_FAILED`, with the error's class only.
+  - **Apply to a derived backend:** keep your own `error` listener on `redisAdapter.pubClient`.
 - **SSE: an instance whose subscriber connection falls silent no longer reports itself ready for ever.**
   - Before: with `RedisRealtimePubSub`, a connection that stopped answering without closing raised no event, and `isPubSubReady()` stayed true while the instance heard nothing.
   - After: the subscriber is sent a `PING` every 10 s; with no answer in 5 s the instance is not subscribed and the connection is replaced. With `commandTimeout` on your client, a first SUBSCRIBE it rejected on a ready connection was never confirmed; it is now sent once more. Your client's `commandTimeout` is lifted from the subscriber while it is ready, and auto-pipelining is off on it. During a liveness replacement, a `retryStrategy` that returns no delay is retried every 10 s until ready, and a `sentinelRetryStrategy` that returns none every 1 s. The subscriber has a `sentinelCommandTimeout` of 5 s when your client sets none. The client that publishes is not changed.

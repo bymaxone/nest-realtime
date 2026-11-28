@@ -479,6 +479,8 @@ pubClient.publish = ((...args: Parameters<typeof send>) => {
 
 **A SUBSCRIBE the Redis server refuses only warns.** When the adapter's subscriber is refused, such as by an ACL without the permission, the application still boots, logs `REALTIME_ADAPTER_COMMAND_FAILED`, and that instance may not receive what the others emit over WebSocket. Watch for that event, and grant the Redis user the subscribe commands and the adapter's channels.
 
+**Your own Redis client needs your own `error` listener.** The library listens to the connections it creates. For a client you pass, as `redisAdapter.pubClient` or to `RedisRealtimePubSub`, attach `client.on('error', ...)`: ioredis prints the raw error of a client that has no listener.
+
 **An ioredis `Cluster` as `redisAdapter.pubClient` does not get the subscriber's overrides.** `Cluster.duplicate()` takes startup nodes as its first argument, not options, so none of them are applied, and the library's guarantees about a subscriber that queues, retries and resubscribes do not apply to it.
 
 **A host gateway that declares the same namespace as `websocket.namespace` shares it with the library's gateway.** It runs its handlers for the library's connections, and what the library does to its own connections, such as revoking, capping or denying them, is not something that gateway can opt out of. Give a host gateway a namespace of its own unless it is meant to receive from those clients.
@@ -583,7 +585,7 @@ A label is one of the values listed and never an id, a tenant or a user. A revoc
 | `REALTIME_REVOCATION_FAILED`           | warn        | A revocation failed and is retried on the next cycle.                               | `connectionId`                                                           |
 | `REALTIME_ADAPTER_MISSING`             | error       | `RealtimeIoAdapter` is not the active WebSocket adapter.                            | none                                                                     |
 | `REALTIME_GATEWAY_OUTSIDE_NAMESPACE`   | warn        | Another gateway is on `/`, the library elsewhere.                                   | none                                                                     |
-| `REALTIME_ADAPTER_COMMAND_FAILED`      | warn        | A command of the Redis adapter's subscriber failed (once for each connection).      | none                                                                     |
+| `REALTIME_ADAPTER_COMMAND_FAILED`      | warn        | The Redis adapter's subscriber: a command or the connection failed (once each).     | none                                                                     |
 | `REALTIME_ADAPTER_PUBLISH_FAILED`      | warn        | Publishes of the Redis adapter were rejected (windowed).                            | `count`                                                                  |
 | `REALTIME_COMPOSITE_PARTIAL_FAILURE`   | warn        | One of the two transports failed an emit under `transport: 'both'`.                 | `op`                                                                     |
 | `REALTIME_SERVER_NOT_ATTACHED`         | warn        | An emit was made before the WebSocket server was attached (once).                   | `op`                                                                     |

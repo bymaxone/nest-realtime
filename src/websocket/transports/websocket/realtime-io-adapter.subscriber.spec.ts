@@ -5,6 +5,7 @@
  * @layer infrastructure
  */
 import 'reflect-metadata'
+import { EventEmitter } from 'node:events'
 import { Logger } from '@nestjs/common'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import { REALTIME_OPTIONS_TOKEN } from '@bymax-one/nest-realtime/internal'
@@ -90,6 +91,51 @@ describe('RealtimeIoAdapter subscriber connection', () => {
   afterEach(() => {
     jest.useRealTimers()
     jest.restoreAllMocks()
+  })
+
+  describe('connection errors', () => {
+    // Scenario: the subscriber emits errors, before and after the adapter is disposed. Expected: it
+    // keeps one 'error' listener, and one line is logged that names the class only. Why: without a
+    // listener ioredis prints the raw error itself.
+    it('listens to the subscriber for as long as it exists, and logs its class once', async () => {
+      const sub = Object.assign(
+        new EventEmitter(),
+        subscriber(async () => 'OK'),
+      )
+      const adapter = adapterOver(callerClient(sub))
+      adapter.createIOServer(0)
+      const text = 'text-of-the-server-reply'
+
+      expect(sub.listenerCount('error')).toBe(1)
+      sub.emit('error', new TypeError(text))
+      await adapter.dispose()
+      expect(sub.listenerCount('error')).toBe(1)
+      sub.emit('error', new TypeError(text))
+
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn.mock.calls[0]?.[0]).toEqual({
+        event: 'REALTIME_ADAPTER_COMMAND_FAILED',
+        message: 'Redis adapter subscriber connection failed (TypeError)',
+      })
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(text)
+    })
+
+    // Scenario: the connection errors, and then Redis refuses a SUBSCRIBE. Expected: both are
+    // logged. Why: a refused SUBSCRIBE leaves the instance deaf, whatever was logged before it.
+    it('still logs a failed command after a connection error', async () => {
+      const refused = subscriber()
+      refused.subscribe.mockRejectedValue(new RangeError('NOPERM'))
+      const sub = Object.assign(new EventEmitter(), refused)
+      adapterOver(callerClient(sub)).createIOServer(0)
+
+      sub.emit('error', new TypeError('lost'))
+      await expect(sub.subscribe('channel')).rejects.toThrow('NOPERM')
+
+      expect(warn.mock.calls.map((call) => lineOf(call[0]))).toEqual([
+        'Redis adapter subscriber connection failed (TypeError)',
+        'Redis adapter subscriber command failed (RangeError)',
+      ])
+    })
   })
 
   describe('dispose', () => {
