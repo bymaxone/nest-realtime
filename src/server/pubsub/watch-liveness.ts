@@ -3,6 +3,7 @@
  * @layer infrastructure
  */
 import type { Redis } from 'ioredis'
+import { fromClient, isErrorReply } from './redis-failure'
 
 /** How often a connected client is asked whether the server is still there. */
 export const PROBE_INTERVAL_MS = 10_000
@@ -12,8 +13,8 @@ export const PROBE_DEADLINE_MS = 5_000
 
 /** Sends a PING. An error reply (NOPERM, BUSY, LOADING) is an answer; the client's own is not. */
 function ask(client: Redis, answered: () => void, gaveUp: () => void): void {
-  client.ping().then(answered, (err: unknown) => {
-    if ((err as { name?: unknown } | null)?.name === 'ReplyError') answered()
+  fromClient(() => client.ping()).then(answered, (err: unknown) => {
+    if (isErrorReply(err)) answered()
     else gaveUp()
   })
 }

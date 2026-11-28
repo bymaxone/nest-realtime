@@ -14,7 +14,7 @@ import { logEvent } from '../utils/log-event'
 import { quitWithin } from '../utils/quit-within'
 import { unavailableError } from '../utils/unavailable-error'
 import { windowedReport } from '../utils/windowed-report'
-import { assertBuiltinsIntact, isBuiltinsRefusal, returnable } from '../utils/builtin-baseline'
+import { assertBuiltinsIntact, returnable } from '../utils/builtin-baseline'
 import {
   absorbed,
   awaitable,
@@ -23,7 +23,7 @@ import {
   unboxed,
   withinDeadline,
 } from '../utils/within-deadline'
-import { redisFailure } from './redis-failure'
+import { fromClient, isErrorReply, redisFailure } from './redis-failure'
 import { PROBE_DEADLINE_MS, PROBE_INTERVAL_MS, watchLiveness } from './watch-liveness'
 
 /** The window of the report of dropped malformed payloads. */
@@ -192,28 +192,20 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       this.connectLazyClient()
       throw this.cannotPublish(`the Redis client is ${status}`)
     }
-    // Outside the try below: what `awaitable` refuses is the library's own refusal.
-    const sent = awaitable(this.sendToChannel(JSON.stringify(message)))
-    let expired: Error | undefined
-    try {
-      await withinDeadline(sent, PUBLISH_WAIT_MS, {
-        timeoutError: () => {
-          expired = this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`)
-          return expired
-        },
-      })
-    } catch (error) {
-      // A refusal of the library's own is not the client's, and keeps its text.
-      if (error === expired || isBuiltinsRefusal(error)) throw error
-      assertBuiltinsIntact()
-      throw redisFailure(error)
-    }
+    const payload = JSON.stringify(message)
+    const sent = awaitable(fromClient(() => this.#pub.publish(this.channel, payload)))
+    // What this wait rejects with is the library's own or already reduced: it is not inspected.
+    await withinDeadline(this.published(sent), PUBLISH_WAIT_MS, {
+      timeoutError: () =>
+        this.cannotPublish(`the server did not answer within ${PUBLISH_WAIT_MS} ms`),
+    })
   }
 
-  /** The PUBLISH itself; a client that throws instead of returning a promise is reduced too. */
-  private sendToChannel(payload: string): Promise<unknown> {
+  /** What PUBLISH settled with; the client's rejection comes out reduced. */
+  private async published(sent: unknown): Promise<void> {
     try {
-      return this.#pub.publish(this.channel, payload)
+      // Already pinned or refused by the caller: this call changes nothing about it.
+      await awaitable(sent)
     } catch (error) {
       assertBuiltinsIntact()
       throw redisFailure(error)
@@ -226,7 +218,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    * status.
    */
   private connectLazyClient(): void {
-    if (this.#pub.status === 'wait') this.#pub.connect().catch(() => undefined)
+    if (this.#pub.status === 'wait') fromClient(() => this.#pub.connect()).catch(() => undefined)
   }
 
   /**
@@ -328,7 +320,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
     // connection: giving up there would end a subscriber that an open connection would have kept.
     // The two Sentinel options are inert without Sentinel. With no command timeout, a Sentinel that
     // accepts and never answers holds a replacement in `connecting`, even after `disconnect()`.
-    const sub: Redis = this.#pub.duplicate({
+    const options: Parameters<Redis['duplicate']>[0] = {
       autoResubscribe: false,
       disconnectTimeout: 1,
       enableAutoPipelining: false,
@@ -339,7 +331,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
         this.retryDelay('retryStrategy', times, sub, PROBE_INTERVAL_MS),
       sentinelRetryStrategy: (times: number) =>
         this.retryDelay('sentinelRetryStrategy', times, sub, SENTINEL_RETRY_MS),
-    })
+    }
+    const sub: Redis = fromClient(() => this.#pub.duplicate(options))
     return sub
   }
 
@@ -373,7 +366,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       }, SUBSCRIBE_WAIT_MS)
       unanswered.unref()
       sub.on('error', (err: Error) => {
-        if (err.name !== 'ReplyError') resolve({ unreachable: redisFailure(err) })
+        if (!isErrorReply(err)) resolve({ unreachable: redisFailure(err) })
       })
       sub.on('close', () => {
         resolve({ unreachable: new Error() })
@@ -391,7 +384,8 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
       if (attached) this.confirm(sub)
     })
     try {
-      await shielded(this.negotiate(sub, sub.subscribe(this.channel), unreachableFirst))
+      const first = fromClient(() => sub.subscribe(this.channel))
+      await shielded(this.negotiate(sub, first, unreachableFirst))
     } finally {
       clearTimeout(unanswered)
     }
@@ -420,7 +414,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
             await first
             return 'subscribed' as const
           } catch (err) {
-            if ((err as Error).name === 'ReplyError') throw redisFailure(err)
+            if (isErrorReply(err)) throw redisFailure(err)
             // The last statement before an object return, which asks the object for a `then`.
             return returnable({ unreachable: redisFailure(err) })
           }
@@ -464,7 +458,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   }
 
   private confirm(sub: Redis): void {
-    sub.subscribe(this.channel).then(
+    fromClient(() => sub.subscribe(this.channel)).then(
       () => this.confirmedBy(sub),
       (err: unknown) => this.refused(err),
     )
@@ -476,7 +470,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
    */
   private unconfirmed(sub: Redis, err: unknown): void {
     this.refused(err)
-    if ((err as { name?: unknown } | null)?.name !== 'ReplyError' && sub.status === 'ready') {
+    if (!isErrorReply(err) && sub.status === 'ready') {
       this.confirm(sub)
     }
   }
@@ -489,7 +483,7 @@ export class RedisRealtimePubSub implements IRealtimePubSub {
   /** A server that was reached and refused the SUBSCRIBE after boot: it stays unsubscribed. */
   private refused(err: unknown): void {
     // A command rejected because the connection closed is an outage, which 'close' reports.
-    if ((err as { name?: unknown } | null)?.name !== 'ReplyError') return
+    if (!isErrorReply(err)) return
     this.#subscribed = false
     // The same refusal can answer more than one SUBSCRIBE around a boot; it is one fact.
     const reason = describeError(err)

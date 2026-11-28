@@ -124,7 +124,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 //     2026-11-27; its budget is 30 B above.
 //     internal measures 28,515 B with the retry the watch keeps while it replaces a silent connection,
 //     measured on 2026-11-27; its budget is 30 B above.
-//     internal measures 28,911 B with Redis client errors reduced to a library message, measured on
+//     internal measures 28,919 B with Redis client errors reduced to a library message, measured on
 //     2026-11-27; its budget is 30 B above.
 //
 // What an SSE application pays on the server is `server` + `internal`, since the
@@ -137,7 +137,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // code that has to exist; the ceiling is what must never move.
 const BUDGETS = [
   { name: 'server (root facade)', path: 'dist/server/index.mjs', brotli: 265 },
-  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 28_941 },
+  { name: 'internal (shared runtime, SSE)', path: 'dist/internal/index.mjs', brotli: 28_949 },
   { name: 'websocket (Socket.IO transport)', path: 'dist/websocket/index.mjs', brotli: 11_217 },
   {
     name: 'observability (metrics contributor)',

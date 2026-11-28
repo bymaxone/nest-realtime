@@ -3,12 +3,14 @@
  * fixed library message, and nothing of the client's message, cause or command.
  * @layer test
  */
+import { EventEmitter } from 'node:events'
 import { inspect } from 'node:util'
 import { Logger } from '@nestjs/common'
 import { Redis } from 'ioredis'
 import { FakeRespServer, healthyRedis } from '../../../test/fixtures/fake-resp-server'
 import type { RespHandler } from '../../../test/fixtures/fake-resp-server'
 import { RedisRealtimePubSub } from './redis-realtime-pubsub'
+import { PROBE_INTERVAL_MS, watchLiveness } from './watch-liveness'
 
 // Upper case, because the fake server upper-cases the words it reads and some replies repeat them.
 const PASSWORD = 'DUMMY_PASSWORD_ZQ9'
@@ -233,5 +235,162 @@ describe('RedisRealtimePubSub error hygiene', () => {
       )
     expect(rejection).toMatchObject({ name: 'Error', message: 'the Redis client failed' })
     expectNoValues(rejection)
+  })
+})
+
+/** A rejection that throws, with the password in its text, on whatever is read from it. */
+function hostile(): object {
+  return new Proxy(
+    {},
+    {
+      get: () => {
+        throw new Error(PASSWORD)
+      },
+    },
+  )
+}
+
+const raise = (): never => {
+  throw new Error(`refused ${PASSWORD}`)
+}
+
+/** The part of an ioredis client the bus calls, with each call replaceable. */
+function fakeClient(calls: Record<string, unknown> = {}) {
+  return Object.assign(new EventEmitter(), {
+    status: 'ready',
+    options: {},
+    subscribe: jest.fn(() => Promise.resolve(1)),
+    publish: jest.fn(() => Promise.resolve(1)),
+    ping: jest.fn(() => Promise.resolve('PONG')),
+    quit: jest.fn(() => Promise.resolve('OK')),
+    connect: jest.fn(() => Promise.resolve()),
+    disconnect: jest.fn(),
+    ...calls,
+  })
+}
+
+describe('RedisRealtimePubSub with a client that raises anything', () => {
+  let warn: jest.SpyInstance
+
+  beforeEach(() => {
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  const busOver = (pub: object, sub: object = fakeClient()): RedisRealtimePubSub =>
+    new RedisRealtimePubSub({
+      client: Object.assign(pub, {
+        duplicate: (pub as { duplicate?: unknown }).duplicate ?? (() => sub),
+      }) as unknown as Redis,
+    })
+
+  const settled = (work: Promise<unknown>): Promise<unknown> =>
+    work.then(
+      () => 'resolved',
+      (error: unknown) => error,
+    )
+
+  const turn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
+  // No property of the rejection is read on the way out, whatever the read would do.
+  it.each([
+    ['throws on every read', hostile],
+    ['answers yes to every read', () => new Proxy({}, { get: () => true })],
+  ])('reduces a publish rejection that %s', async (_label, raised) => {
+    const value = raised()
+    const publish = jest.fn(() => Promise.reject(value))
+    const rejection = await settled(
+      busOver(fakeClient({ publish })).publish({ op: 'emit' } as never),
+    )
+    expect((rejection as Error).message).toBe('the Redis client failed')
+    expectNoValues(rejection)
+  })
+
+  // A client may answer with a thenable of its own; its rejection is the client's too.
+  it('reduces the rejection of a thenable', async () => {
+    const publish = jest.fn(() => ({
+      then: (_resolve: unknown, reject: (error: Error) => void) => reject(new Error(PASSWORD)),
+    }))
+    const rejection = await settled(
+      busOver(fakeClient({ publish })).publish({ op: 'emit' } as never),
+    )
+    expect((rejection as Error).message).toBe('the Redis client failed')
+    expectNoValues(rejection)
+  })
+
+  // A call that throws instead of returning is reduced like a rejection.
+  it.each([
+    ['duplicate', { duplicate: raise }, {}],
+    ['the first SUBSCRIBE', {}, { subscribe: raise }],
+    ['connect', { status: 'wait', connect: raise }, {}],
+  ])('reduces what %s throws on subscribe', async (_label, pubCalls, subCalls) => {
+    const rejection = await settled(
+      busOver(fakeClient(pubCalls), fakeClient(subCalls)).subscribe(jest.fn()),
+    )
+    expect((rejection as Error).message).toBe('the Redis client failed')
+    expectNoValues(rejection)
+  })
+
+  // The subscriber's error listener runs inside the client's emit: a throw there is uncaught.
+  it('takes a hostile error event without throwing', async () => {
+    const sub = fakeClient({ subscribe: jest.fn(() => new Promise(() => undefined)) })
+    const bus = busOver(fakeClient(), sub)
+    const boot = bus.subscribe(jest.fn())
+    await turn()
+    expect(() => sub.emit('error', hostile())).not.toThrow()
+    const close = await boot
+    expectNoValues(warn.mock.calls)
+    await close()
+  })
+
+  // The first SUBSCRIBE can fail with anything, before the boot ends or after it.
+  it('goes on unready when the first SUBSCRIBE rejects with a hostile value', async () => {
+    const sub = fakeClient({ subscribe: jest.fn(() => Promise.reject(hostile())) })
+    const close = await busOver(fakeClient(), sub).subscribe(jest.fn())
+    await turn()
+    expectNoValues(warn.mock.calls)
+    await close()
+  })
+
+  it('takes a hostile rejection of a SUBSCRIBE that arrives after the boot', async () => {
+    let fail: (error: unknown) => void = () => undefined
+    const subscribe = jest.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject
+        }),
+    )
+    const sub = fakeClient({ subscribe })
+    const boot = busOver(fakeClient(), sub).subscribe(jest.fn())
+    await turn()
+    sub.emit('close')
+    const close = await boot
+    fail(hostile())
+    await turn()
+    // It was not an error reply on a ready connection, so one more SUBSCRIBE was sent; the
+    // `ready` that follows sends another, whose answer can be anything as well.
+    subscribe.mockImplementation(() => Promise.reject(hostile()))
+    sub.emit('ready')
+    await turn()
+    expect(subscribe).toHaveBeenCalledTimes(3)
+    expectNoValues(warn.mock.calls)
+    await close()
+  })
+
+  // A PING rejection is classified without reading it directly: it is the client giving up.
+  it('takes a hostile PING rejection as no answer', async () => {
+    jest.useFakeTimers()
+    const client = fakeClient({ ping: jest.fn(() => Promise.reject(hostile())) })
+    const silent = jest.fn()
+    const stop = watchLiveness(client as unknown as Redis, silent)
+    client.emit('ready')
+    await jest.advanceTimersByTimeAsync(PROBE_INTERVAL_MS + 10)
+    expect(silent).toHaveBeenCalledTimes(1)
+    stop()
   })
 })

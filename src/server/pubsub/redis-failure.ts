@@ -3,8 +3,10 @@
  * @layer infrastructure
  *
  * A log, a rejection or a hook is given a message the library wrote, never the client's
- * own text.
+ * own text. What the client raised is read here and nowhere else, since reading it can run
+ * code of its own.
  */
+import { assertBuiltinsIntact } from '../utils/builtin-baseline'
 import { NativeError } from '../utils/captured-builtins'
 
 /** A Redis reply code is one upper-case word, such as `OOM` or `WRONGPASS`. */
@@ -27,6 +29,31 @@ function textOf(raised: unknown, key: 'name' | 'message' | 'code'): string {
 }
 
 /**
+ * Whether what was raised is an error reply of the server; false when it cannot be read.
+ *
+ * @param raised - Whatever the client rejected or emitted.
+ */
+export function isErrorReply(raised: unknown): boolean {
+  return textOf(raised, 'name') === REPLY_ERROR
+}
+
+/**
+ * A call into the client. What it throws instead of returning is reduced like a rejection.
+ *
+ * @param call - The call to make.
+ * @returns What the call returns.
+ * @throws The reduced error, or the library's own refusal when a built-in was replaced.
+ */
+export function fromClient<T>(call: () => T): T {
+  try {
+    return call()
+  } catch (error) {
+    assertBuiltinsIntact()
+    throw redisFailure(error)
+  }
+}
+
+/**
  * A new error that holds the library's own message and, of the original, only the reply code of an
  * error reply or the system code of a connection error. The original is not kept as `cause`.
  *
@@ -34,7 +61,7 @@ function textOf(raised: unknown, key: 'name' | 'message' | 'code'): string {
  * @returns An error named `ReplyError` for an error reply, and `Error` otherwise.
  */
 export function redisFailure(raised: unknown): Error {
-  if (textOf(raised, 'name') !== REPLY_ERROR) {
+  if (!isErrorReply(raised)) {
     const system = SYSTEM_CODE.exec(textOf(raised, 'code'))
     return new NativeError(`the Redis client failed${system ? ` (${system[0]})` : ''}`)
   }
