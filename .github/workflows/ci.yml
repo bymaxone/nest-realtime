@@ -207,7 +207,7 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
     uses: bymaxone/.github/.github/workflows/security.yml@v1
     with:
-      fail-on-severity: high
+      fail-on-severity: low
 
   # Single check the org ruleset can require, in every repo, under one name.
   #
@@ -220,12 +220,11 @@ jobs:
   # `always()` is what makes this a gate rather than decoration: without it the
   # job is skipped the moment a dependency fails, and a skipped check reports
   # neutral — the pull request would look unblocked precisely when it is broken.
-  # `cancelled` is named explicitly for the same reason; a cancelled job is not
-  # a passing one, and a queue timeout produces exactly that.
+  # A cancelled job is not a passing one, and a queue timeout produces exactly that.
   #
-  # A skipped dependency is accepted on purpose: jobs here are conditional on the
-  # event, and failing on skip would break every push that legitimately runs a
-  # subset.
+  # Only `security` may be skipped: it runs on pull requests alone. A skipped job
+  # reports success to a required check, so `ci`, `verify` and `e2e` have to say
+  # `success` themselves.
   ci-pass:
     name: CI passed
     if: always()
@@ -248,8 +247,13 @@ jobs:
             echo "$NEEDS" | jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' | sort
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Named for what the condition does: `skipped` is deliberately not a failure
-      # here, so "did not succeed" would describe a stricter gate than this is.
-      - name: Fail when any dependency failed or was cancelled
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
-        run: exit 1
+      - name: Fail unless every required job succeeded
+        env:
+          CI_RESULT: ${{ needs.ci.result }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+        run: |
+          # One command, so its status is the step's status.
+          [[ "$CI_RESULT" == success && "$VERIFY_RESULT" == success && "$E2E_RESULT" == success &&
+            ( "$SECURITY_RESULT" == success || "$SECURITY_RESULT" == skipped ) ]]
